@@ -15,7 +15,7 @@ use rhtn_adaptors::actor::Handle;
 use rhtn_adaptors::attached::{self, AttachedNode};
 use rhtn_adaptors::beyond::{Beyond, Beyonder};
 use rhtn_adaptors::courier::{Courier, Inlet};
-use rhtn_adaptors::direct::{Gate, LightDirect, Reachable};
+use rhtn_adaptors::direct::{Direct, Gate, LightDirect, Reachable};
 use rhtn_archive::Keyhash;
 use rhtn_archive::submission::WakeEndpoint;
 use rhtn_client::ceremony::Dispatched;
@@ -24,6 +24,7 @@ use rhtn_transport::session::{
     encode_sibling_update,
 };
 use rhtn_transport::tls::{self, Party, Pins};
+use rhtn_transport::traversal::Candidate;
 use std::collections::{BTreeMap, HashMap};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -297,30 +298,28 @@ impl Conversation {
     }
 }
 
-/// The session and everything hung off it, replaced whole on each attach;
-/// the session alone is replaced by a failover.
-struct Live {
-    /// The node attached to, as asked; a failover moves the session to a
-    /// sibling and this stays the name a further attach is compared to.
-    node: Keyhash,
-    courier: Arc<Courier>,
+/// **One attachment**: a session with one node, with its own slot for a
+/// failover to replace, its own status, and the tasks that read it. There
+/// is no first among attachments [restructure step 3, 2026-11-14]: the
+/// node attached to first is a tab like the rest, and closing it leaves
+/// the others serving.
+struct Attachment {
     _serving: Arc<AttachedNode>,
+    current: Current,
+    status: Arc<Mutex<Status>>,
     tasks: Vec<tokio::task::JoinHandle<()>>,
 }
 
-/// **A further attachment** — a tab of the browser model [author,
-/// 2026-11-11]: a session with another node, carried over by the one
-/// courier, with its own slot for a failover to replace.
-struct Tab {
-    _serving: Arc<AttachedNode>,
-    current: Current,
-    _tasks: Vec<tokio::task::JoinHandle<()>>,
+impl Drop for Attachment {
+    fn drop(&mut self) {
+        for t in &self.tasks {
+            t.abort();
+        }
+    }
 }
 
 /// What a detached client carries payload with (see [`Net::stand_detached`]).
 struct Detached {
-    courier: Arc<Courier>,
-    task: tokio::task::JoinHandle<()>,
     /// The socket itself, to close when the device moves.  **The one
     /// direct socket this client has**: an attach's courier carries over
     /// it too, rather than binding a second whose connection table would
@@ -331,7 +330,7 @@ struct Detached {
     direct: LightDirect,
     /// Where the socket delivers: the attach's courier while one is live,
     /// this one otherwise.
-    inlet: Inlet,
+    _inlet: Inlet,
     /// The interface it was bound on: what [`Net::refresh_detached`]
     /// compares against the one the device routes out of now.
     local: std::net::IpAddr,
@@ -339,7 +338,6 @@ struct Detached {
 
 impl Drop for Detached {
     fn drop(&mut self) {
-        self.task.abort();
         self.direct.close();
     }
 }
@@ -384,11 +382,66 @@ pub(crate) struct Contacted {
 /// by a failover without rebuilding what hangs off it.
 type Current = Arc<Mutex<Option<Arc<Session>>>>;
 
-impl Drop for Live {
-    fn drop(&mut self) {
-        for t in &self.tasks {
-            t.abort();
+/// **The one direct socket, behind a handle the courier keeps for its
+/// lifetime**: the socket under it is replaced when the device moves
+/// ([`Net::refresh_detached`]) with the courier and every attachment
+/// unmoved; before a socket is bound, nothing is reachable and nothing
+/// goes direct.
+pub(crate) struct SwappableDirect {
+    inner: Mutex<Option<Arc<dyn Direct>>>,
+}
+
+type DirectFut<'a, T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;
+
+impl SwappableDirect {
+    fn new() -> Self {
+        SwappableDirect {
+            inner: Mutex::new(None),
         }
+    }
+    fn swap(&self, d: Option<Arc<dyn Direct>>) {
+        *self.inner.lock().unwrap() = d;
+    }
+    fn get(&self) -> Option<Arc<dyn Direct>> {
+        self.inner.lock().unwrap().clone()
+    }
+}
+
+impl Direct for SwappableDirect {
+    fn reachable(&self) -> Reachable {
+        self.get().map(|d| d.reachable()).unwrap_or_default()
+    }
+    fn gather(&self, peer: Keyhash) -> DirectFut<'_, Option<Vec<Candidate>>> {
+        Box::pin(async move {
+            match self.get() {
+                Some(d) => d.gather(peer).await,
+                None => None,
+            }
+        })
+    }
+    fn open(&self, peer: Keyhash, candidates: Vec<Candidate>) -> DirectFut<'_, bool> {
+        Box::pin(async move {
+            match self.get() {
+                Some(d) => d.open(peer, candidates).await,
+                None => false,
+            }
+        })
+    }
+    fn deliver(&self, peer: Keyhash, bytes: Vec<u8>) -> DirectFut<'_, bool> {
+        Box::pin(async move {
+            match self.get() {
+                Some(d) => d.deliver(peer, bytes).await,
+                None => false,
+            }
+        })
+    }
+    fn request(&self, peer: Keyhash, bytes: Vec<u8>) -> DirectFut<'_, Option<Vec<u8>>> {
+        Box::pin(async move {
+            match self.get() {
+                Some(d) => d.request(peer, bytes).await,
+                None => None,
+            }
+        })
     }
 }
 
@@ -409,10 +462,16 @@ pub(crate) struct Net {
     /// session they were filled on, which is what makes a cold-start
     /// fallback and 0-RTT reattachment possible (§8.2, §9.2).
     cfg: ClientConfig,
-    live: Arc<Mutex<Option<Live>>>,
-    tabs: Arc<Mutex<BTreeMap<Keyhash, Tab>>>,
-    current: Current,
-    status: Arc<Mutex<Status>>,
+    /// Every node a session is held with, in the order attached; the
+    /// first in this order is what the one status slot the shell reads
+    /// answers with, until the shell reads a status per attachment.
+    attachments: Arc<Mutex<Vec<(Keyhash, Attachment)>>>,
+    /// The one courier, made when the client first stands and never
+    /// replaced: every attachment is a serving added to it.
+    courier: Arc<Mutex<Option<Arc<Courier>>>>,
+    forward: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    /// The direct socket's handle (see [`SwappableDirect`]).
+    direct: Arc<SwappableDirect>,
     events_tx: UnboundedSender<Event>,
     events: Mutex<UnboundedReceiver<Event>>,
     /// Run after every inbound dispatch, whether or not the shell hears
@@ -502,10 +561,10 @@ impl Net {
             endpoint,
             me,
             cfg,
-            live: Arc::new(Mutex::new(None)),
-            tabs: Arc::new(Mutex::new(BTreeMap::new())),
-            current: Arc::new(Mutex::new(None)),
-            status: Arc::new(Mutex::new(Status::Detached)),
+            attachments: Arc::new(Mutex::new(Vec::new())),
+            courier: Arc::new(Mutex::new(None)),
+            forward: Mutex::new(None),
+            direct: Arc::new(SwappableDirect::new()),
             events_tx,
             events: Mutex::new(events),
             persist: Mutex::new(None),
@@ -516,7 +575,12 @@ impl Net {
     }
 
     pub(crate) fn status(&self) -> Status {
-        self.status.lock().unwrap().clone()
+        self.attachments
+            .lock()
+            .unwrap()
+            .first()
+            .map(|(_, a)| a.status.lock().unwrap().clone())
+            .unwrap_or(Status::Detached)
     }
 
     /// The set the client's own route reads, for the client to be built on.
@@ -532,7 +596,7 @@ impl Net {
     /// §8): the client's queries carried and each reply taken until the
     /// node's portion is complete or truncated.
     pub(crate) fn browse(&self, handle: &Handle, node: Keyhash) -> Result<(), Refused> {
-        let courier = self.live_courier()?;
+        let courier = self.attached_courier()?;
         let carried = self.rt().block_on(async move {
             let msgs = handle.with(move |c| c.browse_at(node)).await;
             courier.carry(msgs).await
@@ -576,47 +640,46 @@ impl Net {
 
     /// Close the session and drop everything hung off it.
     pub(crate) fn detach(&self) {
-        if let Some(s) = self.current.lock().unwrap().take() {
-            s.conn.close(quinn::VarInt::from_u32(0), b"detached");
-            // the close frame leaves before anything else happens: a
-            // process that ended its runtime with the frame still queued
-            // would leave the node a session it believes live, and what
-            // is queued for this device behind a delivery that never ends
-            let conn = s.conn.clone();
-            self.rt().block_on(async move {
-                let _ = tokio::time::timeout(Duration::from_secs(1), conn.closed()).await;
-            });
-        }
-        *self.live.lock().unwrap() = None;
-        let tabs = std::mem::take(&mut *self.tabs.lock().unwrap());
-        for (_, t) in tabs {
-            if let Some(s) = t.current.lock().unwrap().take() {
+        let all = std::mem::take(&mut *self.attachments.lock().unwrap());
+        let mut conns = Vec::new();
+        for (node, a) in all {
+            if let Some(s) = a.current.lock().unwrap().take() {
                 s.conn.close(quinn::VarInt::from_u32(0), b"detached");
+                conns.push(s.conn.clone());
+            }
+            if let Some(c) = self.courier.lock().unwrap().clone() {
+                c.drop_serving(&node);
             }
         }
-        *self.status.lock().unwrap() = Status::Detached;
-        // the direct socket delivers to the detached courier again, and
-        // asks nobody for a reflexive candidate
+        // a clean close, so each node queues for this device
+        if !conns.is_empty() {
+            self.rt().block_on(async move {
+                for conn in conns {
+                    let _ = tokio::time::timeout(Duration::from_secs(1), conn.closed()).await;
+                }
+            });
+        }
         if let Some(d) = self.detached.lock().unwrap().as_ref() {
-            d.inlet.bind(d.courier.inbound());
             d.direct.set_stun(None);
         }
-    }
-
-    pub(crate) fn session(&self) -> Option<Arc<Session>> {
-        self.current.lock().unwrap().clone()
+        let _ = self.events_tx.send(Event::Connection(Status::Detached));
     }
 
     /// **A tab closed**: its session, its place in the courier and its
     /// addresses in the client. The serving node itself is closed by
     /// [`Self::detach`].
     pub(crate) fn detach_from(&self, handle: &Handle, node: &Keyhash) {
-        let tab = self.tabs.lock().unwrap().remove(node);
-        let Some(t) = tab else { return };
-        if let Some(s) = t.current.lock().unwrap().take() {
+        let taken = {
+            let mut all = self.attachments.lock().unwrap();
+            all.iter()
+                .position(|(k, _)| k == node)
+                .map(|i| all.remove(i))
+        };
+        let Some((_, a)) = taken else { return };
+        if let Some(s) = a.current.lock().unwrap().take() {
             s.conn.close(quinn::VarInt::from_u32(0), b"detached");
         }
-        if let Ok(c) = self.live_courier() {
+        if let Some(c) = self.courier.lock().unwrap().clone() {
             c.drop_serving(node);
         }
         let node = *node;
@@ -625,132 +688,52 @@ impl Net {
 
     /// Every node attached to: the serving node first, then the tabs.
     pub(crate) fn attachments(&self) -> Vec<Keyhash> {
-        let mut out: Vec<Keyhash> = self
-            .live
+        self.attachments
             .lock()
             .unwrap()
-            .as_ref()
-            .map(|l| vec![l.node])
-            .unwrap_or_default();
-        out.extend(self.tabs.lock().unwrap().keys().copied());
-        out
-    }
-
-    /// **A further node attached while one is held** — a tab: a session
-    /// with it on the one courier, the bundle and profiles published there,
-    /// its arrivals said to have come by it. Replaces a tab to the same
-    /// node.
-    fn attach_tab(
-        &self,
-        handle: &Handle,
-        node: Keyhash,
-        addrs: &[SocketAddr],
-    ) -> Result<Attached, Refused> {
-        self.detach_from(handle, &node);
-        self.cfg
-            .addresses
-            .lock()
-            .unwrap()
-            .insert(node, addrs.to_vec());
-        let courier = self.live_courier()?;
-        let cfg = self.cfg.clone();
-        let (handle_for_task, ep, nonce) =
-            (handle.clone(), self.endpoint.clone(), self.nonce.clone());
-        let addrs = addrs.to_vec();
-        let (events_tx, status) = (self.events_tx.clone(), self.status.clone());
-        let built = self.rt().block_on(async move {
-            let mut session = match attach_any(&cfg, &ep, node, &addrs, false).await {
-                AttachOutcome::Attached(s) => s,
-                AttachOutcome::Refused => {
-                    return Err(Refused::new("the node refused this client"));
-                }
-                AttachOutcome::Unbound(why) => {
-                    return Err(Refused::new(format!("no session: {why}")));
-                }
-                AttachOutcome::EndpointFailure(e) => {
-                    return Err(Refused::new(format!(
-                        "no session: the node is unreachable ({e})"
-                    )));
-                }
-            };
-            let (deliveries, frames) = take_readers(&mut session);
-            let (mode, queued) = (session.ack.mode, session.ack.queued);
-            let session = Arc::new(session);
-            let current: Current = Arc::new(Mutex::new(Some(session.clone())));
-            let reads = current.clone();
-            let serving =
-                AttachedNode::new(node, Arc::new(move || reads.lock().unwrap().clone()), nonce);
-            courier.serve_also(serving.clone());
-            let msgs = handle_for_task.with(move |c| c.attach_tab(node)).await;
-            let carried = courier.carry(msgs).await;
-            let tasks = vec![
-                attached::follow(handle_for_task.clone(), frames),
-                attached::collect(courier.inbound_via(node), deliveries),
-                tokio::spawn(watch(
-                    session,
-                    node,
-                    cfg,
-                    ep,
-                    handle_for_task,
-                    current.clone(),
-                    status,
-                    events_tx,
-                    courier.clone(),
-                    serving.clone(),
-                    false,
-                )),
-            ];
-            Ok::<_, Refused>((
-                Tab {
-                    _serving: serving,
-                    current,
-                    _tasks: tasks,
-                },
-                mode,
-                queued,
-                carried.refused.len(),
-            ))
-        })?;
-        let (tab, mode, queued, refused) = built;
-        self.tabs.lock().unwrap().insert(node, tab);
-        tracing::info!(target: "pay", refused, "pay.tab.attached");
-        Ok(Attached {
-            serving: id_of(&node),
-            primary: mode == 0,
-            queued,
-        })
+            .iter()
+            .map(|(k, _)| *k)
+            .collect()
     }
 
     /// The courier payload goes by: the attach's while one is live, the
     /// detached one otherwise (design §6.4).  What needs a serving node asks
-    /// [`Net::live_courier`] instead.
+    /// [`Net::attached_courier`] instead.
     fn courier(&self) -> Result<Arc<Courier>, Refused> {
-        let live = self
-            .live
+        self.courier
             .lock()
             .unwrap()
-            .as_ref()
-            .map(|l| l.courier.clone());
-        live.or_else(|| {
-            self.detached
-                .lock()
-                .unwrap()
-                .as_ref()
-                .map(|d| d.courier.clone())
-        })
-        .ok_or_else(|| Refused::new("no serving node is attached"))
+            .clone()
+            .ok_or_else(|| Refused::new("the client is not standing"))
     }
 
-    /// The attach's courier alone: for what only a serving node can do —
-    /// maintenance, the catalog, a wake, a record to propagate, a request
-    /// that wants an answer.  Refused with its reason where none is live.
-    fn live_courier(&self) -> Result<Arc<Courier>, Refused> {
-        self.live
-            .lock()
-            .unwrap()
-            .as_ref()
-            .map(|l| l.courier.clone())
-            .ok_or_else(|| Refused::new("no serving node is attached"))
+    /// The courier, where a node is attached; what needs a node refuses
+    /// otherwise rather than carrying into nowhere.
+    fn attached_courier(&self) -> Result<Arc<Courier>, Refused> {
+        if self.attachments.lock().unwrap().is_empty() {
+            return Err(Refused::new("no serving node is attached"));
+        }
+        self.courier()
+    }
+
+    /// The one courier, made the first time anything needs it: over the
+    /// direct socket's handle, forwarding what arrives as events, writing
+    /// after arrivals where a shell wired that, reaching beyond.
+    fn courier_or_new(&self, handle: &Handle) -> Arc<Courier> {
+        let mut slot = self.courier.lock().unwrap();
+        if let Some(c) = slot.as_ref() {
+            return c.clone();
+        }
+        let direct: Arc<dyn Direct> = self.direct.clone();
+        let (courier, events) = Courier::new(handle.clone(), direct);
+        if let Some(p) = self.persist.lock().unwrap().clone() {
+            courier.write_after_arrivals(p);
+        }
+        courier.reach_beyond(self.beyond.clone());
+        *self.forward.lock().unwrap() =
+            Some(self.rt().spawn(forward(events, self.events_tx.clone())));
+        *slot = Some(courier.clone());
+        courier
     }
 
     /// **The payload path with no node** (design §6.4, §12.6.3): the direct
@@ -769,8 +752,7 @@ impl Net {
         let cfg = self.cfg.clone();
         let reachable = self.reachable.clone();
         let handle_for_task = handle.clone();
-        let events_tx = self.events_tx.clone();
-        let persist = self.persist.lock().unwrap().clone();
+        let courier = self.courier_or_new(handle);
         let built = self.rt().block_on(async move {
             let inlet = Inlet::default();
             let gate: Gate = {
@@ -847,25 +829,16 @@ impl Net {
                 addr = %direct.addr().map(|a| a.to_string()).unwrap_or_default(),
                 "pay.direct.bound"
             );
-            let (courier, events) = Courier::new(
-                handle_for_task.clone(),
-                Arc::new(rhtn_adaptors::serving::Nobody),
-                Arc::new(direct.clone()),
-            );
             inlet.bind(courier.inbound());
-            if let Some(p) = persist {
-                courier.write_after_arrivals(p);
-            }
-            let task = tokio::spawn(forward(events, events_tx));
             Ok::<_, Refused>(Detached {
-                courier,
-                task,
                 direct,
-                inlet,
+                _inlet: inlet,
                 local,
             })
         })?;
+        let socket: Arc<dyn Direct> = Arc::new(built.direct.clone());
         *self.detached.lock().unwrap() = Some(built);
+        self.direct.swap(Some(socket));
         Ok(())
     }
 
@@ -920,20 +893,14 @@ impl Net {
         every: Duration,
         after: Arc<dyn Fn() + Send + Sync>,
     ) {
-        let live = self.live.clone();
-        let detached = self.detached.clone();
+        let slot = self.courier.clone();
         self.rt().spawn(async move {
             let mut tick = tokio::time::interval(every);
             tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             tick.tick().await;
             loop {
                 tick.tick().await;
-                let courier = live
-                    .lock()
-                    .unwrap()
-                    .as_ref()
-                    .map(|l| l.courier.clone())
-                    .or_else(|| detached.lock().unwrap().as_ref().map(|d| d.courier.clone()));
+                let courier = slot.lock().unwrap().clone();
                 let Some(courier) = courier else {
                     continue;
                 };
@@ -975,39 +942,30 @@ impl Net {
         addrs: &[SocketAddr],
         population: Vec<Keyhash>,
     ) -> Result<Attached, Refused> {
-        // **a second node while one is held is a tab**, not a replacement
-        // [author, 2026-11-11]; the same node again is the replacement it
-        // always was
-        let held = self.live.lock().unwrap().as_ref().map(|l| l.node);
-        if let Some(h) = held
-            && h != node
-        {
-            return self.attach_tab(handle, node, addrs);
-        }
-        self.detach();
+        // **every attachment is a tab** [restructure step 3, 2026-11-14]:
+        // a session with this node beside whatever else is held, over the
+        // one courier; the same node again is the replacement it always was
+        self.detach_from(handle, &node);
         self.cfg
             .addresses
             .lock()
             .unwrap()
             .insert(node, addrs.to_vec());
+        // the one direct socket and the one courier, stood if not yet
+        self.stand_detached(handle)?;
+        let courier = self.courier()?;
+        let courier_for_task = courier.clone();
+        let socket = {
+            let d = self.detached.lock().unwrap();
+            d.as_ref().expect("stood a line above").direct.clone()
+        };
         let cfg = self.cfg.clone();
         let (handle_for_task, ep, nonce) =
             (handle.clone(), self.endpoint.clone(), self.nonce.clone());
-        let current = self.current.clone();
         let addrs = addrs.to_vec();
-        let beyond = self.beyond.clone();
-        // the one direct socket, stood if it is not yet
-        self.stand_detached(handle)?;
-        let (direct, inlet) = {
-            let d = self.detached.lock().unwrap();
-            let d = d.as_ref().expect("stood a line above");
-            (d.direct.clone(), d.inlet.clone())
-        };
+        let events_tx = self.events_tx.clone();
+        let attachments = self.attachments.clone();
         let built = self.rt().block_on(async move {
-            // the serving node first, and the cached siblings where it is
-            // unreachable at attach time: the cold-start fallback
-            // (`light-client-requirements.md` §4), which a client that
-            // waited for an established session to die could never make
             let (serving_node, mut session) = match attach_any(&cfg, &ep, node, &addrs, false)
                 .await
             {
@@ -1028,118 +986,80 @@ impl Net {
                 },
             };
             let (deliveries, frames) = take_readers(&mut session);
-            // the serving node answers STUN on the socket it serves on
-            // (design §14.1.1): where this side's reflexive candidate comes
-            // from, asked of the one direct socket from here on
-            let stun = session.conn.remote_address();
-            direct.set_stun(Some(stun));
+            socket.set_stun(Some(session.conn.remote_address()));
             let (mode, queued) = (session.ack.mode, session.ack.queued);
             let session = Arc::new(session);
-            *current.lock().unwrap() = Some(session.clone());
+            let current: Current = Arc::new(Mutex::new(Some(session.clone())));
             let reads = current.clone();
             let serving = AttachedNode::new(
                 serving_node,
                 Arc::new(move || reads.lock().unwrap().clone()),
                 nonce,
             );
-            // **The direct path is the one socket this client stood at
-            // start** (design §14.1.1), gated to contacts there [author,
-            // 2026-10-24]; this courier carries over it and the relay is
-            // the answer where there is no path
-            let (courier, events) = Courier::new(
-                handle_for_task.clone(),
-                serving.clone(),
-                Arc::new(direct),
-            );
-            // **the relayed path's first term** (design §12.6.3): payload
-            // for a peer no direct path is held to goes to that peer's own
-            // node, dialled from here, and to the node serving this client
-            // only where that fails
-            courier.reach_beyond(beyond);
-            // the socket delivers to this courier while it is live
-            inlet.bind(courier.inbound());
+            courier_for_task.serve_also(serving.clone());
+            let status = Arc::new(Mutex::new(Status::Attached {
+                serving: serving_node,
+                primary: mode == 0,
+            }));
+            let carried = courier_for_task.attach_at(serving_node, population).await;
             let tasks = vec![
                 attached::follow(handle_for_task.clone(), frames),
-                // **said to have come by the serving node** [review,
-                // 2026-11-13]: what the routing records as the last subnet,
-                // on this path as on a tab's
-                attached::collect(courier.inbound_via(serving_node), deliveries),
+                attached::collect(courier_for_task.inbound_via(serving_node), deliveries),
+                tokio::spawn(watch(
+                    session,
+                    serving_node,
+                    cfg,
+                    ep,
+                    handle_for_task,
+                    current.clone(),
+                    status.clone(),
+                    events_tx,
+                    courier_for_task.clone(),
+                    serving.clone(),
+                    attachments,
+                )),
             ];
-            // the bundle published, the pool stocked and the population
-            // swept, all over this session
-            let carried = courier.attach(population).await;
-            Ok((
-                Live {
-                    node: serving_node,
-                    courier,
+            Ok::<_, Refused>((
+                Attachment {
                     _serving: serving,
+                    current,
+                    status,
                     tasks,
                 },
-                events,
-                session,
                 serving_node,
                 mode,
                 queued,
                 (carried.left.len(), carried.refused.len()),
             ))
         })?;
-        let (live, events, session, serving_node, mode, queued, (left, refused)) = built;
-        // an attach produces nothing the adaptors cannot carry: what they
-        // hand back is the ceremony's own device-to-device conversation,
-        // and no ceremony is open here.  What the node *refused* is a
-        // different answer and is reported as one
-        if refused > 0 {
-            self.detach();
-            return Err(Refused::new(format!(
-                "the serving node refused {refused} of what attaching published, stocked or swept"
-            )));
+        let (attachment, serving_node, mode, queued, (left, refused)) = built;
+        if refused > 0 || left > 0 {
+            // dropped: its tasks end, and the node is no longer served from
+            if let Some(s) = attachment.current.lock().unwrap().take() {
+                s.conn.close(quinn::VarInt::from_u32(0), b"detached");
+            }
+            drop(attachment);
+            courier.drop_serving(&serving_node);
+            handle.with_blocking(move |c| c.detached_from(&serving_node));
+            return Err(Refused::new(if refused > 0 {
+                format!(
+                    "the serving node refused {refused} of what attaching published, stocked or swept"
+                )
+            } else {
+                format!("{left} message(s) an attach produced had no path")
+            }));
         }
-        if left > 0 {
-            self.detach();
-            return Err(Refused::new(format!(
-                "{left} message(s) an attach produced had no path"
-            )));
-        }
-        // what the courier hands up joins the one event stream, and the
-        // session is watched for the failover the kernel drives itself
-        let mut live = live;
-        // **every arrival writes the state**, whoever answers it: the
-        // courier answers a query and a grant itself and hands neither up,
-        // so a verifier's whole service reaches no event stream and
-        // nothing else would write the sessions it opened [2026-10-12]
         if let Some(p) = self.persist.lock().unwrap().clone() {
-            live.courier.write_after_arrivals(p);
+            courier.write_after_arrivals(p);
         }
-        // **every node a resolution walk goes through becomes a contact**
-        // (`light-client-requirements.md` §4.3's capture list; [author,
-        // 2026-10-14] for the pruning it makes possible, since these are
-        // the upstreams §4.3 prunes by and nothing else shows them). Not
-        // saved per hop: the state is written on the next arrival or
-        // maintenance round, and a walk of several hops should not write
-        // the whole store several times over.
         self.beyond
             .note_hops_with(self.handle_for_hops(handle.clone()));
-        live.tasks
-            .push(self.rt().spawn(forward(events, self.events_tx.clone())));
-        live.tasks.push(self.rt().spawn(watch(
-            session,
-            serving_node,
-            self.cfg.clone(),
-            self.endpoint.clone(),
-            handle.clone(),
-            self.current.clone(),
-            self.status.clone(),
-            self.events_tx.clone(),
-            live.courier.clone(),
-            live._serving.clone(),
-            true,
-        )));
-        // the previous session's readers stop when this replaces it
-        *self.live.lock().unwrap() = Some(live);
-        *self.status.lock().unwrap() = Status::Attached {
-            serving: serving_node,
-            primary: mode == 0,
-        };
+        // the answer tells the shell; no event, as before — an event is
+        // what a change the shell did not ask for raises
+        self.attachments
+            .lock()
+            .unwrap()
+            .push((serving_node, attachment));
         Ok(Attached {
             serving: id_of(&serving_node),
             primary: mode == 0,
@@ -1154,7 +1074,7 @@ impl Net {
     /// the network cannot act on, and the party that made it is the only
     /// one that can offer it.
     pub(crate) fn carry_outbox(&self, handle: &Handle) -> Result<(), Refused> {
-        let Ok(courier) = self.live_courier() else {
+        let Ok(courier) = self.attached_courier() else {
             return Ok(());
         };
         let carried = self.rt().block_on(async move {
@@ -1223,7 +1143,7 @@ impl Net {
         &self,
         msgs: Vec<rhtn_client::ceremony::Msg>,
     ) -> Result<Vec<Vec<u8>>, Refused> {
-        let courier = self.live_courier()?;
+        let courier = self.attached_courier()?;
         let carried = self.rt().block_on(async move { courier.carry(msgs).await });
         if !carried.refused.is_empty() {
             return Err(Refused::new(
@@ -1297,7 +1217,7 @@ impl Net {
     }
 
     pub(crate) fn maintain(&self, handle: &Handle) -> Result<(), Refused> {
-        let courier = self.live_courier()?;
+        let courier = self.attached_courier()?;
         self.rt().block_on(async move {
             let msgs = handle.with(|c| c.maintain()).await;
             courier.carry(msgs).await;
@@ -1334,7 +1254,7 @@ impl Net {
     }
 
     pub(crate) fn wake(&self, endpoint: Option<Wake>) -> Result<(), Refused> {
-        let courier = self.live_courier()?;
+        let courier = self.attached_courier()?;
         let me = courier.me();
         let ep = match endpoint {
             Some(mut w) => {
@@ -1359,9 +1279,15 @@ impl Net {
             }
             None => None,
         };
-        let took = self
-            .rt()
-            .block_on(async move { courier.serving.wake(me, ep).await });
+        // every node held is told where to ring: each may have mail for
+        // this device
+        let took = self.rt().block_on(async move {
+            let mut took = false;
+            for s in courier.servings() {
+                took |= s.wake(me, ep.clone()).await;
+            }
+            took
+        });
         if took {
             Ok(())
         } else {
@@ -1390,8 +1316,8 @@ impl Net {
     /// What to run after every inbound dispatch: the state written.
     pub(crate) fn persist_with(&self, after: Arc<dyn Fn() + Send + Sync>) {
         *self.persist.lock().unwrap() = Some(after.clone());
-        if let Some(d) = self.detached.lock().unwrap().as_ref() {
-            d.courier.write_after_arrivals(after);
+        if let Some(c) = self.courier.lock().unwrap().clone() {
+            c.write_after_arrivals(after);
         }
     }
 
@@ -1406,14 +1332,18 @@ impl Net {
         every: Duration,
         after: Arc<dyn Fn() + Send + Sync>,
     ) {
-        let live = self.live.clone();
+        let slot = self.courier.clone();
+        let attachments = self.attachments.clone();
         self.rt().spawn(async move {
             let mut tick = tokio::time::interval(every);
             tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             tick.tick().await;
             loop {
                 tick.tick().await;
-                let courier = live.lock().unwrap().as_ref().map(|l| l.courier.clone());
+                if attachments.lock().unwrap().is_empty() {
+                    continue;
+                }
+                let courier = slot.lock().unwrap().clone();
                 let Some(courier) = courier else {
                     continue;
                 };
@@ -1580,10 +1510,13 @@ async fn watch(
     events: UnboundedSender<Event>,
     courier: Arc<Courier>,
     serving: Arc<AttachedNode>,
-    primary: bool,
+    attachments: Arc<Mutex<Vec<(Keyhash, Attachment)>>>,
 ) {
+    // **one watch per attachment** [restructure step 3, 2026-11-14]: its
+    // own status told and raised as an event, its own failover to a
+    // sibling and its own retry chain (`light-client-requirements.md`
+    // §4.1), and the attachment re-keyed by the node it lands on
     let mut session = session;
-    // the node asked for, whatever sibling the session is with now
     let home = peer;
     let mut peer = peer;
     loop {
@@ -1591,8 +1524,8 @@ async fn watch(
             if *session.reach.lock().unwrap() == Reachability::Unreachable {
                 break;
             }
-            // this session was replaced or dropped on purpose: nothing to
-            // watch
+            // the slot holds another session, or none: this one was
+            // detached or replaced, and the watch is over
             let same = current
                 .lock()
                 .unwrap()
@@ -1603,13 +1536,9 @@ async fn watch(
             }
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
-        // a tab's failover is its own: the connection the shell is told of
-        // is the serving node's
         let tell = |s: Status| {
-            if primary {
-                *status.lock().unwrap() = s.clone();
-                let _ = events.send(Event::Connection(s));
-            }
+            *status.lock().unwrap() = s.clone();
+            let _ = events.send(Event::Connection(s));
         };
         tell(Status::Reconnecting { from: peer });
         session.conn.close(quinn::VarInt::from_u32(0), b"failover");
@@ -1622,13 +1551,9 @@ async fn watch(
                     from: peer,
                     reason: last,
                 });
-                // **and tried again, here** [author, 2026-11-04: *"all
-                // horizon members should re-attach every time they become
-                // detached"*; review 2026-11-13: the rule belongs beside the
-                // judgement of the loss, not in the shell]: the node asked
-                // for at its addresses, then its siblings, after 15, 30, 60,
-                // 120 and then every 300 seconds — until one answers, or
-                // another attach has replaced this session meanwhile
+                // **attach again after a loss, without the person's hand**:
+                // the home node at the address agreed, then any sibling,
+                // seconds growing to minutes, then steady
                 let mut attempt = 0usize;
                 loop {
                     let wait = REATTACH_AFTER_S[attempt.min(REATTACH_AFTER_S.len() - 1)];
@@ -1663,22 +1588,15 @@ async fn watch(
         let mode = sess.ack.mode;
         let sess = Arc::new(sess);
         *current.lock().unwrap() = Some(sess.clone());
-        // **the serving identity moves with the session**: the node asked
-        // from here on is the sibling, the client's own record of whom it
-        // is served by says so, and what it stores of the answers names
-        // the sibling (`light-client-requirements.md` §4)
         serving.moved_to(to);
         let from = peer;
-        handle
-            .with(move |c| {
-                if primary {
-                    c.reattached(to)
-                } else {
-                    c.moved_tab(from, to)
-                }
-            })
-            .await;
-        // the new session's readers feed the same courier and client
+        handle.with(move |c| c.moved_tab(from, to)).await;
+        if from != to {
+            let mut all = attachments.lock().unwrap();
+            if let Some(i) = all.iter().position(|(k, _)| *k == from) {
+                all[i].0 = to;
+            }
+        }
         tokio::spawn(attached::follow(handle.clone(), frames));
         tokio::spawn(attached::collect(courier.inbound_via(to), deliveries));
         tell(Status::Attached {

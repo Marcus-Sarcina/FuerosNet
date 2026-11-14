@@ -85,8 +85,11 @@ type Delivery = (Keyhash, Vec<u8>, Option<Vec<u8>>, Option<Keyhash>);
 pub struct Courier {
     /// The client, on its own thread.
     pub handle: Handle,
-    /// The serving node, for what it publishes, stocks and relays.
-    pub serving: Arc<dyn Serving>,
+    /// **Every node this client holds a session with, and no first among
+    /// them** [restructure step 3, 2026-11-14]: a message names the node
+    /// it goes to, or goes to every one; where a message names none and
+    /// one must be chosen, [`Courier::first`] is the lowest keyhash held,
+    /// and that choice is the only "the serving node" left.
     /// **The further nodes this client holds a session with** — the tabs
     /// of the browser model [author, 2026-11-11], one per address past the
     /// first; a payload for a peer whose address is served by one of them
@@ -168,14 +171,12 @@ impl Courier {
     /// subject's copies arrive.
     pub fn new(
         handle: Handle,
-        serving: Arc<dyn Serving>,
         direct: Arc<dyn Direct>,
     ) -> (Arc<Courier>, mpsc::UnboundedReceiver<(Keyhash, Dispatched)>) {
         let (app, rx) = mpsc::unbounded_channel();
         (
             Arc::new(Courier {
                 handle,
-                serving,
                 servings: Mutex::new(BTreeMap::new()),
                 direct,
                 beyond: Mutex::new(None),
@@ -203,9 +204,98 @@ impl Courier {
     /// Every node this courier carries over: the serving node first, then
     /// the tabs.
     pub fn servings(&self) -> Vec<Arc<dyn Serving>> {
-        let mut out = vec![self.serving.clone()];
-        out.extend(self.servings.lock().unwrap().values().cloned());
-        out
+        self.servings.lock().unwrap().values().cloned().collect()
+    }
+
+    /// The node chosen where a message names none: the lowest keyhash
+    /// held, or nothing where no session is held.
+    pub fn first(&self) -> Option<Arc<dyn Serving>> {
+        self.servings.lock().unwrap().values().next().cloned()
+    }
+
+    /// The node a request beyond this client's own nodes says it came
+    /// by, where one is held.
+    fn via(&self) -> Option<Keyhash> {
+        self.first().map(|s| s.me())
+    }
+
+    /// To every node held; true where any took it.
+    async fn publish_all(&self, b: &[u8]) -> bool {
+        let mut took = false;
+        for s in self.servings() {
+            took |= s.publish(b).await;
+        }
+        took
+    }
+
+    async fn publish_profile_all(&self, b: &[u8]) -> bool {
+        let mut took = false;
+        for s in self.servings() {
+            took |= s.publish_profile(b).await;
+        }
+        took
+    }
+
+    /// Each node held is told the horizon of the address it serves.
+    async fn assert_horizon_all(&self, bytes: &[u8], nonce: [u8; 16]) -> bool {
+        let mut took = false;
+        for s in self.servings() {
+            took |= s.assert_horizon(bytes, nonce).await;
+        }
+        took
+    }
+
+    /// A record to every node held: which of them keeps it is the node's
+    /// own decision (`infra-client-requirements.md` §1).
+    async fn propagate_all(&self, b: &[u8]) -> bool {
+        let mut took = false;
+        for s in self.servings() {
+            took |= s.propagate(b.to_vec()).await;
+        }
+        took
+    }
+
+    /// The one-time pool a message names no node for goes to the first.
+    async fn stock_first(&self, keys: Vec<Vec<u8>>) -> bool {
+        match self.first() {
+            Some(s) => s.stock(self.me(), keys).await,
+            None => false,
+        }
+    }
+
+    async fn profile_first(&self, b: &[u8]) -> Option<Vec<u8>> {
+        match self.first() {
+            Some(s) => s.profile(b).await,
+            None => None,
+        }
+    }
+
+    async fn prekey_first(&self, b: &[u8]) -> Option<Vec<u8>> {
+        match self.first() {
+            Some(s) => s.prekey(self.me(), b).await,
+            None => None,
+        }
+    }
+
+    /// A resource is asked of the node that served its entry, else the first.
+    async fn resource_at(&self, node: &Keyhash, bytes: &[u8]) -> Option<Vec<u8>> {
+        match self.serving_for(node).or_else(|| self.first()) {
+            Some(s) => s.resource(self.me(), bytes).await,
+            None => None,
+        }
+    }
+
+    /// Material for a node itself, addressed to the device it presented
+    /// (`wire-format.md` §7.10): the first node held, there being nothing
+    /// in the client that names one any more.
+    async fn relay_to_first_node(&self, b: &[u8]) -> bool {
+        match self.first() {
+            Some(s) => {
+                let (node, device) = (s.me(), s.node_device());
+                s.relay(self.me(), node, b.to_vec(), device).await
+            }
+            None => false,
+        }
     }
 
     /// The session held with `node`, where one is: by what each answers
@@ -273,7 +363,7 @@ impl Courier {
                 continue;
             };
             if beyond
-                .carry(to, device, bytes.to_vec(), reach, Some(self.serving.me()))
+                .carry(to, device, bytes.to_vec(), reach, self.via())
                 .await
             {
                 took += 1;
@@ -315,13 +405,7 @@ impl Courier {
             return held.prekey(self.me(), body).await;
         }
         beyond
-            .ask_their_node(
-                subject,
-                reach,
-                Some(self.serving.me()),
-                REQUEST_PREKEY,
-                body.to_vec(),
-            )
+            .ask_their_node(subject, reach, self.via(), REQUEST_PREKEY, body.to_vec())
             .await
     }
 
@@ -340,7 +424,7 @@ impl Courier {
             .ask_their_node(
                 subject,
                 reach,
-                Some(self.serving.me()),
+                self.via(),
                 rhtn_archive::profile::REQUEST_PROFILE,
                 body.to_vec(),
             )
@@ -637,28 +721,27 @@ impl Courier {
 
     /// Attach to the serving node beside this client: what the client
     /// publishes, stocks and sweeps at attach, carried there.
-    pub async fn attach(self: &Arc<Self>, population: Vec<Keyhash>) -> Carried {
-        let serving = self.serving.me();
-        let msgs = self
-            .handle
-            .with(move |c| c.attach(serving, &population))
-            .await;
-        // **and the node is taught what this client holds**
-        // (`wire-format.md` §10.1.1; `rhtn_client::ceremony::Client::replay_frames`):
-        // the node replays its store to a client that attaches, and this
-        // is the other half of that edge. Without it a node enrolled into
-        // a subnet that already exists holds none of it, so it can
-        // materialise no role row for a member it never heard of and the
-        // topology does not survive a change of hosting [author,
-        // 2026-11-01]. Before the carry, so the node holds this client's
-        // acts by the time anything it publishes is evaluated.
+    pub async fn attach_at(self: &Arc<Self>, node: Keyhash, population: Vec<Keyhash>) -> Carried {
+        let msgs = self.handle.with(move |c| c.attach(node, &population)).await;
+        // what this client taught its last node, taught to this one
         let frames = self.handle.with(|c| c.replay_frames()).await;
         let offered = frames.len();
-        if offered > 0 {
-            let took = self.serving.teach(frames).await;
+        if offered > 0
+            && let Some(s) = self.serving_for(&node)
+        {
+            let took = s.teach(frames).await;
             tracing::info!(target: "pay", offered, took, "pay.taught");
         }
         self.carry(msgs).await
+    }
+
+    /// [`Courier::attach_at`] the first node held, for a client that holds
+    /// one; nothing where none is held.
+    pub async fn attach(self: &Arc<Self>, population: Vec<Keyhash>) -> Carried {
+        match self.first() {
+            Some(s) => self.attach_at(s.me(), population).await,
+            None => Carried::default(),
+        }
     }
 
     /// Sweep the population's reusable material again
@@ -770,11 +853,18 @@ impl Courier {
             return false;
         }
         let theirs = self.to_their_nodes(to, bytes, device).await > 0;
-        let mine = !theirs
-            && self
-                .serving
-                .relay(self.me(), to, bytes.to_vec(), device)
-                .await;
+        // else by a node of mine, the first that takes it: each serves an
+        // address, and the one that shares a subnet with the recipient
+        // relays or holds it (design §14.1.6)
+        let mut mine = false;
+        if !theirs {
+            for s in self.servings() {
+                if s.relay(self.me(), to, bytes.to_vec(), device).await {
+                    mine = true;
+                    break;
+                }
+            }
+        }
         // said either way: a relay that silently went nowhere left a
         // 424 KiB backup blob unaccounted for on the bench (2026-10-24)
         tracing::info!(
@@ -812,15 +902,12 @@ impl Courier {
                     // the node serving it there [author, 2026-11-11]. The
                     // serving node's answer is the one reported
                     Msg::PublishBundle(b) => {
-                        for s in me.servings().iter().skip(1) {
-                            s.publish(&b).await;
-                        }
-                        if !me.serving.publish(&b).await {
+                        if !me.publish_all(&b).await {
                             out.refused.push(Msg::PublishBundle(b));
                         }
                     }
                     Msg::StockOneTime(keys) => {
-                        if !me.serving.stock(me.me(), keys.clone()).await {
+                        if !me.stock_first(keys.clone()).await {
                             out.refused.push(Msg::StockOneTime(keys));
                         }
                     }
@@ -836,10 +923,7 @@ impl Courier {
                         }
                     }
                     Msg::PublishProfile(b) => {
-                        for s in me.servings().iter().skip(1) {
-                            s.publish_profile(&b).await;
-                        }
-                        if !me.serving.publish_profile(&b).await {
+                        if !me.publish_profile_all(&b).await {
                             out.refused.push(Msg::PublishProfile(b));
                         }
                     }
@@ -850,7 +934,7 @@ impl Courier {
                     // second attempt changes. The next attach sends it
                     // again at a later revision, which is the repair.
                     Msg::AssertHorizon { bytes, nonce } => {
-                        let took = me.serving.assert_horizon(&bytes, nonce).await;
+                        let took = me.assert_horizon_all(&bytes, nonce).await;
                         tracing::debug!(target: "pay", took, "pay.horizon");
                     }
                     // a profile is fetched from where the subject's locator
@@ -860,7 +944,7 @@ impl Courier {
                     Msg::ProfileRequest(b) => {
                         let answered = match me.their_profile(&b).await {
                             Some(reply) => Some(reply),
-                            None => me.serving.profile(&b).await,
+                            None => me.profile_first(&b).await,
                         };
                         match answered {
                             Some(reply) => {
@@ -889,7 +973,7 @@ impl Courier {
                             Some(reply) => Some(reply),
                             None => match me.their_prekeys(&b).await {
                                 Some(reply) => Some(reply),
-                                None => me.serving.prekey(me.me(), &b).await,
+                                None => me.prekey_first(&b).await,
                             },
                         };
                         match answered {
@@ -954,7 +1038,7 @@ impl Courier {
                     // and the answer goes to the caller rather than into
                     // any state of this client's
                     Msg::ResourceRequest { node, bytes } => {
-                        let answered = me.serving.resource(me.me(), &bytes).await;
+                        let answered = me.resource_at(&node, &bytes).await;
                         match answered {
                             Some(reply) => out.answers.push(reply),
                             None => out.refused.push(Msg::ResourceRequest { node, bytes }),
@@ -989,7 +1073,7 @@ impl Courier {
                     // an adjacency, which is the same edge read the other
                     // way).
                     Msg::Record(b) => {
-                        if !me.serving.propagate(b.clone()).await {
+                        if !me.propagate_all(&b).await {
                             out.refused.push(Msg::Record(b));
                         }
                     }
@@ -1007,9 +1091,7 @@ impl Courier {
                     Msg::Transport(b) => {
                         // material for the serving node itself is addressed
                         // to the device it presented (`wire-format.md` §7.10)
-                        let node = me.serving.me();
-                        let device = me.serving.node_device();
-                        if !me.serving.relay(me.me(), node, b.clone(), device).await {
+                        if !me.relay_to_first_node(&b).await {
                             out.refused.push(Msg::Transport(b));
                         }
                     }

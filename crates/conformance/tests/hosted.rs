@@ -59,7 +59,8 @@ async fn r10_wrong_requester_must_not_cancel_another_requesters_pending_query() 
             let device=Device{camera:Rc::new(DeviceStub),clock:Rc::new(DeviceStub),random:Rc::new(DeviceStub),operator:Rc::new(DeviceStub),notifier:Rc::new(Silent),engine:Rc::new(HashEngine::new(16)),direct:Rc::new(Reachable::default())};
             Client::new(test_identity("bob"),ids,cfg,device)
         }).unwrap();
-        let (courier,_app)=Courier::new(handle.clone(),Arc::new(ServingStub),Arc::new(NoDirect(Reachable::default())));
+        let (courier,_app)=Courier::new(handle.clone(), Arc::new(NoDirect(Reachable::default())));
+        courier.serve_also(Arc::new(ServingStub));
         let service=Verifiers::new();service.host(handle.clone(),courier);
         let q=VerificationQuery{subject:subject.public.keyhash,querier:requester.keyhash,ceremony_id:[9;32],profile:vec![1],template_version:1,verifier:verifier_key};
         let qid=q.query_id();

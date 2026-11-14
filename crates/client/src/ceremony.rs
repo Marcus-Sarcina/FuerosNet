@@ -5078,8 +5078,13 @@ impl Client {
         let n = self.payload.cfg.pool_target;
         let keys = self.payload.keys.one_time_keys(n, &mut fresh);
         self.payload.pool_reported = n;
+        self.payload.pools.insert(serving, n);
         let mut out: Vec<Msg> = self.bundle_to_publish(now).into_iter().collect();
-        out.push(Msg::StockOneTime(keys));
+        // stocked at the node named, as a tab is: one pool per address
+        out.push(Msg::StockOneTimeAt {
+            node: serving,
+            keys,
+        });
         // the profiles this client holds for the subnet it acts in, as
         // its bundle is: at attach and whenever they change
         // (`light-client-requirements.md` §4.4) — and where it holds none
@@ -6698,14 +6703,6 @@ impl Client {
     /// transport key it presents, and its messages say they are from it.
     pub fn as_device(&mut self, key: [u8; 32]) {
         self.payload.device = key;
-    }
-
-    /// The session moved to `serving`, a sibling after a failover: what
-    /// this client publishes, sweeps and asks now goes there, and what it
-    /// records of the answers names that node (`light-client-requirements.md`
-    /// §4).
-    pub fn reattached(&mut self, serving: Keyhash) {
-        self.note_attachment(serving);
     }
 
     /// **A further node attached to** — a tab beside the one `attach` took

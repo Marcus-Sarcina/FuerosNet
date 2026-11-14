@@ -21246,3 +21246,30 @@ button while `more`. `AndroidShell.files()`: raw appends with fsync and
 ranged reads, no custody wrapping. `ThreadsTest.kt` rewritten (paging
 with changes folded and carried; a corrupted record; the sealed index and
 another identity's index not opening; the legacy file; the wiring).
+
+**Restructure step 3 built, 2026-11-14 (gating).** The courier had its own
+"the serving node" beneath the `Net`'s: `Courier.serving`, which
+`StockOneTime`, `AssertHorizon`, `ProfileRequest`/`PrekeyRequest` (after
+the held-session paths), `ResourceRequest` (ignoring the node it named),
+`Record`, `Transport`, the wake endpoint and the relay fallback all went
+to. Gone: `Courier::new(handle, direct)`, `servings` the only set,
+`attach_at(node, population)`, publish/profile/horizon/record to every
+node held, the resource request to the node it names, the relay fallback
+trying each node held, `first()` (lowest keyhash) where a message names
+none — the one "the serving node" left, and said so. `Net`:
+`attachments: Vec<(node, Attachment)>` in attach order over one courier
+(`courier_or_new`, forwarding its events once, the persist hook applied
+to it); `SwappableDirect` so a device moving interfaces swaps the socket
+under the courier instead of replacing the courier (`refresh_detached`);
+every attach is yesterday's tab path with the sibling fallback the first
+attach had; `detach_from` closes one and `detach` all; one `watch` per
+attachment telling its own status and raising its own events,
+re-keying the attachment on a failover; `attach_tab`, `live_courier`,
+`Live`, `Tab`, `Status`/`current` singulars and the client's `reattached`
+deleted; the client's `attach` stocks the pool at the node named
+(`StockOneTimeAt`). An attach raises no event (the answer tells the shell),
+which five existing tests pinned by reading the first event as the
+payload. Seam scenario + its new leg 66.5 s; live 9; boundary 13;
+conformance 26; sim kernel 2; adaptors direct/submissions/conversation/
+verifier/teaching/query green. `statuses()` waits for step 4, which reads
+it from the shell.

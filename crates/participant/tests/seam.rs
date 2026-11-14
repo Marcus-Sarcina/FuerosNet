@@ -205,5 +205,27 @@ fn two_subnets_on_two_nodes_an_invitation_taken_as_a_tab_and_a_restart() {
     arrives(&mut set, "mrk", "gxv2", b"after the restart");
     send(&mut set, "mrk", "gxv", b"and back on the other node");
     arrives(&mut set, "gxv", "mrk", b"and back on the other node");
+
+    // **the first attachment is nothing more than the first tab**
+    // (restructure step 3): closing the session with the first node
+    // leaves the second serving, and a message still arrives by it; the
+    // first is attached again afterwards beside it
+    assert_eq!(
+        set.get("mrk").must(&format!("detach-from {gxv}")),
+        [format!("detached {gxv}")]
+    );
+    let held = line(set.get("mrk").must("attachments"), "attachments ");
+    assert!(
+        !held.contains(&gxv) && held.contains(&gxv2),
+        "the second session outlives the first: {held}"
+    );
+    send(&mut set, "gxv2", "mrk", b"with the first node gone");
+    arrives(&mut set, "mrk", "gxv2", b"with the first node gone");
+    attached_to(&mut set, "mrk", "gxv", &n1, &[]);
+    let held = line(set.get("mrk").must("attachments"), "attachments ");
+    assert!(
+        held.contains(&gxv) && held.contains(&gxv2),
+        "both held again: {held}"
+    );
     let _ = mrk;
 }

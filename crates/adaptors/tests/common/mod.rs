@@ -627,11 +627,8 @@ pub fn host_with(
     let reachable = Reachable::default();
     let kept = Kept::new();
     let handle = spawn_client_keeping(name, cfg, reachable.clone(), skew_s, kept.clone());
-    let (courier, app) = Courier::new(
-        handle.clone(),
-        serving.clone(),
-        Arc::new(NoDirect(reachable)),
-    );
+    let (courier, app) = Courier::new(handle.clone(), Arc::new(NoDirect(reachable)));
+    courier.serve_also(serving.clone());
     inboxes.host(kh(name), courier.inbound());
     Party {
         handle,

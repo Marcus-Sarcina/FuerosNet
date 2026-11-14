@@ -58,11 +58,8 @@ fn party(
                 .unwrap_or_else(|e| panic!("{who}'s own archive takes its own record: {e}"));
         }
     });
-    let (courier, _app) = Courier::new(
-        handle.clone(),
-        serving.clone(),
-        Arc::new(NoDirect(reachable)),
-    );
+    let (courier, _app) = Courier::new(handle.clone(), Arc::new(NoDirect(reachable)));
+    courier.serve_also(serving.clone());
     inboxes.host(kh(name), courier.inbound());
     (handle, courier)
 }

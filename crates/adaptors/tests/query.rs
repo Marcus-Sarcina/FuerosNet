@@ -31,11 +31,8 @@ struct Party {
 fn host(name: &'static str, cfg: Config, serving: &Arc<dyn Serving>, inboxes: &Inboxes) -> Party {
     let reachable = Reachable::default();
     let handle = spawn_client(name, cfg, reachable.clone());
-    let (courier, app) = Courier::new(
-        handle.clone(),
-        serving.clone(),
-        Arc::new(NoDirect(reachable)),
-    );
+    let (courier, app) = Courier::new(handle.clone(), Arc::new(NoDirect(reachable)));
+    courier.serve_also(serving.clone());
     inboxes.host(kh(name), courier.inbound());
     Party {
         handle,

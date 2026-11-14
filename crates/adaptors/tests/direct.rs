@@ -148,7 +148,8 @@ fn light(
     let reachable = direct.reachable();
     let handle = spawn_client(name, Config::default(), reachable.clone());
     *slot.lock().unwrap() = Some(handle.clone());
-    let (courier, app) = Courier::new(handle.clone(), serving.clone(), Arc::new(direct));
+    let (courier, app) = Courier::new(handle.clone(), Arc::new(direct));
+    courier.serve_also(serving.clone());
     inlet.bind(courier.inbound());
     inboxes.host(kh(name), courier.inbound_via(serving.me()));
     Party {
@@ -187,7 +188,8 @@ fn light_refusing(name: &'static str, serving: &Arc<dyn Serving>, inboxes: &Inbo
     .expect("bound");
     let reachable = direct.reachable();
     let handle = spawn_client(name, Config::default(), reachable.clone());
-    let (courier, app) = Courier::new(handle.clone(), serving.clone(), Arc::new(direct));
+    let (courier, app) = Courier::new(handle.clone(), Arc::new(direct));
+    courier.serve_also(serving.clone());
     inlet.bind(courier.inbound());
     inboxes.host(kh(name), courier.inbound_via(serving.me()));
     Party {
@@ -209,7 +211,8 @@ fn infra(
     let direct = NodeDirect::new(node.clone(), pins(), inlet.inbound());
     let reachable = direct.reachable();
     let handle = spawn_client(name, Config::default(), reachable.clone());
-    let (courier, app) = Courier::new(handle.clone(), serving.clone(), direct);
+    let (courier, app) = Courier::new(handle.clone(), direct);
+    courier.serve_also(serving.clone());
     inlet.bind(courier.inbound());
     inboxes.host(kh(name), courier.inbound_via(serving.me()));
     Party {
@@ -497,7 +500,8 @@ fn light_holding(
     )
     .expect("bound");
     let reachable = direct.reachable();
-    let (courier, app) = Courier::new(handle.clone(), serving.clone(), Arc::new(direct));
+    let (courier, app) = Courier::new(handle.clone(), Arc::new(direct));
+    courier.serve_also(serving.clone());
     inlet.bind(courier.inbound());
     inboxes.host(kh(name), courier.inbound_via(serving.me()));
     Party {
@@ -709,7 +713,8 @@ fn light_with(
     let gone: Vec<Keyhash> = forget.iter().map(|n| kh(n)).collect();
     handle.with_blocking(move |c| c.known.retain(|k| !gone.contains(&k.keyhash)));
     *slot.lock().unwrap() = Some(handle.clone());
-    let (courier, app) = Courier::new(handle.clone(), serving.clone(), Arc::new(direct.clone()));
+    let (courier, app) = Courier::new(handle.clone(), Arc::new(direct.clone()));
+    courier.serve_also(serving.clone());
     inlet.bind(courier.inbound());
     inboxes.host(kh(name), courier.inbound_via(serving.me()));
     (

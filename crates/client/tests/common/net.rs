@@ -161,6 +161,19 @@ impl Net {
                         "the pool takes the deposit"
                     );
                 }
+                Msg::StockOneTimeAt { node: at, keys } => {
+                    // stocked at the node named: one pool per address
+                    let named = self
+                        .nodes
+                        .keys()
+                        .find(|n| kh(n) == at)
+                        .copied()
+                        .unwrap_or(node);
+                    assert!(
+                        self.nodes.get_mut(named).unwrap().prekeys.stock(from, keys),
+                        "the pool takes the deposit"
+                    );
+                }
                 Msg::PrekeyRequest(req) => {
                     // a single-subject request goes to that subject's serving
                     // node; a sweep to the requester's own

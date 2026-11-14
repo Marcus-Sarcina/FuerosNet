@@ -721,7 +721,7 @@ fn pay_20_a_bundle_per_device_a_session_with_each_and_a_ciphertext_to_each() {
                     .publish(&ids(), &b)
                     .unwrap();
             }
-            Msg::StockOneTime(keys) => {
+            Msg::StockOneTime(keys) | Msg::StockOneTimeAt { keys, .. } => {
                 assert!(
                     n.nodes
                         .get_mut("w1")
@@ -875,7 +875,7 @@ fn a_device_holding_no_seed_publishes_what_the_ceremony_device_signed_and_receiv
         "nothing to publish before the ceremony device signs"
     );
     for m in attach {
-        if let Msg::StockOneTime(keys) = m {
+        if let Msg::StockOneTime(keys) | Msg::StockOneTimeAt { keys, .. } = m {
             assert!(
                 n.nodes
                     .get_mut("w1")

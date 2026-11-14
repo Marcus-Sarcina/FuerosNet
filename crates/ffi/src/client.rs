@@ -2188,7 +2188,7 @@ impl Participant {
 
     /// Whether a session with a serving node is held right now.
     pub fn attached(&self) -> bool {
-        crate::diag::call_plain("attached", || self.net.session().is_some())
+        crate::diag::call_plain("attached", || !self.net.attachments().is_empty())
     }
 
     /// **Every node this client is attached to**: the serving node first,

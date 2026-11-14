@@ -89,7 +89,7 @@ Each step is gated and installed; each removes one class of the veneer.
 | 0 | ~~The seam scenario~~ **Done 2026-11-14**: `crates/participant/tests/seam.rs` (PRT-11), over the scripted participant `rhtnp` (now with `agree`/`agreed`/`disagree`/`attachments`/`detach-from`/`invitation`/`save` and a `--store` so a restart holds what it held) and two spawned `rhtnd`, each speaking as its operator; 68 s; found two defects on its first runs (the archive loader's order, ARC-019; the driver must save as the shell does) | the bench as the only test of composition | it runs in minutes and fails for each of this week's defects when reverted |
 | 1 | ~~`Agreed`, `Serving`, `LastFrom` as relations in the kernel~~ **Done 2026-11-14**: `Agreed` and `LastFrom` were correction 3's; this step removed the last singleton, `PayloadState.serving` (its storage slot written empty so older blobs parse), made the catalog sweep name the node it reads (`Client::browse_at(node)`, `browsing_at()`, the courier sending over the session held with that node, the FFI `browse(node)`, the shell sweeping each node an identity is attached to), published a signed bundle wherever a session is held, and deleted the shell's `serving` file format and its one-time import (`Serving.kt`, `ServingTest.kt`). `Serving (identity, subnet) -> node` stays `serving_at` for now; deriving it from `Agreed` is step 5's, with the relations split | the shell's `serving` file; `serving: Option` | the scenario, plus relation tests |
 | 2 | **Built 2026-11-14, gating** (`Participant::seal`/`unseal` under `rhtn_client::sealed::application_key`; `Threads.kt` the store, `Front` paging, `AndroidShell.files()`, the kernel's wiring and migration; tests both sides). Was: the kernel offers the shell a sealing service (encrypt/decrypt bytes, keys never leaving the kernel); the thread store stays the shell's, keyed by identity, as an append-only file of per-message ciphertext through that service; `Front.convos`/`Threads.kt` are rewritten onto it rather than moved into the kernel | conversations in the clear at rest; the history resealed whole on every change | the scenario sends, restarts, reads back; the stored file holds no plaintext; the (N+1)th message appends |
-| 3 | `Net` as a map over `Attachment`; one `watch` per attachment; status per attachment | `live`/`current`/`status` singulars; `primary: bool` | failover and re-attach per attachment in the scenario |
+| 3 | ~~`Net` as a map over `Attachment`~~ **Built 2026-11-14, gating**: `Net` keeps `attachments: Vec<(node, Attachment)>` over one courier made when the client first stands and never replaced, the direct socket behind a `SwappableDirect` the courier keeps for its lifetime; one `watch` per attachment with its own status and events; the courier has no `serving` field, every message naming its node or going to every node (`first()` the lowest keyhash where none is named); `attach_tab`, `live_courier`, `Live`, `Tab` and the client's `reattached` gone; the seam scenario's new leg (the first node detached, the second still serving) passes | `live`/`current`/`status` singulars; `primary: bool` | failover and re-attach per attachment in the scenario |
 | 4 | The shell model keyed by identity everywhere: `Model` rows carry `by`; the focused-identity accessors go; `Kernel` split into `Identities`, `Attachments`, `Ceremony`, `Levers` | two notions of "whose"; the god object | the pins become behavioural tests of the split objects |
 | 5 | The client blob split per relation with versions, with the migration | the 2.6 MB whole-state write; versioning by array length | a vector per relation, pinned |
 | 6 | The FFI: `Refused` with a kind; the ~50 callerless exports pruned; `local-interfaces.md` carries the data model | string-matched errors; surface nobody owns | binding regenerated, shell compiles against the smaller surface |
@@ -182,6 +182,49 @@ while `PublishBundle`/`PublishProfile` go to every serving and
   the boundary tests read `statuses()`; the seam scenario is the proof, and
   gains one leg: the first node detached while the second stays, a message
   still arriving by the second.
+
+## 4c. Step 4 as designed, 2026-11-14
+
+**What the reads found.** `Kernel` (3,596 lines, 135 functions) holds one
+hidden singleton, `participant` = `loaded[activeId]`, read by 57 sites in
+55 functions: every meeting step, the operator's launch and enrol, the
+attach and detach, the nouns (`contacts()`, `subnets()`, `lines()`,
+`instances()`, `resources()`, `meetings()`), the aliases, the backup, the
+provider credentials, the host keys, the numbers and invitations. The
+screens call these with no identity named and get the focused one. The
+`Model` has the per-identity rows already (`Owned<T>` with `by`) beside
+one `connection` singular and a `connections` map, and `instances` with
+no owner. Only `ConversationActivity` and `ResourceActivity` are given
+their identity by the screen that opened them.
+
+**Part 1, the kernel's API names the identity.** Every function that read
+`participant` takes `by: String` first and reads `loaded[by]`; the getter
+goes; `activeId` stays as the shell's focus, a person's input and nothing
+the kernel reasons from. A `Meet` carries `by` from `startMeet(by, …)`, so
+the ceremony steps read the meeting's identity, not the focus. Screens
+pass the identity explicitly: the two that are given one by intent as
+now, the rest `Kernel.activeIdentity()` at the call until part 3 hands it
+to them. `Model.connection` goes; the chrome reads `connections[focused]`.
+
+**Part 2, the operator's store per identity** [author, 2026-11-14]:
+`getSharedPreferences("operator")` (instances, tokens, invitations) keyed
+by the identity's scope, as the thread store is, so GXV's instance no
+longer shows on GXV-2's Operator screen.
+
+**Part 3, the screens are given their identity**: every screen the shell
+opens for the focused identity is opened with `by` in its intent and
+refuses without it, as the conversation screen does; `activeIdentity()` is
+then read by the chrome alone. `Model.instances` becomes `Owned`.
+
+**Part 4, the split**: `Kernel` into `Identities` (the index, colours,
+focus), `Attachments` (agreements, attach, detach, bring-up, re-attach),
+`Ceremony` (meet, optical, bootstrap, adoption, peering, rotation) and
+`Levers` (the field-test hooks), each an object over `loaded`, the screens
+calling the one that owns the act. The pins of `KernelTest`-style source
+assertions become behavioural tests of the split objects.
+
+Each part gated and committed on its own; the bench run after part 1 and
+after part 4.
 
 ## 5. Rules the restructure must not move
 
