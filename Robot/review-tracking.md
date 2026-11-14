@@ -21436,3 +21436,12 @@ the reviewed list with the reason). The field test of the refused state is
 the bench's lock screen: an Android 15 Samsung with the service refused
 behaves as on the 13th, and with it granted holds its sessions behind the
 keyguard — to be read off the diag files when the phones are free.
+
+**Ruled 2026-11-14 [author]: `Kernel` keeps its name** for what remains
+of it in the shell — an identity's acts and the shared registry. One
+premise corrected in the same breath: the Kotlin `Kernel` implements no
+cryptography and no wire function; those are the Rust kernel's
+(`crates/crypto`, `crates/transport`, `crates/client`, reached through
+`crates/ffi`'s `Participant`). The Kotlin object is the shell's gateway to
+that kernel for an identity, naming which identity acts and carrying the
+answer to a screen; the name predates the split and is kept as a name.
