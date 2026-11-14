@@ -44,6 +44,7 @@ class WipeTest {
         )
     }
 
+    // functional: APP-011
     @Test
     fun the_at_rest_alias_matches_the_shell_that_wraps_with_it() {
         // **two copies, tied by a test**, as `PaletteTest` does for the
@@ -56,6 +57,7 @@ class WipeTest {
         )
     }
 
+    // functional: APP-011
     @Test
     fun the_kernel_directory_is_the_one_the_shell_seals_into() {
         // **the tie is structural now** [2026-11-07]: the shell reads

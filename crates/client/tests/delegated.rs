@@ -18,6 +18,7 @@ fn desktop_of(name: &str, presented: [u8; 32]) -> Client {
     Client::delegated(id(name).public, presented, ids(), Config::default(), dev)
 }
 
+// functional: APP-010
 /// Every act the signing table gives the identity key is refused on a
 /// device that holds none, by name, and nothing is fabricated in its
 /// place.
@@ -55,6 +56,7 @@ fn a_device_holding_no_seed_refuses_what_the_identity_key_signs() {
     assert!(d.expire().is_empty());
 }
 
+// functional: APP-010
 /// The ceremony device delegates to a key another device minted: a
 /// hybrid delegation the network verifies under the identity, naming that
 /// key, for one window; a run is contiguous.

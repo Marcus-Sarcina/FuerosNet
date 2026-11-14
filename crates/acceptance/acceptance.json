@@ -458,7 +458,8 @@
   "interpretation": null,
   "families": [
    "TX-003",
-   "REC-008"
+   "REC-008",
+   "POL-013"
   ]
  },
  {
@@ -1936,7 +1937,8 @@
   "interpretation": null,
   "families": [
    "CER-016",
-   "VER-008"
+   "VER-008",
+   "POL-020"
   ]
  },
  {
@@ -2515,7 +2517,9 @@
    "NET-016",
    "NET-019",
    "NET-021",
-   "NET-027"
+   "NET-027",
+   "APP-003",
+   "APP-005"
   ]
  },
  {
@@ -4916,7 +4920,11 @@
   "when": "The key is served and the node's memory is then lost, and a node is started again from the bytes on disk.",
   "then": "The pool is empty and the key is not served a second time. A key whose file cannot be removed is not served at all, and the reusable material alone is answered.",
   "oracle": "behaviour",
-  "interpretation": "A snapshot taken after the reply cannot carry once-only issuance: a stop between snapshots would return a key whose private half the recipient has already consumed. The allowance counters are spent with the key for the same reason, a counter kept only in memory giving a requester a fresh window every time the process stops."
+  "interpretation": "A snapshot taken after the reply cannot carry once-only issuance: a stop between snapshots would return a key whose private half the recipient has already consumed. The allowance counters are spent with the key for the same reason, a counter kept only in memory giving a requester a fresh window every time the process stops.",
+  "families": [
+   "MAIL-003",
+   "MAIL-011"
+  ]
  },
  {
   "id": "DMN-05",
@@ -4994,7 +5002,10 @@
   "when": "The key is served, the service is saved, and a service is loaded from that directory again.",
   "then": "The pool is empty and no key is served a second time. The reusable material is still there, and a subject whose bundle the service no longer holds is gone from the directory too. The allowance a requester has spent is still spent after a restart.",
   "oracle": "behaviour",
-  "interpretation": "One rule whichever way the service is kept: the save makes the directory match what is held. A bound service already has disk and memory in step and loses nothing to it; a detached one is snapshotted, and adding without removing would leave a served key for the next load to hand out."
+  "interpretation": "One rule whichever way the service is kept: the save makes the directory match what is held. A bound service already has disk and memory in step and loses nothing to it; a detached one is snapshotted, and adding without removing would leave a served key for the next load to hand out.",
+  "families": [
+   "MAIL-003"
+  ]
  },
  {
   "id": "DMN-08",
@@ -5071,7 +5082,14 @@
   "when": "The shell opens a ceremony, takes the counterparty's intent, and then passes an identity of the wrong length and a platform whose randomness gives short measure.",
   "then": "The client is the identity it was given, the intent crosses as fields, and each bad input comes back as a refusal carrying its reason rather than as a process that vanished.",
   "oracle": "behaviour",
-  "interpretation": "The ceremony's own conversation between two present devices has no encoding any document fixes, so an intent crosses as fields for the shell to carry however the two devices manage. Randomness of short measure is refused rather than padded, a seed completed with zeroes not being one."
+  "interpretation": "The ceremony's own conversation between two present devices has no encoding any document fixes, so an intent crosses as fields for the shell to carry however the two devices manage. Randomness of short measure is refused rather than padded, a seed completed with zeroes not being one.",
+  "families": [
+   "APP-001",
+   "APP-002",
+   "APP-004",
+   "APP-005",
+   "APP-006"
+  ]
  },
  {
   "id": "DMN-11",
@@ -5152,7 +5170,13 @@
   "when": "The shell attaches, registers and withdraws a wake endpoint, sends payload to another client of that node, and asks for what arrived.",
   "then": "The node holds the bundle and pool the attach published, the endpoint the registration gave and then nothing after the withdrawal, and the recipient's shell is handed the payload already decrypted. No method returns an encoding, and maintenance without a session is refused with its reason.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "APP-001",
+   "APP-002",
+   "APP-006",
+   "APP-008"
+  ]
  },
  {
   "id": "DMN-14",
@@ -5208,7 +5232,9 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "UX-012"
+   "UX-012",
+   "APP-002",
+   "APP-006"
   ]
  },
  {
@@ -5352,7 +5378,10 @@
   "when": "It is presented with a manifest that declares neither, one that declares a binding the host does not have, and manifests that are missing a component, repeat a key, carry an unknown key, or claim a reserved role.",
   "then": "Each is refused before the package is bound, and the operator is shown both what the manifest declared and what the component reaches. A manifest that says what its component does is admitted.",
   "oracle": "behaviour",
-  "interpretation": "Agreement between a manifest and its component is not a supply chain: signing, provenance and the update channel are what §9.1 leaves open, and none of them is here."
+  "interpretation": "Agreement between a manifest and its component is not a supply chain: signing, provenance and the update channel are what §9.1 leaves open, and none of them is here.",
+  "families": [
+   "PKG-001"
+  ]
  },
  {
   "id": "DMN-21",
@@ -5381,7 +5410,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "GAT-011"
+   "GAT-011",
+   "PKG-002"
   ]
  },
  {
@@ -5535,7 +5565,9 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "VAL-005"
+   "VAL-005",
+   "MAIL-025",
+   "APP-010"
   ]
  },
  {
@@ -5562,7 +5594,10 @@
   "when": "The reference metric allocates.",
   "then": "The allocation admits A before B, B before C, and D before E, and the reported per-candidate flow values match the fixture's expected values.",
   "oracle": "fixture",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "POL-011"
+  ]
  },
  {
   "id": "MET-02",
@@ -5588,7 +5623,10 @@
   "when": "The reference metric allocates over each.",
   "then": "Both allocations are identical.",
   "oracle": "fixture",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "POL-011"
+  ]
  },
  {
   "id": "MET-03",
@@ -5614,7 +5652,11 @@
   "when": "P evaluates the archive.",
   "then": "The standing P computes equals the standing computed from the three records naming known identities alone, and appending further records naming only unknown identities leaves it unchanged.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "POL-001",
+   "POL-013"
+  ]
  },
  {
   "id": "MET-04",
@@ -5641,7 +5683,11 @@
   "when": "The same observed transactions are fed to a node running each in turn.",
   "then": "The two nodes store and forward the same objects and produce the same wire traffic; only their computed standings differ.",
   "oracle": "behaviour",
-  "interpretation": "What the policy interface must expose is not stated; the test asserts that a substitute policy changes computed standing and nothing on the wire."
+  "interpretation": "What the policy interface must expose is not stated; the test asserts that a substitute policy changes computed standing and nothing on the wire.",
+  "families": [
+   "POL-017",
+   "POL-018"
+  ]
  },
  {
   "id": "MET-05",
@@ -5668,7 +5714,11 @@
   "when": "The conformance test runs each policy.",
   "then": "For the reference metric the report states a bound equal to the region's cut and the best score never exceeds it at any size. For the decay policy the report states that the score grows with region size.",
   "oracle": "model",
-  "interpretation": "The form of the reported bound is not specified; the test asserts a finite cut-equal bound for the reference and growth for the decay policy."
+  "interpretation": "The form of the reported bound is not specified; the test asserts a finite cut-equal bound for the reference and growth for the decay policy.",
+  "families": [
+   "POL-009",
+   "POL-018"
+  ]
  },
  {
   "id": "MET-06",
@@ -5690,7 +5740,10 @@
   "when": "The reference metric builds its graph.",
   "then": "The pair carries one edge's capacity; summing the three would give a larger flow, and the computed flow equals the single-edge value.",
   "oracle": "model",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "POL-005"
+  ]
  },
  {
   "id": "MET-07",
@@ -5717,7 +5770,11 @@
   "when": "The reference metric computes joint flow to the region and the sum of independent per-target flows.",
   "then": "The joint flow saturates at the cut at every size while the independent sum grows with population; the figures match the simulation's committed results.",
   "oracle": "model",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "POL-009",
+   "POL-010"
+  ]
  },
  {
   "id": "MET-08",
@@ -5739,7 +5796,10 @@
   "when": "A distance-decay policy is scored on each.",
   "then": "The first converges and the second does not, and the conformance report says which; an implementation that reports the condition as sufficient fails.",
   "oracle": "model",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "POL-019"
+  ]
  },
  {
   "id": "MET-09",
@@ -5766,7 +5826,10 @@
   "when": "It is asked which parties are one edge away, and its policy is asked for a score.",
   "then": "The first ring is the patron and the sibling, not the nephew and not itself. The evidence its policy sees is one edge per open binding in the copy, its own included, and a score comes out of it rather than a question for somebody else.",
   "oracle": "behaviour",
-  "interpretation": "A client's fold has two sources where a node's has three: it is not a party to a peering and holds none, so its graph is its horizon's adoptions plus the meetings it was present at."
+  "interpretation": "A client's fold has two sources where a node's has three: it is not a party to a peering and holds none, so its graph is its horizon's adoptions plus the meetings it was present at.",
+  "families": [
+   "POL-001"
+  ]
  },
  {
   "id": "MET-10",
@@ -5807,7 +5870,9 @@
    ]
   ],
   "families": [
-   "TX-011"
+   "TX-011",
+   "POL-002",
+   "POL-021"
   ]
  },
  {
@@ -5846,7 +5911,10 @@
   ],
   "families": [
    "TX-013",
-   "TX-014"
+   "TX-014",
+   "POL-002",
+   "POL-004",
+   "POL-006"
   ]
  },
  {
@@ -5929,7 +5997,10 @@
   "when": "Two requesters each send a PrekeyRequest for S with field 2 equal to 1.",
   "then": "The two replies carry different one-time keys, the pool shrinks by two, and neither key is ever served again.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "MAIL-003"
+  ]
  },
  {
   "id": "PAY-03",
@@ -5955,7 +6026,10 @@
   "when": "Requesters draw one-time keys until the pool falls below the threshold, and the interval elapses.",
   "then": "S uploads further one-time keys before the pool reaches zero, and publishes a new bundle with a later field 4 after the interval.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "MAIL-007"
+  ]
  },
  {
   "id": "PAY-04",
@@ -5982,7 +6056,11 @@
   "when": "Two PrekeyRequests for S with field 2 equal to 0 arrive from different peers.",
   "then": "Both replies carry S's bundles in field 2, one per device N holds for S, neither carries field 3, and every pool is unchanged.",
   "oracle": "behaviour",
-  "interpretation": "Re-derived 2026-09-22 to a bundle per device (wire-format.md §7.8)."
+  "interpretation": "Re-derived 2026-09-22 to a bundle per device (wire-format.md §7.8).",
+  "families": [
+   "MAIL-003",
+   "MAIL-004"
+  ]
  },
  {
   "id": "PAY-05",
@@ -6009,7 +6087,11 @@
   "when": "One requester sends L plus one PrekeyRequests for S with field 2 equal to 1 within the window, and one for another subject T.",
   "then": "The first L replies carry one-time keys; the excess request for S is served no one-time key; the request for T is served one.",
   "oracle": "behaviour",
-  "interpretation": "Whether the refused request is answered with the bundle and no field 3, or with failure code 1, is not stated; the test asserts only that no one-time key is served."
+  "interpretation": "Whether the refused request is answered with the bundle and no field 3, or with failure code 1, is not stated; the test asserts only that no one-time key is served.",
+  "families": [
+   "MAIL-006",
+   "MAIL-024"
+  ]
  },
  {
   "id": "PAY-06",
@@ -6031,7 +6113,11 @@
   "when": "The last one-time key is served.",
   "then": "S's client on the device whose pool was drained learns of the exhaustion and replenishes that device's pool; the test observes the notice through that client and the subsequent upload.",
   "oracle": "behaviour",
-  "interpretation": "No wire object carries the exhaustion notice; the test observes it through the client and treats the carrier as a parameter. Re-derived 2026-09-22: a pool is a device's."
+  "interpretation": "No wire object carries the exhaustion notice; the test observes it through the client and treats the carrier as a parameter. Re-derived 2026-09-22: a pool is a device's.",
+  "families": [
+   "MAIL-007",
+   "MAIL-024"
+  ]
  },
  {
   "id": "PAY-07",
@@ -6062,7 +6148,11 @@
   "when": "S refreshes its prekey material.",
   "then": "A PrekeyBatchRequest naming the population in ascending keyhash order is observed, and no single-subject PrekeyRequest with field 2 equal to 0 for any of them.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "MAIL-005",
+   "MAIL-023"
+  ]
  },
  {
   "id": "PAY-08",
@@ -6090,7 +6180,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "PAY-002"
+   "PAY-002",
+   "MAIL-024"
   ]
  },
  {
@@ -6113,7 +6204,10 @@
   "when": "The test inspects N's persistent storage afterwards.",
   "then": "No record of the requesters or of which subjects they asked for is present.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "MAIL-006"
+  ]
  },
  {
   "id": "PAY-10",
@@ -6140,7 +6234,10 @@
   "when": "S uploads it and a requester fetches it.",
   "then": "N stores and serves it unchanged. An implementation that parses field 3 and rejects it fails.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "MAIL-001"
+  ]
  },
  {
   "id": "PAY-11",
@@ -6194,7 +6291,9 @@
   "oracle": "behaviour",
   "interpretation": "Re-derived 2026-09-22 to a bundle per device (wire-format.md §7.8).",
   "families": [
-   "PAY-002"
+   "PAY-002",
+   "MAIL-004",
+   "MAIL-007"
   ]
  },
  {
@@ -6316,7 +6415,8 @@
   "families": [
    "PAY-001",
    "PAY-004",
-   "UX-012"
+   "UX-012",
+   "MAIL-009"
   ]
  },
  {
@@ -6374,7 +6474,10 @@
   "when": "A requester is served a one-time key, the node writes its state back, and the rate-limit window later expires.",
   "then": "Nothing anywhere under the node's directories contains the requester's keyhash beside the subject's, at any point. The allowance still binds within a window in memory, and a restart opens a fresh one, which costs the rate and not the budget since a served key is unlinked before its reply.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "MAIL-006"
+  ]
  },
  {
   "id": "PAY-19",
@@ -6401,7 +6504,10 @@
   "when": "The client deposits one-time keys.",
   "then": "The reply refuses, the pool holds none of the deposited keys, and nothing partially written survives. A client is never told a pool was replenished that was not.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "MAIL-002"
+  ]
  },
  {
   "id": "PAY-20",
@@ -6457,7 +6563,11 @@
   "when": "D2 attaches, offers its unsigned bundle payload, and takes back what the phone signed; S then fetches T's material and sends.",
   "then": "D2's attach publishes no bundle; the payload names T and D2; another identity's phone refuses to sign it; a signature by another identity, or one over material D2 does not hold, is refused by D2; the phone's signature is published under D2 and republished on a later attach; S sends to both devices and only D2 opens the ciphertext addressed to it.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "MAIL-025",
+   "APP-010"
+  ]
  },
  {
   "id": "PAY-22",
@@ -6481,7 +6591,8 @@
   "oracle": "behaviour",
   "interpretation": "No Sparse Post-Quantum Ratchet is available to this tree, so the test exercises the seam with a stand-in. It asserts that the seam is load-bearing, never that any particular construction is correct.",
   "families": [
-   "PAY-001"
+   "PAY-001",
+   "MAIL-027"
   ]
  },
  {
@@ -7961,7 +8072,10 @@
   "when": "The standing answer is read and set, and commands are given that it does not know, or that name no identity.",
   "then": "The standing answer to a question put to the person is to decline until it is set. A command it does not understand is refused with what was wrong, not ignored.",
   "oracle": "behaviour",
-  "interpretation": "A declaration is evidence about a scenario rather than about hardware, which is the whole difference between an instrument and a client, and is why this claims none of the product entries."
+  "interpretation": "A declaration is evidence about a scenario rather than about hardware, which is the whole difference between an instrument and a client, and is why this claims none of the product entries.",
+  "families": [
+   "APP-004"
+  ]
  },
  {
   "id": "PRT-04",
@@ -8252,7 +8366,10 @@
   "when": "C attaches to N and reads its unidirectional streams.",
   "then": "C receives k drain deliveries, and the set of ciphertexts received equals the set submitted, byte for byte.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "MAIL-009"
+  ]
  },
  {
   "id": "QUE-03",
@@ -8286,7 +8403,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "VAL-003"
+   "VAL-003",
+   "MAIL-014"
   ]
  },
  {
@@ -8314,7 +8432,11 @@
   "when": "N's process is killed without warning and restarted from whatever it persisted; C attaches to N again.",
   "then": "N's AttachAck carries field 4 equal to 0, no drain delivery follows, and none of the k ciphertexts is present in N's storage after the restart.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "MAIL-014",
+   "MAIL-015"
+  ]
  },
  {
   "id": "QUE-05",
@@ -8343,7 +8465,8 @@
   "oracle": "behaviour",
   "interpretation": "Re-derived 2026-09-22: the queue is per device, so the device the submission named is part of the minimum.",
   "families": [
-   "VAL-001"
+   "VAL-001",
+   "MAIL-012"
   ]
  },
  {
@@ -8371,7 +8494,10 @@
   "when": "X submits a (k+1)th message addressed to C.",
   "then": "X receives a refusal for the (k+1)th message, distinguishable from acceptance; at C's next attach field 4 equals k and the k earlier ciphertexts are all delivered.",
   "oracle": "behaviour",
-  "interpretation": "The sender-facing refusal has no wire encoding; the test checks only that X receives a refusal for that message that differs from the acceptance the earlier k received."
+  "interpretation": "The sender-facing refusal has no wire encoding; the test checks only that X receives a refusal for that message that differs from the acceptance the earlier k received.",
+  "families": [
+   "MAIL-013"
+  ]
  },
  {
   "id": "QUE-07",
@@ -8398,7 +8524,10 @@
   "when": "An attacker A submits several times k further messages addressed to C in quick succession, then C attaches.",
   "then": "Every one of A's messages is refused to A; C's AttachAck carries field 4 equal to k and the k legitimate ciphertexts are all delivered, none replaced by A's.",
   "oracle": "behaviour",
-  "interpretation": "The sender-facing refusal has no wire encoding; the test checks only that A receives a refusal for each message."
+  "interpretation": "The sender-facing refusal has no wire encoding; the test checks only that A receives a refusal for each message.",
+  "families": [
+   "MAIL-013"
+  ]
  },
  {
   "id": "QUE-08",
@@ -8425,7 +8554,10 @@
   "when": "After D, C attaches to N.",
   "then": "N's AttachAck carries field 4 equal to 1 and the message is delivered on a drain stream.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "MAIL-013"
+  ]
  },
  {
   "id": "QUE-09",
@@ -8452,7 +8584,10 @@
   "when": "X submits one message addressed to C2, then C2 attaches.",
   "then": "N accepts the message for C2, and C2's AttachAck carries field 4 equal to 1 with the message delivered on a drain stream.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "MAIL-013"
+  ]
  },
  {
   "id": "QUE-10",
@@ -8511,7 +8646,10 @@
   "when": "X submits one message addressed to C and one addressed to Z.",
   "then": "The message for C is queued (C's next AttachAck carries field 4 equal to 1); nothing is queued for Z in N's inspectable store, and the answer X receives for Z differs from the one it received for C.",
   "oracle": "behaviour",
-  "interpretation": "Neither the acceptance nor the no-record answer to the sender has a wire encoding; the test checks only that the two answers are distinguishable to X."
+  "interpretation": "Neither the acceptance nor the no-record answer to the sender has a wire encoding; the test checks only that the two answers are distinguishable to X.",
+  "families": [
+   "MAIL-008"
+  ]
  },
  {
   "id": "QUE-12",
@@ -8543,7 +8681,10 @@
   "when": "N goes dark; after three missed intervals C attaches to S.",
   "then": "S's AttachAck carries field 1 equal to 1 and field 4 equal to 0, and S delivers nothing on drain streams.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "MAIL-016"
+  ]
  },
  {
   "id": "QUE-13",
@@ -8570,7 +8711,10 @@
   "when": "N returns; C's session on S ends and C performs a fresh attach.",
   "then": "C attaches to N, N's AttachAck carries field 4 equal to k, and all k ciphertexts are delivered on drain streams.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "MAIL-016"
+  ]
  },
  {
   "id": "QUE-14",
@@ -8600,7 +8744,8 @@
   "interpretation": "No close code is assigned for ending a session on supersession; the test checks that the connection is closed by N and not which code it carries.",
   "families": [
    "CUR-008",
-   "REC-005"
+   "REC-005",
+   "MAIL-017"
   ]
  },
  {
@@ -8628,7 +8773,10 @@
   "when": "A client presenting K_old dials N and sends Attach.",
   "then": "N sends no AttachAck and no drain delivery on that connection.",
   "oracle": "model",
-  "interpretation": "Whether the attach is closed with application close code 1 or otherwise is not assigned; the test checks only that no AttachAck and no delivery follow."
+  "interpretation": "Whether the attach is closed with application close code 1 or otherwise is not assigned; the test checks only that no AttachAck and no delivery follow.",
+  "families": [
+   "MAIL-017"
+  ]
  },
  {
   "id": "QUE-16",
@@ -8657,7 +8805,8 @@
   "oracle": "model",
   "interpretation": "That delivery is keyed by the queued recipient keyhash is the model's reading (tamarin/compliant/attach); the specification says nothing further goes to the superseded credential and does not say whether a successor collects material queued for its predecessor.",
   "families": [
-   "REC-005"
+   "REC-005",
+   "MAIL-017"
   ]
  },
  {
@@ -8685,7 +8834,10 @@
   "when": "C's queue is listed.",
   "then": "All three ciphertexts are held, oldest first, and three files exist: the restarted store resumes its sequence past what the directory holds and never creates a file over an existing one. An implementation that restarts its sequence at zero and overwrites fails.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "MAIL-015"
+  ]
  },
  {
   "id": "QUE-18",
@@ -8712,7 +8864,10 @@
   "when": "N stores the recovery; C attaches again and a sender submits a message for C; the restarted node is asked about C.",
   "then": "N's serving state reports C superseded with no separate call: C's session ends, the fresh attach is refused with close code 1, and the submission is refused as superseded. The restarted node reports C superseded before its first session and refuses C's attach. An implementation whose table learns the recovery while its serving state keeps delivering under the old key fails.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "MAIL-017"
+  ]
  },
  {
   "id": "QUE-19",
@@ -8739,7 +8894,11 @@
   "when": "N drains on each attach; the submissions for the attached client are delivered.",
   "then": "After the failed session the store still holds every message C never took and none it took; the second AttachAck reports that count and the drain delivers exactly those, so across both sessions every accepted message was received and nothing was lost. For the attached client each message is stored on acceptance and gone once taken. An implementation that empties the mailbox before delivering, or reports success before the peer has taken the message, fails.",
   "oracle": "behaviour",
-  "interpretation": "Taken means the peer acknowledged every byte of the delivery stream, the transport's own boundary; a message whose acknowledgement the failure swallowed may be delivered again, which is the failure mode the design's no-loss rule chooses."
+  "interpretation": "Taken means the peer acknowledged every byte of the delivery stream, the transport's own boundary; a message whose acknowledgement the failure swallowed may be delivered again, which is the failure mode the design's no-loss rule chooses.",
+  "families": [
+   "MAIL-011",
+   "MAIL-014"
+  ]
  },
  {
   "id": "QUE-20",
@@ -8766,7 +8925,10 @@
   "when": "Both run.",
   "then": "Exactly one is accepted and one refused at the cap, and the store holds one message. An implementation that reads the cap and stores in two steps, so both submissions see the room for one, fails.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "MAIL-011"
+  ]
  },
  {
   "id": "QUE-21",
@@ -8815,7 +8977,11 @@
   "when": "The submission arrives.",
   "then": "The node answers refused, nothing counts as queued for that recipient, and the node stays up. It does not answer accepted, since the answer is a promise the node took the message; it does not answer over-bound, which would tell the sender the recipient's mailbox is full — a claim about somebody else that may be false; and it does not abort the process, which a storage fault must not be able to do.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "MAIL-010",
+   "MAIL-015"
+  ]
  },
  {
   "id": "REC-01",
@@ -9354,7 +9520,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "TOP-018"
+   "TOP-018",
+   "MAIL-016"
   ]
  },
  {
@@ -9499,7 +9666,8 @@
   "oracle": "model",
   "interpretation": null,
   "families": [
-   "TX-014"
+   "TX-014",
+   "POL-017"
   ]
  },
  {
@@ -9746,7 +9914,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "TOP-018"
+   "TOP-018",
+   "MAIL-016"
   ]
  },
  {
@@ -10892,7 +11061,8 @@
   "families": [
    "GAT-013",
    "GAT-014",
-   "GAT-025"
+   "GAT-025",
+   "PKG-013"
   ]
  },
  {
@@ -10922,7 +11092,10 @@
   "interpretation": "The sandbox mechanism is an implementation choice the requirement calls expected rather than mandated; the test assumes a capability-based component host.",
   "families": [
    "GAT-017",
-   "GAT-018"
+   "GAT-018",
+   "PKG-003",
+   "PKG-004",
+   "PKG-012"
   ]
  },
  {
@@ -11011,7 +11184,12 @@
   "when": "O's node processes both and the test watches its sessions.",
   "then": "The first is stored for O; the second is rejected; no report bytes leave the node.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "PKG-010",
+   "PKG-011",
+   "PKG-012"
+  ]
  },
  {
   "id": "RSC-23",
@@ -11194,7 +11372,8 @@
   "oracle": "behaviour",
   "interpretation": "Refused where the operator writes it rather than filtered where it is emitted: silently dropping a role would let an operator believe they granted something.",
   "families": [
-   "GAT-011"
+   "GAT-011",
+   "PKG-002"
   ]
  },
  {
@@ -11250,7 +11429,13 @@
   "when": "Packages are presented that import a dataset the host holds, a platform capability, or a hook inside the host's own instance that the host does not have.",
   "then": "Each is refused before it is instantiated, and the refusal names what was asked for rather than reporting a link failure. A package importing nothing is admitted, so the refusal is about the request and not about the sandbox. A package the host cannot call, and bytes that are not a component, are refused as what they are.",
   "oracle": "behaviour",
-  "interpretation": "The instance the two bindings live in, and the entry the host calls, are the reference implementation's names; no document fixes them."
+  "interpretation": "The instance the two bindings live in, and the entry the host calls, are the reference implementation's names; no document fixes them.",
+  "families": [
+   "PKG-001",
+   "PKG-003",
+   "PKG-004",
+   "PKG-014"
+  ]
  },
  {
   "id": "RSC-31",
@@ -11277,7 +11462,10 @@
   "when": "Two requests are served through it in turn, and a package that answers nothing is served once.",
   "then": "It sees the message the node built and nothing beside it, and the second request is not the first one's. A package that answers nothing has answered nothing, and the host does not invent a body for it.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "PKG-014"
+  ]
  },
  {
   "id": "RSC-32",
@@ -11303,7 +11491,11 @@
   "when": "Each is served, and a working package on the same host is served after them.",
   "then": "The one that will not stop is stopped and reported as having spent its budget; the one that breaks is reported as a defect, which is the different fact an operator acts on differently. Each request carries its own budget, so a second attempt is stopped again rather than inheriting the first one's exhaustion, and the working package is unaffected.",
   "oracle": "behaviour",
-  "interpretation": "What one request may spend is an operator's number. No document fixes a figure, and the reference's defaults are a starting point rather than a rule."
+  "interpretation": "What one request may spend is an operator's number. No document fixes a figure, and the reference's defaults are a starting point rather than a rule.",
+  "families": [
+   "PKG-005",
+   "PKG-006"
+  ]
  },
  {
   "id": "RSC-33",
@@ -11330,7 +11522,10 @@
   "when": "Each is served under a stated ceiling.",
   "then": "The growing package is refused more memory rather than trapping the host, and stops at the ceiling it was given rather than at one it chose. The oversized answer is refused as an answer, with its size stated, rather than reported as a defect in the package.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "PKG-005"
+  ]
  },
  {
   "id": "RSC-34",
@@ -11357,7 +11552,10 @@
   "when": "The host stops it without unbinding it.",
   "then": "It reports itself as not running, which is the question the gateway asks before it hands anything over, and a request that reaches it anyway is refused rather than served.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "PKG-005"
+  ]
  },
  {
   "id": "RSC-35",
@@ -11387,7 +11585,10 @@
   "interpretation": null,
   "families": [
    "GAT-017",
-   "VAL-001"
+   "VAL-001",
+   "PKG-003",
+   "PKG-004",
+   "PKG-009"
   ]
  },
  {
@@ -12298,7 +12499,10 @@
   "when": "T sends a type-9 PrekeyPublication on its own request stream carrying S's bundle, and then one carrying its own.",
   "then": "The first reply echoes T's nonce with code 1 and N holds no bundle for S from it; the second echoes its nonce with code 0 and N holds T's bundle.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "MAIL-001"
+  ]
  },
  {
   "id": "SUB-02",
@@ -12352,7 +12556,10 @@
   "when": "S deposits more than p minus q keys in one type-10 request.",
   "then": "The reply echoes S's nonce with code 2, and N's pool for S still holds exactly q keys.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "MAIL-002"
+  ]
  },
  {
   "id": "SUB-04",
@@ -12379,7 +12586,11 @@
   "when": "S submits ciphertext for R in a type-11 request.",
   "then": "The reply echoes S's nonce with code 0 before R has connected; N's queue for R holds one message; and when R attaches it receives that message with S's keyhash in front of the ciphertext unchanged.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "MAIL-008",
+   "MAIL-009"
+  ]
  },
  {
   "id": "SUB-05",
@@ -12406,7 +12617,10 @@
   "when": "S submits ciphertext for U in a type-11 request.",
   "then": "The reply echoes S's nonce with code 1, N queues nothing, and the answer is distinguishable at S from the code returned for a recipient N serves who is merely offline.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "MAIL-008"
+  ]
  },
  {
   "id": "SUB-06",
@@ -12433,7 +12647,12 @@
   "when": "S sends a type-12 registration carrying endpoint E1 with its key, then a second carrying E2 with a different key.",
   "then": "Both replies echo their nonces with code 0, and N holds exactly one endpoint for S, which is E2 with E2's key.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "MAIL-018",
+   "MAIL-019",
+   "APP-007"
+  ]
  },
  {
   "id": "SUB-07",
@@ -12460,7 +12679,11 @@
   "when": "S sends a type-12 registration with field 2 absent, then one with field 2 absent and field 3 present.",
   "then": "The first reply echoes its nonce with code 0 and N holds no endpoint for S; the second is rejected by the decoder and never reaches the register.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "MAIL-018",
+   "MAIL-019"
+  ]
  },
  {
   "id": "SUB-08",
@@ -12484,7 +12707,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "CAT-022"
+   "CAT-022",
+   "MAIL-010"
   ]
  },
  {
@@ -12512,7 +12736,10 @@
   "when": "The relationship ends: by the client's departure, by the node's disavowal of it, and by a recovery that supersedes the client's key.",
   "then": "The endpoint is gone in each case, as it is on an explicit withdrawal, and the routing slot is empty. A registration that outlived its relationship would be a routable identifier for a person held past the reason it was given.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "MAIL-019"
+  ]
  },
  {
   "id": "SUB-10",
@@ -12535,7 +12762,10 @@
   "when": "A recognised recovery supersedes that subordinate's key under the same patron.",
   "then": "The superseded key's registration is forgotten and its slot row no longer names it. The unrelated party's registration stands. The successor's own registration is its own to make and is not created by the supersession.",
   "oracle": "behaviour",
-  "interpretation": "The fold is what knows a supersession happened, since the adoption names only the new key; the cleanup therefore reads the outcome rather than the record."
+  "interpretation": "The fold is what knows a supersession happened, since the adoption names only the new key; the cleanup therefore reads the outcome rather than the record.",
+  "families": [
+   "MAIL-019"
+  ]
  },
  {
   "id": "SUB-11",
@@ -12579,7 +12809,10 @@
   "when": "S publishes it on d1's session.",
   "then": "The reply echoes the nonce with code 1 and N holds no bundle for (S, d2) from it; the same bundle published on a session d2 presented is taken.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "MAIL-001"
+  ]
  },
  {
   "id": "SUB-13",
@@ -12601,7 +12834,10 @@
   "when": "N's state is inspected after each, and after a save and restart.",
   "then": "N holds S's current bundle and its current pool and nothing else: no prior bundle, no count of publications, no times of deposit.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "MAIL-012"
+  ]
  },
  {
   "id": "SUB-14",
@@ -12658,7 +12894,10 @@
   "when": "S submits ciphertext for R, and R collects it.",
   "then": "What R collects carries S's bundle for that device as its third element, byte-for-byte as S signed it; where N holds no bundle for the submitting device the two-element form is delivered instead, and R accepts both.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "MAIL-026"
+  ]
  },
  {
   "id": "TOP-01",
@@ -13661,7 +13900,8 @@
    ]
   ],
   "families": [
-   "TX-010"
+   "TX-010",
+   "POL-021"
   ]
  },
  {
@@ -13692,7 +13932,8 @@
    ]
   ],
   "families": [
-   "TX-010"
+   "TX-010",
+   "POL-021"
   ]
  },
  {
@@ -16376,7 +16617,8 @@
   "families": [
    "GAT-027",
    "GAT-029",
-   "GAT-030"
+   "GAT-030",
+   "PKG-015"
   ]
  },
  {
@@ -16421,7 +16663,10 @@
   "when": "Three envelopes are offered: a live one with no body, a live one whose body is not the digest it claims, and a withdrawal that carries a body.",
   "then": "Each is refused with its own reason, nothing is queued for the instance, and no watermark moves — so none of them has taken the record's revision and left a complete copy unable to follow it.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "PKG-016"
+  ]
  },
  {
   "id": "RSC-46",
@@ -16448,7 +16693,11 @@
   "when": "The same revision arrives with a different digest, then the same revision again unchanged, then revision 3, then revision 1, then a withdrawal, and then the older live copy once more.",
   "then": "The differing digest is a conflict, kept for the operator and delivered to nobody; the repeat is a no-op; revision 3 is delivered; revision 1 is discarded; the withdrawal is delivered and stands; and the replayed live copy is refused against the tombstone. The node keeps identities, revisions and digests, and the conflict is not resolved for the operator.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "PKG-009",
+   "PKG-016"
+  ]
  },
  {
   "id": "RSC-47",
@@ -16470,7 +16719,10 @@
   "when": "The instance refuses the relationships exchange on every attempt, and then takes it.",
   "then": "While it refuses, the relationships are repeated and no envelope and no outbox poll reach it; the envelope waits where it was admitted; once it takes them the waiting envelope is delivered.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "PKG-015"
+  ]
  },
  {
   "id": "RSC-48",
@@ -16497,7 +16749,10 @@
   "when": "Revision 3 of the same record arrives and is taken, and the rounds then run to quiet.",
   "then": "Revision 2 is never handed over again, the record is applied at revision 3, and the instance's own log of what it was handed shows no revision after a higher one, with nothing left waiting.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "PKG-016"
+  ]
  },
  {
   "id": "RSC-49",
@@ -16577,7 +16832,10 @@
   "when": "An envelope arrives from an instance that is no relationship of it, and the instance emits to each configured destination and to one that is not.",
   "then": "The envelope from the stranger is refused at the node and never offered; each configured destination is resolved and queued, and the relation it is marked with is the node's reading of the operator's configuration; an emission naming an instance that is no relationship of the sender is refused with its reason and queues nothing; and one addressed to an instance whose own operator has not configured the sender is held, readable as pending for that instance, and never forced through.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "PKG-009"
+  ]
  },
  {
   "id": "RSC-52",
@@ -16630,7 +16888,10 @@
   "when": "An envelope is delivered claiming an origin whose node is not the caller, claiming an origin no node is configured for, and claiming the largest revision there is.",
   "then": "Each is refused on the handshake's key rather than on the envelope's word, and the plane is untouched: no watermark moves, so the legitimate revisions that follow are still delivered rather than classified as older. A node configured for one instance cannot speak for another, and the path the envelope carries changes none of this.",
   "oracle": "behaviour",
-  "interpretation": "The node's own transport key is the identity's classical member, which is what lets a test configure both nodes before either starts."
+  "interpretation": "The node's own transport key is the identity's classical member, which is what lets a test configure both nodes before either starts.",
+  "families": [
+   "PKG-015"
+  ]
  },
  {
   "id": "DMN-30",
@@ -16784,7 +17045,11 @@
   "when": "The file is applied, and again with a package tolerating only versions this host does not offer, with an ill-formed destination, with a bad key, and on a node with no state directory.",
   "then": "The block exists under the state directory at the declared quota and the log beside it; the instance's plane carries rhtn-host, rhtn-block, rhtn-block-bytes, rhtn-log and rhtn-log-bytes on its relationships PUT, told again when they move; the version mismatch, the destination, the key and the missing state directory are each refused at installation with the reason named.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "PKG-001",
+   "PKG-017"
+  ]
  },
  {
   "id": "DMN-36",
@@ -17213,7 +17478,8 @@
   "oracle": "behaviour",
   "interpretation": "§11.2's requirements are written in the request direction, and §11 field 2 extends them to the response by *same reasoning as the request* — whose own note is that opaque means the node does not interpret the application's semantics, not that it forwards unexamined input. The hazard is a property of the party in the middle, so the leg without a parser was the gap.",
   "families": [
-   "GAT-038"
+   "GAT-038",
+   "PKG-006"
   ]
  },
  {
@@ -17326,7 +17592,10 @@
   "when": "It writes what it was handed into its block, reads it back, logs a line and reads the clock; then writes past the quota; and a package granted no block touches it.",
   "then": "The round trip returns what was written and the file persists between requests; the log line is host-stamped; the write past the quota is refused with the quota named and nothing of it lands; the ungranted touch traps the request; a name with a path in it is not a block name.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "PKG-017"
+  ]
  },
  {
   "id": "RSC-64",
@@ -17353,7 +17622,10 @@
   "when": "It hands the host a request to a declared destination, one to an undeclared one, one with no host, one with a method the host does not send, and one that is not HTTP; and a declared name resolves to the node's own address.",
   "then": "The declared request is sent and its response handed back as bytes; each other is refused with the reason named, the refusal written to the instance's log; a package granted no fetch traps on the first touch; an address of the node's own machine or network is never connected to.",
   "oracle": "behaviour",
-  "interpretation": "The TLS exchange itself is exercised against the operating system's roots and a live destination, which the gate has none of; what the gate holds is the refusals, the address rule and the sandbox round trip through a fetcher of the test's own."
+  "interpretation": "The TLS exchange itself is exercised against the operating system's roots and a live destination, which the gate has none of; what the gate holds is the refusals, the address rule and the sandbox round trip through a fetcher of the test's own.",
+  "families": [
+   "PKG-017"
+  ]
  },
  {
   "id": "RSC-65",
@@ -17380,7 +17652,10 @@
   "when": "A request schedules a job for now; another is scheduled and cancelled; a third schedule is attempted; the host's tick runs; the table is reopened; the day's compute is charged out and the tick runs again.",
   "then": "The job is on disk at once; the third schedule is refused naming the bound; the tick runs the package's `job` entry with the task, which writes into the block, the outcome is in the log and the job is gone; the reopened table lists what was scheduled and not run; with the day spent, nothing runs and the log says the jobs wait.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "PKG-017"
+  ]
  },
  {
   "id": "RSC-66",
@@ -17415,7 +17690,8 @@
   "families": [
    "TX-027",
    "UX-022",
-   "CAT-026"
+   "CAT-026",
+   "PKG-018"
   ]
  },
  {
@@ -17491,7 +17767,10 @@
   "when": "The instance lists, writes, reads, sizes, syncs and removes a flat name in its block; writes a line to its log; asks to read its log back; and writes past the block's ceiling.",
   "then": "Every block operation answers as the sandbox binding does, absence reading as no bytes; the log line is kept with the host's stamp and a read of the log is refused as the operator's to make; the write past the ceiling is refused with the ceiling named and nothing of it lands.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "PKG-017"
+  ]
  },
  {
   "id": "DMN-43",

@@ -120,6 +120,8 @@ fn only_the_intersection_with_known_identities_is_weighed() {
     assert_eq!((nothing.weighed.len(), nothing.total), (0, 0.0));
 }
 
+// functional: POL-016
+// functional: POL-022
 /// Verifier responses are sought, and their absence is something an
 /// evaluator weighs, never a requirement (design §6.4): a presence record
 /// carrying no response at all is evidence, weighed by the observer's

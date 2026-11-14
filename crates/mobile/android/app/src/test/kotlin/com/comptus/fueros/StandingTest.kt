@@ -35,6 +35,7 @@ class StandingTest {
         Standing.reset()
     }
 
+    // functional: APP-008
     @Test
     fun the_kernel_starts_the_same_whether_the_standing_is_granted_or_refused() {
         val a = source("Attachments.kt")

@@ -1219,7 +1219,7 @@ async fn a_party_the_kernel_learned_binds_a_direct_dial_across_a_restart() {
     );
 }
 
-// functional APP-011
+// functional: APP-011
 #[test]
 fn state_written_before_the_kernel_sealed_is_read_and_resealed() {
     // a device from before the seam: the platform declared unsealed, so the
@@ -1259,7 +1259,7 @@ fn state_written_before_the_kernel_sealed_is_read_and_resealed() {
     );
 }
 
-// functional APP-011
+// functional: APP-011
 #[test]
 fn failed_custody_refuses_the_start_rather_than_writing_plain() {
     let shell = Arc::new(Shell {
@@ -1281,7 +1281,7 @@ fn failed_custody_refuses_the_start_rather_than_writing_plain() {
     );
 }
 
-// functional APP-011
+// functional: APP-011
 #[test]
 fn anothers_key_does_not_open_the_state_and_the_start_is_refused() {
     let theirs = Arc::new(Shell::default());

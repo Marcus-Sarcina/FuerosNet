@@ -5,6 +5,7 @@ use rhtn_client::sealed::{HEADER, is_sealed, open, seal};
 
 const KEY: [u8; 32] = [7u8; 32];
 
+// functional: APP-011
 #[test]
 fn what_is_sealed_opens_under_its_key_and_name() {
     let blob = seal(&KEY, "client", b"the durable state");
@@ -15,6 +16,7 @@ fn what_is_sealed_opens_under_its_key_and_name() {
     );
 }
 
+// functional: APP-011
 #[test]
 fn another_key_does_not_open_it() {
     let blob = seal(&KEY, "client", b"the durable state");
@@ -29,6 +31,7 @@ fn another_names_contents_do_not_open_as_this_one() {
     assert_eq!(open(&KEY, "client", &blob), None);
 }
 
+// functional: APP-011
 #[test]
 fn a_damaged_blob_refuses_whole() {
     let mut blob = seal(&KEY, "client", b"the durable state");

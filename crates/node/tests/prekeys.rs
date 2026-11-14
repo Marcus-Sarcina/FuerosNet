@@ -68,6 +68,7 @@ fn stocked(subject: &str, n: usize) -> PrekeyService {
     svc
 }
 
+// functional: MAIL-001
 #[test]
 fn the_corpus_prekey_objects_read_here() {
     let b = PrekeyBundle::parse(&fixture("P-prekey")).unwrap();

@@ -21,6 +21,7 @@ fn seeds(start: u8) -> impl FnMut() -> [u8; 32] {
     }
 }
 
+// functional: MAIL-027
 #[test]
 fn messages_cross_in_both_directions_and_out_of_order_and_decrypt_once() {
     let (mut a, mut b) = pair();
@@ -58,6 +59,8 @@ fn messages_cross_in_both_directions_and_out_of_order_and_decrypt_once() {
     assert!(c.decrypt(&m1, &mut seeds(0)).is_err());
 }
 
+// functional: PAY-004
+// functional: MAIL-027
 #[test]
 fn too_many_skipped_messages_are_refused() {
     let (mut a, mut b) = pair();

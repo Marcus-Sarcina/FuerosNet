@@ -784,6 +784,7 @@ fn every_clause_survives_being_written_and_read_back() {
     assert!(text.contains("Written by the node"), "{text}");
 }
 
+// functional: PKG-015
 /// **The directive plane across two instances one node hosts**
 /// (`rhtn_node::federation`; `resource-design/directive-surface.md`): the
 /// hosting file names the relationships, each instance is an ordinary

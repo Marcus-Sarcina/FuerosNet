@@ -44,6 +44,7 @@ class ThreadsTest {
         }
     }
 
+    // functional: APP-015
     @Test
     fun messages_append_and_read_back_newest_first_in_pages_with_delivery_changes_folded_in() {
         val files = Mem()
@@ -91,6 +92,7 @@ class ThreadsTest {
         assertTrue("a thread with no file is empty, not broken", moved.messages.isEmpty() && !moved.broken && moved.before == null)
     }
 
+    // functional: APP-015
     @Test
     fun the_index_round_trips_sealed_and_a_bad_or_missing_index_is_no_threads() {
         val files = Mem()

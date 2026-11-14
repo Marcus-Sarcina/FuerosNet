@@ -9,6 +9,8 @@ fn s(x: &str) -> String {
     x.to_string()
 }
 
+// functional: POL-022
+// functional: POL-016
 #[test]
 fn the_tally_keeps_answered_apart_from_unavailable_and_infra_from_light() {
     let mut ev = Evidence::new(s("obs"));
@@ -36,6 +38,7 @@ fn the_tally_keeps_answered_apart_from_unavailable_and_infra_from_light() {
     assert_eq!(w.total(), 2);
 }
 
+// functional: POL-022
 #[test]
 fn the_holding_window_is_the_decay_and_nothing_else_is() {
     let mut ev = Evidence::new(s("obs"));

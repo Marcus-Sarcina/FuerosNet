@@ -39,6 +39,7 @@ class FrontTest {
 
     // ---- lifecycle (S05 as tests) --------------------------------------
 
+    // functional: APP-013
     @Test
     fun a_bound_screen_renders_once_against_the_state_so_far() {
         val front = Front()
@@ -62,6 +63,7 @@ class FrontTest {
         assertEquals("hello", screen.lastThreads.single().messages.single().text)
     }
 
+    // functional: APP-013
     @Test
     fun a_gone_screen_is_a_null_sink_and_the_next_one_sees_the_state() {
         val front = Front()
@@ -80,6 +82,7 @@ class FrontTest {
         )
     }
 
+    // functional: APP-013
     @Test
     fun a_stale_unbind_does_not_silence_the_replacement() {
         val front = Front()

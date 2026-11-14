@@ -187,6 +187,7 @@ fn a_restart_in_the_arrival_second_overwrites_nothing_accepted() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+// functional: MAIL-014
 /// The recipient's directory outlives a delivery: a push for the same
 /// recipient may be between its file write and its directory flush when a
 /// running drain delivers and removes what it just wrote, and the flush

@@ -21877,3 +21877,44 @@ Ed25519/ML-DSA/COSE known answers; `primitives.rs` has the DH, KDF and KEM
 vectors and no signature KAT), VAL-007 to VAL-011 (E rows and the kinds'
 own rule: measurement programmes, not tests). Figure: 575 live, 374 held,
 201 by neither; CAP 2, CAT 0, ENC 1, SIG 3, VAL 5.
+
+**Third group — MAIL, APP, PKG, POL — linked, 2026-11-14.** MAIL by the
+QUE, SUB, PAY and DMN prekey entries with REP-02/16 and three unmarked
+tests (the corpus prekey objects, the ratchet's two, the queue directory);
+APP by DMN-10/13/15/27, CER-44, PRT-02, PAY-21, SUB-06 and the sealing,
+delegated, standing, wipe, front and threads tests; PKG by the RSC sandbox
+and federation entries with DMN-20/21/29/35/42 and the directive-plane
+hosting test; POL by the MET entries, ARC-14, REP-07, CER-28, TOP-31/32
+and nine unmarked policy tests (`metric.rs`'s flow invariants carried from
+`flow_metric.py`, `conduct.rs`'s tally, `archive.rs`'s responseless
+record). **Three dead markers fixed**: `ffi/tests/boundary.rs` carried
+`// functional APP-011` three times without the colon the regex needs,
+so APP-011 was held by nothing; the colon is back. The partials: MAIL-005
+(the batch and its order; duplicate targets multiplying nothing has no
+test); MAIL-019 (a foreign node overwriting another's registration has no
+test); MAIL-027 (the Double Ratchet's crossing and skipped bound, and the
+seam; the client stating which ratchet it runs has no test); APP-007
+(SUB-06 takes a client-supplied endpoint and key; that nothing registers
+unasked is asserted by nothing); APP-013 (one kernel per identity per
+location is the shell's wiring, FrontTest holding the screen half); PKG-005
+(fuel, memory, response; the table bound has no test); PKG-006 (an E row:
+the working package unaffected and the unreadable answer; concurrent hostile
+packages beside an active node is a programme); PKG-010 (stored from its
+resource alone, the forgery refused; the category bound has no vector);
+PKG-013 (the node's side; the package tolerating a new session id is the
+package's); POL-004 (scope edges; that a sibling adds no capacity edge is
+`a_scope_is_adoption_and_sibling_edges_only`'s by half); POL-006 (MET-11's
+peering as acquaintance; the common capacity treatment for every
+out-of-horizon kind is asserted by nothing); POL-016 (the tally keeps
+answered apart from unavailable; the negative threshold and inconclusive
+band have no test); POL-020 (CER-28 refutes a met claim; that re-signing
+adds no weight has no test). **Held by neither, and said so**: APP-009 (an
+O row), APP-012 (zeroization; not observable, and no test walks freed
+memory), APP-014 (a device bringing another of its identity to the dataset
+unasked; no test by any name), MAIL-020/021 (the doorbell and the foreground
+default; SUB-14 is unimplemented), MAIL-022 (an O row), PKG-007 (an O row),
+PKG-008 (stating unmet dependencies; no test), POL-014 (rotation credit
+bounded by vouching paths; no test), POL-015 (decay as policy over
+standing; MET-05 reports the decay policy's growth and nothing tests
+inactivity). Figure: 575 live, 445 held, 130 by neither; APP 3, MAIL 3,
+PKG 2, POL 2.

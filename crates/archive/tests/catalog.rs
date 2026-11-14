@@ -32,6 +32,7 @@ fn body_of_frame(f: &[u8]) -> Vec<u8> {
     p[outer[1].clone()].to_vec()
 }
 
+// functional: PKG-010
 // functional: CAT-003
 #[test]
 fn the_corpus_catalog_entry_and_abuse_report_read_and_verify_and_their_forgeries_do_not() {

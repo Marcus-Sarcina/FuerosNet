@@ -90,6 +90,7 @@ fn no_adjacency_order_decides_an_equal_path_tie() {
     assert_eq!(forward.admitted, ["A", "B", "C", "D"].map(s));
 }
 
+// functional: POL-011
 /// Carried from `flow_metric.py`: each of the three passes needs its own
 /// case, because a plain multi-sink max-flow satisfies pass 1 by accident,
 /// fails pass 2 silently, and cannot detect a missing pass 0.
@@ -146,6 +147,8 @@ fn the_three_passes_each_decide_their_own_case() {
     }
 }
 
+// functional: POL-008
+// functional: POL-009
 #[test]
 fn max_flow_is_the_min_cut() {
     let mut g = FlowGraph::new();
@@ -284,6 +287,7 @@ fn the_aggregate_a_set_can_draw_is_bounded_by_the_cut_per_computation() {
     }
 }
 
+// functional: POL-010
 /// Carried from `flow_metric.py`: two disjoint halves of one region admitted
 /// separately draw more than the cut; admitted together they draw the cut.
 /// The bound rests on the whole set entering one computation, and nothing
@@ -305,6 +309,8 @@ fn setwise_conservation_holds_per_computation_not_per_lifetime() {
     );
 }
 
+// functional: POL-007
+// functional: POL-008
 /// Carried from `flow_metric.py`: a peering edge one hop past a visible one
 /// stays invisible at every reach.  Learning of a node confers no sight of
 /// the records around it (design §16.2.1, §16.3.1).
@@ -333,6 +339,7 @@ fn visibility_does_not_compose() {
     }
 }
 
+// functional: POL-003
 /// Carried from `flow_metric.py`: distance is computed from the same graph
 /// the flow is.  Here that is structural — an evaluator's distance and its
 /// capacity graph come from one evidence — and what is checked is design
@@ -374,6 +381,9 @@ fn hops_in_the_collapsed_graph_are_the_landscape_distance() {
     assert_eq!(dist["REGION.f10"], 4);
 }
 
+// functional: POL-003
+// functional: POL-008
+// functional: POL-012
 /// The E2 construction's edge: entered from inside the horizon the same
 /// region is unthrottled — the bound is a beyond-the-horizon claim (design
 /// §16.2.1, §17.3).  And a region gated behind a node outside the horizon is
@@ -542,6 +552,7 @@ fn the_branching_condition_is_necessary_and_not_sufficient() {
     );
 }
 
+// functional: POL-004
 #[test]
 fn a_scope_is_adoption_and_sibling_edges_only() {
     let scope = Scope::from_adoptions(&[(s("p"), s("a")), (s("p"), s("b")), (s("a"), s("c"))]);
