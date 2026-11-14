@@ -21035,3 +21035,70 @@ either radio, ICMP and small UDP passing; the one capture taken caught no
 dial (a passive window under Doze). **What the remote run exercises
 first**: the second-identity launch (T5), which on 2026-11-12 showed done
 with no machine and was bypassed by a hand enrolment.
+
+**R1 done and the radio finding explained, 2026-11-14.** The first
+subnet's node launched from GXV's Operator screen as a user would:
+64.227.31.70 (QUIC 7431, administration 7449 answering `401` with the
+nonce-and-proof text from here), GXV enrolled, agreed and attached in
+2.1 s. MRK, ZU8 and 4VC pointed at it by the `agree_to` lever and
+restarted: ZU8 attached in 2.2 s, 4VC in 1.7 s (each after the dead
+provision's 10 s timeout), **MRK timed out — and its diag held one
+`quinn_udp sendmsg error: Os { code: 1, kind: PermissionDenied }` to
+64.227.31.70:7431**, which quinn logs at most once per 60 s
+(`IO_ERROR_LOG_INTERVAL`). Across all diag files: GXV 73 refused sends,
+MRK 397, ZU8 0, 4VC 1 — the two Android 15 handsets against the two on
+Android 12, every destination one the app was dialling. MRK was awake on
+its lock screen (`mDreamingLockscreen=true`); GXV was unlocked in the
+author's hand. **Lock screen dismissed by `input keyevent 82`, app
+restarted: attached to 703a82c2's node in 21.8 s from start, zero refused
+sends.** So: **Android 15 on these Samsungs refuses UDP sends from an app
+that is not visible and holds no foreground service** (the shell has
+none: no `startForeground` anywhere), and every "GXV/MRK cannot complete
+a QUIC handshake" of 2026-11-12/13 was an app restarted by `adb` behind a
+keyguard. The AP's radios, the dongle, the DHCP lease and the laptop's
+band were all innocent of that one; the dongle re-association of the 12th
+fixed a different, real, asymmetry. **Owed to the author**: whether the
+client holds a foreground service (a persistent notification) so a
+session survives the screen; without one, nothing arrives while the phone
+is locked on Android 15, which is most of a phone's day. **Bench rule
+meanwhile**: wake and dismiss the keyguard on a Samsung before any
+adb-driven attach or send.
+
+**Ruled 2026-11-14 [author]: the client holds a foreground service**, and
+*"automated tests must continue to test both the normal state and the case
+where this service is blocked, as it seems like the kind of thing a mobile
+OS vendor or performance utility might choose to block in the future."*
+Documents: `light-client-requirements.md` §4.1 (a bullet after re-attach);
+SES-020 (571 families, SES 20); pins regenerated. Code owed, after the
+bench run: an Android foreground service under the kernel (type
+`remoteMessaging`, which Android 15 does not time-limit where `dataSync`
+is cut at six hours a day), its start wrapped so a platform refusal
+(`ForegroundServiceStartNotAllowedException` and kin) leaves the kernel
+running and re-attaching on visibility; Kotlin tests for both states with
+the service starter faked; `acceptance.json` row.
+
+**T5 done, 2026-11-14 — the second-identity launch against a provider.**
+GXV-2 (feb8843a) in focus launched from the Operator screen: a second
+droplet, 167.99.153.102 (administration `401` from here), enrolled,
+agreed, attached in 10.8 s. The 10 s of that is a dial timeout before the
+agreed address: both the hand-enrolled ET node of the 12th and this one
+speak as feb8843a, so the client's held endpoint record for "node
+feb8843a" still named the laptop and `dial_order` tried it first — it
+corrects itself when the new record is held. MRK pointed at it by the
+lever with its keyguard dismissed: `identity.attach node=703a82c2
+attached=true tab=true` at 21.4 s and `node=feb8843a attached=true
+tab=true` at 32.0 s from start, zero refused sends — one identity, two
+subnets, two remote nodes, as SES-017 says. Both subnets are now on
+droplets launched from the phone; the laptop does `adb` only.
+
+**Ruled 2026-11-14 [author]: the Operator screen varies with the identity
+in focus** — *"GXV's instance shows on the Operator screen for GXV-2. The
+Operator interface is one of the pages that ought to vary based on
+in-focus user, as this could get confusing."* The screen keeps its
+instances, tokens and invitations in one device-wide preference file
+(`getSharedPreferences("operator")`: `instances`, `token:<at>`,
+`invited:<who>`), which is the veneer audit's "facts held per device that
+are an identity's" item. Owed after the bench run: key that file by the
+focused identity's scope (a `Front.persist`-style per-identity store, as
+the threads were moved on the 12th), and in the restructure the
+`Instance` row carries its operator like every other row.

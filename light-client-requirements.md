@@ -826,6 +826,18 @@ nothing below reaches across them.
   or an attach at start that got no answer, is tried again with backoff
   (seconds growing to minutes, then steady) until it holds; a restart is
   not the way back. Each address is tried on its own.
+- **Keep your sessions while you are not on the screen** [author,
+  2026-11-14]. A mobile platform may refuse network to an application the
+  person is not looking at; the client takes whatever standing the platform
+  offers a process that must keep a connection (on Android, a foreground
+  service and the notification it costs), so that mail arrives while the
+  phone is in a pocket. **And works without it.** The platform, a vendor's
+  build of it or a utility the person installed may refuse that standing
+  [author: *"it seems like the kind of thing a mobile OS vendor or
+  performance utility might choose to block in the future"*]: a client so
+  refused runs the same, its sessions re-attached the moment it is visible
+  again, and nothing is lost but the time it was away. Both states are
+  tested, not the first alone.
 - **Open a session with each of a recipient's devices, and send to each.** A
   fetch returns a bundle per device (`wire-format.md` §7.8), a session is with
   a device, and a message sent to one of them reaches one of them; the
