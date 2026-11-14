@@ -22,7 +22,8 @@
   "oracle": "fixture",
   "interpretation": null,
   "families": [
-   "ARC-001"
+   "ARC-001",
+   "TX-018"
   ]
  },
  {
@@ -58,7 +59,8 @@
    ]
   ],
   "families": [
-   "ARC-001"
+   "ARC-001",
+   "TX-007"
   ]
  },
  {
@@ -130,6 +132,10 @@
     1,
     "series-opens-at-zero"
    ]
+  ],
+  "families": [
+   "TX-001",
+   "TX-030"
   ]
  },
  {
@@ -156,7 +162,8 @@
   "interpretation": "Tested on the comparison rather than on a transaction: §2.3's rule says when two sequences may be ranked and what newer means, and the objects that are ranked by it are endpoint records.",
   "families": [
    "ARC-005",
-   "ARC-015"
+   "ARC-015",
+   "TX-017"
   ]
  },
  {
@@ -378,7 +385,9 @@
    ]
   ],
   "families": [
-   "ARC-007"
+   "ARC-007",
+   "TX-002",
+   "TX-003"
   ]
  },
  {
@@ -443,7 +452,10 @@
   "when": "P evaluates each chain at adoption.",
   "then": "The initial trust state P derives for S is identical for A and B. The result carries no field for archive length, record count or counterparty count.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TX-003"
+  ]
  },
  {
   "id": "ARC-15",
@@ -1303,7 +1315,10 @@
   "when": "The grant and query arrive.",
   "then": "B's signed response carries result `unavailable`.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TX-025"
+  ]
  },
  {
   "id": "CER-13",
@@ -1398,7 +1413,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "CER-016"
+   "CER-016",
+   "TX-025"
   ]
  },
  {
@@ -1584,7 +1600,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "CER-010"
+   "CER-010",
+   "TX-022"
   ]
  },
  {
@@ -2091,6 +2108,9 @@
     "no-aggregate-verdict",
     "-"
    ]
+  ],
+  "families": [
+   "TX-027"
   ]
  },
  {
@@ -2152,6 +2172,9 @@
     "guided-capture-on-a-camera",
     "-"
    ]
+  ],
+  "families": [
+   "TX-026"
   ]
  },
  {
@@ -2300,6 +2323,11 @@
     "one-signature-only",
     "+"
    ]
+  ],
+  "families": [
+   "TX-007",
+   "TX-008",
+   "TX-030"
   ]
  },
  {
@@ -2556,7 +2584,9 @@
   "families": [
    "CER-002",
    "CER-009",
-   "CER-025"
+   "CER-025",
+   "TX-020",
+   "TX-021"
   ]
  },
  {
@@ -3802,7 +3832,10 @@
   "when": "Each is decoded.",
   "then": "The valid envelope is accepted; each variant is rejected at the structural layer before any signature is checked, and the response with a kid in an embedded or standalone signature is rejected. An implementation that tolerates a matching kid there fails.",
   "oracle": "fixture",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TX-022"
+  ]
  },
  {
   "id": "DEC-18",
@@ -3859,7 +3892,11 @@
   "when": "Each is decoded and verified.",
   "then": "The valid objects are accepted. Every variant is rejected: the envelope variants at the structural layer, the block variants before any signature in the block is checked, and the endpoint record at verification. An implementation that reconstructs the signing input from its own empty headers and nil payload while ignoring what was received fails, as does one that treats an empty block as covered.",
   "oracle": "fixture",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TX-005",
+   "TX-007"
+  ]
  },
  {
   "id": "DEC-20",
@@ -3903,6 +3940,10 @@
     1,
     "recovery-response-shape"
    ]
+  ],
+  "families": [
+   "TX-001",
+   "TX-005"
   ]
  },
  {
@@ -3944,6 +3985,11 @@
     5,
     "formation-is-genesis-rooted"
    ]
+  ],
+  "families": [
+   "TX-019",
+   "TX-020",
+   "TX-021"
   ]
  },
  {
@@ -3986,6 +4032,12 @@
     7,
     "new-series-at-counter-zero"
    ]
+  ],
+  "families": [
+   "TX-001",
+   "TX-013",
+   "TX-015",
+   "TX-018"
   ]
  },
  {
@@ -4064,7 +4116,10 @@
   "when": "Each is parsed as a record or checked as a body; the last is verified.",
   "then": "The malformed locator, the self-nominated witness and the wide address are rejected, and the nominated record parses. The public verifier refuses the bare adoption on the body rule before any signature, with the same reason the record parser gives. An implementation that checks a locator's path only when it stands alone, or whose crypto entry point verifies signatures over a body it never checked, fails.",
   "oracle": "fixture",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TX-019"
+  ]
  },
  {
   "id": "DEC-25",
@@ -4124,7 +4179,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "TOP-014"
+   "TOP-014",
+   "TX-006"
   ]
  },
  {
@@ -4151,7 +4207,10 @@
   "when": "Each is parsed.",
   "then": "Both are malformed at typed validation, before any signature is weighed. An adoption whose three keys are distinct still parses and verifies.",
   "oracle": "behaviour",
-  "interpretation": "Checkable from the adoption alone, so it sits beside the recovery block's prior-key rule rather than in a verifier that needs keys."
+  "interpretation": "Checkable from the adoption alone, so it sits beside the recovery block's prior-key rule rather than in a verifier that needs keys.",
+  "families": [
+   "TX-005"
+  ]
  },
  {
   "id": "DEC-28",
@@ -4259,6 +4318,9 @@
     3,
     "code-space-is-64"
    ]
+  ],
+  "families": [
+   "TX-010"
   ]
  },
  {
@@ -4309,6 +4371,10 @@
     "one-signature-only",
     "-"
    ]
+  ],
+  "families": [
+   "TX-007",
+   "TX-009"
   ]
  },
  {
@@ -4413,6 +4479,9 @@
     "witness-names-a-body-entry",
     "-"
    ]
+  ],
+  "families": [
+   "TX-019"
   ]
  },
  {
@@ -5449,6 +5518,9 @@
     "prejudice-band-read",
     "-"
    ]
+  ],
+  "families": [
+   "TX-011"
   ]
  },
  {
@@ -5484,6 +5556,10 @@
     "peering-is-acquaintance",
     "-"
    ]
+  ],
+  "families": [
+   "TX-013",
+   "TX-014"
   ]
  },
  {
@@ -7186,6 +7262,9 @@
     2,
     "ends-only-the-named"
    ]
+  ],
+  "families": [
+   "TX-012"
   ]
  },
  {
@@ -7225,7 +7304,8 @@
    ]
   ],
   "families": [
-   "TOP-008"
+   "TOP-008",
+   "TX-012"
   ]
  },
  {
@@ -8554,7 +8634,10 @@
   "when": "The recovery ceremony runs.",
   "then": "V's client generates the VerificationQuery with field 2 naming V and the meeting's own pre-commitment, S's new key countersigns it, and V's response carries selection basis 0 and field 8 equal to S's prior key.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TX-025"
+  ]
  },
  {
   "id": "REC-05",
@@ -8586,7 +8669,10 @@
   "when": "S's client performs the rotation.",
   "then": "Before the adoption under k2 is pushed, a self-signed SignedLocator by k1 at the maximum counter is produced for each of the two series, and nothing signed by k1 follows them.",
   "oracle": "model",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TX-016"
+  ]
  },
  {
   "id": "REC-06",
@@ -8619,6 +8705,10 @@
     7,
     "new-series-at-counter-zero"
    ]
+  ],
+  "families": [
+   "TX-015",
+   "TX-016"
   ]
  },
  {
@@ -8646,7 +8736,10 @@
   "when": "S's client is asked to produce a reissue whose field 4 names s1 or s2.",
   "then": "No such reissue is produced; a reissue into an unused series is.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TX-015"
+  ]
  },
  {
   "id": "REC-08",
@@ -8676,7 +8769,8 @@
   "interpretation": null,
   "families": [
    "ARC-014",
-   "ARC-015"
+   "ARC-015",
+   "TX-015"
   ]
  },
  {
@@ -8847,7 +8941,10 @@
   "when": "P evaluates each.",
   "then": "P countersigns none of them.",
   "oracle": "model",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TX-005"
+  ]
  },
  {
   "id": "REP-01",
@@ -8961,7 +9058,10 @@
   "when": "L presents T an adoption carrying P's countersignature (a lateral shift) with no archive presentation.",
   "then": "T completes the adoption; no archive-fetch request and no presence ceremony are required of L.",
   "oracle": "behaviour",
-  "interpretation": "'No archive presentation or re-verification' is observed as the absence of an archive-fetch request and of a presence-ceremony requirement; the spec names no other observable."
+  "interpretation": "'No archive presentation or re-verification' is observed as the absence of an archive-fetch request and of a presence-ceremony requirement; the spec names no other observable.",
+  "families": [
+   "TX-006"
+  ]
  },
  {
   "id": "REP-05",
@@ -8985,7 +9085,10 @@
   "when": "A node in A's horizon receives the record by topology push.",
   "then": "The record is accepted and stored, and the ASN values it exposes are exactly those asserted; no validation failure is reported.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TX-013"
+  ]
  },
  {
   "id": "REP-06",
@@ -9013,7 +9116,10 @@
   "when": "O's client reads A's peering relationships.",
   "then": "The stored record yields A's and B's keyhashes, both IPv4 addresses and both ASNs as decoded from the record's NetworkPoints, with nothing withheld or derived.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TX-013"
+  ]
  },
  {
   "id": "REP-07",
@@ -9036,7 +9142,10 @@
   "when": "The reference metric scores the same target from the same observer in each graph.",
   "then": "The two scores are identical.",
   "oracle": "model",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TX-014"
+  ]
  },
  {
   "id": "REP-08",
@@ -9121,7 +9230,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "TOP-003"
+   "TOP-003",
+   "TX-014"
   ]
  },
  {
@@ -9206,7 +9316,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "TOP-005"
+   "TOP-005",
+   "TX-014"
   ]
  },
  {
@@ -9384,7 +9495,8 @@
   "oracle": "fixture",
   "interpretation": null,
   "families": [
-   "TOP-016"
+   "TOP-016",
+   "TX-017"
   ]
  },
  {
@@ -9440,7 +9552,8 @@
   "oracle": "behaviour",
   "interpretation": "The spec says the reader 'has learned nothing'; the test reads this as the held locator left unchanged, the newcomer not installed, and the reader signalling indeterminacy rather than choosing.",
   "families": [
-   "TOP-034"
+   "TOP-034",
+   "TX-017"
   ]
  },
  {
@@ -9658,7 +9771,8 @@
   "oracle": "behaviour",
   "interpretation": "The spec requires failure rather than referral and names codes 0 and 1 as the stale-locator outcomes; which of the two S returns is the test's reading, and either is accepted.",
   "families": [
-   "TOP-007"
+   "TOP-007",
+   "TX-008"
   ]
  },
  {
@@ -12202,7 +12316,8 @@
    ]
   ],
   "families": [
-   "TOP-003"
+   "TOP-003",
+   "TX-008"
   ]
  },
  {
@@ -12232,6 +12347,9 @@
     3,
     "ends-only-the-named"
    ]
+  ],
+  "families": [
+   "TX-011"
   ]
  },
  {
@@ -12265,6 +12383,9 @@
     3,
     "applies-regardless-of-time"
    ]
+  ],
+  "families": [
+   "TX-009"
   ]
  },
  {
@@ -12445,7 +12566,10 @@
   "when": "O verifies the adoption structurally, then evaluates it, dereferencing field 8, before applying it to the table.",
   "then": "Structural verification reports valid. Evaluation reports the presence reference unsatisfied, the record naming P and Z rather than P and N, and O's table does not gain N under P.",
   "oracle": "behaviour",
-  "interpretation": "Whether a failed evaluation keeps the adoption out of the table is not stated; wire-format.md §3.4 makes taking effect a separate question from validity, and the test reads the evaluation step as the gate on applying the binding."
+  "interpretation": "Whether a failed evaluation keeps the adoption out of the table is not stated; wire-format.md §3.4 makes taking effect a separate question from validity, and the test reads the evaluation step as the gate on applying the binding.",
+  "families": [
+   "TX-004"
+  ]
  },
  {
   "id": "TOP-13",
@@ -12582,6 +12706,10 @@
     3,
     "ordered-in-patrons-slot"
    ]
+  ],
+  "families": [
+   "TX-009",
+   "TX-011"
   ]
  },
  {
@@ -12626,7 +12754,8 @@
    ]
   ],
   "families": [
-   "TOP-015"
+   "TOP-015",
+   "TX-012"
   ]
  },
  {
@@ -12660,7 +12789,8 @@
   "oracle": "model",
   "interpretation": null,
   "families": [
-   "TOP-014"
+   "TOP-014",
+   "TX-004"
   ]
  },
  {
@@ -12697,7 +12827,9 @@
    ]
   ],
   "families": [
-   "TOP-015"
+   "TOP-015",
+   "TX-012",
+   "TX-016"
   ]
  },
  {
@@ -13007,6 +13139,9 @@
     3,
     "ordered-in-patrons-slot"
    ]
+  ],
+  "families": [
+   "TX-011"
   ]
  },
  {
@@ -13043,6 +13178,9 @@
     3,
     "code-space-is-64"
    ]
+  ],
+  "families": [
+   "TX-010"
   ]
  },
  {
@@ -13071,6 +13209,9 @@
     3,
     "reason-band-is-structural"
    ]
+  ],
+  "families": [
+   "TX-010"
   ]
  },
  {
@@ -13102,7 +13243,8 @@
   ],
   "families": [
    "TOP-005",
-   "TOP-007"
+   "TOP-007",
+   "TX-008"
   ]
  },
  {
@@ -14799,7 +14941,8 @@
   "interpretation": "The adoption rests on the meeting, so the two are together and each holds what the checks need [author, 2026-10-14].",
   "families": [
    "CER-031",
-   "NET-031"
+   "NET-031",
+   "TX-003"
   ]
  },
  {
@@ -14828,7 +14971,8 @@
   "oracle": "behaviour",
   "interpretation": "A device that signed what was sent to it would be adopted by anybody able to reach it.",
   "families": [
-   "CER-031"
+   "CER-031",
+   "TX-004"
   ]
  },
  {
@@ -15236,7 +15380,8 @@
   "interpretation": "A peering carries none of the subnet's authority, so nothing consults a patron [design §15.1].",
   "families": [
    "NET-031",
-   "NET-030"
+   "NET-030",
+   "TX-013"
   ]
  },
  {
@@ -15266,7 +15411,8 @@
   "oracle": "behaviour",
   "interpretation": "",
   "families": [
-   "NET-030"
+   "NET-030",
+   "TX-031"
   ]
  },
  {
@@ -15447,7 +15593,10 @@
   "when": "The adoption is composed, signed by both, and read by a party holding only the patron's identity, then by one holding the patron's and the material the record carried.",
   "then": "The record carries the adopted node's key material and not the patron's, and that material hashes to the keyhash the record names as its subject. A holder of the patron's identity alone meets the unverifiable outcome naming the node as missing, rather than a rejection; adding the material the record carried verifies it. So the record introduces its own subject and can be verified by a party holding nothing else of the subnet. A caller that names material of its own keeps it, which is the recovery path introducing a party deliberately.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "TX-002"
+  ]
  },
  {
   "id": "CER-72",
@@ -16710,7 +16859,10 @@
   "when": "The client reads a capture ask, a location ask, a sign ask and malformed asks; the person gives a place at the precision asked, a photograph, an approval of the payload, and declines a scan.",
   "then": "The same body under text/plain is text and only the declared type is an ask; each malformed ask is refused by the name of its field; the place at another precision is refused; each answer is one POST to the return path on the resource that asked through the node that served it, with the named parts; the declined scan carries its reason and no result; the photograph and the approval carry a digest, a key and a claim that verify over the stated array for that resource and not for another; the key is not the identity's and another resource sees another key; the secret survives the device's own state and is absent from the backup; a blob written before the secret was kept opens.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "TX-027"
+  ]
  },
  {
   "id": "TOP-54",

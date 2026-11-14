@@ -237,7 +237,7 @@ fn peered(s: &mut common::harness::Setup) -> Vec<u8> {
 /// peer cannot open; a contact the owner lost comes back from it on the
 /// next contact; nothing the owner still holds is replaced; and the sealed
 /// captures of others never cross.
-// acceptance: TX-031, PAY-018
+// functional: TX-031
 #[test]
 fn a_peer_holds_a_blob_it_cannot_open_and_the_owner_recovers_a_lost_contact_from_it() {
     let mut s = setup(&PARTIES);
@@ -381,7 +381,7 @@ fn payloads(msgs: &[rhtn_client::ceremony::Msg]) -> usize {
 /// blob bob returns verifies under the material its own contacts carry,
 /// and brings the records, the contacts, her name and bob as a peer of
 /// her own.
-// acceptance: TX-031
+// functional: TX-031
 #[test]
 fn a_restored_client_knows_its_peers_from_the_horizon_and_takes_its_dataset_from_the_blob() {
     let mut s = setup(&PARTIES);
@@ -507,7 +507,7 @@ fn a_restored_client_knows_its_peers_from_the_horizon_and_takes_its_dataset_from
 /// has no node to answer, so the asking is the proof — the deposit memory
 /// with it, so the next held contact on a session deposits afresh; and
 /// the silence allowed doubles.
-// acceptance: TX-031
+// functional: TX-031
 #[test]
 fn a_peer_silent_for_two_rounds_is_opened_to_anew_and_deposited_to_again() {
     use rhtn_client::ceremony::Msg;
@@ -629,7 +629,7 @@ fn a_peering_record_in_the_greeting_makes_the_sender_a_peer_of_a_client_that_los
 /// patience** [bench `61c672c-restore-kind30-1`, 2026-10-30]: the first
 /// may have met a node that had nothing for the peer yet, and until it
 /// is asked again every message to that peer parks behind it.
-// acceptance: TX-031
+// functional: TX-031
 #[test]
 fn an_unanswered_prekey_request_is_asked_again_after_a_patience() {
     use rhtn_client::ceremony::{Client, Msg};

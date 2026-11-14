@@ -41,6 +41,15 @@ fn parse_frame(raw: &[u8]) -> Result<frame::Frame, Error> {
     }
 }
 
+// functional: TX-001
+// functional: TX-010
+// functional: TX-013
+// functional: TX-020
+// functional: TX-021
+// functional: TX-022
+// functional: TX-024
+// functional: TX-025
+// functional: TX-029
 #[test]
 fn every_bytes_entry_agrees_with_its_expectation() {
     let corpus = corpus();

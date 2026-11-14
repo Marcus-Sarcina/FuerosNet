@@ -1020,6 +1020,7 @@ fn integrity_with_evidence(evidence: Option<usize>) -> Vec<u8> {
     out
 }
 
+// functional: TX-026
 /// A revealed integrity slot is held to its schema, evidence width
 /// included: `? bstr .size (1..1024)`, so none, one and 1024 bytes read,
 /// and zero or 1025 are malformed.

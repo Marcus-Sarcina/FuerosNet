@@ -21738,3 +21738,43 @@ ceremony stopped refusing a carriage for want of a key, saying nothing —
 the carriage tests refuse a stranger's bytes as `Unsealable`, none
 abandons a ceremony and then offers it a step). Figure: 575 live, 192
 held, 383 by neither; NET 2.
+
+**The TX families linked, 2026-11-14 [author].** The S rows are held by
+the DEC entries at the structural layer, the C rows by the TOP, REC, REP,
+ARC and CER entries that apply each type, and nine S rows by the corpus
+test `every_bytes_entry_agrees_with_its_expectation` in `crypto/tests/
+corpus.rs`, which runs the 104 negative vectors — N-adopt-no-evidence and
+N-adopt-two-evidence for TX-001, N-enum-disavowal-64 for 010,
+N-peering-endpoint-neither and N-peering-no-evidence for 013,
+N-witness-empty-array for 020, N-formation-non-genesis for 021,
+N-envelope-wrong-signers for 022, N-responses-empty-array for 024,
+N-response-inconclusive-personal for 025, N-retired-body-key-7 and
+N-retired-witness-key-4 for 029. The partials: TX-002 (the material hashing
+to the node, CER-71; the head as one offered head, ARC-12; that an
+arbitrary subset is refused as a head is asserted by nothing); 003 (both
+people authorising the live interaction is the ceremony's shape; MET-12,
+which would hold the evaluation, is unimplemented); 004 (a fully withheld
+presentation remaining usable for the adoption check has no test); 006
+(REP-04 moves without a fresh ceremony; whether the former patron held the
+relationship is DEC-26's missing-key path and no evidence check of its
+own); 007 (the one-signer form and the patron-signed refusal; that both
+halves of the hybrid pair are required is DEC-19's shape rule, no
+departure-specific test); 018 (DEC-22 refuses the one-identity reissue;
+that a root's rollup names a real predecessor is ARC-01's genesis rule by
+contraposition, and the locator update not becoming a transaction is
+asserted by nothing); 024 (the empty responses array; a duplicate
+(verifier, subject) pair and the verifier-then-subject order have no
+vector); 026 (the 3-to-5 count and liveness in CER-38, the integrity
+evidence width in record.rs; the attestation fields are not validated by
+any test read); 027 (the geohash precision check in the utility path and
+the empty location; corroborations and the record-level maxima have no
+test); 031 (REP-18 and the four peering tests; the strictly-greater seqno
+rule for a peer's endpoint and the one-locator-per-anchor rule are
+asserted by nothing). **A register defect fixed on the way**: four
+`// acceptance: TX-031` markers in `client/tests/peering.rs` named a
+family as an entry and matched neither regex, so they held nothing; one
+of them read `TX-031, PAY-018`, which the acceptance regex, unanchored,
+read as `PAY-01`. They are `// functional: TX-031` now. **Held by neither,
+and said so**: TX-023 (finalized_at at least started_at and at most 86,400 s
+later; no vector at zero, at the bound or past it, and no test). Figure:
+575 live, 221 held, 354 by neither; TX 1.
