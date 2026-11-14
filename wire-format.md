@@ -5687,7 +5687,11 @@ IntentExchange = [             ; carried by the bearer (§14.3.1), not optical
                                ;   it has signed (§2.3): the receiver pinned
                                ;   the sender's key from the screen, keeps
                                ;   this as the locator it holds for them,
-                               ;   and hands it onward in its own bundles
+                               ;   and hands it onward in its own bundles.
+                               ;   An intent whose locator is not the
+                               ;   sender's own, or does not verify under
+                               ;   that key, is refused where it is read,
+                               ;   with nothing of it kept
   ? tstr .size (1..32),        ; the number the sender's device reports for
                                ;   itself [author, 2026-11-10], where the
                                ;   platform gave one. ABSENT IS THE ORDINARY

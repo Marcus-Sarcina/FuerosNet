@@ -191,6 +191,11 @@ pub enum Abort {
     /// two proposers or none the conversation cannot run, so the intent is
     /// refused where it is read.
     InitiatorClaim,
+    /// The intent's locator is not the sender's own, or does not verify
+    /// under the key pinned for them from the screen (`wire-format.md`
+    /// §14.3.2): refused where it is read, before anything of the intent
+    /// is kept.
+    Locator(String),
     /// The conversation's next step waits on something that has not
     /// arrived (`wire-format.md` §7.10.1): what, in words.
     Waiting(&'static str),
@@ -1572,11 +1577,7 @@ impl Client {
     /// same series.  `outright` is the subject's own statement in its
     /// intent, which replaces whatever is held, series aside.
     fn hold_locator(&mut self, who: &Keyhash, sl: &[u8], outright: bool) -> Result<(), Abort> {
-        let read = rhtn_archive::locator::SignedLocator::parse(sl).map_err(Abort::Malformed)?;
-        if read.subject != *who {
-            return Err(Abort::Malformed("a locator for another party".into()));
-        }
-        read.verify(&self.known).map_err(Abort::Malformed)?;
+        let read = self.own_locator_of(who, sl).map_err(Abort::Malformed)?;
         let held = self
             .store
             .contacts
@@ -1612,6 +1613,22 @@ impl Client {
             }
         }
         Ok(())
+    }
+
+    /// `sl` read as `who`'s own `SignedLocator`: parsed, its subject `who`,
+    /// and verified under the material this client holds for them.  The
+    /// reason comes back in words for the caller to name as it refuses.
+    fn own_locator_of(
+        &self,
+        who: &Keyhash,
+        sl: &[u8],
+    ) -> Result<rhtn_archive::locator::SignedLocator, String> {
+        let read = rhtn_archive::locator::SignedLocator::parse(sl)?;
+        if read.subject != *who {
+            return Err("a locator for another party".into());
+        }
+        read.verify(&self.known)?;
+        Ok(read)
     }
 
     /// **Step 1 of the optical exchange** (`wire-format.md` §14.3.1): the
@@ -1937,18 +1954,30 @@ impl Client {
     pub fn take_intent(&mut self, from: Keyhash, intent: &Intent) -> Result<[u8; 32], Abort> {
         let me = self.keyhash();
         let tolerance = self.cfg.clock_tolerance_s;
-        let a = self.active()?;
-        if a.counterparty != Some(from) {
+        let (counterparty, started_at, initiator) = {
+            let a = self.active()?;
+            (a.counterparty, a.started_at, a.initiator)
+        };
+        if counterparty != Some(from) {
             return Err(abort("take_intent", Abort::NotActive));
         }
-        if intent.started_at.abs_diff(a.started_at) > tolerance {
+        if intent.started_at.abs_diff(started_at) > tolerance {
             return Err(anchor_refused("intent", Abort::ClockFar));
         }
         // the flag is self-reported; the one check that converts two
         // silent deadlocks, both proposing and neither, into a refusal
-        if intent.initiator == a.initiator {
+        if intent.initiator == initiator {
             return Err(anchor_refused("intent", Abort::InitiatorClaim));
         }
+        // **the locator before anything of the intent is kept**: it is the
+        // sender's own statement of where it sits, verified under the key
+        // pinned from the screen, and one that is another party's or does
+        // not verify refuses the intent whole (`wire-format.md` §14.3.2).
+        // Checked here and not only where it is held, so a refused intent
+        // leaves the ceremony where it stood [2026-11-14]
+        self.own_locator_of(&from, &intent.locator)
+            .map_err(|e| anchor_refused("intent", Abort::Locator(e)))?;
+        let a = self.active()?;
         if intent.initiator && !a.initiator {
             a.started_at = intent.started_at;
         }

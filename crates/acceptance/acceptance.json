@@ -14838,6 +14838,36 @@
   "interpretation": ""
  },
  {
+  "id": "CER-72",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Refuse an intent whose locator is not the sender's own, or does not verify under the pinned key",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §14.3.2",
+   "light-client-requirements.md §1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §14.3.2",
+    "text": "An intent whose locator is not the\n                               ;   sender's own, or does not verify under\n                               ;   that key, is refused where it is read,\n                               ;   with nothing of it kept"
+   },
+   {
+    "where": "light-client-requirements.md §1",
+    "text": "refuse one whose\nlocator is not the sender's own or does not verify under the key you pinned"
+   }
+  ],
+  "given": "Two clients through the optical exchange, each holding the other's key from the screen and the ceremony-id from the transcript; and the responder's intent with its locator replaced, once by a third party's own locator and once by the responder's position signed under the third party's key.",
+  "when": "The initiator takes each altered intent, and then the responder's own.",
+  "then": "Each altered intent is refused as an anchor refusal naming the locator, and nothing of it is kept: no locator is held for the counterparty and the ceremony-id stands as the transcript fixed it. The responder's own intent is then taken and its locator held, and the ceremony proceeds.",
+  "oracle": "behaviour",
+  "interpretation": "",
+  "families": [
+   "CER-029"
+  ]
+ },
+ {
   "id": "PRD-17",
   "area": "product",
   "gap": "product",

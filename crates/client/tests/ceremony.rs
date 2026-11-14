@@ -656,3 +656,77 @@ fn a_witness_will_not_sign_before_its_window_has_passed() {
         "a window of zero is the check off"
     );
 }
+
+// acceptance: CER-72
+/// **An intent's locator is the sender's own, or the intent is refused
+/// where it is read** (`wire-format.md` §14.3.2): naming the locator,
+/// with nothing of the intent kept, so the ceremony stands where it stood
+/// and the sender's true intent is taken afterwards.
+#[test]
+fn an_intent_whose_locator_is_not_the_senders_own_is_refused_where_it_is_read() {
+    use rhtn_archive::locator::signed_locator;
+    use rhtn_archive::tx::{Locator, Seqno};
+    let mut s = setup(&EVERYONE);
+    let ia = s
+        .client("alice")
+        .begin(Some(kh("bob")), vec![], true)
+        .expect("alice begins");
+    let ib = s
+        .client("bob")
+        .begin(Some(kh("alice")), vec![], false)
+        .expect("bob begins");
+    let qa = s.client("alice").optical_contribution().unwrap();
+    let qb = s.client("bob").optical_contribution().unwrap();
+    s.client("alice").take_optical(&qb).unwrap();
+    s.client("bob").take_optical(&qa).unwrap();
+    let ta = s.client("alice").transcript_confirm().unwrap();
+    let tb = s.client("bob").transcript_confirm().unwrap();
+    s.client("alice").take_transcript(&tb).unwrap();
+    s.client("bob").take_transcript(&ta).unwrap();
+    let before = s.client("alice").ceremony_id();
+    let seq = Seqno {
+        series: 1,
+        counter: 0,
+    };
+    // carol's own locator, signed by carol: a locator for another party
+    let carols = signed_locator(&id("carol"), &Locator::root(kh("carol"), seq));
+    // bob's position, signed by carol: not verifying under the key pinned
+    // for bob from his screen
+    let forged = signed_locator(&id("carol"), &Locator::root(kh("bob"), seq));
+    for (why, sl) in [("another party's", carols), ("under another key", forged)] {
+        let bad = Intent {
+            locator: sl,
+            ..ib.clone()
+        };
+        let got = s.client("alice").take_intent(kh("bob"), &bad);
+        assert!(
+            matches!(got, Err(Abort::Locator(_))),
+            "{why}: refused naming the locator, got {got:?}"
+        );
+        assert!(
+            s.client("alice")
+                .store
+                .contacts
+                .get(&kh("bob"))
+                .and_then(|c| c.locator.as_ref())
+                .is_none(),
+            "{why}: nothing of the intent is kept"
+        );
+        assert_eq!(
+            s.client("alice").ceremony_id(),
+            before,
+            "{why}: the ceremony stands where it stood"
+        );
+    }
+    // the sender's own is taken, and held as the locator for them
+    s.client("alice")
+        .take_intent(kh("bob"), &ib)
+        .expect("bob's own locator");
+    assert!(
+        s.client("alice").store.contacts[&kh("bob")]
+            .locator
+            .is_some(),
+        "held as the locator for bob"
+    );
+    s.client("bob").take_intent(kh("alice"), &ia).unwrap();
+}

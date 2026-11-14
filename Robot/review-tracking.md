@@ -21582,9 +21582,8 @@ CER-48, CER-45; 023 ← CER-48; 024 ← CER-49, CER-44; 025 ← CER-50, CER-51;
 ← the restart test that rebuilds introductions and CER-27's greater-counter
 reading (the sender's composition from the most recent locator held is not
 asserted as such); 029 ← the contact test that keeps the intent's locator
-(refusing an intent whose locator is not the sender's own, or does not
-verify, has no test and no code path found: `own_locator` is built, never
-checked on receipt); 031 ← CER-57 to CER-62; 032 ← CER-68, CER-70, CER-46,
+(the refusal of an intent whose locator is not the sender's own, or
+does not verify, had no test; built the same day, below); 031 ← CER-57 to CER-62; 032 ← CER-68, CER-70, CER-46,
 CER-45 (the request before the capture and the overlap of capture and
 queries with the window are asserted by none of them). **Held by neither,
 and said so**: CER-007 (latency treatment; nothing in the code reads a
@@ -21597,3 +21596,25 @@ response copy; the retention is declared and never compared), CER-027
 (manual until the second shell), CER-030 (a verifier queried from the
 introduction's material alone; the query test knows its verifier by
 attachment). Figure: 575 live, 61 held, 514 by neither; CER 7.
+
+**The intent-locator check built, 2026-11-14 [author: "Build the
+intent-locator check now"].** A correction first: the previous note said
+no code path checked the intent's locator. There was one — `hold_locator`
+parsed it, held its subject to the sender and verified it under the pinned
+key — but it ran after the ceremony had already taken the intent (the id
+re-fixed, the contribution, bundle and retention written) and refused as
+`Malformed`, the same word a bad encoding gets, so a refused intent left
+the ceremony half-taken. Now `take_intent` reads the locator through
+`own_locator_of` before anything of the intent is written and refuses it
+as an anchor refusal `Abort::Locator(reason)`, logged as the others are;
+`hold_locator` shares the reader and keeps `Malformed` for introductions.
+`wire-format.md` §14.3.2's `SignedLocator` comment and
+`light-client-requirements.md` §1 now say the refusal, which the CER-029
+row had asserted of them without either stating it. Acceptance CER-72
+(negative, families CER-029) with its test in `client/tests/ceremony.rs`:
+a third party's own locator and the sender's position signed under the
+third party's key are each refused naming the locator, no locator is held
+for the counterparty, the ceremony-id stands as the transcript fixed it,
+and the sender's own intent is then taken. Code pin and vector pin
+re-accepted (hash lines only, 23 of 23). Figure unchanged: 575 live, 61
+held, 514 by neither.

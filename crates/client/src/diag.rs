@@ -130,7 +130,7 @@ pub fn kind_name(kind: u64) -> &'static str {
 pub fn abort(a: &crate::ceremony::Abort) -> String {
     use crate::ceremony::Abort::*;
     match a {
-        Malformed(s) | Record(s) | PatronRefused(s) | NodeRefused(s) | Payload(s) => {
+        Malformed(s) | Record(s) | PatronRefused(s) | NodeRefused(s) | Payload(s) | Locator(s) => {
             format!("{}({s})", variant(a))
         }
         Refused(r) => format!("Refused({r:?})"),
@@ -169,6 +169,7 @@ pub fn variant(a: &crate::ceremony::Abort) -> &'static str {
         NodeRefused(_) => "NodeRefused",
         NoCounterparty => "NoCounterparty",
         InitiatorClaim => "InitiatorClaim",
+        Locator(_) => "Locator",
         Waiting(_) => "Waiting",
         NotProposer => "NotProposer",
         Payload(_) => "Payload",
