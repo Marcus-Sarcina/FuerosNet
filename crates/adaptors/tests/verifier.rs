@@ -260,6 +260,7 @@ async fn a_grant_on_the_payload_channel_answers_the_waiting_stream_of_a_hosted_l
     );
 }
 
+// functional: PAY-015
 /// **An arrival the courier answers itself still writes the state.** A
 /// verifier's service reaches no application channel: the courier answers
 /// a query and takes a grant without handing either up, so a caller that

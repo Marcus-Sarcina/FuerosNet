@@ -44,6 +44,7 @@ fn three_meetings() -> (Setup, [u8; 32], [u8; 32], [u8; 32]) {
     (s, cb, ab, ac)
 }
 
+// functional: PAY-016
 /// **A query or a grant unanswered at half the patience goes again, on
 /// a fresh session, once.** A verifier that lost its sessions refuses
 /// everything sent on the old ones and has nothing to say so on; the

@@ -148,7 +148,9 @@ for e in entries:
     for f in e.get("families", []):
         if f not in fam:
             flags.append(f"{e.get('id')}: families names {f!r}, which functional_tests.md does not number")
-        listed.setdefault(f, e.get("id"))
+        # an entry holds a family only where a test holds the entry
+        if e.get("id") in impl:
+            listed.setdefault(f, e.get("id"))
 for f in marked:
     if f not in fam:
         flags.append(f"{marked[f]}: functional marker {f!r}, which functional_tests.md does not number")

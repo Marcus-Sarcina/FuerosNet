@@ -149,6 +149,7 @@ async fn next_delivery(s: &mut Session) -> Option<Vec<u8>> {
         .flatten()
 }
 
+// functional: PAY-007
 // acceptance: TRV-01
 #[tokio::test]
 async fn candidates_carry_the_host_address_and_the_reflexive_address_the_serving_node_saw() {
@@ -219,6 +220,7 @@ async fn exchange_and_open(sc: &mut Scene) -> (bool, bool) {
     (a, b)
 }
 
+// functional: PAY-007
 // acceptance: TRV-02
 #[tokio::test]
 async fn the_direct_path_is_attempted_first_and_the_relay_taken_when_the_checks_fail() {
@@ -275,6 +277,7 @@ async fn the_direct_path_is_attempted_first_and_the_relay_taken_when_the_checks_
     );
 }
 
+// functional: PAY-007
 // acceptance: TRV-03
 #[tokio::test]
 async fn the_relay_carries_every_message_in_order_while_the_direct_path_stays_defeated() {
@@ -360,6 +363,7 @@ async fn control_traffic_dials_outward_and_never_traverses() {
     );
 }
 
+// functional: PAY-005
 // acceptance: TRV-05
 #[tokio::test]
 async fn nothing_is_gathered_and_no_address_dialled_for_a_peer_outside_the_horizon() {

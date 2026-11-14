@@ -40,6 +40,7 @@ fn refusal(e: Abort) -> String {
     }
 }
 
+// functional: PAY-018
 // acceptance: REP-17
 #[test]
 fn two_parties_who_met_peer_by_locator_and_both_hold_the_record() {
@@ -230,6 +231,7 @@ fn peered(s: &mut common::harness::Setup) -> Vec<u8> {
     env
 }
 
+// functional: PAY-018
 /// **What a peer holds, and what it gives back** (design §6.3, the author's
 /// six steps of 2026-10-24): a blob under the owner's identity that the
 /// peer cannot open; a contact the owner lost comes back from it on the
@@ -370,6 +372,7 @@ fn payloads(msgs: &[rhtn_client::ceremony::Msg]) -> usize {
         .count()
 }
 
+// functional: PAY-019
 /// **A client restored from its phrase knows nobody and holds nothing;
 /// its peers are what the serving node's replay names, and its dataset
 /// is what a peer gives back** (design §6.3, §10.2).  A fresh alice,
@@ -494,6 +497,7 @@ fn a_restored_client_knows_its_peers_from_the_horizon_and_takes_its_dataset_from
     );
 }
 
+// functional: PAY-019
 /// **A peer silent for two rounds is opened to anew, and the deposit goes
 /// again** (`light-client-requirements.md` §3's rule for a verifier that
 /// lost its sessions, applied to a peer): the greeting on a held path
@@ -567,6 +571,7 @@ fn a_peer_silent_for_two_rounds_is_opened_to_anew_and_deposited_to_again() {
     );
 }
 
+// functional: PAY-019
 /// **The greeting carries the peering record, and a peer that lost
 /// everything takes the sender as a peer by it** [author, 2026-10-30;
 /// `wire-format.md` §7.10.3, kind 30], node or no node.  A fresh alice,

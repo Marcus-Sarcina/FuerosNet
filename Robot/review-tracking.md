@@ -21535,3 +21535,28 @@ it was supplied before), SES-006 (every Ack or update replaces the cached
 list whole, an absent list clears it), SES-014 (request-only sessions to
 resource hosts without attaching — the RSC entries may hold it; not
 claimed until read). Figure: 575 live, 24 held, 551 by neither; SES 3.
+
+**The PAY families linked, 2026-11-14 [author].** First a correction to
+the checker: an entry holds a family only where a test holds the entry
+(PAY-13, the primitives' vectors, has none and now counts for nothing).
+Then, by the entries' `then` clauses and the tests' own names: PAY-001 ←
+PAY-16 (a session only under the identity key bound to the sender) and
+PAY-22 (the post-quantum half in the root chain) — the primitives' own
+vectors stay PAY-13, untested; 002 ← PAY-08 and PAY-12; 004 ← PAY-16,
+PAY-17, PAY-23 (tamper, wrong peer, replay across a restart — lost and
+reordered messages and the skipped-key bound are held by no entry read
+here); 005 ← the direct-path tests that refuse an unheld party and dial
+nothing outside the horizon; 007 ← the traversal tests (reflexive
+candidates off the QUIC socket, relay on failed checks, order kept under a
+defeated path — NAT combinations and CGNAT not among them); 008 ← PAY-15,
+PAY-24, PAY-25; 009 ← PAY-15 and the boundary test of a refused relay
+reaching the application as unsent; 012 ← PAY-24, PAY-25, PRT-01; 014 ←
+PAY-26; 015 ← the courier's write after an arrival it answers itself and
+the restart with the queue intact; 016 ← the half-patience resend test;
+017 ← candidates across the ceremony's bearer (the clock and the network's
+return are held by no test); 018 ← the two peering tests of the locator
+and the recovered contact; 019 ← the three restored-client peering tests;
+020 ← PAY-11. **Held by neither, and said so**: PAY-010 (group send as
+fanout — no test), PAY-011 (an owed pin, not a behaviour), PAY-013 (a
+targeted prekey fetch going to the subject's node — the harness assumes it,
+nothing asserts it). Figure: 575 live, 37 held, 538 by neither; PAY 3.

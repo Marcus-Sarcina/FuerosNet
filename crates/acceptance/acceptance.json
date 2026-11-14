@@ -5520,7 +5520,10 @@
   "when": "S idles, then sends its first message to T.",
   "then": "No PrekeyRequest with field 2 equal to 1 is observed while idle; exactly one, naming T, is observed immediately before the first message.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "PAY-002"
+  ]
  },
  {
   "id": "PAY-09",
@@ -5621,7 +5624,10 @@
   "when": "S requests a one-time key for T and then sends its first message.",
   "then": "The PrekeyReply carries T's bundle for the device named in field 2 and no field 3, and S still opens the session and delivers the message. An implementation that refuses to send without a one-time key fails.",
   "oracle": "behaviour",
-  "interpretation": "Re-derived 2026-09-22 to a bundle per device (wire-format.md §7.8)."
+  "interpretation": "Re-derived 2026-09-22 to a bundle per device (wire-format.md §7.8).",
+  "families": [
+   "PAY-002"
+  ]
  },
  {
   "id": "PAY-13",
@@ -5707,7 +5713,11 @@
   "when": "One sends the other a message.",
   "then": "The direct candidates fail and the message is delivered through the serving node's relay; the recipient decrypts it.",
   "oracle": "behaviour",
-  "interpretation": "Re-read 2026-09-22: design §14.1.1's priority order is RFC 8445's and binds this implementation; this entry holds the outcome, and TRV-11 holds the order."
+  "interpretation": "Re-read 2026-09-22: design §14.1.1's priority order is RFC 8445's and binds this implementation; this entry holds the outcome, and TRV-11 holds the order.",
+  "families": [
+   "PAY-008",
+   "PAY-009"
+  ]
  },
  {
   "id": "PAY-16",
@@ -5734,7 +5744,11 @@
   "when": "The message is delivered to B named as coming from A, and then the same message named as coming from C.",
   "then": "Named as A's it is refused, no session is opened for A, no plaintext is dispatched, and the person is told it could not be attributed. Named as C's it decrypts.",
   "oracle": "behaviour",
-  "interpretation": "The binding of a keyhash to a payload identity key is the prekey bundle, which its subject signs. A recipient holding no bundle for the sender cannot check the binding, so it refuses and asks for the bundle; that message is not recovered."
+  "interpretation": "The binding of a keyhash to a payload identity key is the prekey bundle, which its subject signs. A recipient holding no bundle for the sender cannot check the binding, so it refuses and asks for the bundle; that message is not recovered.",
+  "families": [
+   "PAY-001",
+   "PAY-004"
+  ]
  },
  {
   "id": "PAY-17",
@@ -5761,7 +5775,10 @@
   "when": "B takes the corrupted copy, and then the original.",
   "then": "The corrupted copy fails and the one-time pair it named is still held; the original then opens the session and decrypts, and only then is the pair gone. A second message naming the same pair finds nothing.",
   "oracle": "behaviour",
-  "interpretation": "PQXDH's receiving procedure deletes the one-time private key after the initial message decrypts. Deleting it on arrival lets one injected copy destroy the key the real message needs."
+  "interpretation": "PQXDH's receiving procedure deletes the one-time private key after the initial message decrypts. Deleting it on arrival lets one injected copy destroy the key the real message needs.",
+  "families": [
+   "PAY-004"
+  ]
  },
  {
   "id": "PAY-18",
@@ -5893,7 +5910,10 @@
   "when": "Both parties run the same construction and exchange messages across a ratchet step.",
   "then": "What the post-quantum half carries crosses in the header and what it contributes reaches the root chain, so the same messages under the same keys encrypt differently from the floor's. A session at the floor derives and persists exactly what it did before the seam existed, and a state written before it still opens.",
   "oracle": "behaviour",
-  "interpretation": "No Sparse Post-Quantum Ratchet is available to this tree, so the test exercises the seam with a stand-in. It asserts that the seam is load-bearing, never that any particular construction is correct."
+  "interpretation": "No Sparse Post-Quantum Ratchet is available to this tree, so the test exercises the seam with a stand-in. It asserts that the seam is load-bearing, never that any particular construction is correct.",
+  "families": [
+   "PAY-001"
+  ]
  },
  {
   "id": "PAY-23",
@@ -5916,7 +5936,10 @@
   "when": "The copy is presented again, both within the run and after the client has been restarted from its persisted state.",
   "then": "The message is refused as a replay and the live ratchet is untouched, so the session continues and the adversary has neither read nor reset it. The refusal survives the restart: the cache of seen initials is persisted with the session state, since a cache that emptied on restart reopened the window it closes.",
   "oracle": "behaviour",
-  "interpretation": "Refusing every initial message for a peer that already has a ratchet would also close it, and would break a peer that legitimately lost its state and re-initiates; the replay cache keeps that case working [2026-09-30]."
+  "interpretation": "Refusing every initial message for a peer that already has a ratchet would also close it, and would break a peer that legitimately lost its state and re-initiates; the replay cache keeps that case working [2026-09-30].",
+  "families": [
+   "PAY-004"
+  ]
  },
  {
   "id": "PAY-24",
@@ -5944,7 +5967,11 @@
   "when": "S hands payload for C2 to the node serving C2, dialled request-only from S's own endpoint with no attach submission preceding it.",
   "then": "N2 answers accepted and queues one message for C2; N1 queues nothing. C2, attaching afterwards, collects exactly the ciphertext sent with S named in front of it. The same submission put to N1, which serves nobody by that name, is refused, and the refusal reaches the caller as a refusal rather than as a delivery. A reply echoing another submission's nonce is not treated as an answer to this one.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "PAY-008",
+   "PAY-012"
+  ]
  },
  {
   "id": "PAY-25",
@@ -5967,7 +5994,11 @@
   "when": "The client is asked to hand payload for that recipient to the node serving the recipient, which resolves to N.",
   "then": "Nothing is dialled and no submission is made on a new connection: N queues nothing from this path, and the answer is no, so the caller falls through to the session it already holds with N.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "PAY-008",
+   "PAY-012"
+  ]
  },
  {
   "id": "PAY-26",
@@ -5990,7 +6021,10 @@
   "when": "W writes to A first, so the session between them is established from W's side, and A never asks for a one-time key again because a session now exists.",
   "then": "What A queued before the session existed is encrypted on that session and sent, ahead of anything queued after it, and reaches W. Nothing A queued is dropped and no error is reported to A in place of a delivery.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "PAY-014"
+  ]
  },
  {
   "id": "PRD-01",

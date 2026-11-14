@@ -233,6 +233,7 @@ async fn next(
         .flatten()
 }
 
+// functional: PAY-005
 // acceptance: TRV-07
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn two_light_clients_beside_their_serving_node_join_the_direct_path_from_their_own_sends() {
@@ -337,6 +338,7 @@ async fn two_nodes_that_are_participants_join_the_direct_path_on_their_own_socke
     );
 }
 
+// functional: PAY-005
 // acceptance: TRV-08
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_direct_path_the_local_decision_refuses_opens_in_neither_direction() {
@@ -809,6 +811,7 @@ async fn a_stranger_that_introduces_itself_on_the_dial_is_held_and_handed_a_bund
     );
 }
 
+// functional: PAY-017
 // acceptance: TRV-12
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn candidates_handed_over_on_the_ceremony_s_own_interfaces_open_the_direct_path() {

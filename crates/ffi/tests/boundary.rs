@@ -616,6 +616,7 @@ async fn the_kernel_holds_the_session_and_no_wire_byte_crosses_outward() {
     );
 }
 
+// functional: PAY-009
 // acceptance: DMN-15
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_message_the_serving_node_refused_reaches_the_application_as_unsent() {
@@ -875,6 +876,7 @@ async fn a_device_holding_no_seed_attaches_under_its_delegation_and_publishes_wh
     }
 }
 
+// functional: PAY-015
 /// A process restart with an established payload session and messages
 /// queued meanwhile: the kernel starts from what it wrote through the
 /// storage seam, the queued message opens on the restored ratchet, and the
