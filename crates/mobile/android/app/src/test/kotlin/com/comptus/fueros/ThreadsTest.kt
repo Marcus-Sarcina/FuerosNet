@@ -118,7 +118,7 @@ class ThreadsTest {
 
     @Test
     fun the_shell_wires_the_store_per_identity_and_opens_a_thread_lazily() {
-        val k = source("Kernel.kt")
+        val k = source("Attachments.kt")
         assertTrue("the store is not built per identity over the kernel's sealing", k.contains("Threads(shell.files(), sealerOf(p), by)"))
         assertTrue("the index is not restored per identity at bring-up", k.contains("front.restore(h.id, s.index())"))
         assertTrue("the old file is not migrated", k.contains("Threads.decodeLegacy("))

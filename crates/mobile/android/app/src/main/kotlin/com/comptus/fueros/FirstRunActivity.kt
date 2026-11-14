@@ -79,9 +79,9 @@ class FirstRunActivity : Activity() {
         // reached the name would come back as the choice of new or
         // restored and read as a wipe.
         when {
-            owedPhrase != null -> shown(Kernel.materialHex(Kernel.focused()), owedPhrase)
-            !Kernel.hasIdentity(this) -> choice()
-            intent.getBooleanExtra(NAME_ONLY, false) || Kernel.defaultAlias(Kernel.focused()) == null -> name()
+            owedPhrase != null -> shown(Kernel.materialHex(Identities.focused()), owedPhrase)
+            !Identities.hasIdentity(this) -> choice()
+            intent.getBooleanExtra(NAME_ONLY, false) || Kernel.defaultAlias(Identities.focused()) == null -> name()
             // **the picker already asked which way**, so neither door is
             // offered a second time
             intent.getBooleanExtra(GENERATE, false) -> create()
@@ -155,7 +155,7 @@ class FirstRunActivity : Activity() {
         body.removeAllViews()
         title("Fueros")
         para(
-            if (Kernel.hasIdentity(this)) {
+            if (Identities.hasIdentity(this)) {
                 "Another identity on this device. Start a new one, or restore one " +
                     "from the phrase you wrote down when it was made. What this " +
                     "device already holds stays held."
@@ -186,7 +186,7 @@ class FirstRunActivity : Activity() {
         // line can recreate this activity, and from here on a recreation
         // redraws the phrase rather than routing past it
         owedPhrase = phrase
-        if (!Kernel.createIdentity(this, seeds)) {
+        if (!Identities.createIdentity(this, seeds)) {
             owedPhrase = null
             para("This device's own storage refused the seeds; nothing was made.")
             button("Back") { choice() }
@@ -203,7 +203,7 @@ class FirstRunActivity : Activity() {
     private fun waitForMaterial(): String? {
         val until = System.currentTimeMillis() + 30_000
         while (System.currentTimeMillis() < until) {
-            Kernel.materialHex(Kernel.focused())?.let { return it }
+            Kernel.materialHex(Identities.focused())?.let { return it }
             Thread.sleep(200)
         }
         return null
@@ -307,7 +307,7 @@ class FirstRunActivity : Activity() {
         restoreSaid = "opening it…"
         shown(restoredMaterial, null)
         Thread({
-            val out = Kernel.restoreBackup(blob)
+            val out = Identities.restoreBackup(blob)
             runOnUiThread {
                 if (isFinishing) return@runOnUiThread
                 restoreSaid = out.fold(
@@ -355,7 +355,7 @@ class FirstRunActivity : Activity() {
                 is Identity.Read.Entropy -> {
                     val seeds = Identity.seeds(read.bytes)
                     read.bytes.fill(0)
-                    if (!Kernel.createIdentity(this, seeds)) {
+                    if (!Identities.createIdentity(this, seeds)) {
                         said.text = "This device's own storage refused the seeds; nothing was restored."
                     } else {
                         seeds.fill(0)
@@ -411,7 +411,7 @@ class FirstRunActivity : Activity() {
         // — unlike the phrase, which is not stored and genuinely cannot
         // come back. A person who lost the first screen is not asked to
         // wipe the device to see their own public identity.
-        Kernel.materialHex(Kernel.focused())?.let {
+        Kernel.materialHex(Identities.focused())?.let {
             heading("Public key material")
             para("What a node is told about you. The bench reads it from here.")
             mono(it)

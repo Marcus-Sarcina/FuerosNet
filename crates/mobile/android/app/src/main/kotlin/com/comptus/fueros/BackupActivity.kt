@@ -157,7 +157,7 @@ class BackupActivity : Activity() {
         // **the blob is asked for only once there is somewhere to put it**:
         // exporting and then finding no destination would leave the whole
         // archive in this process's memory for no reason
-        val blob = Kernel.exportBackup(by)
+        val blob = Identities.exportBackup(by)
         if (blob == null) {
             narration.text = "This device's kernel did not answer, so nothing was written."
             return

@@ -67,7 +67,7 @@ class AttachActivity : Activity() {
 
         val detach = Button(this).apply {
             text = "Detach"
-            setOnClickListener { Kernel.detachNow(by) }
+            setOnClickListener { Attachments.detachNow(by) }
         }
         val buttons = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -177,7 +177,7 @@ class AttachActivity : Activity() {
                     text = "Serve from $label"
                     setOnClickListener {
                         said.text = "attaching to $addr…"
-                        Kernel.serveFrom(by, this@AttachActivity, me, addr)
+                        Attachments.serveFrom(by, this@AttachActivity, me, addr)
                     }
                 },
             )

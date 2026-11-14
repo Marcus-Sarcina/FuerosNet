@@ -713,7 +713,7 @@ class ResourceActivity : Activity() {
             h.removeAllViews()
             h.addView(note("answering…"))
         }
-        Thread({ show(Kernel.answerUtility((by ?: Kernel.focused()), ask.id, outcome)) }, "fueros-resource-answer").start()
+        Thread({ show(Kernel.answerUtility((by ?: Identities.focused()), ask.id, outcome)) }, "fueros-resource-answer").start()
     }
 
     private fun declined(reason: String) = uniffi.rhtn_ffi.UtilityOutcome.Declined(reason)

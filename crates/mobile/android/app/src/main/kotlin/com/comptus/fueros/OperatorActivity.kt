@@ -1018,7 +1018,7 @@ class OperatorActivity : Activity() {
                             // node speaks as its operator; the address is
                             // the machine it just launched.
                             Kernel.keyhash(by)?.let { me ->
-                                Kernel.serveFrom(by, this@OperatorActivity, me, "$ip:${Launch.QUIC_PORT}")
+                                Attachments.serveFrom(by, this@OperatorActivity, me, "$ip:${Launch.QUIC_PORT}")
                             }
                             atField.setText(surface)
                             tokenField.setText(minted)

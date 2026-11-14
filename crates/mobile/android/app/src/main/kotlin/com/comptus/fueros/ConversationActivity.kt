@@ -73,7 +73,7 @@ class ConversationActivity : Activity() {
             }
             box.setText("")
             val holder = by ?: return@setOnClickListener
-            Kernel.send(holder, to, text)
+            Attachments.send(holder, to, text)
         }
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL

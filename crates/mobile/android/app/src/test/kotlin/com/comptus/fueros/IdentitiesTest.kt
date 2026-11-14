@@ -268,7 +268,7 @@ class IdentitiesTest {
         )
         assertTrue(
             "the list is not drawn from the index and the active choice",
-            shell.contains("Identities.listed(held, Kernel.activeIdentity())"),
+            shell.contains("Identities.listed(held, Identities.activeIdentity())"),
         )
         // **the list and nothing else** [author, 2026-11-10]: no title, no
         // explanation of what an identity is for, no cancel button
@@ -296,7 +296,7 @@ class IdentitiesTest {
         // recreation mid-add reads as a wipe
         assertTrue(
             "the choice is offered before the name step, which a recreation would undo",
-            first.indexOf("Kernel.defaultAlias(Kernel.focused()) == null -> name()") <
+            first.indexOf("Kernel.defaultAlias(Identities.focused()) == null -> name()") <
                 first.indexOf("intent.getBooleanExtra(ADDING, false) -> choice()"),
         )
         // **and a phrase owed outranks both** [bench, 2026-11-10]: the
@@ -306,11 +306,11 @@ class IdentitiesTest {
         assertTrue(
             "a phrase owed does not come first, so a recreation can route past it",
             first.indexOf("owedPhrase != null -> shown(") <
-                first.indexOf("!Kernel.hasIdentity(this) -> choice()"),
+                first.indexOf("!Identities.hasIdentity(this) -> choice()"),
         )
         assertTrue(
             "the phrase is not owed before the kernel is touched, so the window is still open",
-            first.indexOf("owedPhrase = phrase") < first.indexOf("Kernel.createIdentity(this, seeds)"),
+            first.indexOf("owedPhrase = phrase") < first.indexOf("Identities.createIdentity(this, seeds)"),
         )
         assertTrue(
             "nothing but the person's own acknowledgement clears it",
@@ -339,11 +339,11 @@ class IdentitiesTest {
         // 2026-11-11, step 1 of the browser model]: extracted so a loop
         // can run per identity; bring-up still runs one, for the one that
         // acts, so this step moves code and changes nothing
-        val loopSource = source("Kernel.kt")
+        val loopSource = source("Attachments.kt")
         assertTrue(
             "the event loop is still inline in bringUp rather than a function per participant",
-            loopSource.contains("private fun runLoop(p: Participant, id: String)") &&
-                loopSource.contains("runLoop(p, activeId ?: \"\")"),
+            loopSource.contains("fun runLoop(p: Participant, id: String)") &&
+                loopSource.contains("runLoop(p, id)"),
         )
         // **step 3: a loop and an attach per identity** — the focused one
         // on the kernel thread as always, every other on its own via
@@ -355,16 +355,16 @@ class IdentitiesTest {
         )
         assertTrue(
             "an identity out of focus is not attached and run for itself",
-            loopSource.contains("private fun launchHeld(id: String, p: Participant, scope: String?)") &&
-                loopSource.contains("if (hid != activeId) launchHeld(hid, hp, index.firstOrNull { it.id == hid }?.scope)"),
+            loopSource.contains("fun launchHeld(id: String, p: Participant, scope: String?)") &&
+                loopSource.contains("if (hid != Identities.activeId) launchHeld(hid, hp, index.firstOrNull { it.id == hid }?.scope)"),
         )
         assertTrue(
             "an identity added while the kernel is up gets no loop of its own",
-            Regex("""loaded\[(id|newId)\]\?\.let \{ launchHeld\(""").findAll(loopSource).count() == 2,
+            Regex("""loaded\[(id|newId)\]\?\.let \{ Attachments\.launchHeld\(""").findAll(source("Identities.kt")).count() == 2,
         )
         assertTrue(
             "the network callback reaches only the focused identity",
-            loopSource.contains("loaded.values.flatMap { q -> q.networkChanged() }"),
+            loopSource.contains("Kernel.loaded.values.flatMap { q -> q.networkChanged() }"),
         )
         // **step 4: the node an identity agrees to is its own**, so an
         // identity attaches only to one it agreed to and never inherits
@@ -377,7 +377,7 @@ class IdentitiesTest {
         )
         assertTrue(
             "launchHeld attaches from something other than the identity's own kernel",
-            loopSource.contains("val tabs = call(\"agreed\", { emptyList() }) { p.agreed() }"),
+            loopSource.contains("val tabs = Kernel.call(\"agreed\", { emptyList() }) { p.agreed() }"),
         )
         assertFalse(
             "an identity out of focus is still handed the device's provision",
@@ -390,7 +390,7 @@ class IdentitiesTest {
         // park
         assertTrue(
             "the loop does not read which identity is in focus each turn",
-            loopSource.contains("val focused = id == activeId"),
+            loopSource.contains("val focused = id == Identities.activeId"),
         )
         // **a meeting is driven by the loop of the identity it is held as**
         // [restructure step 4, 2026-11-14], whichever identity is in focus:
@@ -417,21 +417,22 @@ class IdentitiesTest {
         assertTrue(
             "a reply goes out as the focused identity rather than the one holding the thread",
             loopSource.contains("fun send(by: String, to: String, text: String)") &&
-                loopSource.contains("val p = asHolder(by)"),
+                loopSource.contains("val p = Kernel.asHolder(by)"),
         )
         assertTrue(
             "an incoming message is not filed under the identity that received it",
-            loopSource.contains("front.incoming(id, from, who, String(e.bytes))"),
+            loopSource.contains("Kernel.front.incoming(id, from, who, String(e.bytes))"),
         )
         // **and the removal is on the Options screen**, two steps deep
         assertTrue(
             "no control takes one identity off this device",
             shell.contains("row(\"Remove an identity\"") &&
                 shell.contains("Identities.removable(held, chosen.id)") &&
-                shell.contains("Kernel.removeIdentity(this, chosen.id)"),
+                shell.contains("Identities.removeIdentity(this, chosen.id)"),
         )
 
-        val kernel = source("Kernel.kt")
+        // the kernel, the attachments and the identities: one object until step 4 split it
+        val kernel = source("Kernel.kt") + source("Attachments.kt") + source("Identities.kt")
         // **adding, not replacing** [author, 2026-11-07]: an identity
         // already held stays held, which is the whole of "Add an identity"
         assertTrue(
@@ -454,7 +455,8 @@ class IdentitiesTest {
         // so the three parts of the author's ruling are read from the
         // source: a new archive for the new identity, the same address,
         // and the departure after the adoption
-        val kernel = source("Kernel.kt")
+        // the kernel, the attachments and the identities: one object until step 4 split it
+        val kernel = source("Kernel.kt") + source("Attachments.kt") + source("Identities.kt")
         assertTrue(
             "the rotation's marks are not sealed in the new identity's own scope",
             kernel.contains("val own = AndroidShell(app, scope)") &&
@@ -475,7 +477,7 @@ class IdentitiesTest {
         assertEquals(
             "it runs at the end of a meeting and at every start",
             2,
-            Regex("""^\s+(Kernel\.)?concludeRotation\(\)""", RegexOption.MULTILINE).findAll(kernel + source("Ceremony.kt")).count(),
+            Regex("""^\s+(\w+\.)?concludeRotation\(\)""", RegexOption.MULTILINE).findAll(kernel + source("Ceremony.kt")).count(),
         )
         assertTrue(
             "the departure is not the prior key's own act",
@@ -514,7 +516,7 @@ class IdentitiesTest {
         )
         // **instances are the exception**, every act on one being an
         // operator action: read from the identity that acts, no holder
-        assertTrue("instances are not the active identity's", model.contains("Kernel.instances(Kernel.focused())"))
+        assertTrue("instances are not the active identity's", model.contains("Kernel.instances(Identities.focused())"))
         assertFalse("instances should carry no holder", model.contains("Kernel.instancesHeld()"))
 
         // acting inside a subnet goes through the row's holder

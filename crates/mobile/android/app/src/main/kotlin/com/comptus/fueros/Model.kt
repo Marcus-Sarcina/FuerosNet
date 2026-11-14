@@ -78,7 +78,7 @@ object Model {
             }
             if (Noun.SUBNETS in nouns || Noun.PROFILES in nouns) subnets = Kernel.subnetsHeld()
             if (Noun.LINES in nouns) lines = Kernel.linesHeld()
-            if (Noun.INSTANCES in nouns) instances = Kernel.instances(Kernel.focused())
+            if (Noun.INSTANCES in nouns) instances = Kernel.instances(Identities.focused())
             if (Noun.RESOURCES in nouns) resources = Kernel.resourcesHeld()
             if (Noun.MEETINGS in nouns) meetings = Kernel.meetingsHeld()
             Diag.event("model.refreshed", "nouns" to nouns.joinToString(",") { it.name.lowercase() })

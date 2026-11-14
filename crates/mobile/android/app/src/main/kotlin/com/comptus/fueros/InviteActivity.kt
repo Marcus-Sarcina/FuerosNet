@@ -51,7 +51,7 @@ import android.widget.TextView
  */
 class InviteActivity : Activity() {
     /** The identity this screen acts for: the one named by whoever opened it, else the one in focus — a link tapped, or a screen nothing opens yet. */
-    private val by: String by lazy { intent.getStringExtra("by") ?: Kernel.focused() }
+    private val by: String by lazy { intent.getStringExtra("by") ?: Identities.focused() }
 
     private companion object {
         /** How long to wait for the kernel a deep link did not start. */
@@ -89,14 +89,14 @@ class InviteActivity : Activity() {
         // the launcher brings the kernel up, so a tap on an invitation
         // arrived here with no participant and the screen said only "this
         // could not be read" — about a link it had read perfectly well.
-        if (!Kernel.hasIdentity(this)) {
+        if (!Identities.hasIdentity(this)) {
             narration.text =
                 "This device has no identity yet. Open Fueros and make one, then open this " +
                     "invitation again."
             return
         }
         narration.text = "Reading the invitation…"
-        Kernel.start(this)
+        Attachments.start(this)
         // the bring-up runs on its own thread, so this waits for it rather
         // than reading once and calling the absence a bad link
         Thread({
@@ -155,7 +155,7 @@ class InviteActivity : Activity() {
                     setOnClickListener {
                         isEnabled = false
                         narration.text = "${narration.text}\nattaching to ${read.at}…"
-                        Kernel.serveFrom(by, this@InviteActivity, node, read.at)
+                        Attachments.serveFrom(by, this@InviteActivity, node, read.at)
                     }
                 },
             )

@@ -184,7 +184,7 @@ object Ceremony {
             adoption = null
             peering = null
             // nobody is named here: the codes say who is being met
-            // (`wire-format.md` §14.3.1), the provision's Kernel.peer being the
+            // (`wire-format.md` §14.3.1), the provision's Attachments.peer being the
             // payload demo's and no part of a ceremony
             resetWindow()
             meet = Meet(by = by, kind = kind, role = role, retentionYears = retention.toLong()).also { m ->
@@ -207,7 +207,7 @@ object Ceremony {
      * Witnesses are nominated from the counterparty's neighbourhood
      * (design §7.1). This Kernel.shell holds no horizon to nominate from yet, so
      * the nomination is empty and the ceremony is that much weaker, which
-     * the record carries honestly — unless the provision named Kernel.nominees,
+     * the record carries honestly — unless the provision named Attachments.nominees,
      * which is the bench standing in for that horizon (`field-run.sh`): a
      * witness is reached over the network and need not be present
      * [author, 2026-10-05], so the laptop's instruments can be the ones.
@@ -215,11 +215,11 @@ object Ceremony {
     private fun beginCeremony(p: Participant, m: Meet) {
         Thread {
             Kernel.call("begin", { e -> m.stop("begin refused: ${e.reason}") }) {
-                p.begin(m.counterpartyKey?.let { Kernel.unhex(it) }, Kernel.nominees, m.role == Meet.Role.INITIATOR)
+                p.begin(m.counterpartyKey?.let { Kernel.unhex(it) }, Attachments.nominees, m.role == Meet.Role.INITIATOR)
                 m.begunCeremony()
                 m.note("ceremony open; the two codes are ready to cross.")
             }
-            // **the Kernel.nominees are engaged with the intent, before the code
+            // **the Attachments.nominees are engaged with the intent, before the code
             // is shown** [author, 2026-10-19]: they observe from before
             // the counterparty has accepted anything, which is their
             // value — a witness shown only finished records adds no
@@ -231,7 +231,7 @@ object Ceremony {
     }
 
     /**
-     * **Engage this side's Kernel.nominees** (kind 20), retried while the
+     * **Engage this side's Attachments.nominees** (kind 20), retried while the
      * bindings land: the first attempt on a nominee whose session
      * material is not held asks for it, so a transient absence is not an
      * unavailable witness (`light-client-requirements.md` §1.1). The
@@ -404,7 +404,7 @@ object Ceremony {
             presence = txid,
             kern = peeringKern(p),
             post = { bytes ->
-                Kernel.call("send", { e -> Diag.warn("Kernel.peer.send", "refused" to e.reason); false }) {
+                Kernel.call("send", { e -> Diag.warn("Attachments.peer.send", "refused" to e.reason); false }) {
                     p.send(Kernel.unhex(them), Peering.KIND, bytes)
                     true
                 }
@@ -535,14 +535,14 @@ object Ceremony {
      * a party who is not the one in Kernel.front of you.
      */
     /**
-     * **The optical exchange's trace to this side's Kernel.nominees** (kind 21)
+     * **The optical exchange's trace to this side's Attachments.nominees** (kind 21)
      * [author, 2026-10-19], one message per event and never batched: the
      * flow drains the exchange as each read lands and hands the events
-     * here, where each goes to the Kernel.nominees this side engaged.
+     * here, where each goes to the Attachments.nominees this side engaged.
      *
      * **A failure is not the meeting's end.** A nominee that cannot be
      * reached is a witness that does not appear (design §7.1); what the
-     * trace buys is the arrival pattern on the clocks of the Kernel.nominees it
+     * trace buys is the arrival pattern on the clocks of the Attachments.nominees it
      * does reach, and the exchange itself is unaffected.
      */
     fun opticalTrace(by: String, events: List<OpticalExchange.Event>) {
@@ -608,23 +608,23 @@ object Ceremony {
      * scanning it is an incident of the world and not a fact the rest of
      * the ceremony carries. Before this the provision had to name whoever
      * a device could meet; now the meeting is what introduces them
-     * (`wire-format.md` §14.3.1, design §12.3), and the provisioned Kernel.peer
+     * (`wire-format.md` §14.3.1, design §12.3), and the provisioned Attachments.peer
      * remains only for messaging before any meeting.
      */
     private fun adopt(by: String, who: ByteArray) {
         val key = Kernel.hex(who)
         synchronized(lock) {
-            Kernel.peer = who
-            Kernel.peerKey = key
-            if (Kernel.peerName.isEmpty() || Kernel.peerName == "the other person") Kernel.peerName = key.take(8)
+            Attachments.peer = who
+            Attachments.peerKey = key
+            if (Attachments.peerName.isEmpty() || Attachments.peerName == "the other person") Attachments.peerName = key.take(8)
         }
-        Kernel.front.peerKnown(by, key, Kernel.peerName)
+        Kernel.front.peerKnown(by, key, Attachments.peerName)
     }
 
     /** Who this device is talking to: the meeting's counterparty while one
-     *  is open, the adopted or provisioned Kernel.peer otherwise. */
+     *  is open, the adopted or provisioned Attachments.peer otherwise. */
     private fun counterparty(): ByteArray? =
-        meet?.counterpartyKey?.let { runCatching { Kernel.unhex(it) }.getOrNull() } ?: Kernel.peer
+        meet?.counterpartyKey?.let { runCatching { Kernel.unhex(it) }.getOrNull() } ?: Attachments.peer
 
     /**
      * **The bearer's load** (`wire-format.md` §14.3.2): this device's
@@ -689,7 +689,7 @@ object Ceremony {
         }
         Thread {
             // THE LINK FIRST. offer and seek return as the radio starts,
-            // not as a Kernel.peer connects and subscribes, and a packet sent
+            // not as a Attachments.peer connects and subscribes, and a packet sent
             // before the subscription goes nowhere while reporting success
             // (BleBearer). So the intent waits, bounded, on the link coming
             // ready; a link that does not is a stopped meeting with a
@@ -1112,7 +1112,7 @@ object Ceremony {
     }
 
     /**
-     * Enter the conversation as the window opens: the Kernel.nominees and the
+     * Enter the conversation as the window opens: the Attachments.nominees and the
      * verifier rows for the screen first, then the kernel's open and its
      * queries, off the thread the bearer's packet arrived on, since each
      * sends over the network. The flow opens once; a second entry is its
@@ -1120,7 +1120,7 @@ object Ceremony {
      */
     private fun startConversation(p: Participant, m: Meet) {
         Thread {
-            Kernel.call("Kernel.nominees", { null }) { p.nominees() }?.let { n ->
+            Kernel.call("Attachments.nominees", { null }) { p.nominees() }?.let { n ->
                 m.nominated(n.mine.map { Kernel.hex(it) }, n.theirs.map { Kernel.hex(it) })
             }
             val picked = Kernel.call("selectVerifiers", { e -> m.note("selection refused: ${e.reason}"); null }) {
@@ -1370,7 +1370,7 @@ object Ceremony {
                 // [author, 2026-11-07]: the old key leaves the subnet
                 // that rotated once the new one is adopted into its
                 // place, so this is the moment it is owed
-                Kernel.concludeRotation()
+                Identities.concludeRotation()
             }
             if (m.stepStale()) {
                 m.stop("nothing has moved for ${Meet.STALE_MS / 1000} s at ${m.step().name.lowercase()}; the other phone may have stopped")

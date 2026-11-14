@@ -21332,3 +21332,24 @@ and a name moved by name takes every same-named declaration (`clear(dir)`
 went with `clear()` and came back). The bench-provisioned peer
 (`peer`, `peerKey`, `peerName`, `nominees`) stays the kernel's, read by
 both. 380 Kotlin tests green, both flavours compile.
+
+**Step 4 parts 4b and 4c built, 2026-11-14 (gating).** By the same
+extraction script, now carrying annotations and finding a declaration's
+end by bracket depth: `Identities` gained the index, the focus
+(`activeId`, `focused()`, `activeIdentity()`), the colours, create,
+remove, wipe, rotation and backup (23 items, appended to the object that
+already decoded the index); `Attachments` (new) took start, bring-up, the
+per-identity loop, attach, detach, the agreements, re-attach, serve-from,
+provision, the network watch, the thread-store wiring and the direct-path
+chip (27 items, with the bench provision's peer and the re-attach
+schedule). `Kernel` is 970 lines of an identity's acts: nouns, aliases,
+numbers, invitations, the operator's credentials, enrol and renew,
+resources and asks, and the shared registry (`loaded`, `front`, `shell`,
+`appContext`, `lock`, `call`, `hex`). Three things the script got wrong
+and the compiler caught: a parameter or local named like a shared member
+(`shell`, `started`) prefixed as the member; an annotation on its own line
+left behind its field; an object appended to without the kernel's
+imports. Source-pin tests re-pointed to the objects their text moved to;
+two pins were made weaker only where the visibility widened (`private
+fun` to `fun`). 380 Kotlin tests green, both flavours compile. **Asked of
+the author**: the name of what remains in `Kernel`.

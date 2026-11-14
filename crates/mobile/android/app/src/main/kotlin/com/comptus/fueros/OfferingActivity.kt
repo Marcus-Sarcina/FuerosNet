@@ -90,8 +90,8 @@ class OfferingActivity : Activity() {
         // to mint a resource and to name its owner. Idempotent, and the
         // bring-up runs on its own thread, so by the time an operator has
         // read a manifest it is there.
-        if (Kernel.hasIdentity(this)) {
-            Kernel.start(this)
+        if (Identities.hasIdentity(this)) {
+            Attachments.start(this)
         }
         // **the link as it arrived**, from a tap or from this screen being
         // opened with one in hand; a code reader hands over the same text

@@ -103,7 +103,7 @@ class ConversationsActivity : Activity() {
      * known. The device's own identities are not offered to each other.
      */
     private fun contacts(threads: List<Front.Thread>) {
-        val own = Kernel.identities(this).map { it.id }.toSet()
+        val own = Identities.identities(this).map { it.id }.toSet()
         val open = threads.map { it.by to it.peerKey }.toSet()
         val seen = HashSet<Pair<String, String>>()
         val fresh = Kernel.contactsHeld()
@@ -152,13 +152,13 @@ class ConversationsActivity : Activity() {
     /** Which identity holds a thread, said on the row only where the
      *  device holds more than one — a label, not an explanation. */
     private fun holderLabel(by: String): String {
-        val held = Kernel.identities(this)
+        val held = Identities.identities(this)
         if (held.size <= 1) return ""
         val h = held.firstOrNull { it.id == by } ?: return ""
         return " · " + Identities.label(h)
     }
 
-    private val colours: Map<String, Int> by lazy { Kernel.identityColours(this) }
+    private val colours: Map<String, Int> by lazy { Identities.identityColours(this) }
 
     private fun px(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 

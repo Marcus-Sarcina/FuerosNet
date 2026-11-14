@@ -134,12 +134,12 @@ class ShellActivity : Activity() {
 
         // where a provision arrives, and where the kernel is brought up:
         // both are the launcher's, once
-        intent.getStringExtra("provision")?.let { Kernel.provision(this, it) }
+        intent.getStringExtra("provision")?.let { Attachments.provision(this, it) }
         // **no identity yet is the first run's screen** [author,
         // 2026-10-29], not a kernel minting one silently: the person
         // chooses new or restored, sees the material and the phrase, and
         // names themselves; this screen is what they land on after
-        if (!Kernel.hasIdentity(this)) {
+        if (!Identities.hasIdentity(this)) {
             startActivity(Intent(this, FirstRunActivity::class.java))
             finish()
             return
@@ -155,9 +155,9 @@ class ShellActivity : Activity() {
         // the bring-up is what applies it ([Kernel.requestActive]); every
         // other lever needs a kernel that is already up
         if (BuildConfig.FIELD_TEST) {
-            intent.getStringExtra("active_identity")?.let { Kernel.requestActive(it) }
+            intent.getStringExtra("active_identity")?.let { Identities.requestActive(it) }
         }
-        Kernel.start(this)
+        Attachments.start(this)
         benchLevers(intent)
         go(Chrome.Place.Home)
     }
@@ -184,24 +184,24 @@ class ShellActivity : Activity() {
      */
     private fun benchLevers(intent: Intent) {
         if (!BuildConfig.FIELD_TEST) return
-        intent.getStringExtra("forget_contact")?.let { Kernel.forgetContact(Kernel.focused(), it) }
+        intent.getStringExtra("forget_contact")?.let { Kernel.forgetContact(Identities.focused(), it) }
         // **an agreement re-pointed, as a lever** [bench, 2026-11-13: the
         // laptop's address moved and every agreement named the old one]:
         // `<node hex>@<host:port>` for the identity in focus
-        intent.getStringExtra("agree_to")?.let { Kernel.agreeToNow(Kernel.focused(), it) }
+        intent.getStringExtra("agree_to")?.let { Attachments.agreeToNow(Identities.focused(), it) }
         // **the focused identity's public material, as an event** — the
         // bench's way to a node configuration naming a phone's identity as
         // operator without the key-material screen (which shows it once)
         intent.getStringExtra("export_material")?.let {
             Diag.event(
                 "identity.material",
-                "who" to (Kernel.activeIdentity() ?: "").take(8),
-                "hex" to Kernel.materialHex(Kernel.focused()),
+                "who" to (Identities.activeIdentity() ?: "").take(8),
+                "hex" to Kernel.materialHex(Identities.focused()),
             )
         }
-        if (intent.getBooleanExtra("forget_contacts", false)) Kernel.forgetContacts(Kernel.focused())
-        intent.getStringExtra("forget_captures")?.let { Kernel.forgetCaptures(Kernel.focused(), it) }
-        if (intent.getBooleanExtra("contact_peers", false)) Kernel.contactPeersNow(Kernel.focused())
+        if (intent.getBooleanExtra("forget_contacts", false)) Kernel.forgetContacts(Identities.focused())
+        intent.getStringExtra("forget_captures")?.let { Attachments.forgetCaptures(Identities.focused(), it) }
+        if (intent.getBooleanExtra("contact_peers", false)) Attachments.contactPeersNow(Identities.focused())
         // **which identity acts, as a lever** [bench, 2026-11-11]: the
         // choice is a person's input and nothing the kernel owns, so the
         // harness may give it — and measuring what a device can still do
@@ -219,7 +219,7 @@ class ShellActivity : Activity() {
         // (`light-client-requirements.md` §4.3): this is the screen that
         // shows names, so it is where the asking belongs; what comes back
         // reaches the rail through the model
-        Thread({ Kernel.requestProfiles(Kernel.focused()) }, "fueros-profiles").start()
+        Thread({ Kernel.requestProfiles(Identities.focused()) }, "fueros-profiles").start()
     }
 
     /**
@@ -232,11 +232,11 @@ class ShellActivity : Activity() {
     private fun drawFromModel() {
         val rows = Model.subnets
         scopes = rows
-        colours = Kernel.identityColours(this)
+        colours = Identities.identityColours(this)
         drawRail(rows)
         Thread({
-            val mine = Kernel.ownAlias(Kernel.focused())
-            val unnamed = mine.second.isNotEmpty() && Kernel.defaultAlias(Kernel.focused()) == null
+            val mine = Kernel.ownAlias(Identities.focused())
+            val unnamed = mine.second.isNotEmpty() && Kernel.defaultAlias(Identities.focused()) == null
             runOnUiThread {
                 if (isFinishing) return@runOnUiThread
                 if (unnamed) {
@@ -288,7 +288,7 @@ class ShellActivity : Activity() {
     private var colours: Map<String, Int> = emptyMap()
 
     /** The colour of the identity in focus. */
-    private fun focusColour(): Int = Identities.colourOf(colours, Kernel.activeIdentity())
+    private fun focusColour(): Int = Identities.colourOf(colours, Identities.activeIdentity())
 
     private fun drawRail(subnets: List<Identities.Owned<uniffi.rhtn_model.Subnet>>) {
         railColumn.removeAllViews()
@@ -331,7 +331,7 @@ class ShellActivity : Activity() {
             startActivity(Intent(this, ConversationsActivity::class.java))
         }
         is Chrome.Rung.Meet -> orb(rung, "◎") {
-            startActivity(Intent(this, MeetActivity::class.java).putExtra("by", Kernel.focused()))
+            startActivity(Intent(this, MeetActivity::class.java).putExtra("by", Identities.focused()))
         }
         is Chrome.Rung.Subnet -> orb(rung, Chrome.mark(rung.alias, rung.id)) {
             go(Chrome.Place.Subnet(rung.id))
@@ -439,12 +439,12 @@ class ShellActivity : Activity() {
      * stays with the identity it started in, and only this choice moves.
      */
     private fun whichIdentity() {
-        val held = Kernel.identities(this)
+        val held = Identities.identities(this)
         // **the list always opens, because it always has something to
         // offer** [author, 2026-11-09]: its last row is the door to
         // another identity ([Identities.ANOTHER]), so a device holding
         // one is not answered with a notice and nothing shown.
-        val rows = Identities.listed(held, Kernel.activeIdentity()).toTypedArray()
+        val rows = Identities.listed(held, Identities.activeIdentity()).toTypedArray()
         // **the list and nothing else** [author, 2026-11-10]: *"I want no
         // narrative and I want a drop down that just says '[identity
         // alias]' and '<New Identity>' as options."* No title, no
@@ -456,7 +456,7 @@ class ShellActivity : Activity() {
                     return@setItems
                 }
                 val chosen = held.getOrNull(which) ?: return@setItems
-                if (Kernel.chooseActive(this, chosen.id)) {
+                if (Identities.chooseActive(this, chosen.id)) {
                     // the foot carries the name, so the place is redrawn
                     // under the identity that now acts
                     drawFromModel()
@@ -476,13 +476,13 @@ class ShellActivity : Activity() {
      */
     /** The colour of the identity in focus, chosen from the palette by name. */
     private fun chooseColour() {
-        val me = Kernel.activeIdentity() ?: return
+        val me = Identities.activeIdentity() ?: return
         val now = focusColour()
         val rows = Palette.IDENTITY.map { (name, c) -> (if (c == now) "● " else "") + name }.toTypedArray()
         AlertDialog.Builder(this)
             .setItems(rows) { _, which ->
                 val (_, c) = Palette.IDENTITY.getOrNull(which) ?: return@setItems
-                Kernel.setIdentityColour(this, me, c)
+                Identities.setIdentityColour(this, me, c)
                 drawFromModel()
                 go(place)
             }
@@ -516,8 +516,8 @@ class ShellActivity : Activity() {
      * removing it takes ([Identities.removes]).
      */
     private fun removeIdentity() {
-        val held = Kernel.identities(this)
-        val rows = held.map { (if (it.id == Kernel.activeIdentity()) "● " else "") + Identities.label(it) }
+        val held = Identities.identities(this)
+        val rows = held.map { (if (it.id == Identities.activeIdentity()) "● " else "") + Identities.label(it) }
         AlertDialog.Builder(this)
             .setItems(rows.toTypedArray()) { _, which ->
                 val chosen = held.getOrNull(which) ?: return@setItems
@@ -528,7 +528,7 @@ class ShellActivity : Activity() {
                 AlertDialog.Builder(this)
                     .setMessage(Identities.removes(Identities.label(chosen)))
                     .setPositiveButton("Remove") { _, _ ->
-                        Kernel.removeIdentity(this, chosen.id)?.let { Kernel.front.note("· $it") }
+                        Identities.removeIdentity(this, chosen.id)?.let { Kernel.front.note("· $it") }
                         drawFromModel()
                         go(place)
                     }
@@ -623,7 +623,7 @@ class ShellActivity : Activity() {
         // counting the lines of every identity would silence the prompt on
         // a device holding two identities with one patron each — the case
         // it exists for
-        if (!Chrome.suggestingSecondPatron(Kernel.lines(Kernel.focused()).size)) return null
+        if (!Chrome.suggestingSecondPatron(Kernel.lines(Identities.focused()).size)) return null
         val said = Disclosure.words(Disclosure.Topic.SECOND_PATRON)
         if (said.isEmpty()) return null
         return TextView(this).apply {
@@ -668,7 +668,7 @@ class ShellActivity : Activity() {
             Button(this).apply {
                 text = "Make a backup"
                 setOnClickListener {
-                    startActivity(Intent(this@ShellActivity, BackupActivity::class.java).putExtra("by", Kernel.focused()))
+                    startActivity(Intent(this@ShellActivity, BackupActivity::class.java).putExtra("by", Identities.focused()))
                 }
             },
         )
@@ -702,7 +702,7 @@ class ShellActivity : Activity() {
                         "Resources",
                         "the catalog as swept from your serving node — which of them " +
                             "belong to this subnet is not a question it can answer yet",
-                    ) { startActivity(Intent(this, CatalogActivity::class.java).putExtra("by", Kernel.focused())) },
+                    ) { startActivity(Intent(this, CatalogActivity::class.java).putExtra("by", Identities.focused())) },
                 )
             }
             is Chrome.Place.Direct -> {
@@ -720,12 +720,12 @@ class ShellActivity : Activity() {
                 connection = line
                 column.addView(
                     row("Serving node", null, line) {
-                        startActivity(Intent(this, AttachActivity::class.java).putExtra("by", Kernel.focused()))
+                        startActivity(Intent(this, AttachActivity::class.java).putExtra("by", Identities.focused()))
                     },
                 )
                 column.addView(
                     row("Instances you run", "enrol one, launch one at a provider, its pages, its run") {
-                        startActivity(Intent(this, OperatorActivity::class.java).putExtra("by", Kernel.focused()))
+                        startActivity(Intent(this, OperatorActivity::class.java).putExtra("by", Identities.focused()))
                     },
                 )
                 column.addView(
@@ -746,14 +746,14 @@ class ShellActivity : Activity() {
                     row(
                         "Authority — who you are under, and what leaving costs",
                         "every line this key holds, not this subnet's alone; tap one for the cost of ending it",
-                    ) { startActivity(Intent(this, LeavingActivity::class.java).putExtra("by", Kernel.focused())) },
+                    ) { startActivity(Intent(this, LeavingActivity::class.java).putExtra("by", Identities.focused())) },
                 )
                 column.addView(owed(Shell.downline(s)))
                 if (s?.root == true) column.addView(nameSubnet(where.id, scope?.alias))
                 if (s?.operator == true) {
                     column.addView(
                         row("Your instance here", "its administration pages, through the operator's own section") {
-                            startActivity(Intent(this, OperatorActivity::class.java).putExtra("by", Kernel.focused()))
+                            startActivity(Intent(this, OperatorActivity::class.java).putExtra("by", Identities.focused()))
                         },
                     )
                 }
@@ -866,7 +866,7 @@ class ShellActivity : Activity() {
                     Identity.aliasRefusal(typed)?.let { said.text = it; return@setOnClickListener }
                     said.text = "publishing…"
                     Thread({
-                        val why = Kernel.publishSubnetAlias(Kernel.focused(), id, typed)
+                        val why = Kernel.publishSubnetAlias(Identities.focused(), id, typed)
                         runOnUiThread {
                             if (isFinishing) return@runOnUiThread
                             said.text = why?.let { "not published: $it" } ?: "Named $typed; published to your node."

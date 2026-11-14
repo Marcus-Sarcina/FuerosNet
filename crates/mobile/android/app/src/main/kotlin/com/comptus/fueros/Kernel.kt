@@ -26,7 +26,7 @@ import uniffi.rhtn_ffi.kindApplication
  *
  * An Activity is recreated on a font change; a Participant holds a
  * connection, an event loop and a maintenance clock, and must not be. One
- * kernel is started here once, screens bind to its [front] and unbind from
+ * kernel is Attachments.started here once, screens bind to its [front] and unbind from
  * it, and a screen that has gone is a null sink rather than a leaked loop.
  * Every context used is the application's, so nothing here retains an
  * Activity.
@@ -37,7 +37,7 @@ object Kernel {
      *  kernel mutates it. It lives in [Front], which a JVM test can hold. */
     val front = Front()
 
-    private val lock = Any()
+    internal val lock = Any()
 
     /**
      * **Every identity this device holds, open at once**, by its id
@@ -51,33 +51,6 @@ object Kernel {
     internal val loaded = java.util.concurrent.ConcurrentHashMap<String, Participant>()
 
     /**
-     * **Which identity acts** — a meeting's and an operator action's
-     * ([Identities.needsTheActive]), chosen by press and hold on the
-     * nameplate. Null only where the device holds none.
-     */
-    @Volatile internal var activeId: String? = null
-
-    /**
-     * **The identity in focus, named at a call** [restructure step 4,
-     * 2026-11-14]: the person's choice of which identity acts, a UI
-     * input and nothing the kernel reasons from. Every function that acts
-     * for an identity takes it as its first argument; a screen that acts
-     * for the focused one passes this, and a screen given its identity
-     * passes that. Empty where the device holds none, which every
-     * function answers as it answered a missing focus.
-     */
-    fun focused(): String = activeId ?: ""
-    @Volatile internal var peer: ByteArray? = null
-    @Volatile internal var peerKey: String? = null
-    internal var peerName: String = "peer"
-    /** Who this device nominates to witness, where the provision names
-     *  anybody: a bench stand-in for the horizon a phone at genesis does
-     *  not have (see [beginCeremony]). */
-    @Volatile internal var nominees: List<ByteArray> = listOf()
-    internal var started = false
-    internal var provisioned = false
-
-    /**
      * **An identity's own serving node**, in its own scope — step 4 of the
      * browser model [author, 2026-11-11]: the node an identity agrees to
      * ([serveFrom]) is that identity's tab and not the device's, so an
@@ -86,9 +59,6 @@ object Kernel {
      * identity a phone was set up with, read by [bringUp] for the one in
      * focus alone.
      */
-
-    /** An identity's conversations, in its own scope ([Threads]). */
-    private const val THREADS = "threads"
 
     /** The application's context, kept for the radio the bearer needs. */
     @Volatile internal var appContext: Context? = null
@@ -328,7 +298,7 @@ object Kernel {
       * hand-typed enrolment — a machine somebody already had is in a place
       * this screen was not told.
       */
-    private fun point(hostPort: String, asn: Long? = null, zone: String? = null): ByteArray? {
+    internal fun point(hostPort: String, asn: Long? = null, zone: String? = null): ByteArray? {
         val host = hostPort.substringBeforeLast(':', "")
         val port = hostPort.substringAfterLast(':', "").toUShortOrNull() ?: return null
         if (host.isEmpty()) return null
@@ -338,7 +308,7 @@ object Kernel {
     }
 
     /** Seconds since the epoch, which is what a delegation's window is in. */
-    private fun now(): ULong = (System.currentTimeMillis() / 1000).toULong()
+    internal fun now(): ULong = (System.currentTimeMillis() / 1000).toULong()
 
     /**
      * One call into the kernel, bracketed for the diagnostics
@@ -464,7 +434,7 @@ object Kernel {
         val seconds: ULong?,
     )
 
-    private fun answered(a: uniffi.rhtn_ffi.ResourceAnswer): Answered = Answered(
+    internal fun answered(a: uniffi.rhtn_ffi.ResourceAnswer): Answered = Answered(
         status = a.status,
         page = a.page?.let { q ->
             Page(
@@ -579,7 +549,7 @@ object Kernel {
      * answers is the application's, and nothing is kept of it.
      */
     fun ask(node: String, resource: String, path: String): Answered? {
-        val me = activeId ?: return null
+        val me = Identities.activeId ?: return null
         return askAs(me, node, resource, path)
     }
 
@@ -647,206 +617,12 @@ object Kernel {
 
     // ---- the optical exchange, which is the kernel's ------------------
 
-    /** The peer this device talks to — adopted at a meeting or named by the
+    /** The Attachments.peer this device talks to — adopted at a meeting or named by the
      *  provision — or null: what a conversation screen opens onto. */
 
     /**
-     * Start the kernel, once for the life of the process.
-     *
-     * **A second call does nothing**, which is the whole point: a recreated
-     * screen finds the kernel it left rather than starting another against
-     * the same state files.
-     */
-    fun start(context: Context) {
-        val app = context.applicationContext
-        synchronized(lock) {
-            if (started) return
-            started = true
-            appContext = app
-        }
-        Thread({ bringUp(AndroidShell(app)) }, "fueros-kernel").start()
-        // the main thread's watchdog, in a build that has somewhere to say it
-        if (Diag.enabled()) Stall.start()
-    }
-
-    /**
-     * Keep a provision blob for the kernel to read when it comes up.
-     *
-     * Written before [start] on a cold launch, which is where a provision
-     * arrives. **A kernel already up does not re-read it**: it is attached
-     * where it was told to attach, and the screen says so rather than
-     * appearing to have taken an instruction it did not.
-     */
-    /**
-     * **Serve from this node from now on**, which is the whole of attaching
-     * [author, 2026-11-04: "attachment is not a separate act. The operator
-     * should attach upon launch and install, other horizon members should
-     * agree to attach once when invited and then all horizon members
-     * should re-attach every time they become detached."].
-     *
-     * Two things, because attaching once is not what was asked for. The
-     * node is **remembered in the provision**, which is what [bringUp]
-     * attaches from at every start — so a device that becomes detached
-     * comes back to the same node without being asked again. And it is
-     * **attached to now**, because a provision alone takes effect only at
-     * the next start and the operator who just launched a machine is
-     * entitled to be on it.
-     *
-     * **Nobody is asked for a key or an address.** The operator's own node
-     * speaks as its operator, so the key is this device's own keyhash; the
-     * address is the machine this device launched. A member learns both
-     * from the invitation it agreed to. There is nothing here a person
-     * could usefully type.
-     */
-    fun serveFrom(by: String, context: Context, nodeHex: String, address: String) {
-        // **the node an identity agrees to is that identity's** — step 4
-        // of the browser model [author, 2026-11-11]. Written into the
-        // device's provision before this, so that with an attach per
-        // identity every identity on the device would have joined a node
-        // one of them agreed to at the next start: a profile joining a
-        // server it never agreed to. Remembered in the focused identity's
-        // own scope instead, which is the one that agreed (the kernel's agreement).
-        val app = context.applicationContext
-        val scope = activeId?.let { id -> identities(app).firstOrNull { it.id == id }?.scope }
-        // **one tab per address** [author, 2026-11-11], **kept by the kernel**
-        // [review, 2026-11-13: the one store of what an identity agreed to]
-        val p = loaded[by] ?: run { front.note("· no kernel yet"); return }
-        val node = Attach.node(nodeHex)?.let { runCatching { unhex(it) }.getOrNull() }
-        if (node == null) {
-            front.note("· not a node: ${nodeHex.take(8)}…")
-            return
-        }
-        call("agreeTo", { e -> front.note("· the node could not be remembered: ${e.reason}") }) {
-            p.agreeTo(node, listOf(address))
-        }
-        attachTo(by, nodeHex, address)
-    }
-
-    /** The bench's lever: `<node hex>@<host:port>` agreed to by the identity in focus. */
-    fun agreeToNow(by: String, spec: String) {
-        val p = loaded[by] ?: return
-        val cut = spec.indexOf('@')
-        if (cut <= 0) return
-        val node = runCatching { unhex(spec.substring(0, cut)) }.getOrNull() ?: return
-        val addr = spec.substring(cut + 1)
-        call("agreeTo", { e -> Diag.warn("agree_to", "why" to e.reason) }) { p.agreeTo(node, listOf(addr)) }
-        Diag.event("agree_to", "node" to spec.take(8), "addr" to addr)
-    }
-
-    /** The kernel's sealing service for one identity, as [Threads] reaches it. */
-    private fun sealerOf(p: Participant) = object : Threads.Sealer {
-        override fun seal(label: String, bytes: ByteArray): ByteArray = p.seal(label, bytes)
-        override fun unseal(label: String, bytes: ByteArray): ByteArray? = runCatching { p.unseal(label, bytes) }.getOrNull()
-    }
-
-    /** The one JSON file of 2026-11-12, written out as sealed records once and forgotten. */
-    private fun migrateThreads(shell: AndroidShell, s: Threads) {
-        val old = shell.read(THREADS) ?: return
-        val threads = Threads.decodeLegacy(old)
-        for (t in threads) {
-            for (m in t.messages) s.append(t.peerKey, Threads.Record.Said(m.mine, m.who, m.text, m.delivery, m.reason))
-        }
-        if (threads.isNotEmpty()) s.writeIndex(threads.map { Threads.Entry(it.peerKey, it.peerName, it.direct) })
-        shell.forget(THREADS)
-        Diag.event("threads.migrated", "threads" to threads.size, "messages" to threads.sumOf { it.messages.size })
-    }
-
-    fun provision(context: Context, blob: String) {
-        AndroidShell(context.applicationContext).write("provision", blob.toByteArray())
-        synchronized(lock) {
-            if (!started || provisioned) return
-        }
-        front.note("· provision stored. Restart the app for it to take effect.")
-    }
-
-    /**
-     * Send application bytes **to the party whose thread this is**, named
-     * by its keyhash in hex [2026-10-27].
-     *
-     * The bubble goes up at once as *sending*; the kernel's own send blocks
-     * on the network, so it runs off the caller's thread and settles the
-     * bubble to *sent* — accepted for Ceremony.carriage, never *delivered* — or to
-     * *unsent* with the refusal's reason.
-     *
-     * **The recipient was this kernel's one `peer` slot until now**, which
-     * every meeting overwrote: a conversation screen drew the thread it was
-     * opened on and then sent to whoever had been met last, putting the
-     * bubble in that other thread as it went. A screen showing one party
-     * and sending to another is a misdelivery, not a missing feature, so
-     * the recipient is the screen's own and this kernel keeps no current
-     * one. Who may be sent to is every party [adopt] has pinned, which is
-     * every meeting this device has reached the optical step of.
-     */
-    fun send(by: String, to: String, text: String) {
-        // **as the identity that holds the thread, never the one in
-        // focus** — step 2b of the browser model [author, 2026-11-11]: a
-        // reply typed into another identity's conversation went out under
-        // the focused key before this, which is the wrong-key act the
-        // row-holder rule exists to prevent, and nothing would have
-        // refused it. Refused here rather than fallen back from
-        // ([asHolder]).
-        val p = asHolder(by)
-        val who = runCatching { unhex(to) }.getOrNull()
-        if (p == null || who == null || who.size != 32) {
-            front.note(
-                if (p == null) "· that identity is not open on this device" else "· not a party to send to: ${to.take(8)}…",
-            )
-            return
-        }
-        val id = front.outgoing(by, to, text)
-        Thread({
-            call("send", { e -> front.settle(by, to, id, Front.Delivery.UNSENT, e.reason) }) {
-                p.send(who, kindApplication(), text.toByteArray())
-                front.settle(by, to, id, Front.Delivery.SENT, null)
-            }
-        }, "fueros-send").start()
-    }
-
-    /**
-     * **The network is the platform's to know** (`light-client-requirements.md`
-     * §9: the hardware crosses inward). The default network coming up —
-     * at start, and again after it was lost — is handed to the kernel,
-     * which stands its direct socket again where the device now routes
-     * out of another interface and reaches for every peer (design §6.3).
-     * The kernel reaches for them on its own clock besides; this is the
-     * reconnect case, which a clock alone would Ceremony.meet() late. Off the
-     * callback's thread: a round dials, and a dial waits.
-     */
-    private fun watchNetwork(p: Participant) {
-        val cm = appContext?.getSystemService(android.net.ConnectivityManager::class.java) ?: return
-        try {
-            cm.registerDefaultNetworkCallback(object : android.net.ConnectivityManager.NetworkCallback() {
-                override fun onAvailable(network: android.net.Network) {
-                    Diag.event("shell.network", "state" to "available")
-                    Thread({
-                        call("network_changed", { _ -> }) {
-                            val round = loaded.values.flatMap { q -> q.networkChanged() }
-                            Diag.event(
-                                "peer.round",
-                                "peers" to round.size,
-                                "held" to round.count { it.held },
-                                "how" to round.joinToString(",") { it.how },
-                            )
-                            round.forEach { c ->
-                                val who = hex(c.who).take(8)
-                                if (c.how == "dialled") front.note("· peer $who… reached directly")
-                            }
-                        }
-                    }, "fueros-network").start()
-                }
-
-                override fun onLost(network: android.net.Network) {
-                    Diag.event("shell.network", "state" to "lost")
-                }
-            })
-        } catch (e: Exception) {
-            Diag.warn("shell.network", "state" to "unwatched", "error" to (e.message ?: e.javaClass.simpleName))
-        }
-    }
-
-    /**
-     * **The bench's two levers on the peer exchange** (fieldtest flavour,
-     * by intent extra): forget one contact, so that a peer's copy can be
+     * **The bench's two levers on the Attachments.peer exchange** (fieldtest flavour,
+     * by intent extra): forget one contact, so that a Attachments.peer's copy can be
      * watched bringing it back; and reach for the peers now rather than
      * at the clock's next tick. Each runs off the caller's thread and says
      * what it did on the home screen's notes.
@@ -929,68 +705,6 @@ object Kernel {
 
     // ---- the device's own attach ---------------------------------------
 
-    /**
-     * **Attach to a serving node the person named** [2026-10-27].
-     *
-     * Until this, the only attach was the one `bringUp` performs from the
-     * bench's provision blob, read once at a cold start — so an installed
-     * app had no way to reach a node at all, and every run that needed one
-     * was a run a script had set up. A second attach replaces the first,
-     * which is what returning to a patron after a spell on a sibling is.
-     *
-     * **The population swept is the parties this device holds**, not the
-     * nodes: a sweep stocks payload material for people, and a node is
-     * where they are reached rather than somebody to reach.
-     *
-     * Off the caller's thread: an attach dials, publishes and sweeps.
-     */
-    fun attachTo(by: String, nodeHex: String, address: String) {
-        val p = loaded[by] ?: run { front.note("· no kernel yet"); return }
-        val node = Attach.node(nodeHex)?.let { runCatching { unhex(it) }.getOrNull() }
-        val at = Attach.address(address)
-        if (node == null || at == null) {
-            front.note("· not a node and an address: ${nodeHex.take(8)}… at $address")
-            return
-        }
-        Thread({
-            val population = call("contacts", { emptyList() }) {
-                // the people, not the infrastructure: `how` 4 is a node
-                p.contacts().filter { it.how != How.INFRA }.map { it.keyhash }
-            }
-            val a = call("attach", { e -> front.note("· attach refused: ${e.reason}"); null }) {
-                p.attach(node, listOf(at), population)
-            }
-            if (a == null) {
-                // **a node that did not answer is the detached case**, as
-                // it is on the provision's path: the loop goes on running
-                front.note("· $at did not answer: this device stays detached.")
-                show(p, Connection.Detached)
-            } else {
-                // **not the provision's flag**: that one says a blob was
-                // read, and this attach is the person's own
-                front.note("· attached to ${hex(node).take(8)}… at $at; ${a.queued} queued there.")
-                show(p, Connection.Attached(node, a.primary))
-            }
-        }, "fueros-attach").start()
-    }
-
-    /**
-     * **Detach, which the person may do and the screen offers**: the
-     * session closes cleanly so the serving node queues for this device
-     * from now rather than after three missed intervals. Everything else
-     * is kept.
-     */
-    fun detachNow(by: String) {
-        val p = loaded[by] ?: run { front.note("· no kernel yet"); return }
-        Thread({
-            call("detach", { e -> front.note("· detach refused: ${e.reason}") }) {
-                p.detach()
-                front.note("· detached. Nothing is queued for this device from here.")
-                show(p, Connection.Detached)
-            }
-        }, "fueros-detach").start()
-    }
-
     // ---- authority: the lines this key holds, and what ending one costs
 
     /**
@@ -999,7 +713,7 @@ object Kernel {
      * Absent for a party that has published none to this device, and
      * that absence is shown as the keyhash rather than filled in.
      */
-    private fun aliases(p: Participant): Map<String, String> =
+    internal fun aliases(p: Participant): Map<String, String> =
         call("contacts", { emptyMap() }) {
             p.contacts().mapNotNull { c -> c.alias?.let { a -> c.keyhash.hex() to a } }.toMap()
         }
@@ -1079,20 +793,6 @@ object Kernel {
         return call("invitations", { emptyList() }) { p.invitations(at) }
     }
 
-    /**
-     * **This device's archive and store, enveloped** (design §13.7.1,
-     * `rhtn_client::backup`): what a device loss takes away, under a key
-     * derived from the identity, so the blob is unreadable wherever it is
-     * kept until the identity is in hand again.
-     *
-     * The identity is **not** in it: that is the one thing a backup must
-     * not carry, and the seed phrase is how it comes back.
-     */
-    fun exportBackup(by: String): ByteArray? {
-        val p = loaded[by] ?: return null
-        return call("exportBackup", { null }) { p.exportBackup() }
-    }
-
     /** The subnets this device roots and could bring under a patron. */
     fun subnetsRooted(by: String): List<Subnet> {
         val p = loaded[by] ?: return emptyList()
@@ -1156,710 +856,13 @@ object Kernel {
         }
     }
 
-    fun forgetCaptures(by: String, hexKey: String) {
-        val p = loaded[by] ?: run { front.note("· no kernel yet"); return }
-        val who = runCatching { unhex(hexKey) }.getOrNull() ?: run { front.note("· not a key: $hexKey"); return }
-        Thread({
-            call("forget_captures", { e -> front.note("· forget refused: ${e.reason}") }) {
-                val n = p.forgetCaptures(who)
-                front.note("· forgot $n sealed capture(s) of ${hexKey.take(8)}…")
-            }
-        }, "fueros-forget").start()
-    }
-
-    fun contactPeersNow(by: String) {
-        val p = loaded[by] ?: run { front.note("· no kernel yet"); return }
-        Thread({
-            call("contact_peers", { e -> front.note("· contact refused: ${e.reason}") }) {
-                val round = p.contactPeers()
-                Diag.event("peer.round", "peers" to round.size, "held" to round.count { it.held }, "how" to round.joinToString(",") { it.how })
-                front.note("· peers: " + round.joinToString("; ") { "${hex(it.who).take(8)}… ${it.how}" }.ifEmpty { "none" })
-            }
-        }, "fueros-contact").start()
-    }
-
-    /** Start the participant, attach where provisioned, and pump its events. */
+    /** Start the participant, attach where Attachments.provisioned, and pump its events. */
     @Volatile internal var shell: AndroidShell? = null
-
-    /**
-     * The participant for the identity whose storage `own` is, or null
-     * where it would not open. The rotation logic is per identity: see
-     * [openHeld].
-     */
-    private fun openOn(shell: AndroidShell, known: List<ByteArray>): Participant? {
-        // **a mark outranks the seeds** ([Rotation.start]): a rotation that
-        // began and may not have finished is performed here, because
-        // `Participant.rotating` opens the new identity on the storage it
-        // is handed — so between beginning one and sealing its new seeds
-        // the archive belongs to a key the seeds do not name, and a start
-        // that trusted the seeds would open the wrong identity on the
-        // right archive
-        val mark = shell.unseal(Rotation.MARK_NEW)
-        val p = when (
-            Rotation.start(
-                shell.unseal(Identities.LEGACY_SEEDS)?.size == 64,
-                mark?.size == 64,
-            )
-        ) {
-            is Rotation.Start.Unstarted -> {
-                // **one identity's seeds being gone is that identity's
-                // fact and not the device's** [2026-11-07]: the device
-                // may hold others, and [bringUp] says so once where none
-                // of them came up
-                Diag.warn("identity", "op" to "open", "error" to "no seeds under this scope")
-                return null
-            }
-            is Rotation.Start.Rotate -> {
-                // bound here rather than asserted: the predicate above read
-                // the same value, and a `!!` would say this code knows
-                // something the compiler cannot check
-                val fresh = mark ?: return null
-                val prior = shell.unseal(Rotation.MARK_PRIOR)
-                if (prior == null || prior.size != 64) {
-                    // **half a mark is no mark**: without the prior key
-                    // there is no rotation to make (`wire-format.md` §4.1
-                    // admits no variant carrying one half), so the mark is
-                    // dropped and the device starts as it was
-                    shell.forget(Rotation.MARK_NEW)
-                    front.note("· a rotation was begun without its prior key and was dropped")
-                    call("Participant.start", { e -> front.setStatus("kernel refused: ${e.reason}"); null }) {
-                        Participant.start(heldSeeds(shell), known, platformOf(shell))
-                    } ?: return null
-                } else {
-                    val out = call("Participant.rotating", { e ->
-                        front.setStatus("the rotation was refused: ${e.reason}"); null
-                    }) {
-                        Participant.rotating(fresh.copyOf(), prior.copyOf(), null, known, platformOf(shell))
-                    }
-                    prior.fill(0)
-                    if (out == null) return null
-                    // **the new seeds become the identity only now**, and
-                    // the mark goes after them: cleared first and the
-                    // process dying would leave an archive nothing names
-                    if (!shell.seal(Identities.LEGACY_SEEDS, fresh)) {
-                        front.setStatus("the rotation held but its seeds could not be kept")
-                        return null
-                    }
-                    shell.forget(Rotation.MARK_PRIOR)
-                    shell.forget(Rotation.MARK_NEW)
-                    fresh.fill(0)
-                    Diag.event("rotation.done")
-                    front.note("· the rotation completed and this device holds its new key")
-                    out
-                }
-            }
-            is Rotation.Start.Ordinary ->
-                call("Participant.start", { e -> front.setStatus("kernel refused: ${e.reason}"); null }) {
-                    Participant.start(heldSeeds(shell), known, platformOf(shell))
-                } ?: return null
-        }
-        return p
-    }
-
-    /** The keyhash a seed pair names, or null where it does not read. */
-    private fun idOfSeeds(seeds: ByteArray): String? =
-        call("keyhashOfSeeds", { null }) { uniffi.rhtn_ffi.keyhashOfSeeds(seeds) }
-            ?.takeIf { Identities.names(it) }
-
-    /**
-     * **Open one of the identities this device holds**, on storage of its
-     * own ([AndroidShell]'s scope): two kernels over one directory would
-     * each overwrite the other's archive.
-     *
-     * **A mark outranks the seeds** ([Rotation.start]), per identity: a
-     * rotation that began and may not have finished is performed here,
-     * because `Participant.rotating` opens the new identity on the
-     * storage it is handed — so between beginning one and sealing its new
-     * seeds the archive belongs to a key the seeds do not name, and a
-     * start that trusted the seeds would open the wrong identity on the
-     * right archive.
-     */
-    private fun openHeld(app: Context, h: Identities.Held, known: List<ByteArray>) {
-        val own = AndroidShell(app, h.scope)
-        val p = openOn(own, known) ?: return
-        loaded[h.id] = p
-    }
-
-    private fun bringUp(shell: AndroidShell) {
-        this.shell = shell
-        val provision = shell.read("provision")?.let {
-            try { JSONObject(String(it)) } catch (_: Exception) { null }
-        }
-        synchronized(lock) { provisioned = provision != null }
-        front.setProvisioned(provision != null)
-        // the identity is this device's own, whether or not anybody has
-        // been told about it yet
-        // **`opt`, not `get`** [2026-11-04]: `getJSONArray` throws where the
-        // key is absent, and the `?.let` below only ever guarded a null
-        // provision. A provision naming a node and an address and nothing
-        // else — which is what agreeing to an invitation writes
-        // ([serveFrom]) — crashed the kernel thread on every start, so two
-        // bench phones would not launch at all. A provision is a thing
-        // other code writes, and every field of it is optional to this.
-        val known = provision?.optJSONArray("known")
-            ?.let { a -> (0 until a.length()).map { unhex(a.getString(it)) } }
-            ?: listOf()
-        // **every identity this device holds, opened at once**
-        // ([Identities]; author, 2026-11-07): a key rotation replaces the
-        // key one subnet knows and leaves the others live, so a device
-        // that has rotated holds a key still usable elsewhere.
-        val app = appContext ?: return
-        var index = Identities.decode(shell.unseal(Identities.INDEX))
-        // **the identity held before this model is brought into the index
-        // and nothing is moved**: its scope is the top-level directory it
-        // already writes, because relocating an archive would be a
-        // destructive step at the one moment there is nothing to fall
-        // back on ([Identities.LEGACY_SCOPE])
-        val legacy = shell.unseal(Identities.LEGACY_SEEDS)?.takeIf { it.size == 64 }
-        val adopt = Identities.migrated(legacy != null, legacy?.let { idOfSeeds(it) }, index)
-        if (adopt is Identities.Migration.Adopt) {
-            index = index + Identities.Held(adopt.id, Identities.LEGACY_SCOPE, null)
-            if (!shell.seal(Identities.INDEX, Identities.encode(index))) {
-                front.setStatus("this device's storage would not keep its list of identities")
-                return
-            }
-            Diag.event("identity.adopted")
-        }
-        if (index.isEmpty()) {
-            front.setStatus("no identity on this device")
-            return
-        }
-        for (h in index) {
-            openHeld(app, h, known)
-        }
-        // **one of them acts** ([Identities.active]): the saved choice
-        // where it is still held, the first otherwise — a device holding
-        // identities always has one, or a meeting would have nothing to
-        // offer and no way to say why
-        val saved = shell.unseal(Identities.ACTIVE)?.toString(Charsets.UTF_8)?.trim()
-        // **a bench lever's choice is read here and not at the door**
-        // [bench, 2026-11-11]: `chooseActive` refuses an identity that is
-        // not open yet, and a lever read from the launching intent runs
-        // before this loop has opened any — so the request joins the saved
-        // choice, which [Identities.active] already falls back from where
-        // the identity named is not held.
-        activeId = Identities.active(index.filter { loaded.containsKey(it.id) }, requestedActive ?: saved)
-        requestedActive = null
-        // **a departure a rotation owes is owed at every start**, since a
-        // process that died between the Ceremony.adoption() and the departure left
-        // the mark behind ([concludeRotation])
-        concludeRotation()
-        val p = activeId?.let { loaded[it] } ?: run {
-            front.setStatus("no identity on this device came up")
-            return
-        }
-        show(p, Connection.Detached)
-        // the shell's copy of the nouns, from a kernel that is up now
-        Model.refreshAll()
-        watchNetwork(p)
-        // **a nominee arrives as an introduction** (`wire-format.md` §2.3):
-        // material and a signed locator, taken as a person would take one
-        // scanned, so the nominee can be offered to the counterparty's
-        // prune by locator. The bench names nominees this way because a
-        // phone at genesis has met nobody; material alone left the set
-        // empty (run 58a6883-a5-2, 2026-10-24)
-        provision?.optJSONArray("introductions")?.let { a ->
-            for (k in 0 until a.length()) {
-                val bytes = runCatching { unhex(a.getString(k)) }.getOrNull() ?: continue
-                call("takeIntroduction", { e -> front.note("· an introduction was refused: ${e.reason}") }) {
-                    val who = p.takeIntroduction(bytes)
-                    front.note("· introduced: ${hex(who).take(16)}…")
-                }
-            }
-        }
-
-        val material = p.material().joinToString("") { "%02x".format(it) }
-
-        // **An unprovisioned device is the ordinary device** [author,
-        // 2026-10-11]: it holds its own identity, knows nobody, is
-        // attached to nothing, and meets whoever is in front of it — the
-        // event loop below is what drives a ceremony and it runs either
-        // way. A provision is the bench's convenience (a peer to message,
-        // nominees, a node, a stream) and never the way in. Until this
-        // the shell returned here, and no phone ever met without a
-        // script having written a blob first.
-        if (provision == null) {
-            // the material is this device's public identity, shown
-            // because nothing else exposes it: no flavour logs it and the
-            // Report bundle carries identities as eight characters only
-            front.note("· this device's public key material:")
-            front.note("    $material")
-            front.note("· nobody known, nothing attached: a meeting crosses the bearer alone.")
-        }
-
-        // the retention this device declares (design §7.5.1), where the
-        // provision names one; the kernel's own default otherwise
-        val retention = provision?.optLong("retention_years", 0L) ?: 0L
-        if (retention > 0L) {
-            call("set_retention_years", { e -> front.note("· retention refused: ${e.reason}") }) {
-                p.setRetentionYears(retention.toULong())
-            }
-        }
-        // **the provision need not name anybody.** A device that has met
-        // nobody is the ordinary case, and the invitation code is what
-        // introduces the first counterparty ([counterparty]); a named peer
-        // here is only a convenience for messaging before any meeting.
-        val to = provision?.optString("peer", "")?.takeIf { it.isNotEmpty() }
-            ?.let { runCatching { unhex(it) }.getOrNull() }
-        peer = to
-        peerName = provision?.optString("peer_name", "the other person") ?: "the other person"
-        nominees = provision?.optJSONArray("nominees")
-            ?.let { a -> (0 until a.length()).map { unhex(a.getString(it)) } }
-            ?: listOf()
-        peerKey = to?.let { hex(it) }
-        activeId?.let { by -> peerKey?.let { front.peerKnown(by, it, peerName) } }
-        // **a provision may name no node, and then this device stays
-        // detached** (design §6.4): a pair can Ceremony.meet() with nothing reachable
-        // but each other, and what they form is the witnessless shape —
-        // two identities at their genesis, no witnesses, no responses
-        // (`wire-format.md` §3.2 subtype 1). The event loop below still
-        // runs, because it is what drives the ceremony; only the attach
-        // is skipped [author, 2026-10-07].
-        val nodeHex = provision?.optString("node", "") ?: ""
-        if (nodeHex.isEmpty()) {
-            if (provision != null) {
-                front.note("· no node in the provision: this device stays detached,")
-                front.note("  and a meeting crosses the bearer alone (design §6.4).")
-            }
-            show(p, Connection.Detached)
-        } else {
-            val node = unhex(nodeHex)
-            val a = call("attach", { e -> front.setStatus("attach refused: ${e.reason}"); null }) {
-                // a device that has met nobody attaches with no peers to
-                // follow; the first one is learned at the meeting
-                p.attach(node, listOf(provision?.optString("addr", "") ?: ""), listOfNotNull(to))
-            }
-            // **a node named but unreachable is the detached case, not a
-            // reason to stop.** This returned, and the event loop below
-            // never ran — which is the author's own rule broken twelve
-            // lines above, where a provision naming no node skips the
-            // attach and runs the loop anyway [author, 2026-10-07].
-            //
-            // It cost seven attempts at A6. The phones carried
-            // `node=5046da37 addr=192.168.0.8:7447` from an earlier
-            // `field-run`, and a nodeless run has nothing listening
-            // there, so every one of them left the kernel with no loop:
-            // no poll, no staleness watchdog, no heartbeat, and a
-            // conversation that received every byte it needed and acted
-            // on none of it (2026-10-24).
-            if (a == null) {
-                front.note("· the node named in the provision did not answer:")
-                front.note("  this device stays detached, and a meeting crosses")
-                front.note("  the bearer alone (design §6.4).")
-                show(p, Connection.Detached)
-            } else {
-                show(p, Connection.Attached(node, a.primary))
-            }
-        }
-        // **the tabs the focused identity agreed to** [author, 2026-11-11]:
-        // each attached beside the provision's node, a second node while
-        // one is held being a tab rather than a replacement
-        run {
-            val scope = activeId?.let { id -> index.firstOrNull { it.id == id }?.scope }
-            var missed = 0
-            for (t in call("agreed", { emptyList() }) { p.agreed() }) {
-                val hex = t.serving.hex()
-                if (hex == nodeHex) continue
-                val a = call("attach", { e -> front.note("· tab ${hex.take(8)}… refused: ${e.reason}"); null }) {
-                    p.attach(t.serving, t.addresses, listOfNotNull(to))
-                }
-                if (a == null) missed += 1
-                Diag.event("identity.attach", "who" to (activeId ?: "").take(8), "node" to hex.take(8), "attached" to (a != null), "tab" to true)
-            }
-            // **and tried again where one did not answer** [bench, 2026-11-13:
-            // the focused identity's attach timed out at start and nothing
-            // retried it — the held identities' path did]
-            if (missed > 0) activeId?.let { reattachLater(it, p, scope, 1) }
-        }
-        // **every other identity attaches and receives for itself** — step
-        // 3 of the browser model [author, 2026-11-11]: the one in focus
-        // stays on this thread, as it always did, and each of the rest
-        // gets its own ([launchHeld])
-        // **every identity's conversations, back from its own scope, and
-        // written there after each change** [author, 2026-11-12]
-        // **sealed through the kernel, appended per message, read when
-        // opened** [author, 2026-11-14] (`light-client-requirements.md`
-        // §9, APP-015): one store per identity over its own scope and its
-        // own kernel's sealing; the 12th's one file migrated once
-        appContext?.let { a ->
-            val stores = HashMap<String, Threads>()
-            fun storeOf(by: String): Threads? {
-                stores[by]?.let { return it }
-                val h = index.firstOrNull { it.id == by } ?: return null
-                val p = loaded[by] ?: return null
-                val shell = AndroidShell(a, h.scope)
-                return Threads(shell.files(), sealerOf(p), by).also { stores[by] = it }
-            }
-            for (h in index) {
-                val s = storeOf(h.id) ?: continue
-                migrateThreads(AndroidShell(a, h.scope), s)
-                front.restore(h.id, s.index())
-            }
-            front.appender = { by, peer, rec -> storeOf(by)?.append(peer, rec) }
-            front.indexer = { by -> storeOf(by)?.writeIndex(front.entries(by)) }
-            front.loader = { by, peer, before, pending -> storeOf(by)?.page(peer, before, Threads.PAGE, pending) }
-        }
-        for ((hid, hp) in loaded) {
-            if (hid != activeId) launchHeld(hid, hp, index.firstOrNull { it.id == hid }?.scope)
-        }
-        runLoop(p, activeId ?: "")
-    }
-
-    /**
-     * **An identity that is not in focus still receives, and still
-     * attaches to a node it agreed to** — steps 3 and 4 of the browser
-     * model [author, 2026-11-11]: a browser window out of focus keeps its
-     * tabs open and its notifications arriving, and opens no tab it was
-     * never told to. The node is the identity's own agreement, kept by the kernel,
-     * written where it agreed ([serveFrom]); an identity with none —
-     * one just added, or a rotation's new key before its patron — has no
-     * node until it agrees to one, and is recorded detached rather than
-     * handed the device's. The result is this identity's alone
-     * ([Model.connectionOf]), and its loop runs on a thread of its own.
-     *
-     * **The node admits an identity or refuses it on its own terms**,
-     * which is the author's ruling that a node serves an identity and not
-     * a handset: a refusal is that identity detached, said to the
-     * diagnostics and the model, and nothing else on the device changes.
-     * Called by [bringUp] for every loaded identity but the focused one,
-     * and by [createIdentity] and [beginRotation] for one added while the
-     * kernel is up.
-     */
-    private fun launchHeld(id: String, p: Participant, scope: String?) {
-        // **every tab the identity agreed to** [author, 2026-11-11]: the
-        // first attach is the session, each further one a tab on it, and
-        // the connection shown is the first's
-        attachTabs(id, p, scope, attempt = 0)
-        Thread({ runLoop(p, id) }, "fueros-kernel-${id.take(8)}").start()
-    }
-
-    /**
-     * **Every tab the identity agreed to, attached** — the first attach the
-     * session, each further one a tab on it; the connection shown is the
-     * first's. Where one did not answer, [reattachLater] tries again.
-     */
-    private fun attachTabs(id: String, p: Participant, scope: String?, attempt: Int) {
-        val tabs = call("agreed", { emptyList() }) { p.agreed() }
-        if (tabs.isEmpty()) {
-            Diag.event("identity.attach", "who" to id.take(8), "node" to "none")
-            Model.connectionOf(id, Connection.Detached)
-            return
-        }
-        var first: Connection? = null
-        var missed = 0
-        for (t in tabs) {
-            val node = t.serving
-            val hex = node.hex()
-            val a = call("attach", { e -> Diag.event("identity.attach", "who" to id.take(8), "node" to hex.take(8), "refused" to e.reason); null }) {
-                p.attach(node, t.addresses, listOf())
-            }
-            Diag.event("identity.attach", "who" to id.take(8), "node" to hex.take(8), "attached" to (a != null), "attempt" to attempt)
-            if (a == null) missed += 1
-            if (first == null) first = if (a == null) Connection.Detached else Connection.Attached(node, a.primary)
-        }
-        Model.connectionOf(id, first ?: Connection.Detached)
-        if (missed > 0) reattachLater(id, p, scope, attempt + 1)
-    }
-
-    /** The waits before each attempt to attach again, in seconds; the last repeats. */
-    private val REATTACH_AFTER_S = longArrayOf(15, 30, 60, 120, 300)
-
-    private val reattaching = java.util.concurrent.ConcurrentHashMap<String, Int>()
-
-    /**
-     * **An attach that got no answer at start is tried again, with
-     * backoff** [author, 2026-11-04]. A session *lost* after it held is
-     * the kernel's to try again, beside its judgement of the loss
-     * (`Net::watch`); this chain is for the attach that never held, which
-     * the kernel has no session to watch. One chain per identity; a chain
-     * already running is not doubled.
-     */
-    private fun reattachLater(id: String, p: Participant, scope: String?, attempt: Int) {
-        if (reattaching.putIfAbsent(id, attempt) != null) return
-        val wait = REATTACH_AFTER_S[minOf(attempt - 1, REATTACH_AFTER_S.size - 1).coerceAtLeast(0)]
-        Diag.event("identity.reattach", "who" to id.take(8), "attempt" to attempt, "after_s" to wait)
-        Thread({
-            try {
-                Thread.sleep(wait * 1000)
-            } catch (_: InterruptedException) {
-                reattaching.remove(id)
-                return@Thread
-            }
-            reattaching.remove(id)
-            attachTabs(id, p, scope, attempt)
-        }, "fueros-reattach-${id.take(8)}").start()
-    }
-
-    /**
-     * **The event loop, over one participant** — step 1 of the browser
-     * model [author, 2026-11-11: *"Begin at 1"*]: extracted from [bringUp]
-     * so that a loop can be run per identity, which is what lets an
-     * identity receive while it is not the one in focus. **This step
-     * changes no behaviour**: [bringUp] still runs exactly one, for the
-     * identity that acts, on the thread it always did.
-     *
-     * What the loop still shares with the device rather than the identity
-     * — the meeting ([Ceremony.meet()]), the front's notices, the model's refresh —
-     * is step 2's to separate, and is left as it was here so that this
-     * extraction can be read as a move and nothing else.
-     */
-    private fun runLoop(p: Participant, id: String) {
-        // **the loop's own first word.** Said once, before any turn, so
-        // that a run which never reaches the loop is distinguishable from
-        // one whose loop parks in its first call (2026-10-24).
-        Diag.event("kernel.loop", "state" to "entered", "who" to id.take(8))
-        val diag = Ceremony.TurnDiag()
-        var turns = 0L
-        while (true) {
-            // **before the call that can park, not after.** The turn
-            // heartbeat sits past `nextEvent` and the event handling, so a
-            // loop parked in `nextEvent` emits nothing at all and says
-            // nothing about where it stopped — which is how A6's fifth and
-            // sixth attempts left the question open. `next_event` is
-            // wrapped in the diagnostics' plain call, which emits nothing,
-            // so this is the only line that can place it. On the clock
-            // rather than every turn: a 2 s poll would otherwise write
-            // thirty lines a minute for a loop doing nothing.
-            Ceremony.turnEntry(diag, turns)
-            turns += 1
-            val e = p.nextEvent(2000UL)
-            // **the meeting belongs to the identity in focus** — step 2 of
-            // the browser model [author, 2026-11-11]: a meeting, the
-            // Ceremony.adoption() and Ceremony.peering() it carries, and the tick that drives
-            // them are the device's one at a time and the focused
-            // identity's, where everything else below — a message, a
-            // peer's word, a changed noun — is this identity's whichever
-            // is in focus. Read every turn, since focus can move while
-            // this loop runs. **No behaviour changes while bring-up runs
-            // one loop for the identity that acts**: that loop is always
-            // the focused one, and the unfocused branches are reached only
-            // once step 3 runs a loop per identity.
-            val focused = id == activeId
-            // the kind of thing that arrived and who from, as eight hex
-            // characters; a payload's bytes are counted, never shown
-            if (e != null && Diag.enabled()) {
-                Diag.event(
-                    "shell.event",
-                    "kind" to e::class.simpleName,
-                    "from" to when (e) {
-                        is Event.Payload -> Diag.id8(e.from)
-                        is Event.Answered -> Diag.id8(e.from)
-                        is Event.ResponseCopy -> Diag.id8(e.from)
-                        is Event.Late -> Diag.id8(e.from)
-                        is Event.Conversed -> Diag.id8(e.from)
-                        is Event.Peer -> Diag.id8(e.from)
-                        else -> null
-                    },
-                    "bytes" to (e as? Event.Payload)?.bytes?.size,
-                    "refused" to when (e) {
-                        is Event.Answered -> e.refused
-                        is Event.ResponseCopy -> e.refused
-                        is Event.Late -> e.refused
-                        is Event.Conversed -> Ceremony.refusalIn(e.step)
-                        else -> null
-                    },
-                )
-            }
-            if (e != null && Ceremony.took(id, p, e)) {
-                // a meeting's own, taken by it
-            } else {
-                when (e) {
-                    is Event.Payload -> {
-                        val from = hex(e.from)
-                        val who = if (from == peerKey) peerName else from.take(16)
-                        front.incoming(id, from, who, String(e.bytes))
-                    }
-                    is Event.Connection -> {
-                        // every identity's connection is recorded for itself
-                        Model.connectionOf(id, e.v1)
-                        if (focused) show(p, e.v1)
-                    }
-                    // **the nouns the kernel changed**: the shell's copy is
-                    // refreshed for exactly those, and the screens watching
-                    // them redraw
-                    is Event.Changed -> Model.refresh(e.nouns.toSet())
-                    // between peers (design §6.3): what a locator, a deposit, a
-                    // request or a return came to, in the kernel's words
-                    is Event.Peer -> {
-                        Diag.event("peer.event", "from" to Diag.id8(e.from), "what" to e.what)
-                        front.note("· peer: ${e.what}")
-                    }
-                    is Event.Answered -> front.note("· a response was refused: ${e.refused}")
-                    is Event.Conversed -> front.note("· ${e.what}")
-                    null -> {}
-                    else -> front.note("· $e")
-                }
-            }
-            Ceremony.tick(id, p, diag)
-        }
-    }
-
-    /**
-     * The connection, what this device presents, and which construction the
-     * payload session runs.
-     *
-     * **The construction is the client's own statement** and nothing a peer
-     * can check (`light-client-requirements.md` §3): the session derives the
-     * same keys or it does not, so the only party who can say which half is
-     * running is this one, and it says it where its user can read it. The
-     * direct-path chip is updated here too — **status, never a choice**: the
-     * path order is fixed (design §12.6.3).
-     */
-    internal fun show(p: Participant, s: Connection) {
-        val key = p.presentedKey().joinToString("") { "%02x".format(it) }.take(16)
-        val line = when (s) {
-            is Connection.Detached -> "detached"
-            is Connection.Attached -> if (s.primary) "attached, primary" else "attached"
-            is Connection.Reconnecting -> "reconnecting…"
-            is Connection.Lost -> "lost: no serving node reachable"
-        }
-        // the kernel says which; the words are this shell's
-        val construction = when (p.payloadConstruction()) {
-            Construction.DOUBLE_RATCHET -> "the Double Ratchet (the floor)"
-            Construction.TRIPLE_RATCHET -> "the Triple Ratchet"
-        }
-        front.setStatus("$line · presents $key…\npayload: $construction")
-        // **every thread's chip, not the latest party's** [2026-10-27]:
-        // the chip is per peer on the thread list (C1), and reading it off
-        // one slot left every other thread's showing whatever it showed
-        // when that party was the current one
-        for (t in front.threads()) {
-            runCatching { unhex(t.peerKey) }.getOrNull()?.let { who ->
-                if (who.size == 32) loaded[t.by]?.let { h -> front.directPath(t.by, t.peerKey, h.directTo(who)) }
-            }
-        }
-    }
-
-    /** `dir` and everything under it gone, or false where some of it stays. */
-    private fun clear(dir: java.io.File): Boolean {
-        if (!dir.exists()) return true
-        dir.listFiles()?.forEach { if (it.isDirectory) clear(it) else it.delete() }
-        return dir.deleteRecursively() || !dir.exists()
-    }
 
     internal fun unhex(s: String): ByteArray =
         ByteArray(s.length / 2) { ((s[2 * it].digitToInt(16) shl 4) + s[2 * it + 1].digitToInt(16)).toByte() }
 
     internal fun hex(b: ByteArray): String = b.joinToString("") { "%02x".format(it) }
-
-    /**
-     * The device's own seeds, as the first run sealed them.
-     *
-     * **Under the shell's own custody and never around it**: these are the
-     * whole of the identity, and they never cross the kernel's storage
-     * seam, so the kernel's sealing does not reach them — they are
-     * Keystore-wrapped here, exactly as the storage key itself is
-     * (`light-client-requirements.md` §9).
-     *
-     * **Nothing is minted here since 2026-10-29** [author]: the first run
-     * is a choice between a new identity and one restored from its
-     * phrase, and [createIdentity] is where the seeds arrive. A kernel
-     * started with none is a shell that skipped that screen, which is a
-     * fault to say rather than paper over.
-     */
-    private fun heldSeeds(shell: AndroidShell): ByteArray {
-        val s = shell.unseal(Identities.LEGACY_SEEDS)
-        check(s != null && s.size == 64) { "no identity on this device: the first run was not completed" }
-        return s
-    }
-
-    /** Whether the first run has been completed on this device. */
-    fun hasIdentity(context: Context): Boolean {
-        val device = AndroidShell(context.applicationContext)
-        // the index, or the identity a device held before there was one
-        return Identities.decode(device.unseal(Identities.INDEX)).isNotEmpty() ||
-            device.unseal(Identities.LEGACY_SEEDS)?.size == 64
-    }
-
-    /**
-     * **Take the identity off this device** ([Wipe]; PRD-03): the key,
-     * the archive, the store, every sealed capture, the shell's own
-     * preference stores, and last the Keystore key that wrapped them, so
-     * a byte that survived a delete cannot be read.
-     *
-     * **The kernel handle goes first**, before anything is deleted: a
-     * live `Participant` writes through the shell's custody, and a writer
-     * running against a half-deleted directory could put a file back.
-     * The caller kills the process afterwards for the same reason — the
-     * one guarantee that nothing in flight outlives this.
-     *
-     * Returns what would **not** go, for [Wipe.left] to say. An empty
-     * list is a device holding no identity.
-     */
-    fun wipe(context: Context): List<String> {
-        loaded.clear()
-        activeId = null
-        Ceremony.meet = null
-        val app = context.applicationContext
-        val left = mutableListOf<String>()
-        if (!clear(java.io.File(app.filesDir, Wipe.KERNEL_DIR))) left += Wipe.KERNEL_DIR
-        if (!clear(java.io.File(app.filesDir, Wipe.DIAG_DIR))) left += Wipe.DIAG_DIR
-        for (store in Wipe.STORES) {
-            val ok = runCatching {
-                app.getSharedPreferences(store, Context.MODE_PRIVATE).edit().clear().commit()
-            }.getOrDefault(false)
-            // **and the file itself**, not only its contents: a cleared
-            // store still names itself on disk
-            runCatching { app.deleteSharedPreferences(store) }
-            if (!ok) left += store
-        }
-        // **the wrapping key last of all**: while it exists, anything
-        // recovered from the storage it wrapped is readable, and once it
-        // is gone nothing is (`light-client-requirements.md` §6 gives the
-        // same reasoning for a deleted archive window's capture keys)
-        val alias = runCatching {
-            val ks = java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-            ks.deleteEntry(Wipe.AT_REST_ALIAS)
-            !ks.containsAlias(Wipe.AT_REST_ALIAS)
-        }.getOrDefault(false)
-        if (!alias) left += Wipe.AT_REST_ALIAS
-        Diag.event("identity.wiped")
-        return left
-    }
-
-    /**
-     * **The first run hands the seeds over and the kernel starts on them**
-     * ([FirstRunActivity]): sealed under the shell's custody first, so a
-     * process that dies between the two finds them at its next start.
-     * False where the storage refused them, and nothing started.
-     */
-    fun createIdentity(context: Context, seeds: ByteArray): Boolean {
-        require(seeds.size == 64) { "the kernel's seeds are 64 bytes" }
-        val app = context.applicationContext
-        val device = AndroidShell(app)
-        val id = idOfSeeds(seeds) ?: return false
-        val index = Identities.decode(device.unseal(Identities.INDEX))
-        // **adding, not replacing** [author, 2026-11-07]: *"'Add an
-        // identity' … is just another trigger for 'Start a new
-        // identity'"*, so this door is reached from the first run and
-        // again later, and an identity already held stays held.
-        if (index.any { it.id == id }) return true
-        // **its own storage, named for itself**: two kernels over one
-        // directory would each overwrite the other's archive. The
-        // top-level directory belongs to whatever identity a device held
-        // before this model ([Identities.LEGACY_SCOPE]) and is never
-        // taken by a new one.
-        val scope = Identities.scopeFor(id)
-        if (!AndroidShell(app, scope).seal(Identities.LEGACY_SEEDS, seeds)) return false
-        // **the seeds land before the index names them**, so a process
-        // that dies between leaves an identity on disk that nothing opens
-        // rather than an index naming storage that is not there
-        if (!device.seal(Identities.INDEX, Identities.encode(index + Identities.Held(id, scope, null)))) {
-            return false
-        }
-        Diag.event("identity.added")
-        if (started) {
-            // already running: open it beside the others rather than
-            // waiting for a restart, and let it act since a person who
-            // just made an identity means to use it
-            openHeld(app, Identities.Held(id, scope, null), listOf())
-            loaded[id]?.let { launchHeld(id, it, scope) }
-            chooseActive(context, id)
-        } else {
-            start(context)
-        }
-        return true
-    }
 
     /**
      * **Every held identity's rows, each carrying whose it is** — the
@@ -1874,9 +877,9 @@ object Kernel {
      * In the index's order, so the list a person reads does not reshuffle
      * between refreshes.
      */
-    private fun <T> acrossHeld(what: String, of: (Participant) -> List<T>): List<Identities.Owned<T>> {
+    internal fun <T> acrossHeld(what: String, of: (Participant) -> List<T>): List<Identities.Owned<T>> {
         val app = appContext ?: return listOf()
-        return identities(app).flatMap { h ->
+        return Identities.identities(app).flatMap { h ->
             val p = loaded[h.id] ?: return@flatMap listOf<Identities.Owned<T>>()
             call(what, { emptyList<T>() }) { of(p) }.map { Identities.Owned(h.id, it) }
         }
@@ -1905,7 +908,7 @@ object Kernel {
      * here, which a caller reports rather than falling back to the active
      * one: falling back is the wrong-key act this exists to prevent.
      */
-    private fun asHolder(by: String): Participant? = loaded[by]
+    internal fun asHolder(by: String): Participant? = loaded[by]
 
     /**
      * **Leave a patron as the identity that holds that line** [author,
@@ -1920,293 +923,6 @@ object Kernel {
             front.note("· ${by.take(8)}… left ${patronHex.take(8)}…; the departure is ${hex(t).take(8)}…")
             "left ${patronHex.take(8)}… as ${by.take(8)}… — the departure is ${hex(t).take(8)}…"
         }
-    }
-
-    /** Every identity this device holds, in the order the index names. */
-    fun identities(context: Context): List<Identities.Held> =
-        Identities.decode(AndroidShell(context.applicationContext).unseal(Identities.INDEX))
-
-    /** Which identity acts, or null where the device holds none. */
-    fun activeIdentity(): String? = activeId
-
-    /**
-     * **Every identity held, with its colour** [author, 2026-11-12]: the
-     * device's colours file, each identity without one given the first
-     * unused and the file written back where that happened.
-     */
-    fun identityColours(context: Context): Map<String, Int> {
-        val shell = AndroidShell(context.applicationContext)
-        val stored = Identities.colours(runCatching { shell.read(Identities.COLOURS) }.getOrNull())
-        val now = Identities.assigned(stored, identities(context))
-        if (now != stored) runCatching { shell.write(Identities.COLOURS, Identities.encodeColours(now)) }
-        return now
-    }
-
-    /** The colour chosen for one identity on Options. */
-    fun setIdentityColour(context: Context, id: String, argb: Int) {
-        val shell = AndroidShell(context.applicationContext)
-        val now = LinkedHashMap(identityColours(context))
-        now[id] = argb
-        runCatching { shell.write(Identities.COLOURS, Identities.encodeColours(now)) }
-            .onFailure { front.note("· the colour could not be kept: ${it.message}") }
-    }
-
-    /**
-     * **Choose the identity that acts** — a meeting's and an operator
-     * action's ([Identities.needsTheActive]), from the nameplate's own
-     * list [author, 2026-11-07]. Nothing where `id` is not held: a
-     * selector offering what the device does not hold is a bug, and
-     * switching to it would leave the device unable to Ceremony.meet().
-     */
-    /**
-     * **Take one identity off this device, leaving the others** [author,
-     * 2026-11-10]. The refusals are [Identities.removable]'s and are
-     * returned as they are; null means it went.
-     *
-     * **The index is rewritten before the storage is deleted**, which is
-     * the opposite order from [createIdentity] and for the same reason: a
-     * process that dies between leaves storage nothing opens rather than
-     * an index naming storage that is not there. Half-removed is the
-     * failure to design against, and an orphaned directory is the
-     * harmless half.
-     *
-     * **A rotation owed in that identity's scope stops it.** The marks say
-     * a prior key is still to depart ([Rotation.MARK_PRIOR]); deleting the
-     * identity that owes the departure would leave the old key standing in
-     * a subnet it has been replaced in, with nothing on the device able to
-     * say so.
-     */
-    fun removeIdentity(context: Context, id: String): String? {
-        val app = context.applicationContext
-        val device = AndroidShell(app)
-        val index = Identities.decode(device.unseal(Identities.INDEX))
-        Identities.removable(index, id)?.let { return it }
-        val (kept, scope) = Identities.without(index, id)
-        val own = AndroidShell(app, scope)
-        if (own.unseal(Rotation.MARK_PRIOR) != null) {
-            return "this identity owes a departure from a rotation; finish that first"
-        }
-        if (!device.seal(Identities.INDEX, Identities.encode(kept))) {
-            return "this device's storage would not keep its list of identities"
-        }
-        // nothing opens it from here on: the index no longer names it
-        loaded.remove(id)
-        val left = scope?.let { java.io.File(app.filesDir, "${Wipe.KERNEL_DIR}/$it").deleteRecursively() } ?: false
-        if (activeId == id) {
-            Identities.active(kept.filter { loaded.containsKey(it.id) }, null)?.let { chooseActive(context, it) }
-        }
-        Diag.event("identity.removed", "who" to id.take(8), "storage" to left.toString())
-        Model.refreshAll()
-        return if (left) {
-            null
-        } else {
-            "the identity is off this device's list; some of its storage would not go"
-        }
-    }
-
-    /**
-     * **Which identity the next bring-up should make active**, for the
-     * bench's lever alone (`ShellActivity.benchLevers`): nothing in a
-     * releasable build sets it, and it is spent by the bring-up that
-     * reads it.
-     */
-    @Volatile
-    private var requestedActive: String? = null
-
-    /** Ask the next bring-up to make `id` the one that acts. */
-    fun requestActive(id: String) {
-        requestedActive = id.trim().takeIf { Identities.names(it) }
-    }
-
-    fun chooseActive(context: Context, id: String): Boolean {
-        if (!loaded.containsKey(id)) return false
-        activeId = id
-        AndroidShell(context.applicationContext).seal(Identities.ACTIVE, id.toByteArray())
-        Diag.event("identity.active", "who" to id.take(8))
-        activeId?.let { loaded[it] }?.let { show(it, Connection.Detached) }
-        Model.refreshAll()
-        return true
-    }
-
-    /**
-     * **Open a backup into this client** (`rhtn_client::backup`;
-     * `light-client-requirements.md` §2): the blob opens under this
-     * identity, the import scans it, and what came back is reported —
-     * records taken, and captures the scan discarded as past the window
-     * their *subject* declared (design §13.7.1).
-     *
-     * Refused where this client already holds an archive, where the blob
-     * belongs to another identity, or where it does not open; the kernel's
-     * own words come back rather than a guess at them.
-     *
-     * **Waits for the kernel**, as the first run calls this moments after
-     * starting it.
-     */
-    fun restoreBackup(blob: ByteArray): Result<uniffi.rhtn_ffi.Restored> {
-        val until = System.currentTimeMillis() + 30_000
-        var p = activeId?.let { loaded[it] }
-        while (p == null && System.currentTimeMillis() < until) {
-            Thread.sleep(200)
-            p = activeId?.let { loaded[it] }
-        }
-        val held = p ?: return Result.failure(IllegalStateException("the kernel did not start"))
-        return runCatching { held.restoreBackup(blob) }
-    }
-
-    /**
-     * **The seeds this device holds**, for a rotation to sign its
-     * `Recovery` with (design §9.0: *"the old key is in hand wherever the
-     * rotation carries its inheritance, since it signs the `Recovery`"*).
-     *
-     * **The one caller is [beginRotation]'s screen**, and the copy is the
-     * caller's to wipe. Nothing else has business reading these: a seed
-     * crosses no wire (design §23.3), and this returns it only so the
-     * device can sign with the key it already has rather than asking a
-     * person to type a phrase it holds.
-     */
-    fun heldSeedsForRotation(context: Context): ByteArray? {
-        // **the identity being rotated is the one that acts** ([Identities]:
-        // a rotation is a meeting, and a meeting takes the active
-        // identity), so its seeds come from its own scope and not the
-        // top-level directory a single-identity device used
-        val app = context.applicationContext
-        val id = activeId
-        val scope = if (id == null) {
-            Identities.LEGACY_SCOPE
-        } else {
-            val held = identities(app).firstOrNull { it.id == id } ?: return null
-            held.scope
-        }
-        return AndroidShell(app, scope).unseal(Identities.LEGACY_SEEDS)?.takeIf { it.size == 64 }
-    }
-
-    /**
-     * **The departure a concluded rotation owes** [author, 2026-11-07]:
-     * *"the rotation completes, the new key is adopted by patron P, and
-     * then the prior key departs P"* — in that order, so the person is
-     * never briefly outside the subnet they are rotating inside (design
-     * §9.1).
-     *
-     * **The mark is the trigger and forgetting it is the completion**, the
-     * same shape the rest of the rotation uses: this runs at every start
-     * and at the end of every meeting, does nothing where there is no
-     * mark, and does nothing where the new identity holds no line yet —
-     * which is the state between beginning a rotation and meeting the
-     * patron. A process that dies in the middle leaves the mark, and the
-     * next start owes the same act.
-     *
-     * **Nothing is guessed about which subnet.** The patron is the one
-     * the new identity's own line names; a new identity's archive is new
-     * ([beginRotation]), so the line it holds is the Ceremony.adoption() the
-     * rotation just made.
-     */
-    internal fun concludeRotation() {
-        val app = appContext ?: return
-        for (h in identities(app)) {
-            val own = AndroidShell(app, h.scope)
-            val priorId = own.unseal(Rotation.MARK_SUCCEEDS)
-                ?.toString(Charsets.UTF_8)?.trim()
-                ?.takeIf { Identities.names(it) }
-                ?: continue
-            val fresh = loaded[h.id] ?: continue
-            // the rotation has not reached its Ceremony.adoption() yet: nothing owed
-            val patron = call("lines", { null }) { fresh.lines().firstOrNull()?.patron }
-                ?: continue
-            val old = loaded[priorId] ?: run {
-                // the key being succeeded is not open here — taken off the
-                // device, or never held. Nothing can sign its departure,
-                // and the mark is spent rather than retried forever
-                own.forget(Rotation.MARK_SUCCEEDS)
-                front.note("· the key this rotation succeeded is not on this device, so its departure was not signed")
-                return@run null
-            } ?: continue
-            val said = call("depart", { e -> e.reason }) {
-                old.depart(patron, null)
-                null
-            }
-            if (said == null) {
-                own.forget(Rotation.MARK_SUCCEEDS)
-                Diag.event("rotation.departed", "who" to priorId.take(8))
-                front.note("· the key you rotated away from has left that subnet")
-            } else {
-                // **left for the next start**: the mark stays, so the
-                // departure is owed rather than lost
-                front.note("· that departure was refused and is still owed: $said")
-            }
-        }
-    }
-
-    /**
-     * **Begin a key rotation, in a way a dying process cannot spoil**
-     * (design §9.0, §9.1; PRD-03).
-     *
-     * The two seed pairs are sealed as a mark *before* anything is opened,
-     * and [bringUp] obeys a mark over the sealed seeds — so the rotation
-     * either has not begun or will be finished by some later start, and
-     * there is no state in which the archive on disk belongs to a key
-     * nothing names. The mark is cleared only after the new seeds are the
-     * sealed ones.
-     *
-     * **Both halves or neither**: `wire-format.md` §4.1 admits no variant
-     * of a `Recovery` carrying one, so a mark without its prior key is
-     * dropped rather than half-performed.
-     *
-     * False where custody refused either, and nothing was begun. The
-     * caller's copies are this function's to wipe.
-     */
-    fun beginRotation(context: Context, newSeeds: ByteArray, priorSeeds: ByteArray): Boolean {
-        require(newSeeds.size == 64) { "the kernel's seeds are 64 bytes" }
-        require(priorSeeds.size == 64) { "a prior identity is 64 bytes of seed" }
-        val app = context.applicationContext
-        // **the new key is a new identity, with an archive of its own**
-        // [author, 2026-11-07]: *"just start a new archive for the new
-        // identity … The old archive should show the old ID leaving the
-        // subnet that rotated, but should otherwise remain unchanged."*
-        // So the marks are sealed in the **new** identity's scope, not the
-        // rotating one's: [openOn] then performs the rotation on empty
-        // storage, and the key being succeeded opens from its own
-        // directory untouched.
-        val newId = idOfSeeds(newSeeds) ?: return false
-        val priorId = idOfSeeds(priorSeeds) ?: return false
-        if (newId == priorId) return false
-        val scope = Identities.scopeFor(newId)
-        val own = AndroidShell(app, scope)
-        // the prior key first: a mark whose new seeds landed and whose
-        // prior did not is the half-mark [openOn] has to drop, so make it
-        // the harder half to be missing
-        if (!own.seal(Rotation.MARK_PRIOR, priorSeeds)) return false
-        if (!own.seal(Rotation.MARK_NEW, newSeeds)) {
-            own.forget(Rotation.MARK_PRIOR)
-            return false
-        }
-        // **which key it succeeds, kept for the departure that follows**
-        // [author, 2026-11-07]: the old key leaves the rotated subnet once
-        // the new one is adopted into its place, and the marks that hold
-        // the prior seeds are forgotten the moment the rotation completes
-        own.seal(Rotation.MARK_SUCCEEDS, priorId.toByteArray())
-        // **and the index names it**, so a start opens it beside the one
-        // it succeeds rather than instead of it
-        val device = AndroidShell(app)
-        val index = Identities.decode(device.unseal(Identities.INDEX))
-        if (index.none { it.id == newId } &&
-            !device.seal(Identities.INDEX, Identities.encode(index + Identities.Held(newId, scope, null)))
-        ) {
-            own.forget(Rotation.MARK_NEW)
-            own.forget(Rotation.MARK_PRIOR)
-            own.forget(Rotation.MARK_SUCCEEDS)
-            return false
-        }
-        newSeeds.fill(0)
-        priorSeeds.fill(0)
-        Diag.event("rotation.begun")
-        if (started) {
-            openHeld(app, Identities.Held(newId, scope, null), listOf())
-            loaded[newId]?.let { launchHeld(newId, it, scope) }
-            chooseActive(context, newId)
-        } else {
-            start(context)
-        }
-        return true
     }
 
     /** The default name the kernel holds, or null. */
@@ -2224,10 +940,10 @@ object Kernel {
      */
     fun setDefaultAlias(name: String): String? {
         val until = System.currentTimeMillis() + 30_000
-        var p = activeId?.let { loaded[it] }
+        var p = Identities.activeId?.let { loaded[it] }
         while (p == null && System.currentTimeMillis() < until) {
             Thread.sleep(200)
-            p = activeId?.let { loaded[it] }
+            p = Identities.activeId?.let { loaded[it] }
         }
         if (p == null) return "the kernel did not come up"
         return call("setDefaultAlias", { it.reason }) { p.setDefaultAlias(name); null }

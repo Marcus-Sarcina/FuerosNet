@@ -72,7 +72,7 @@ import android.widget.TextView
  */
 class RotationActivity : Activity() {
     /** The identity this screen acts for: the one named by whoever opened it, else the one in focus — a link tapped, or a screen nothing opens yet. */
-    private val by: String by lazy { intent.getStringExtra("by") ?: Kernel.focused() }
+    private val by: String by lazy { intent.getStringExtra("by") ?: Identities.focused() }
 
     private lateinit var body: LinearLayout
 
@@ -169,7 +169,7 @@ class RotationActivity : Activity() {
      * and an archive that do not match ([Rotation.start]).
      */
     private fun rotate() {
-        val prior = Kernel.heldSeedsForRotation(this)
+        val prior = Identities.heldSeedsForRotation(this)
         if (prior == null) {
             said = "This device holds no key to rotate from."
             draw()
@@ -180,7 +180,7 @@ class RotationActivity : Activity() {
         }
         val fresh = Identity.seeds(master)
         master.fill(0)
-        said = if (Kernel.beginRotation(this, fresh, prior)) {
+        said = if (Identities.beginRotation(this, fresh, prior)) {
             "The rotation has begun. It completes on this start, and any later one " +
                 "if this is interrupted."
         } else {

@@ -77,7 +77,7 @@ class WipeActivity : Activity() {
 
     /** Clear, say what happened, and stop running. */
     private fun go() {
-        val left = Kernel.wipe(this)
+        val left = Identities.wipe(this)
         body.removeAllViews()
         body.addView(
             TextView(this).apply {

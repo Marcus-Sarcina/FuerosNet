@@ -1,5 +1,26 @@
 package com.comptus.fueros
 
+import android.content.Context
+import org.json.JSONObject
+import uniffi.rhtn_ffi.Answer
+import uniffi.rhtn_ffi.Construction
+import uniffi.rhtn_ffi.Conversation
+import uniffi.rhtn_ffi.Event
+import uniffi.rhtn_ffi.Participant
+import uniffi.rhtn_ffi.Refused
+import uniffi.rhtn_ffi.Told
+import uniffi.rhtn_ffi.TraceStep
+import uniffi.rhtn_ffi.kindApplication
+import uniffi.rhtn_model.Connection
+import uniffi.rhtn_model.Contact
+import uniffi.rhtn_model.Cost
+import uniffi.rhtn_model.How
+import uniffi.rhtn_model.Instance
+import uniffi.rhtn_model.Line
+import uniffi.rhtn_model.Meeting
+import uniffi.rhtn_model.Resource
+import uniffi.rhtn_model.Subnet
+
 /**
  * **The identities this device holds, and which of them may do what** —
  * the pure part, so a test can hold it, as [Rotation] and [Wipe] are.
@@ -351,4 +372,541 @@ object Identities {
         Act.OPERATOR -> "No identity on this device to act as."
         else -> null
     }
+
+    /**
+     * **Which identity acts** — a meeting's and an operator action's
+     * ([Identities.needsTheActive]), chosen by press and hold on the
+     * nameplate. Null only where the device holds none.
+     */
+    @Volatile internal var activeId: String? = null
+
+    @Volatile internal var requestedActive: String? = null
+
+    /**
+     * **The departure a concluded rotation owes** [author, 2026-11-07]:
+     * *"the rotation completes, the new key is adopted by patron P, and
+     * then the prior key departs P"* — in that order, so the person is
+     * never briefly outside the subnet they are rotating inside (design
+     * §9.1).
+     *
+     * **The mark is the trigger and forgetting it is the completion**, the
+     * same shape the rest of the rotation uses: this runs at every start
+     * and at the end of every meeting, does nothing where there is no
+     * mark, and does nothing where the new identity holds no line yet —
+     * which is the state between beginning a rotation and meeting the
+     * patron. A process that dies in the middle leaves the mark, and the
+     * next start owes the same act.
+     *
+     * **Nothing is guessed about which subnet.** The patron is the one
+     * the new identity's own line names; a new identity's archive is new
+     * ([beginRotation]), so the line it holds is the Ceremony.adoption() the
+     * rotation just made.
+     */
+    internal fun concludeRotation() {
+        val app = Kernel.appContext ?: return
+        for (h in identities(app)) {
+            val own = AndroidShell(app, h.scope)
+            val priorId = own.unseal(Rotation.MARK_SUCCEEDS)
+                ?.toString(Charsets.UTF_8)?.trim()
+                ?.takeIf { Identities.names(it) }
+                ?: continue
+            val fresh = Kernel.loaded[h.id] ?: continue
+            // the rotation has not reached its Ceremony.adoption() yet: nothing owed
+            val patron = Kernel.call("lines", { null }) { fresh.lines().firstOrNull()?.patron }
+                ?: continue
+            val old = Kernel.loaded[priorId] ?: run {
+                // the key being succeeded is not open here — taken off the
+                // device, or never held. Nothing can sign its departure,
+                // and the mark is spent rather than retried forever
+                own.forget(Rotation.MARK_SUCCEEDS)
+                Kernel.front.note("· the key this rotation succeeded is not on this device, so its departure was not signed")
+                return@run null
+            } ?: continue
+            val said = Kernel.call("depart", { e -> e.reason }) {
+                old.depart(patron, null)
+                null
+            }
+            if (said == null) {
+                own.forget(Rotation.MARK_SUCCEEDS)
+                Diag.event("rotation.departed", "who" to priorId.take(8))
+                Kernel.front.note("· the key you rotated away from has left that subnet")
+            } else {
+                // **left for the next start**: the mark stays, so the
+                // departure is owed rather than lost
+                Kernel.front.note("· that departure was refused and is still owed: $said")
+            }
+        }
+    }
+
+    /**
+     * **Begin a key rotation, in a way a dying process cannot spoil**
+     * (design §9.0, §9.1; PRD-03).
+     *
+     * The two seed pairs are sealed as a mark *before* anything is opened,
+     * and [bringUp] obeys a mark over the sealed seeds — so the rotation
+     * either has not begun or will be finished by some later start, and
+     * there is no state in which the archive on disk belongs to a key
+     * nothing names. The mark is cleared only after the new seeds are the
+     * sealed ones.
+     *
+     * **Both halves or neither**: `wire-format.md` §4.1 admits no variant
+     * of a `Recovery` carrying one, so a mark without its prior key is
+     * dropped rather than half-performed.
+     *
+     * False where custody refused either, and nothing was begun. The
+     * caller's copies are this function's to wipe.
+     */
+    fun beginRotation(context: Context, newSeeds: ByteArray, priorSeeds: ByteArray): Boolean {
+        require(newSeeds.size == 64) { "the kernel's seeds are 64 bytes" }
+        require(priorSeeds.size == 64) { "a prior identity is 64 bytes of seed" }
+        val app = context.applicationContext
+        // **the new key is a new identity, with an archive of its own**
+        // [author, 2026-11-07]: *"just start a new archive for the new
+        // identity … The old archive should show the old ID leaving the
+        // subnet that rotated, but should otherwise remain unchanged."*
+        // So the marks are sealed in the **new** identity's scope, not the
+        // rotating one's: [openOn] then performs the rotation on empty
+        // storage, and the key being succeeded opens from its own
+        // directory untouched.
+        val newId = idOfSeeds(newSeeds) ?: return false
+        val priorId = idOfSeeds(priorSeeds) ?: return false
+        if (newId == priorId) return false
+        val scope = Identities.scopeFor(newId)
+        val own = AndroidShell(app, scope)
+        // the prior key first: a mark whose new seeds landed and whose
+        // prior did not is the half-mark [openOn] has to drop, so make it
+        // the harder half to be missing
+        if (!own.seal(Rotation.MARK_PRIOR, priorSeeds)) return false
+        if (!own.seal(Rotation.MARK_NEW, newSeeds)) {
+            own.forget(Rotation.MARK_PRIOR)
+            return false
+        }
+        // **which key it succeeds, kept for the departure that follows**
+        // [author, 2026-11-07]: the old key leaves the rotated subnet once
+        // the new one is adopted into its place, and the marks that hold
+        // the prior seeds are forgotten the moment the rotation completes
+        own.seal(Rotation.MARK_SUCCEEDS, priorId.toByteArray())
+        // **and the index names it**, so a start opens it beside the one
+        // it succeeds rather than instead of it
+        val device = AndroidShell(app)
+        val index = Identities.decode(device.unseal(Identities.INDEX))
+        if (index.none { it.id == newId } &&
+            !device.seal(Identities.INDEX, Identities.encode(index + Identities.Held(newId, scope, null)))
+        ) {
+            own.forget(Rotation.MARK_NEW)
+            own.forget(Rotation.MARK_PRIOR)
+            own.forget(Rotation.MARK_SUCCEEDS)
+            return false
+        }
+        newSeeds.fill(0)
+        priorSeeds.fill(0)
+        Diag.event("rotation.begun")
+        if (Attachments.started) {
+            openHeld(app, Identities.Held(newId, scope, null), listOf())
+            Kernel.loaded[newId]?.let { Attachments.launchHeld(newId, it, scope) }
+            chooseActive(context, newId)
+        } else {
+            Attachments.start(context)
+        }
+        return true
+    }
+
+    /**
+     * **The seeds this device holds**, for a rotation to sign its
+     * `Recovery` with (design §9.0: *"the old key is in hand wherever the
+     * rotation carries its inheritance, since it signs the `Recovery`"*).
+     *
+     * **The one caller is [beginRotation]'s screen**, and the copy is the
+     * caller's to wipe. Nothing else has business reading these: a seed
+     * crosses no wire (design §23.3), and this returns it only so the
+     * device can sign with the key it already has rather than asking a
+     * person to type a phrase it holds.
+     */
+    fun heldSeedsForRotation(context: Context): ByteArray? {
+        // **the identity being rotated is the one that acts** ([Identities]:
+        // a rotation is a meeting, and a meeting takes the active
+        // identity), so its seeds come from its own scope and not the
+        // top-level directory a single-identity device used
+        val app = context.applicationContext
+        val id = activeId
+        val scope = if (id == null) {
+            Identities.LEGACY_SCOPE
+        } else {
+            val held = identities(app).firstOrNull { it.id == id } ?: return null
+            held.scope
+        }
+        return AndroidShell(app, scope).unseal(Identities.LEGACY_SEEDS)?.takeIf { it.size == 64 }
+    }
+
+    /**
+     * **This device's archive and store, enveloped** (design §13.7.1,
+     * `rhtn_client::backup`): what a device loss takes away, under a key
+     * derived from the identity, so the blob is unreadable wherever it is
+     * kept until the identity is in hand again.
+     *
+     * The identity is **not** in it: that is the one thing a backup must
+     * not carry, and the seed phrase is how it comes back.
+     */
+    fun exportBackup(by: String): ByteArray? {
+        val p = Kernel.loaded[by] ?: return null
+        return Kernel.call("exportBackup", { null }) { p.exportBackup() }
+    }
+
+    /**
+     * **Open a backup into this client** (`rhtn_client::backup`;
+     * `light-client-requirements.md` §2): the blob opens under this
+     * identity, the import scans it, and what came back is reported —
+     * records taken, and captures the scan discarded as past the window
+     * their *subject* declared (design §13.7.1).
+     *
+     * Refused where this client already holds an archive, where the blob
+     * belongs to another identity, or where it does not open; the kernel's
+     * own words come back rather than a guess at them.
+     *
+     * **Waits for the kernel**, as the first run calls this moments after
+     * starting it.
+     */
+    fun restoreBackup(blob: ByteArray): Result<uniffi.rhtn_ffi.Restored> {
+        val until = System.currentTimeMillis() + 30_000
+        var p = activeId?.let { Kernel.loaded[it] }
+        while (p == null && System.currentTimeMillis() < until) {
+            Thread.sleep(200)
+            p = activeId?.let { Kernel.loaded[it] }
+        }
+        val held = p ?: return Result.failure(IllegalStateException("the kernel did not start"))
+        return runCatching { held.restoreBackup(blob) }
+    }
+
+    /**
+     * The device's own seeds, as the first run sealed them.
+     *
+     * **Under the shell's own custody and never around it**: these are the
+     * whole of the identity, and they never cross the kernel's storage
+     * seam, so the kernel's sealing does not reach them — they are
+     * Keystore-wrapped here, exactly as the storage key itself is
+     * (`light-client-requirements.md` §9).
+     *
+     * **Nothing is minted here since 2026-10-29** [author]: the first run
+     * is a choice between a new identity and one restored from its
+     * phrase, and [createIdentity] is where the seeds arrive. A kernel
+     * started with none is a shell that skipped that screen, which is a
+     * fault to say rather than paper over.
+     */
+    internal fun heldSeeds(shell: AndroidShell): ByteArray {
+        val s = shell.unseal(Identities.LEGACY_SEEDS)
+        check(s != null && s.size == 64) { "no identity on this device: the first run was not completed" }
+        return s
+    }
+
+    /**
+     * **Open one of the identities this device holds**, on storage of its
+     * own ([AndroidShell]'s scope): two kernels over one directory would
+     * each overwrite the other's archive.
+     *
+     * **A mark outranks the seeds** ([Rotation.start]), per identity: a
+     * rotation that began and may not have finished is performed here,
+     * because `Participant.rotating` opens the new identity on the
+     * storage it is handed — so between beginning one and sealing its new
+     * seeds the archive belongs to a key the seeds do not name, and a
+     * start that trusted the seeds would open the wrong identity on the
+     * right archive.
+     */
+    internal fun openHeld(app: Context, h: Identities.Held, known: List<ByteArray>) {
+        val own = AndroidShell(app, h.scope)
+        val p = openOn(own, known) ?: return
+        Kernel.loaded[h.id] = p
+    }
+
+    /** The keyhash a seed pair names, or null where it does not read. */
+    internal fun idOfSeeds(seeds: ByteArray): String? =
+        Kernel.call("keyhashOfSeeds", { null }) { uniffi.rhtn_ffi.keyhashOfSeeds(seeds) }
+            ?.takeIf { Identities.names(it) }
+
+    /**
+     * The participant for the identity whose storage `own` is, or null
+     * where it would not open. The rotation logic is per identity: see
+     * [openHeld].
+     */
+    internal fun openOn(shell: AndroidShell, known: List<ByteArray>): Participant? {
+        // **a mark outranks the seeds** ([Rotation.start]): a rotation that
+        // began and may not have finished is performed here, because
+        // `Participant.rotating` opens the new identity on the storage it
+        // is handed — so between beginning one and sealing its new seeds
+        // the archive belongs to a key the seeds do not name, and a start
+        // that trusted the seeds would open the wrong identity on the
+        // right archive
+        val mark = shell.unseal(Rotation.MARK_NEW)
+        val p = when (
+            Rotation.start(
+                shell.unseal(Identities.LEGACY_SEEDS)?.size == 64,
+                mark?.size == 64,
+            )
+        ) {
+            is Rotation.Start.Unstarted -> {
+                // **one identity's seeds being gone is that identity's
+                // fact and not the device's** [2026-11-07]: the device
+                // may hold others, and [bringUp] says so once where none
+                // of them came up
+                Diag.warn("identity", "op" to "open", "error" to "no seeds under this scope")
+                return null
+            }
+            is Rotation.Start.Rotate -> {
+                // bound here rather than asserted: the predicate above read
+                // the same value, and a `!!` would say this code knows
+                // something the compiler cannot check
+                val fresh = mark ?: return null
+                val prior = shell.unseal(Rotation.MARK_PRIOR)
+                if (prior == null || prior.size != 64) {
+                    // **half a mark is no mark**: without the prior key
+                    // there is no rotation to make (`wire-format.md` §4.1
+                    // admits no variant carrying one half), so the mark is
+                    // dropped and the device starts as it was
+                    shell.forget(Rotation.MARK_NEW)
+                    Kernel.front.note("· a rotation was begun without its prior key and was dropped")
+                    Kernel.call("Participant.start", { e -> Kernel.front.setStatus("kernel refused: ${e.reason}"); null }) {
+                        Participant.start(heldSeeds(shell), known, platformOf(shell))
+                    } ?: return null
+                } else {
+                    val out = Kernel.call("Participant.rotating", { e ->
+                        Kernel.front.setStatus("the rotation was refused: ${e.reason}"); null
+                    }) {
+                        Participant.rotating(fresh.copyOf(), prior.copyOf(), null, known, platformOf(shell))
+                    }
+                    prior.fill(0)
+                    if (out == null) return null
+                    // **the new seeds become the identity only now**, and
+                    // the mark goes after them: cleared first and the
+                    // process dying would leave an archive nothing names
+                    if (!shell.seal(Identities.LEGACY_SEEDS, fresh)) {
+                        Kernel.front.setStatus("the rotation held but its seeds could not be kept")
+                        return null
+                    }
+                    shell.forget(Rotation.MARK_PRIOR)
+                    shell.forget(Rotation.MARK_NEW)
+                    fresh.fill(0)
+                    Diag.event("rotation.done")
+                    Kernel.front.note("· the rotation completed and this device holds its new key")
+                    out
+                }
+            }
+            is Rotation.Start.Ordinary ->
+                Kernel.call("Participant.start", { e -> Kernel.front.setStatus("kernel refused: ${e.reason}"); null }) {
+                    Participant.start(heldSeeds(shell), known, platformOf(shell))
+                } ?: return null
+        }
+        return p
+    }
+
+    /** `dir` and everything under it gone, or false where some of it stays. */
+    internal fun clear(dir: java.io.File): Boolean {
+        if (!dir.exists()) return true
+        dir.listFiles()?.forEach { if (it.isDirectory) clear(it) else it.delete() }
+        return dir.deleteRecursively() || !dir.exists()
+    }
+
+    /**
+     * **Take the identity off this device** ([Wipe]; PRD-03): the key,
+     * the archive, the store, every sealed capture, the shell's own
+     * preference stores, and last the Keystore key that wrapped them, so
+     * a byte that survived a delete cannot be read.
+     *
+     * **The kernel handle goes first**, before anything is deleted: a
+     * live `Participant` writes through the shell's custody, and a writer
+     * running against a half-deleted directory could put a file back.
+     * The caller kills the process afterwards for the same reason — the
+     * one guarantee that nothing in flight outlives this.
+     *
+     * Returns what would **not** go, for [Wipe.left] to say. An empty
+     * list is a device holding no identity.
+     */
+    fun wipe(context: Context): List<String> {
+        Kernel.loaded.clear()
+        activeId = null
+        Ceremony.meet = null
+        val app = context.applicationContext
+        val left = mutableListOf<String>()
+        if (!clear(java.io.File(app.filesDir, Wipe.KERNEL_DIR))) left += Wipe.KERNEL_DIR
+        if (!clear(java.io.File(app.filesDir, Wipe.DIAG_DIR))) left += Wipe.DIAG_DIR
+        for (store in Wipe.STORES) {
+            val ok = runCatching {
+                app.getSharedPreferences(store, Context.MODE_PRIVATE).edit().clear().commit()
+            }.getOrDefault(false)
+            // **and the file itself**, not only its contents: a cleared
+            // store still names itself on disk
+            runCatching { app.deleteSharedPreferences(store) }
+            if (!ok) left += store
+        }
+        // **the wrapping key last of all**: while it exists, anything
+        // recovered from the storage it wrapped is readable, and once it
+        // is gone nothing is (`light-client-requirements.md` §6 gives the
+        // same reasoning for a deleted archive window's capture keys)
+        val alias = runCatching {
+            val ks = java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            ks.deleteEntry(Wipe.AT_REST_ALIAS)
+            !ks.containsAlias(Wipe.AT_REST_ALIAS)
+        }.getOrDefault(false)
+        if (!alias) left += Wipe.AT_REST_ALIAS
+        Diag.event("identity.wiped")
+        return left
+    }
+
+    /** Whether the first run has been completed on this device. */
+    fun hasIdentity(context: Context): Boolean {
+        val device = AndroidShell(context.applicationContext)
+        // the index, or the identity a device held before there was one
+        return Identities.decode(device.unseal(Identities.INDEX)).isNotEmpty() ||
+            device.unseal(Identities.LEGACY_SEEDS)?.size == 64
+    }
+
+    /**
+     * **The first run hands the seeds over and the kernel starts on them**
+     * ([FirstRunActivity]): sealed under the shell's custody first, so a
+     * process that dies between the two finds them at its next start.
+     * False where the storage refused them, and nothing started.
+     */
+    fun createIdentity(context: Context, seeds: ByteArray): Boolean {
+        require(seeds.size == 64) { "the kernel's seeds are 64 bytes" }
+        val app = context.applicationContext
+        val device = AndroidShell(app)
+        val id = idOfSeeds(seeds) ?: return false
+        val index = Identities.decode(device.unseal(Identities.INDEX))
+        // **adding, not replacing** [author, 2026-11-07]: *"'Add an
+        // identity' … is just another trigger for 'Start a new
+        // identity'"*, so this door is reached from the first run and
+        // again later, and an identity already held stays held.
+        if (index.any { it.id == id }) return true
+        // **its own storage, named for itself**: two kernels over one
+        // directory would each overwrite the other's archive. The
+        // top-level directory belongs to whatever identity a device held
+        // before this model ([Identities.LEGACY_SCOPE]) and is never
+        // taken by a new one.
+        val scope = Identities.scopeFor(id)
+        if (!AndroidShell(app, scope).seal(Identities.LEGACY_SEEDS, seeds)) return false
+        // **the seeds land before the index names them**, so a process
+        // that dies between leaves an identity on disk that nothing opens
+        // rather than an index naming storage that is not there
+        if (!device.seal(Identities.INDEX, Identities.encode(index + Identities.Held(id, scope, null)))) {
+            return false
+        }
+        Diag.event("identity.added")
+        if (Attachments.started) {
+            // already running: open it beside the others rather than
+            // waiting for a restart, and let it act since a person who
+            // just made an identity means to use it
+            openHeld(app, Identities.Held(id, scope, null), listOf())
+            Kernel.loaded[id]?.let { Attachments.launchHeld(id, it, scope) }
+            chooseActive(context, id)
+        } else {
+            Attachments.start(context)
+        }
+        return true
+    }
+
+    fun chooseActive(context: Context, id: String): Boolean {
+        if (!Kernel.loaded.containsKey(id)) return false
+        activeId = id
+        AndroidShell(context.applicationContext).seal(Identities.ACTIVE, id.toByteArray())
+        Diag.event("identity.active", "who" to id.take(8))
+        activeId?.let { Kernel.loaded[it] }?.let { Attachments.show(it, Connection.Detached) }
+        Model.refreshAll()
+        return true
+    }
+
+    /** Ask the next bring-up to make `id` the one that acts. */
+    fun requestActive(id: String) {
+        requestedActive = id.trim().takeIf { Identities.names(it) }
+    }
+
+    /**
+     * **Choose the identity that acts** — a meeting's and an operator
+     * action's ([Identities.needsTheActive]), from the nameplate's own
+     * list [author, 2026-11-07]. Nothing where `id` is not held: a
+     * selector offering what the device does not hold is a bug, and
+     * switching to it would leave the device unable to Ceremony.meet().
+     */
+    /**
+     * **Take one identity off this device, leaving the others** [author,
+     * 2026-11-10]. The refusals are [Identities.removable]'s and are
+     * returned as they are; null means it went.
+     *
+     * **The index is rewritten before the storage is deleted**, which is
+     * the opposite order from [createIdentity] and for the same reason: a
+     * process that dies between leaves storage nothing opens rather than
+     * an index naming storage that is not there. Half-removed is the
+     * failure to design against, and an orphaned directory is the
+     * harmless half.
+     *
+     * **A rotation owed in that identity's scope stops it.** The marks say
+     * a prior key is still to depart ([Rotation.MARK_PRIOR]); deleting the
+     * identity that owes the departure would leave the old key standing in
+     * a subnet it has been replaced in, with nothing on the device able to
+     * say so.
+     */
+    fun removeIdentity(context: Context, id: String): String? {
+        val app = context.applicationContext
+        val device = AndroidShell(app)
+        val index = Identities.decode(device.unseal(Identities.INDEX))
+        Identities.removable(index, id)?.let { return it }
+        val (kept, scope) = Identities.without(index, id)
+        val own = AndroidShell(app, scope)
+        if (own.unseal(Rotation.MARK_PRIOR) != null) {
+            return "this identity owes a departure from a rotation; finish that first"
+        }
+        if (!device.seal(Identities.INDEX, Identities.encode(kept))) {
+            return "this device's storage would not keep its list of identities"
+        }
+        // nothing opens it from here on: the index no longer names it
+        Kernel.loaded.remove(id)
+        val left = scope?.let { java.io.File(app.filesDir, "${Wipe.KERNEL_DIR}/$it").deleteRecursively() } ?: false
+        if (activeId == id) {
+            Identities.active(kept.filter { Kernel.loaded.containsKey(it.id) }, null)?.let { chooseActive(context, it) }
+        }
+        Diag.event("identity.removed", "who" to id.take(8), "storage" to left.toString())
+        Model.refreshAll()
+        return if (left) {
+            null
+        } else {
+            "the identity is off this device's list; some of its storage would not go"
+        }
+    }
+
+    /** The colour chosen for one identity on Options. */
+    fun setIdentityColour(context: Context, id: String, argb: Int) {
+        val shell = AndroidShell(context.applicationContext)
+        val now = LinkedHashMap(identityColours(context))
+        now[id] = argb
+        runCatching { shell.write(Identities.COLOURS, Identities.encodeColours(now)) }
+            .onFailure { Kernel.front.note("· the colour could not be kept: ${it.message}") }
+    }
+
+    /**
+     * **Every identity held, with its colour** [author, 2026-11-12]: the
+     * device's colours file, each identity without one given the first
+     * unused and the file written back where that happened.
+     */
+    fun identityColours(context: Context): Map<String, Int> {
+        val shell = AndroidShell(context.applicationContext)
+        val stored = Identities.colours(runCatching { shell.read(Identities.COLOURS) }.getOrNull())
+        val now = Identities.assigned(stored, identities(context))
+        if (now != stored) runCatching { shell.write(Identities.COLOURS, Identities.encodeColours(now)) }
+        return now
+    }
+
+    /**
+     * **The identity in focus, named at a call** [restructure step 4,
+     * 2026-11-14]: the person's choice of which identity acts, a UI
+     * input and nothing the kernel reasons from. Every function that acts
+     * for an identity takes it as its first argument; a screen that acts
+     * for the focused one passes this, and a screen given its identity
+     * passes that. Empty where the device holds none, which every
+     * function answers as it answered a missing focus.
+     */
+    fun focused(): String = activeId ?: ""
+
+    /** Which identity acts, or null where the device holds none. */
+    fun activeIdentity(): String? = activeId
+
+    /** Every identity this device holds, in the order the index names. */
+    fun identities(context: Context): List<Identities.Held> =
+        Identities.decode(AndroidShell(context.applicationContext).unseal(Identities.INDEX))
 }
