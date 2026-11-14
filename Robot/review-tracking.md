@@ -21778,3 +21778,41 @@ read as `PAY-01`. They are `// functional: TX-031` now. **Held by neither,
 and said so**: TX-023 (finalized_at at least started_at and at most 86,400 s
 later; no vector at zero, at the bound or past it, and no test). Figure:
 575 live, 221 held, 354 by neither; TX 1.
+
+**The UX families linked, 2026-11-14 [author].** Held by the PRD entries
+(manual rows whose Kotlin test classes carry their markers), by the CER,
+RSC, DMN, REP, SES and PRP entries that state what the person is shown,
+and by sixty-five Kotlin tests across fifteen classes — `MeetTest`,
+`ChromeTest`, `RotationTest`, `DisclosureTest`, `CatalogTest`, `FrontTest`,
+`AttachTest`, `LeavingTest`, `ResourcePageTest`, `BootstrapTest`,
+`ShellTest`, `GivingTest`, `WipeTest`, `IdentitiesTest`, `ThreadsTest`,
+`ColoursTest` — plus the node's subtree count and the utility bound in
+Rust. **One correction**: PRT-11, the seam scenario, listed `UX-032` (the
+colours) where it holds `UX-031` (identities as browsers, addresses as
+tabs); my own restructure commit c32eded, off by one. The partials: UX-006
+(departure's cost, RSC-53/54/55 and PRD-02; transfers and disavowals as
+authority changes have no cost screen); 007 (the brief names the authority
+and the patronage; listing the resources with upward-reaching policies and
+the affected people by name and count has no test); 008 (the two rotation
+paths' wording and what device loss costs; offering withholding and
+archive-window deletion as two controls has no test); 009 (PRD-06 for roles
+shown and predicates not; quantile population and cutoff display has no
+test); 011 (the sweep and the truncated portion; that browsing cached items
+opens no connection and one query session at a time is closed after use are
+asserted by nothing); 012 (sender attribution, sent-never-delivered, the
+refusal reason; degraded/failover mode and the mailbox count's meaning have
+no test); 014 (the kernel side only, RES-09 and PRP-24; no screen test
+shows operator-itself against person-behind-it); 017 (the renewal opening
+where the run ends and re-signing no record; re-checking the proof over the
+transport key before signing has no test); 021 (the count and the shell's
+agreement; the fetch stating count, claim and sequence, and the client
+re-signing, have no test); 026 (ordering, the horizon sentence, the peering
+record's ASN; the launch recording its zone into the endpoint record has no
+test); 028 (focus and the acting identity; a rotated-away key acting in
+another subnet has no test); 029 (REC-01's test reuses the succeeded
+address; the old key leaving only after the new one is adopted is
+IdentitiesTest's owed departure, not a sequencing test). **Held by
+neither, and said so**: UX-013 (an E row: walking the real application on
+each platform with permission denials and a screen reader is a programme,
+not a test; `FrameIsolationTest` under androidTest is the one instrumented
+walk and it holds RSC-58). Figure: 575 live, 250 held, 325 by neither; UX 1.

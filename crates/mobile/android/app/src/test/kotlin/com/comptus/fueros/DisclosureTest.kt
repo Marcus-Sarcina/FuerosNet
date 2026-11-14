@@ -133,6 +133,7 @@ class DisclosureTest {
      * subnet — and said nothing about what it loses on this one, which
      * left both paths reading as though a rotation cost nothing anywhere.
      */
+    // functional: UX-008
     @Test
     fun both_paths_say_what_the_old_key_loses_on_the_subnet_it_rotates() {
         val unlinked = Disclosure.words(Disclosure.Topic.UNLINKED_PATH).joinToString(" ")
@@ -164,6 +165,7 @@ class DisclosureTest {
         )
     }
 
+    // functional: UX-026
     @Test
     fun the_provisioning_screen_says_whose_horizon_the_ordering_speaks_to() {
         val said = Disclosure.words(Disclosure.Topic.PROVISIONING).joinToString(" ")

@@ -70,6 +70,7 @@ class GivingTest {
         return names
     }
 
+    // functional: UX-022
     @Test
     fun every_utility_the_kernel_can_send_has_a_plan_or_a_reason() {
         for (name in utilitiesTheKernelSends()) {
@@ -89,6 +90,7 @@ class GivingTest {
         }
     }
 
+    // functional: UX-022
     @Test
     fun a_utility_this_app_has_nothing_for_is_declined_by_name() {
         val plan = Giving.plan(ask("teleport"), phone)
@@ -150,6 +152,7 @@ class GivingTest {
         assertTrue(uwb.says, uwb.says.contains("ultra-wideband"))
     }
 
+    // functional: UX-022
     @Test
     fun what_this_device_lacks_is_the_reason_the_resource_is_given() {
         for (utility in listOf("scan", "capture")) {
@@ -217,6 +220,7 @@ class GivingTest {
         assertEquals(12, Giving.geohash(51.5, -0.12, 99).length)
     }
 
+    // functional: UX-022
     @Test
     fun the_person_is_shown_the_cell_and_told_when_the_fix_is_coarser_than_it() {
         val tight = Giving.placeSays("u4pruyd", 40f)
@@ -241,6 +245,7 @@ class GivingTest {
 
     // ---- a signature, and a tag ---------------------------------------
 
+    // functional: UX-022
     @Test
     fun the_exact_payload_is_shown_where_it_is_text_and_never_guessed_at() {
         val text = Giving.payloadSays("I accept the terms of the loan".toByteArray())
@@ -289,6 +294,7 @@ class GivingTest {
 
     /** The cap is the kernel's bound less its own headroom, so a capture
      *  is turned away before the act rather than after it. */
+    // functional: UX-022
     @Test
     fun a_result_is_capped_under_the_messages_own_bound() {
         assertTrue(Giving.RESULT_CAP < 16 shl 20)

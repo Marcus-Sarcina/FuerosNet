@@ -32,6 +32,7 @@ class RotationTest {
         Disclosure.words(Disclosure.Topic.LINKED_PATH, patron = patron, subnet = subnet)
             .joinToString(" ")
 
+    // functional: UX-008
     @Test
     fun a_plain_rotation_warns_that_prior_standing_is_abandoned() {
         val said = rotation()
@@ -48,6 +49,7 @@ class RotationTest {
         assertTrue("$said", !said.contains("traceable"))
     }
 
+    // functional: UX-008
     @Test
     fun a_recovery_states_that_the_link_will_be_published() {
         val said = recovery()
@@ -56,6 +58,7 @@ class RotationTest {
         assertTrue("names which subnet: $said", said.contains("Ward"))
     }
 
+    // functional: UX-008
     @Test
     fun the_two_paths_do_not_say_the_same_thing() {
         // a person choosing between them must be able to tell them apart,
@@ -67,6 +70,7 @@ class RotationTest {
         )
     }
 
+    // functional: UX-015
     @Test
     fun a_party_is_named_by_what_they_published_or_by_their_keyhash() {
         // **never a name this device invented** (PRD-14): an alias is the
@@ -97,6 +101,7 @@ class RotationTest {
      * the archive belongs to a key the seeds do not name. A start obeying
      * the seeds there would open the wrong identity on the right archive.
      */
+    // functional: UX-029
     @Test
     fun a_start_obeys_the_mark_over_the_seeds() {
         assertTrue(
@@ -125,6 +130,7 @@ class RotationTest {
         )
     }
 
+    // functional: UX-029
     @Test
     fun re_entering_the_rotation_after_a_crash_is_the_same_decision() {
         // **idempotent by construction**: the inputs a start reads do not

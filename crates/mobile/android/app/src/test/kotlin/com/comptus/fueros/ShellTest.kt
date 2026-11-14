@@ -7,6 +7,7 @@ import org.junit.Test
 class ShellTest {
     private fun standing(n: Int) = uniffi.rhtn_model.Rank(root = false, operator = false, subordinates = n.toUInt())
 
+    // functional: UX-021
     @Test
     fun the_downline_is_the_direct_count_and_agrees_in_number() {
         assertEquals("Your standing here has not been read yet.", Shell.downline(null))

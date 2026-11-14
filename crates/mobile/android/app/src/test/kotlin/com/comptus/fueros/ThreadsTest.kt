@@ -116,6 +116,7 @@ class ThreadsTest {
         assertEquals(emptyList<Front.Thread>(), Threads.decodeLegacy("not json".toByteArray()))
     }
 
+    // functional: UX-031
     @Test
     fun the_shell_wires_the_store_per_identity_and_opens_a_thread_lazily() {
         val k = source("Attachments.kt")

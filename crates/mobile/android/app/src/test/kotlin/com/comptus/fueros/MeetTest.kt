@@ -476,6 +476,7 @@ class MeetConversationTest {
         assertNull(m.waitingOn())
     }
 
+    // functional: UX-003
     @Test
     fun a_witness_that_declined_is_shown_as_declined_and_weighed_in_the_warnings() {
         val m = atVerifiers()
@@ -985,6 +986,7 @@ class MeetConversationTest {
         assertEquals("asked once, not waited out", 1, c.count("open"))
     }
 
+    // functional: UX-020
     @Test
     fun the_window_opens_with_the_request_and_is_retried_while_the_prune_answers() {
         val m = Meet("the identity under test", "aa", "carol", Meet.Kind()).apply {
@@ -1015,6 +1017,7 @@ class MeetConversationTest {
 
     /** Any other refusal of the request ends the meeting: there is no
      *  conversation without it. */
+    // functional: UX-020
     @Test
     fun a_refused_window_stops_the_meeting_with_the_kernels_reason() {
         val m = Meet("the identity under test", "aa", "carol", Meet.Kind()).apply {
@@ -1029,6 +1032,7 @@ class MeetConversationTest {
 
     /** **Who witnessed it, and whose nominees they were**: the survivors
      *  that signed, split by the side that nominated each. */
+    // functional: UX-020
     @Test
     fun the_attested_set_is_the_survivors_that_signed_split_by_side() {
         val m = atVerifiers()
@@ -1101,6 +1105,7 @@ class MeetRowsTest {
 
     // ---- D1.5: UX-001, UX-002, PRD-02 ---------------------------------
 
+    // functional: UX-001
     @Test
     fun the_brief_tells_both_people_what_becomes_durable_and_who_reads_it() {
         val items = meet().brief()
@@ -1125,6 +1130,7 @@ class MeetRowsTest {
         assertFalse(meet().brief().joinToString(" ") { it.text }.contains("patron"))
     }
 
+    // functional: UX-007
     // acceptance: PRD-02
     @Test
     fun an_adoption_names_the_authority_it_moves_and_which_way() {
@@ -1159,6 +1165,7 @@ class MeetRowsTest {
      * regular meeting's brief while the other phone was proposing to be
      * its patron.
      */
+    // functional: UX-007
     @Test
     fun the_responder_is_briefed_on_the_patronage_the_initiator_asked_for() {
         // this device asked for nothing; the invitation it read did
@@ -1195,6 +1202,7 @@ class MeetRowsTest {
      * party being adopted reads the inviter's claim off the bootstrap and
      * is told it is a claim.
      */
+    // functional: UX-016
     // acceptance: PRD-15
     @Test
     fun the_brief_of_the_party_being_adopted_names_the_subnet_as_the_inviters_claim() {
@@ -1210,6 +1218,7 @@ class MeetRowsTest {
         assertTrue("and calls it a claim", text.contains("claim until their signed profile"))
     }
 
+    // functional: UX-016
     @Test
     fun an_invitation_that_named_no_subnet_is_said_to_have_named_none() {
         val m = meet(Meet.Adopt.NONE, role = Meet.Role.RESPONDER)
@@ -1224,6 +1233,7 @@ class MeetRowsTest {
 
     /** The patron chooses which subnet, at D1a or at its brief, and the
      *  brief says what it chose or that it must. */
+    // functional: UX-016
     // acceptance: PRD-15
     @Test
     fun the_patron_chooses_a_subnet_and_the_brief_states_the_choice() {
@@ -1249,6 +1259,7 @@ class MeetRowsTest {
      * is asked which scope to adopt into, the subordinate which to submit
      * as, and a device with nothing to choose is not asked.
      */
+    // functional: UX-016
     // acceptance: PRD-15
     @Test
     fun the_scope_question_is_asked_of_whoever_has_something_to_choose() {
@@ -1315,6 +1326,7 @@ class MeetRowsTest {
      * learns it from the bootstrap [bench, 2026-10-19]: its own `kind` is
      * its own screen's answer, which it never gave — it scanned.
      */
+    // functional: UX-019
     @Test
     fun a_responder_takes_the_peering_from_the_inviters_code() {
         val them = meet(role = Meet.Role.RESPONDER)
@@ -1335,6 +1347,7 @@ class MeetRowsTest {
         assertFalse(meet().peeringAsked())
     }
 
+    // functional: UX-019
     @Test
     fun the_peering_the_checkbox_asked_for_is_in_the_brief() {
         val text = meet(backup = true).brief().joinToString(" ") { it.text }
@@ -1359,6 +1372,7 @@ class MeetRowsTest {
         return m
     }
 
+    // functional: UX-003
     @Test
     fun the_pre_sign_warnings_name_each_weakness_and_only_the_real_ones() {
         val m = atReview(meet())
@@ -1380,6 +1394,7 @@ class MeetRowsTest {
         assertFalse(text.contains("invalid"))
     }
 
+    // functional: UX-003
     @Test
     fun a_sound_meeting_is_not_warned_about() {
         val m = atReview(meet())

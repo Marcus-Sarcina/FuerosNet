@@ -1507,7 +1507,8 @@
   "interpretation": "design §19.6 owes a witness or a verifier no warning [author, 2026-09-17]: neither is a person acting, and a per-query notice would convey who is meeting whom. The reference client tells the verifier's operator nothing; this test reads 'no notification' as no prompt and no notice of any kind.",
   "families": [
    "CER-001",
-   "CER-004"
+   "CER-004",
+   "UX-002"
   ]
  },
  {
@@ -1655,7 +1656,8 @@
   "oracle": "behaviour",
   "interpretation": "The form of the notice is not specified; the test asserts that one is raised before signing.",
   "families": [
-   "CER-002"
+   "CER-002",
+   "UX-003"
   ]
  },
  {
@@ -1784,7 +1786,11 @@
   "when": "The ceremony reaches capture, and the witnesses and verifiers are asked.",
   "then": "The hook records a disclosure to each participant before capture, and no disclosure to any witness or verifier at any point.",
   "oracle": "behaviour",
-  "interpretation": "The content and form of the disclosure are not specified; the test asserts its occurrence and timing. Re-derived 2026-09-21: design §19.6 owes a witness or verifier no warning [author, 2026-09-17]."
+  "interpretation": "The content and form of the disclosure are not specified; the test asserts its occurrence and timing. Re-derived 2026-09-21: design §19.6 owes a witness or verifier no warning [author, 2026-09-17].",
+  "families": [
+   "UX-001",
+   "UX-002"
+  ]
  },
  {
   "id": "CER-27",
@@ -4935,7 +4941,10 @@
   "when": "The shell sends application payload to that recipient.",
   "then": "The call reports a refusal rather than success, nothing is queued at the node, and the same discipline applies to publishing a bundle and stocking a pool. An application told a message was sent stops retrying it.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "UX-012"
+  ]
  },
  {
   "id": "DMN-16",
@@ -5155,7 +5164,10 @@
   "when": "The daemon provisions and then runs across a credential boundary.",
   "then": "The daemon generates the keypair, only the public half appears in what it sends the operator's client, the run it receives is 45 credentials over that key with each not_before equal to the previous not_after, and a session accepted after the boundary presents the same key under the next credential.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "UX-017"
+  ]
  },
  {
   "id": "DMN-24",
@@ -5199,7 +5211,10 @@
   "when": "The daemon restarts and serves.",
   "then": "No endpoint record and no anchor entry signed by the daemon appears in what it pushes or serves; it serves the operator-signed records it was given and reports that its address has moved and a new record is owed.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "UX-017"
+  ]
  },
  {
   "id": "DMN-26",
@@ -6028,7 +6043,8 @@
   "interpretation": "The binding of a keyhash to a payload identity key is the prekey bundle, which its subject signs. A recipient holding no bundle for the sender cannot check the binding, so it refuses and asks for the bundle; that message is not recovered.",
   "families": [
    "PAY-001",
-   "PAY-004"
+   "PAY-004",
+   "UX-012"
   ]
  },
  {
@@ -6346,7 +6362,11 @@
   "when": "A reviewer initiates a departure, then accepts a new patron.",
   "then": "The departure flow works out the cost, names each resource that will be lost with the reason it goes and says what the figure is a floor of, and shows all of it before the control that leaves appears; the first press arms and the second acts, with nothing re-read between them. The adoption flow states, in the author's own words, that the patron's policies and their patron's will apply to any resource the person uses or hosts in that subnet.",
   "oracle": "behaviour",
-  "interpretation": "**The adoption half was restated by the author's own sentence** [author, 2026-11-05]. This row had read that the flow *\"lists resources whose predicates reach upward\"*, and the assistant's rendering of it — \"resources whose access reaches upward through a patron\" — did not survive being read back: asked what it meant, the author wrote the obligation plainly instead, and `Disclosure.Topic.ADOPTION_UPWARD` carries his sentence. **Enumerating is also not something the client could do honestly**: a predicate is relative to the owner, so which resources reach upward is a fact about the neighbourhood the person has not moved into yet, and a list drawn before the move would be a prediction presented as a fact. So the disclosure states the rule. **Both halves are built and held**: the departure by `LeavingTest` — each loss named with its instance, service type and reason, the limits said, and a source-reading test that the warning precedes the arming and that nothing is re-read between arming and acting — and the adoption by `MeetTest`, which asserts the brief renders the table's sentence rather than a phrase of its own."
+  "interpretation": "**The adoption half was restated by the author's own sentence** [author, 2026-11-05]. This row had read that the flow *\"lists resources whose predicates reach upward\"*, and the assistant's rendering of it — \"resources whose access reaches upward through a patron\" — did not survive being read back: asked what it meant, the author wrote the obligation plainly instead, and `Disclosure.Topic.ADOPTION_UPWARD` carries his sentence. **Enumerating is also not something the client could do honestly**: a predicate is relative to the owner, so which resources reach upward is a fact about the neighbourhood the person has not moved into yet, and a list drawn before the move would be a prediction presented as a fact. So the disclosure states the rule. **Both halves are built and held**: the departure by `LeavingTest` — each loss named with its instance, service type and reason, the limits said, and a source-reading test that the warning precedes the arming and that nothing is re-read between arming and acting — and the adoption by `MeetTest`, which asserts the brief renders the table's sentence rather than a phrase of its own.",
+  "families": [
+   "UX-006",
+   "UX-007"
+  ]
  },
  {
   "id": "PRD-03",
@@ -6368,7 +6388,10 @@
   "when": "A reviewer starts an identity path that links the new credential to prior history, and one that does not.",
   "then": "The unlinked path warns that prior standing is abandoned — the new key arriving as a genuinely-new user, vouched for afresh, and not that the member loses the status they hold; the linked path states that the link to the prior identity will be published within the horizon.",
   "oracle": "behaviour",
-  "interpretation": "The documents call these identity paths and not rotations (`light-client-requirements.md` §6); design §9.0 fixes the vocabulary [author, 2026-11-05]: a key rotation replaces the key a subnet knows, a series reissue keeps the key and the data, a restore brings data back to the key that held it, and `Recovery` is the wire block alone. The linked path is a rotation carrying one. **The door it needs now exists** [author, 2026-11-07]. Asked whether taking an identity off the device is a live control or a harness act, and whether it and starting a new identity should be one function: it was a harness act (`crates/tools/field-setup.sh` uninstalls the app, wiping its data with it), and they are two functions — *\"'Launch a new identity' and 'Wipe the current identity' are necessary functions\"*, built as separate doors because fusing them would make the only way to start fresh a destruction and leave a confirmation ambiguous about which was agreed to. Built: `Wipe`, `WipeActivity` and `Kernel.wipe`, reached from the backup screen so the way back is passed on the way in, with `light-client-requirements.md` §2's obligation and `functional_tests.md` UX-027. **And nothing assumes one identity per device** [author, 2026-11-07]: *\"if we support key rotation, we wind up having to support multiple identities on a device, so 'Add an identity' … is just another trigger for 'Start a new identity'/Key rotation\"* — which `RotationActivity`'s unlinked path already is, so the words say *this* identity and not *your* identity. **Still owed**: the walkthrough itself, this entry's oracle being behaviour on a release build (UX-013). **What the old key loses, and where** [author, 2026-11-07]: *\"The old key loses its reachability on the rotated subnet as well as any standing which depends on it. They are granted roles and standing only within the trust horizon on the rotated subnet.\"*  The table's words already said what the old key **keeps** — every other subnet — and said nothing about what it loses on this one, which left both paths reading as though a rotation cost nothing anywhere. His clause is added to both, differing where the paths differ: unlinked loses the standing that rested on the old key there, linked carries it. The assistant had reported the warning as *partly false* for not scoping the loss; in fact it was already scoped the right way on the half it stated and was silent on the other half, which is a gap rather than a falsehood. `DisclosureTest` holds both halves now."
+  "interpretation": "The documents call these identity paths and not rotations (`light-client-requirements.md` §6); design §9.0 fixes the vocabulary [author, 2026-11-05]: a key rotation replaces the key a subnet knows, a series reissue keeps the key and the data, a restore brings data back to the key that held it, and `Recovery` is the wire block alone. The linked path is a rotation carrying one. **The door it needs now exists** [author, 2026-11-07]. Asked whether taking an identity off the device is a live control or a harness act, and whether it and starting a new identity should be one function: it was a harness act (`crates/tools/field-setup.sh` uninstalls the app, wiping its data with it), and they are two functions — *\"'Launch a new identity' and 'Wipe the current identity' are necessary functions\"*, built as separate doors because fusing them would make the only way to start fresh a destruction and leave a confirmation ambiguous about which was agreed to. Built: `Wipe`, `WipeActivity` and `Kernel.wipe`, reached from the backup screen so the way back is passed on the way in, with `light-client-requirements.md` §2's obligation and `functional_tests.md` UX-027. **And nothing assumes one identity per device** [author, 2026-11-07]: *\"if we support key rotation, we wind up having to support multiple identities on a device, so 'Add an identity' … is just another trigger for 'Start a new identity'/Key rotation\"* — which `RotationActivity`'s unlinked path already is, so the words say *this* identity and not *your* identity. **Still owed**: the walkthrough itself, this entry's oracle being behaviour on a release build (UX-013). **What the old key loses, and where** [author, 2026-11-07]: *\"The old key loses its reachability on the rotated subnet as well as any standing which depends on it. They are granted roles and standing only within the trust horizon on the rotated subnet.\"*  The table's words already said what the old key **keeps** — every other subnet — and said nothing about what it loses on this one, which left both paths reading as though a rotation cost nothing anywhere. His clause is added to both, differing where the paths differ: unlinked loses the standing that rested on the old key there, linked carries it. The assistant had reported the warning as *partly false* for not scoping the loss; in fact it was already scoped the right way on the half it stated and was silent on the other half, which is a gap rather than a falsehood. `DisclosureTest` holds both halves now.",
+  "families": [
+   "UX-008"
+  ]
  },
  {
   "id": "PRD-04",
@@ -6390,7 +6413,10 @@
   "when": "A reviewer uses the client through its first sessions.",
   "then": "The client prompts, unobtrusively, that a second independent adoption protects against a single patron; it is absent once a second is held.",
   "oracle": "behaviour",
-  "interpretation": "The eclipse condition is out of the sequence [author, 2026-11-05]: *\"It is a theoretical attack, not an intended feature of the network.\"* So what is testable is the prompt and when it is absent, not its timing against an attack nobody intends to stage. design §18.4 still prices eclipse and `light-client-requirements.md` §6 still gives it as the reason plurality is worth having early; neither is a condition a test waits for."
+  "interpretation": "The eclipse condition is out of the sequence [author, 2026-11-05]: *\"It is a theoretical attack, not an intended feature of the network.\"* So what is testable is the prompt and when it is absent, not its timing against an attack nobody intends to stage. design §18.4 still prices eclipse and `light-client-requirements.md` §6 still gives it as the reason plurality is worth having early; neither is a condition a test waits for.",
+  "families": [
+   "UX-005"
+  ]
  },
  {
   "id": "PRD-05",
@@ -6439,7 +6465,9 @@
   "oracle": "behaviour",
   "interpretation": "**Built on the node and framed by the client** [2026-11-08]. All three rules are `rhtn_daemon::operator`'s: §10.6's binding view renders hosted against brokered, §10.7's role view renders the roles a principal holds and never the predicates that granted them, and §8's exposure view states what the configuration exposes the identities below it to — each with its own test in that module. The client's part is to frame those pages rather than to re-render them, which is PRD-12 (closed by an instrumentation run on hardware), and `Disclosure.Topic.OPERATOR_EXPOSURE` records that the words live there rather than in the client's own table. **The exposure view was read off the live node on 2026-11-08** over its loopback, where arriving is the authorisation: \"What this exposes the identities below it to\", with how many sit below, whether their payload is relayed and what is hosted. The other two views need a bound resource to render and the bench node hosts none, so they stand on their tests.",
   "families": [
-   "GAT-008"
+   "GAT-008",
+   "UX-009",
+   "UX-010"
   ]
  },
  {
@@ -6471,7 +6499,10 @@
   "when": "A reviewer creates a backup, reads the backup screen, and imports a backup containing captures past their window.",
   "then": "The backup is encrypted under a passphrase-derived key not stored with it; the screen states what device loss costs; the import deletes the expired captures and says so.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "UX-008"
+  ]
  },
  {
   "id": "PRD-08",
@@ -6552,7 +6583,10 @@
   "when": "The provisioning screen lists providers and zones.",
   "then": "The least concentrated come first, the crowded ones are marked rather than hidden, and the screen says the ordering speaks to this operator's horizon and not the network's.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "UX-026"
+  ]
  },
  {
   "id": "PRD-12",
@@ -7371,7 +7405,8 @@
   "oracle": "behaviour",
   "interpretation": "There is no unmarking: §7.6 gives a record a successor and no retraction, so a node that stopped being infrastructure leaves its records standing in every horizon that stored them.",
   "families": [
-   "TOP-032"
+   "TOP-032",
+   "UX-014"
   ]
  },
  {
@@ -7596,7 +7631,8 @@
   "oracle": "behaviour",
   "interpretation": "",
   "families": [
-   "TOP-046"
+   "TOP-046",
+   "UX-025"
   ]
  },
  {
@@ -7875,7 +7911,7 @@
    "SES-017",
    "SES-019",
    "PAY-020",
-   "UX-032"
+   "UX-031"
   ]
  },
  {
@@ -8534,6 +8570,9 @@
     1,
     "recovery-successor-bound"
    ]
+  ],
+  "families": [
+   "UX-029"
   ]
  },
  {
@@ -9118,7 +9157,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "TX-013"
+   "TX-013",
+   "UX-026"
   ]
  },
  {
@@ -9200,7 +9240,8 @@
   "oracle": "behaviour",
   "interpretation": "'Should tell an operator plainly' is a reference-client commitment; the test asserts only that the count is derivable and displayed, and leaves any policy discount unspecified.",
   "families": [
-   "TOP-003"
+   "TOP-003",
+   "UX-005"
   ]
  },
  {
@@ -9637,7 +9678,10 @@
   "when": "The requester sends R a ResolveRequest with subject R, anchor R and the empty path.",
   "then": "The reply has field 2 = 0 and a ServingInfra naming R with an empty path field, and the requester treats R itself as the addressed party.",
   "oracle": "fixture",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "UX-014"
+  ]
  },
  {
   "id": "RES-10",
@@ -10591,7 +10635,10 @@
   "when": "The client follows the sweep.",
   "then": "The client asks H for that type at most once more, marks H's portion of its view truncated, and stops.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "UX-011"
+  ]
  },
  {
   "id": "RSC-24",
@@ -10619,7 +10666,9 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "GAT-034"
+   "GAT-034",
+   "UX-010",
+   "UX-011"
   ]
  },
  {
@@ -11036,7 +11085,11 @@
   "when": "The client browses, and each reply the node answers with is taken.",
   "then": "The unfiltered query goes out first, entries are verified under their owners and kept in the portion for the node that served them, and a continuation is asked for once per type until the portion is complete. A client attached to nobody posts nothing. A reply under a nonce no sweep sent is not taken and leaves the query outstanding for the honest one.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "UX-011",
+   "UX-018"
+  ]
  },
  {
   "id": "RSC-40",
@@ -15206,7 +15259,8 @@
   "oracle": "behaviour",
   "interpretation": "A profile is a statement by its subject and the node checks that, not who the subject is to the subnet.",
   "families": [
-   "NET-029"
+   "NET-029",
+   "UX-015"
   ]
  },
  {
@@ -15265,7 +15319,10 @@
   "when": "It renders them.",
   "then": "The first is shown by alias and image, the second by keyhash; its own alias is published per subnet at attach and on change and appears in no record.",
   "oracle": "behaviour",
-  "interpretation": "The alias is display only and the keyhash is what a counterparty pinned."
+  "interpretation": "The alias is display only and the keyhash is what a counterparty pinned.",
+  "families": [
+   "UX-015"
+  ]
  },
  {
   "id": "PRD-15",
@@ -15292,7 +15349,10 @@
   "when": "It invites a party to be adopted, and the party reads the brief.",
   "then": "The inviter is asked which subnet by its label, the patron's alias there and the subnet's; the invited party's brief states that label; the operator's screen lists the one instance under its subnet and offers none for the other.",
   "oracle": "behaviour",
-  "interpretation": "An operator in one subnet is an ordinary light client in the next."
+  "interpretation": "An operator in one subnet is an ordinary light client in the next.",
+  "families": [
+   "UX-016"
+  ]
  },
  {
   "id": "PRD-16",
@@ -15319,7 +15379,10 @@
   "when": "The inviter ticks the box and shows its code; the other reads the brief and accepts; the record finalises. Then a second meeting with the box left clear.",
   "then": "The brief the other person reads names the peering and what it entitles them to, before anything is signed; after the record the peering is made without either being asked again, the lower keyhash building the body and the other sending its back-pointers; both end holding it. The adoption's own section is unaffected whichever way it went — a meeting carries a peering, an adoption, both or neither. The second meeting says nothing of a peering anywhere and makes none. A refusal is shown with its reason and leaves the record standing.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "UX-019"
+  ]
  },
  {
   "id": "TOP-51",
@@ -15381,7 +15444,8 @@
   "families": [
    "NET-031",
    "NET-030",
-   "TX-013"
+   "TX-013",
+   "UX-019"
   ]
  },
  {
@@ -15441,7 +15505,10 @@
   "when": "Its administration surface is fetched; a renewal is signed from the end it reports; and a credential straddling hours already held is pushed.",
   "then": "The fetch names how many credentials are held and when the run ends; the renewal is taken and the reported end moves by the renewal's own windows; the straddling credential is refused with its reason, while the identical window re-sent is still taken once.",
   "oracle": "behaviour",
-  "interpretation": "A renewal is about the credential alone: neither §4.4 record is re-signed [author, 2026-10-16]."
+  "interpretation": "A renewal is about the credential alone: neither §4.4 record is re-signed [author, 2026-10-16].",
+  "families": [
+   "UX-017"
+  ]
  },
  {
   "id": "DEC-37",
@@ -15495,7 +15562,8 @@
   "interpretation": "",
   "families": [
    "CER-002",
-   "NET-032"
+   "NET-032",
+   "UX-020"
   ]
  },
  {
@@ -15595,7 +15663,8 @@
   "oracle": "behaviour",
   "interpretation": "",
   "families": [
-   "TX-002"
+   "TX-002",
+   "UX-025"
   ]
  },
  {
@@ -15653,7 +15722,10 @@
   "when": "The ceremony begins and the two codes cross.",
   "then": "Each reachable nominee is engaged before the code is shown, the unreachable one is retried while its binding is fetched, and the person is told how many of the nominated are watching. As the codes cross, each nominee receives the exchange's shape — both block counts, then each part as it lands and each part the other display acknowledges — one message per event and never the content.",
   "oracle": "behaviour",
-  "interpretation": "A device run shows the nominee's diagnostics spread across the exchange rather than batched at its end; the kernel's own entries (CER-67) assert the ordering."
+  "interpretation": "A device run shows the nominee's diagnostics spread across the exchange rather than batched at its end; the kernel's own entries (CER-67) assert the ordering.",
+  "families": [
+   "UX-020"
+  ]
  },
  {
   "id": "PRD-18",
@@ -15695,7 +15767,10 @@
   "when": "Each meeting reaches its end screen.",
   "then": "The first states how many attested and how the nominated_by split fell; the second says so and that this side's own nominees are absent from it; the third says nobody witnessed it and that the record says so permanently. None of the three is presented as a fault.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "UX-020"
+  ]
  },
  {
   "id": "PRD-20",
@@ -15722,7 +15797,10 @@
   "when": "It attaches, and attaches again.",
   "then": "Each attach carries its profile for that subnet signed at a counter above the one it carried before, so a node holding the earlier one replaces it rather than refusing it.",
   "oracle": "behaviour",
-  "interpretation": "Resending the held bytes unchanged satisfies \"at attach\" and not \"at a higher counter\"; the node's rule makes the second reading the only one that attaches twice."
+  "interpretation": "Resending the held bytes unchanged satisfies \"at attach\" and not \"at a higher counter\"; the node's rule makes the second reading the only one that attaches twice.",
+  "families": [
+   "UX-015"
+  ]
  },
  {
   "id": "PRD-21",
@@ -15753,7 +15831,10 @@
   "when": "It is read; and read at a version this client does not know, with a field missing, repeated or malformed, with a label of more than one line, with an image reference that reads as a flag, with a manifest that is not text or is over the bound, longer than the bound as a whole, and carrying a resource, an owner or a key.",
   "then": "An offering composes and reads back unchanged, the manifest's every byte among it, and reads the same with whitespace around it as a code gives it; the version is checked before any field, a version this client does not read refused with the words that a newer client will read it; each malformed or missing field is refused naming the field, a repeated field refused rather than resolved, and an over-long offering refused unread; a port is optional; and a resource, an owner, an instance or a key is not a field this format has, an offering naming one being read without it.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "UX-023"
+  ]
  },
  {
   "id": "PRD-22",
@@ -15784,7 +15865,10 @@
   "when": "It is read; read at a vocabulary this client does not know, with a parameter kind it does not draw and with a credential it does not know how to bring; a bounce from the node's page is taken, carrying a field the act does not declare and a credential field; each declared bound is answered inside and outside its range; and an act carrying a set is sent.",
   "then": "The declaration reads back with each act's subject, what the client must bring and every kind's own bounds; a vocabulary this client does not read is said rather than drawn; an act with an undrawable kind or an unknown credential is refused whole with the words that a newer client will make it, while the acts it does understand stay drawable; a bounce names only an act whose name is a name, and its query fills only the fields the act declares — a credential field never among them; each declared bound is checked before the act is sent; and a set reaches the instance as one field per value, an empty field being left out rather than sent empty.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "UX-023"
+  ]
  },
  {
   "id": "PRD-23",
@@ -15818,7 +15902,10 @@
   "when": "The surface answers; it does not and nothing else does either, inside the window and past it; and it does not while the ssh port does, at every elapsed time.",
   "then": "A surface that answers is no silence. Nothing answering inside the window is said to be still coming, naming the engine install and the image pull it is waiting for and calling nothing a failure. Nothing answering past the window is the machine rather than the node. **The ssh port answering settles it at any elapsed time**: the machine is up and the node did not start, so the wait ends rather than running out. That verdict names the three causes in the order they happen — the image not pulled, the configuration refused, the container started and exited — asserts none of them, says the machine's own log is where the truth is with the command that reads it and that this client cannot, names the machine and its provider since each verdict ends in a choice about it, and is kept as the instance's own label so an operator who looked away still finds it.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "UX-024"
+  ]
  },
  {
   "id": "RSC-43",
@@ -16403,7 +16490,10 @@
   "when": "Its declaration is read, read again after a grant is made, and acts are invoked by name on the one route — including one it does not declare; and its own page is read.",
   "then": "The declaration names the vocabulary's version; every act carries what it is about and what the client must bring, the acts reaching the machine naming the host key and the others nothing; no act declares a field for a credential; an act's declared parameter names are the fields the implementing route reads; a resource's acts carry the roles its package declared as a set and offer nothing to narrow until a grant stands, and carry the package's own declared operations in the same shape; invoking a declared act by name is taken and an undeclared name is refused with the declaration and the version named; the page carries no form at all, each act appearing as a control in this client's scheme with the resource and the grant's place as hints; the page's list is drawn from the same declaration a client reads; and the declaration and an invocation are each authorised as any act is — by the loopback or by a proof.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "UX-023"
+  ]
  },
  {
   "id": "DMN-41",
@@ -16502,7 +16592,10 @@
   "when": "The cost of leaving the patron is asked for.",
   "then": "The patron's resource is named as lost, with the node it was reached through and the reason that node leaves the horizon; a resource whose host stays in view and whose owner goes is lost for that reason instead, which is a different thing to be told. Both counts are by resource and not by entry: a resource another node in view still serves is kept, and goes only when the last way to it closes. The answer is computed on demand from the copy the client already holds and retained nowhere.",
   "oracle": "behaviour",
-  "interpretation": "§6 names the resources an ending revokes, and a resource is revoked when no way to it survives. Counting entries would report the loss of one of several hosts as the loss of the resource, which is the one error a warning cannot afford: it is read as a reason not to act."
+  "interpretation": "§6 names the resources an ending revokes, and a resource is revoked when no way to it survives. Counting entries would report the loss of one of several hosts as the loss of the resource, which is the one error a warning cannot afford: it is read as a reason not to act.",
+  "families": [
+   "UX-006"
+  ]
  },
  {
   "id": "RSC-54",
@@ -16529,7 +16622,10 @@
   "when": "The cost of leaving is asked for.",
   "then": "The list is still given, and every reason it is a floor is given with it: the stale portion, the truncated one, the unswept node, and that access is a resource's own predicate which this client holds none of. A host still in view may refuse once the line is gone, so a list without that limit beside it would read as the whole cost.",
   "oracle": "behaviour",
-  "interpretation": "§6 requires the warning, not a claim of completeness. A client holds no predicate and cannot evaluate one, so the honest answer is a lower bound stated as a lower bound; a stale portion shown as stale is the same obligation read from the other side, and is why a partial answer is still worth giving."
+  "interpretation": "§6 requires the warning, not a claim of completeness. A client holds no predicate and cannot evaluate one, so the honest answer is a lower bound stated as a lower bound; a stale portion shown as stale is the same obligation read from the other side, and is why a partial answer is still worth giving.",
+  "families": [
+   "UX-006"
+  ]
  },
  {
   "id": "RSC-55",
@@ -16551,7 +16647,10 @@
   "when": "The cost of leaving that other party is asked for.",
   "then": "It is refused by the same name the departure itself is refused by, rather than answered with a cost of nothing. A figure shown for a change that would not happen is worse than no figure: the person reads it as the price of an act they cannot perform.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "UX-006"
+  ]
  },
  {
   "id": "RSC-56",
@@ -16578,7 +16677,10 @@
   "when": "A client reads it to decide what to show.",
   "then": "The application's own status, the declared media type lower-cased without its parameters, and the charset are taken from the message; `text/html` is a page and `text/plain` is not; every other declared type and every absent declaration is named rather than rendered, so the same markup is a page when declared one and is not when declared nothing. A chunked body is joined and a body with neither length nor encoding is what remains.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "UX-018"
+  ]
  },
  {
   "id": "RSC-57",
@@ -16605,7 +16707,10 @@
   "when": "The client parses it.",
   "then": "It is refused by name rather than normalised: a line not terminated by CRLF, a folded header, a duplicated content-length, a content-length beside a transfer-encoding, an encoding other than chunked, a chunk size carrying an extension, a trailer section, bytes after the declared body, fewer bytes than declared. Nothing of a refused message is shown, and the reason is given to the person rather than a guess at the content.",
   "oracle": "behaviour",
-  "interpretation": "§11.2's requirements are written for the node, in the request direction. The hazard they close is a property of a boundary rather than of a direction, and §11 has the node parse and re-serialise the response on the same reasoning — so the client's half of the rule is to refuse what reaches it ambiguous, which also reports a node that did not do its own half."
+  "interpretation": "§11.2's requirements are written for the node, in the request direction. The hazard they close is a property of a boundary rather than of a direction, and §11 has the node parse and re-serialise the response on the same reasoning — so the client's half of the rule is to refuse what reaches it ambiguous, which also reports a node that did not do its own half.",
+  "families": [
+   "UX-018"
+  ]
  },
  {
   "id": "RSC-58",
@@ -16861,7 +16966,8 @@
   "oracle": "behaviour",
   "interpretation": "",
   "families": [
-   "TX-027"
+   "TX-027",
+   "UX-022"
   ]
  },
  {
@@ -16994,7 +17100,8 @@
   "interpretation": "",
   "families": [
    "GAT-015",
-   "GAT-033"
+   "GAT-033",
+   "UX-010"
   ]
  }
 ]

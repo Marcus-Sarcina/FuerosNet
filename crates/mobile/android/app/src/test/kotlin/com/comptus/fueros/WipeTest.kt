@@ -13,6 +13,7 @@ import org.junit.Test
  */
 class WipeTest {
 
+    // functional: UX-027
     @Test
     fun every_store_the_shell_writes_is_on_the_list() {
         // **a half-wiped device reads as clean**, so this is checked
@@ -70,6 +71,7 @@ class WipeTest {
         assertEquals("and that directory is still the one a wipe clears", "kernel", Wipe.KERNEL_DIR)
     }
 
+    // functional: UX-027
     @Test
     fun the_warning_says_what_goes_what_cannot_come_back_and_what_a_new_one_is() {
         val said = Wipe.words()
@@ -83,6 +85,7 @@ class WipeTest {
         assertTrue("and a backup for the history: ${said[1]}", said[1].contains("backup file"))
     }
 
+    // functional: UX-027
     @Test
     fun the_new_identity_is_described_as_new_and_not_as_a_loss_of_status() {
         // **PRD-03's unlinked half, in the shape the entry asks for**: the
@@ -98,6 +101,7 @@ class WipeTest {
         }
     }
 
+    // functional: UX-027
     @Test
     fun the_confirmation_names_the_act_rather_than_asking_again() {
         val c = Wipe.confirm()
@@ -110,6 +114,7 @@ class WipeTest {
         assertFalse("does not ask `are you sure`: $c", c.lowercase().contains("are you sure"))
     }
 
+    // functional: UX-027
     @Test
     fun a_wipe_that_could_not_finish_says_so_and_a_clean_one_says_nothing() {
         assertNull("nothing to say when it all went", Wipe.left(listOf()))

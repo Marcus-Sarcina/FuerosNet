@@ -14,6 +14,7 @@ class ColoursTest {
     private fun id(n: Int) = "%064x".format(n)
     private fun held(vararg n: Int) = n.map { Identities.Held(id(it), "s$it", null) }
 
+    // functional: UX-032
     @Test
     fun a_new_identity_takes_the_first_colour_no_identity_uses() {
         val one = Identities.assigned(emptyMap(), held(1))
@@ -50,6 +51,7 @@ class ColoursTest {
         assertEquals(Palette.IDENTITY.size, Palette.IDENTITY.map { it.second }.toSet().size)
     }
 
+    // functional: UX-032
     @Test
     fun what_the_focus_changes_wears_its_colour() {
         val shell = source("ShellActivity.kt")

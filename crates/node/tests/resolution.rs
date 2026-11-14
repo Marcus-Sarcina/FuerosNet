@@ -1186,6 +1186,7 @@ fn a_thiefs_seal_freezes_a_chainless_holders_entry_and_nothing_moves_it_afterwar
     assert_eq!(store.in_series(&kh("alice"), 5).unwrap().bytes, thief);
 }
 
+// functional: UX-021
 /// **What a node counts beneath itself, which is what its anchor entry
 /// claims** (`NodeView::subtree_seen`; design §12.2's subtree size;
 /// `infra-client-requirements.md` §4.4): the downline over open bindings,

@@ -107,6 +107,7 @@ class FrontTest {
 
     // ---- the conversation model ----------------------------------------
 
+    // functional: UX-012
     @Test
     fun messages_carry_their_sender_and_incoming_is_not_mine() {
         val front = Front()
@@ -121,6 +122,7 @@ class FrontTest {
         assertEquals("carol", msgs[1].who)
     }
 
+    // functional: UX-012
     @Test
     fun an_outgoing_message_is_sending_then_sent_never_delivered() {
         val front = Front()
@@ -134,6 +136,7 @@ class FrontTest {
         assertEquals(3, Front.Delivery.entries.size)
     }
 
+    // functional: UX-012
     @Test
     fun a_refused_send_is_unsent_and_carries_its_reason() {
         val front = Front()
@@ -144,6 +147,7 @@ class FrontTest {
         assertEquals("no session", m.reason)
     }
 
+    // functional: UX-012
     @Test
     fun the_direct_path_chip_is_status_only_and_defaults_off() {
         val front = Front()
@@ -162,6 +166,7 @@ class FrontTest {
      * older thread appeared in the newest one and went to that party. The
      * front was always able to say this; nothing had asked it to.
      */
+    // functional: UX-031
     @Test
     fun a_message_sits_in_the_thread_it_was_sent_on_and_in_no_other() {
         val front = Front()
@@ -227,6 +232,7 @@ class FrontTest {
      * model [author, 2026-11-11]: two identities on one device talking to
      * one party are two conversations, and neither sees the other's.
      */
+    // functional: UX-031
     @Test
     fun two_identities_with_one_peer_are_two_threads() {
         val front = Front()

@@ -428,6 +428,7 @@ fn the_application_secret_is_the_devices_and_survives_its_restart_but_not_a_back
     assert!(reader.application_secret.is_none());
 }
 
+// functional: UX-022
 #[test]
 fn a_result_is_bounded_by_the_message_bound_and_a_boundary_inside_a_part_is_redrawn() {
     let ask = parse(&ask_json("scan", "")).unwrap();

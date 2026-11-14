@@ -25,6 +25,7 @@ class BootstrapTest {
         assertEquals("Alice", own.alias)
     }
 
+    // functional: UX-016
     // acceptance: PRD-15
     @Test
     fun a_version_two_code_carries_the_subnet_and_both_aliases_as_claims() {
@@ -41,6 +42,7 @@ class BootstrapTest {
         assertEquals("Alice's Bowling League", claim.label("the other person"))
     }
 
+    // functional: UX-016
     @Test
     fun a_lone_root_names_no_subnet_and_the_label_says_so() {
         val code = Bootstrap.encode(me, 1, true, Meet.Scope.OWN)

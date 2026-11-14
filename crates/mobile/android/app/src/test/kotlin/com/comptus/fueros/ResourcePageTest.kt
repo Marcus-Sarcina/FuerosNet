@@ -74,6 +74,7 @@ class ResourcePageTest {
         )
     }
 
+    // functional: UX-018
     @Test
     fun an_answer_that_was_not_delivered_says_which_of_the_six_it_was() {
         for (s in 1..5) {
@@ -87,6 +88,7 @@ class ResourcePageTest {
         assertTrue(none.why, none.why.contains("did not carry"))
     }
 
+    // functional: UX-018
     @Test
     fun a_message_the_kernel_could_not_read_shows_none_of_it() {
         val said = (

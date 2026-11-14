@@ -37,6 +37,8 @@ class IdentitiesTest {
     private fun held(n: Int, scope: String? = null, alias: String? = null) =
         Identities.Held(id(n), scope, alias)
 
+    // functional: UX-028
+    // functional: UX-031
     @Test
     fun a_meeting_and_an_operator_action_take_the_active_one_and_nothing_else_does() {
         // **the whole of the rule** [author, 2026-11-07]: "Concurrent for
@@ -131,6 +133,7 @@ class IdentitiesTest {
         assertEquals(Identities.Migration.None, Identities.migrated(true, "nope", none))
     }
 
+    // functional: UX-030
     @Test
     fun a_device_holding_any_identity_always_has_one_that_acts() {
         val two = listOf(held(1), held(2))
@@ -142,6 +145,7 @@ class IdentitiesTest {
         assertNull("and nothing where nothing is held", Identities.active(listOf(), id(1)))
     }
 
+    // functional: UX-028
     @Test
     fun the_list_names_each_one_and_marks_the_one_that_acts() {
         val two = listOf(held(1, null, "Marcus"), held(2))
@@ -223,6 +227,7 @@ class IdentitiesTest {
         )
     }
 
+    // functional: UX-030
     @Test
     fun one_identity_comes_off_and_three_cases_refuse() {
         val two = listOf(held(1, "aa".repeat(32), "Marcus"), held(2, "bb".repeat(32)))
@@ -256,6 +261,7 @@ class IdentitiesTest {
         assertTrue("and what does not: $said", said.contains("other identities here are"))
     }
 
+    // functional: UX-028
     @Test
     fun the_nameplate_opens_the_list_and_the_kernel_adds_rather_than_replaces() {
         // **the drawing a JVM test cannot reach**, as `InsetSweepTest` and
@@ -449,6 +455,8 @@ class IdentitiesTest {
         )
     }
 
+    // functional: UX-029
+    // functional: UX-030
     @Test
     fun a_rotation_makes_a_new_identity_and_owes_the_old_one_a_departure() {
         // **the drawing and the kernel's own flow a JVM test cannot run**,
@@ -495,6 +503,8 @@ class IdentitiesTest {
         )
     }
 
+    // functional: UX-028
+    // functional: UX-031
     @Test
     fun viewing_is_every_identity_s_and_a_meeting_is_the_active_one_s() {
         // **the division, pinned in both directions** [author,

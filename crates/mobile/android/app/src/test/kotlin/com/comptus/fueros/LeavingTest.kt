@@ -242,6 +242,7 @@ class LeavingTest {
     /** The author's ruling of 2026-10-28: show the alias here. Both,
      *  though — an alias is what somebody signed about themselves, and
      *  the act is not undoable. */
+    // functional: UX-015
     @Test
     fun a_party_is_named_by_the_alias_and_the_keyhash_together() {
         assertEquals("Rosa, a3f21c081234…", Leaving.party(patronKey, "Rosa"))
@@ -252,6 +253,7 @@ class LeavingTest {
         )
     }
 
+    // functional: UX-015
     @Test
     fun a_party_who_published_no_name_is_shown_by_the_keyhash_alone() {
         assertEquals("a3f21c081234…", Leaving.party(patronKey, null))

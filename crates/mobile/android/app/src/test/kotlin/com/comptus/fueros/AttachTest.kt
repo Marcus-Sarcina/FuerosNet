@@ -66,6 +66,7 @@ class AttachTest {
         assertTrue(Attach.roll(listOf(uniffi.rhtn_model.Instance(key.unhex(), emptyList()))).contains("no address held"))
     }
 
+    // functional: UX-012
     @Test
     fun the_status_bar_keeps_the_kernels_words_and_says_the_line_is_a_door() {
         val bar = Attach.statusLine("detached · presents 5046da37…\npayload: the Double Ratchet")

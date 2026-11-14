@@ -23,6 +23,7 @@ class CatalogTest {
             stale = stale,
         )
 
+    // functional: UX-018
     @Test
     fun an_entry_names_its_type_instance_owner_and_the_node_that_served_it() {
         assertEquals(
@@ -31,6 +32,8 @@ class CatalogTest {
         )
     }
 
+    // functional: UX-011
+    // functional: UX-018
     @Test
     fun a_truncated_or_stale_portion_is_said_and_never_smoothed_over() {
         assertTrue(Catalog.line(offered(truncated = true)).endsWith("— more than this held"))
@@ -51,6 +54,7 @@ class CatalogTest {
      * this shell reading one; the kernel reads it now, so what is
      * quoted here is what the kernel found.
      */
+    // functional: UX-018
     @Test
     fun each_of_the_six_statuses_is_said_in_words_and_what_was_read_is_quoted() {
         assertEquals("delivered", said(0UL))

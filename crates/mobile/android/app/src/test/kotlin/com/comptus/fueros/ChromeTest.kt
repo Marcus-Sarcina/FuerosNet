@@ -87,6 +87,8 @@ class ChromeTest {
         )
     }
 
+    // functional: UX-012
+    // functional: UX-015
     @Test
     fun an_orbs_mark_is_the_published_name_or_the_keyhash_and_never_a_guess() {
         assertEquals("Al", Chrome.mark("Allotments", sub))
@@ -127,6 +129,7 @@ class ChromeTest {
         assertEquals("Meet somebody", Chrome.said(Chrome.Rung.Meet))
     }
 
+    // functional: UX-015
     @Test
     fun the_foot_carries_a_name_where_one_was_published_and_a_keyhash_otherwise() {
         assertEquals("Marcus" to "home", Chrome.foot("Marcus", sub))
@@ -140,6 +143,7 @@ class ChromeTest {
      * a theoretical attack, not an intended feature of the network."* So
      * what is asked is how many patrons there are, and nothing else.
      */
+    // functional: UX-005
     // acceptance: PRD-04
     @Test
     fun a_second_patron_is_suggested_while_one_is_held_and_not_otherwise() {
@@ -151,6 +155,7 @@ class ChromeTest {
         assertFalse(Chrome.suggestingSecondPatron(7))
     }
 
+    // functional: UX-005
     // acceptance: PRD-04
     @Test
     fun the_suggestion_says_what_a_single_patron_costs() {
