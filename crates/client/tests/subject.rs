@@ -177,6 +177,8 @@ fn the_aggregate_is_a_lock_for_the_window_and_nothing_after() {
     );
 }
 
+// functional: VER-002
+// functional: VER-005
 #[test]
 fn consent_is_bound_to_the_window_the_subject_and_the_ceremonys_one_profile() {
     let me = id("alice");
@@ -229,6 +231,7 @@ fn consent_is_bound_to_the_window_the_subject_and_the_ceremonys_one_profile() {
     );
 }
 
+// functional: VER-015
 #[test]
 fn a_response_copy_is_held_only_for_a_consented_query_under_its_verifier() {
     let me = id("alice");

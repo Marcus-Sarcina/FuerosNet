@@ -243,6 +243,7 @@ fn an_own_introduction_is_taken_by_another_and_held_with_its_locator() {
     );
 }
 
+// functional: RES-002
 // functional: TOP-042
 /// **Taking an introduction is the one way a party arrives without a
 /// meeting** (`wire-format.md` §2.3; design §12.3 Case 0, where the

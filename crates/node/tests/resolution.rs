@@ -831,6 +831,7 @@ fn state_digest(v: &NodeView) -> Vec<u8> {
     out
 }
 
+// functional: RES-009
 /// Not a catalogue entry: a node with no published endpoint record cannot be
 /// reached past a resolution, and says so rather than emitting a serving
 /// answer the schema rejects.

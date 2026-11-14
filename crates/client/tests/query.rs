@@ -8,6 +8,8 @@ use rhtn_client::query::*;
 use rhtn_codec::cbor::*;
 use rhtn_crypto::verify;
 
+// functional: VER-001
+// functional: VER-002
 #[test]
 fn the_worked_query_and_its_frame_decode_and_the_consent_verifies() {
     // the standalone query fixture: its id recomputes; it is the recovery
@@ -54,6 +56,8 @@ fn the_worked_query_and_its_frame_decode_and_the_consent_verifies() {
     ));
 }
 
+// functional: VER-009
+// functional: VER-017
 #[test]
 fn the_grant_and_the_late_response_decode_and_round_trip() {
     let g = KeyGrant::decode(&fixture("P-e2e-01")).unwrap();
@@ -82,6 +86,7 @@ fn the_grant_and_the_late_response_decode_and_round_trip() {
     assert_eq!(l.encode(), fixture("P-e2e-02"));
 }
 
+// functional: VER-014
 #[test]
 fn a_response_signed_here_reads_back_and_verifies_like_the_records() {
     // every response the normal record carries reads and verifies

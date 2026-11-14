@@ -21816,3 +21816,25 @@ neither, and said so**: UX-013 (an E row: walking the real application on
 each platform with permission denials and a screen reader is a programme,
 not a test; `FrameIsolationTest` under androidTest is the one instrumented
 walk and it holds RSC-58). Figure: 575 live, 250 held, 325 by neither; UX 1.
+
+**The remaining prefixes, first group — CUR, RES, REC, VER — linked,
+2026-11-14 [author: "Link all remaining prefixes to their tests"].**
+CUR by the CUR entries with QUE-14/16 and ARC-15 (the role-3 down-line
+attestation, CUR-001/009, has no test; the P rows 007 and 009 hold their
+testable clauses); RES by the RES entries with CER-72, TOP-48, TRN-03,
+DMN-18, PRP-19 and two unmarked node tests; REC by the REC entries with
+TOP-15/16, CUR-04/07, QUE-14/16, ARC-11/14/15/23 and CER-42 (REC-008, a P
+row, has ARC-14's known-counterparty weighting alone; REC-011, an O row,
+has ARC-15's notification, which is implemented; REC-012's thin-set
+weighing against the claimed count is asserted by nothing); VER by the
+CER verifier entries with TRN-20 and REC-04 and six unmarked tests in
+`client/tests/{query,subject,verifier}.rs` (VER-006, a P row, has CER-25's
+per-requester limit and no distributed combination; VER-013's legacy
+engine has no test). **Held by neither, and said so**: RES-014 (explicit
+lifetimes and negative caching; nothing expires), RES-015 (resolving only
+for a need; no test asserts a browse resolves nothing), RES-016 (a light
+client driving the descent against any infra node it holds an address for;
+the two sim resolutions are the node's, run on the client's behalf, and
+RES-07 routes through the serving node — the row's 2026-10-05 restatement
+has no test and, as far as read, no client code path). Figure: 575 live,
+305 held, 270 by neither; CUR 0, REC 0, VER 0, RES 3.

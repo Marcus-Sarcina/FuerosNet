@@ -348,7 +348,8 @@
   "oracle": "behaviour",
   "interpretation": "Re-derived 2026-09-21 to the frontier form.",
   "families": [
-   "ARC-016"
+   "ARC-016",
+   "REC-010"
   ]
  },
  {
@@ -454,7 +455,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "TX-003"
+   "TX-003",
+   "REC-008"
   ]
  },
  {
@@ -482,7 +484,11 @@
   "when": "I issues the currency query to both and receives both attestations.",
   "then": "I's result for X reports a fork: both attestations are retained and neither is silently chosen as X's current key. I sends a notification to P1 and a notification to P2.",
   "oracle": "behaviour",
-  "interpretation": "No notice object exists and none is coming [author, 2026-10-16]: every node on the rootward path sees the same divergence, and an artefact would not compel a malicious one to speak (design §9.0.2). The test observes that a message is sent to each patron and checks neither its content nor its encoding."
+  "interpretation": "No notice object exists and none is coming [author, 2026-10-16]: every node on the rootward path sees the same divergence, and an artefact would not compel a malicious one to speak (design §9.0.2). The test observes that a message is sent to each patron and checks neither its content nor its encoding.",
+  "families": [
+   "CUR-010",
+   "REC-011"
+  ]
  },
  {
   "id": "ARC-16",
@@ -756,7 +762,8 @@
   "oracle": "behaviour",
   "interpretation": "The KEK is derived from the identity root and never written; what the blob carries is the wrapped data key and the header needed to derive the KEK again, which is the standard envelope construction §13.7.1 names. The identity itself is not in the blob: it is what opens it.",
   "families": [
-   "ARC-006"
+   "ARC-006",
+   "REC-010"
   ]
  },
  {
@@ -1267,7 +1274,13 @@
   "when": "A KeyGrant from A naming that record and a query_id B has not seen arrives, and the bound elapses.",
   "then": "B opens nothing, answers nothing, and the grant is discarded when the bound elapses.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "VER-001",
+   "VER-004",
+   "VER-010",
+   "VER-011"
+  ]
  },
  {
   "id": "CER-11",
@@ -1293,7 +1306,12 @@
   "when": "B processes the three in order.",
   "then": "The grant from C is rejected and opens nothing; the first grant from A is used to answer; the third changes nothing and B's answer is not revised.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "VER-009",
+   "VER-010",
+   "VER-011"
+  ]
  },
  {
   "id": "CER-12",
@@ -1317,7 +1335,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "TX-025"
+   "TX-025",
+   "VER-012"
   ]
  },
  {
@@ -1349,7 +1368,12 @@
   "when": "B processes each.",
   "then": "Each stream is closed with no VerifierResponse sent, and no comparison is run for any of them.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "VER-002",
+   "VER-003",
+   "VER-004"
+  ]
  },
  {
   "id": "CER-14",
@@ -1378,7 +1402,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "NET-018"
+   "NET-018",
+   "VER-015"
   ]
  },
  {
@@ -1414,7 +1439,10 @@
   "interpretation": null,
   "families": [
    "CER-016",
-   "TX-025"
+   "TX-025",
+   "VER-012",
+   "VER-013",
+   "VER-014"
   ]
  },
  {
@@ -1446,7 +1474,10 @@
   "when": "A second consented query bound to P about S arrives carrying a different profile F2.",
   "then": "B rejects it and sends no second response about S for that ceremony; a query bound to P about the *other* participant is unaffected.",
   "oracle": "behaviour",
-  "interpretation": "Whether the subject's client also refuses to countersign a differing second profile is stated as a capability rather than a rule, so only the verifier side is asserted. The scope is the subject and not the ceremony [author, 2026-10-13]: a ceremony has two subjects and either participant may select the same verifier."
+  "interpretation": "Whether the subject's client also refuses to countersign a differing second profile is stated as a capability rather than a rule, so only the verifier side is asserted. The scope is the subject and not the ceremony [author, 2026-10-13]: a ceremony has two subjects and either participant may select the same verifier.",
+  "families": [
+   "VER-005"
+  ]
  },
  {
   "id": "CER-56",
@@ -1472,7 +1503,10 @@
   "when": "A consented query about S bound to a different pre-commitment Q arrives, from either querier and carrying any profile.",
   "then": "B refuses it; once the question bound to P is answered either way, a query bound to Q about S is taken.",
   "oracle": "behaviour",
-  "interpretation": "Concurrent pre-commitments probing one subject are the leakage the rule is for; successive ceremonies are untouched, each paying a full ceremony for its one probe [author, 2026-10-13]. An identical profile under another pre-commitment is still a second probe and is refused."
+  "interpretation": "Concurrent pre-commitments probing one subject are the leakage the rule is for; successive ceremonies are untouched, each paying a full ceremony for its one probe [author, 2026-10-13]. An identical profile under another pre-commitment is still a second probe and is refused.",
+  "families": [
+   "VER-005"
+  ]
  },
  {
   "id": "CER-17",
@@ -1508,7 +1542,8 @@
   "families": [
    "CER-001",
    "CER-004",
-   "UX-002"
+   "UX-002",
+   "VER-018"
   ]
  },
  {
@@ -1602,7 +1637,8 @@
   "interpretation": null,
   "families": [
    "CER-010",
-   "TX-022"
+   "TX-022",
+   "VER-015"
   ]
  },
  {
@@ -1732,7 +1768,11 @@
   "when": "A's client releases the capture key.",
   "then": "The KeyGrant is observed only on A's end-to-end path to B; no grant bytes appear on any path to C or to a witness.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "VER-009",
+   "VER-010"
+  ]
  },
  {
   "id": "CER-25",
@@ -1759,7 +1799,11 @@
   "when": "During W a requester exceeds the per-requester limit; after W closes the test inspects A's storage.",
   "then": "The excess query receives no grant, and after W no record of the requester or of the count remains.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "VER-006",
+   "VER-007"
+  ]
  },
  {
   "id": "CER-26",
@@ -1846,7 +1890,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "CER-016"
+   "CER-016",
+   "VER-008"
   ]
  },
  {
@@ -1877,7 +1922,11 @@
   "when": "The holder processes both, then later discards R.",
   "then": "R's bytes and txid are unchanged; the first LateResponse is held beside R and the second is rejected; after R is discarded the LateResponse is gone too.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "VER-016",
+   "VER-017"
+  ]
  },
  {
   "id": "CER-30",
@@ -1911,7 +1960,8 @@
   "oracle": "behaviour",
   "interpretation": "The documents route a query to its verifier's serving node and stop there; how that node carries it to a client attached over the wire is unwritten. The reference answers for the verifiers hosted in the node's own process, a node that is a participant for its own key and a light client beside it, and the subject's copy travels as a payload kind of the reference's own.",
   "families": [
-   "NET-018"
+   "NET-018",
+   "VER-011"
   ]
  },
  {
@@ -1938,7 +1988,10 @@
   "when": "The second request is rejected.",
   "then": "The pending request keeps its place, and the grant arriving for it still completes its stream within the buffer. The rejected request gets nothing.",
   "oracle": "behaviour",
-  "interpretation": "The requester is checked before the request touches state another request owns, and each registration is released only by the request that made it."
+  "interpretation": "The requester is checked before the request touches state another request owns, and each registration is released only by the request that made it.",
+  "families": [
+   "VER-003"
+  ]
  },
  {
   "id": "CER-32",
@@ -1964,7 +2017,10 @@
   "when": "The response is offered for the ceremony 6 record, and then one consented in ceremony 6 is.",
   "then": "The first is refused naming the ceremony and nothing is attached; the second is kept beside the record. A holder that keeps the record but cannot resolve its ceremony refuses too, and records the arrival with its verifier where the response verified.",
   "oracle": "behaviour",
-  "interpretation": "The arrival is recorded because a late response is a sign of the responder's reliability whatever became of it [author, 2026-09-12]; the bytes are not kept, since retention follows the record. A response that does not verify is not recorded, a forgery being no signal."
+  "interpretation": "The arrival is recorded because a late response is a sign of the responder's reliability whatever became of it [author, 2026-09-12]; the bytes are not kept, since retention follows the record. A response that does not verify is not recorded, a forgery being no signal.",
+  "families": [
+   "VER-017"
+  ]
  },
  {
   "id": "CER-33",
@@ -2333,7 +2389,8 @@
   "families": [
    "TX-007",
    "TX-008",
-   "TX-030"
+   "TX-030",
+   "REC-010"
   ]
  },
  {
@@ -2364,7 +2421,9 @@
   "oracle": "behaviour",
   "interpretation": "",
   "families": [
-   "NET-018"
+   "NET-018",
+   "VER-003",
+   "VER-015"
   ]
  },
  {
@@ -2778,7 +2837,11 @@
   "when": "S requests currency from P.",
   "then": "A CurrencyReply with code 0 carries an attestation whose field 1 is S, field 2 is k, field 5 is 0, field 6 is P, whose field 4 minus field 3 equals L, and whose COSE_Sign1 verifies under P's classical key with external_aad rhtn/1:currency.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CUR-001",
+   "CUR-002"
+  ]
  },
  {
   "id": "CUR-02",
@@ -2805,7 +2868,10 @@
   "when": "S requests currency from P again at t1 > t0.",
   "then": "The reply's attestation has field 3 later than A's field 3 and a signature different from A's. No message from P carries A's fields 1 to 3 with a later field 4.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CUR-007"
+  ]
  },
  {
   "id": "CUR-03",
@@ -2832,7 +2898,11 @@
   "when": "A CurrencyRequest naming S arrives at P.",
   "then": "Every attestation P issues for S afterwards carries k2 in field 2; none carries k1.",
   "oracle": "model",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CUR-002",
+   "CUR-008"
+  ]
  },
  {
   "id": "CUR-04",
@@ -2858,7 +2928,13 @@
   "when": "A CurrencyRequest naming X with nonce n arrives on an authenticated session.",
   "then": "A CurrencyReply is observed with field 1 equal to n, field 2 equal to 1 and field 3 absent.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CUR-002",
+   "CUR-005",
+   "CUR-006",
+   "REC-006"
+  ]
  },
  {
   "id": "CUR-05",
@@ -2899,7 +2975,11 @@
   "when": "Queued payload for S is available for delivery.",
   "then": "Delivery proceeds. An implementation that withholds routine payload until currency is refreshed fails.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CUR-003",
+   "CUR-010"
+  ]
  },
  {
   "id": "CUR-07",
@@ -2925,7 +3005,11 @@
   "when": "S attempts to attach under k1 and requests delivery.",
   "then": "No session is served under k1 and nothing is delivered under it; the unexpired staple does not restore service.",
   "oracle": "model",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CUR-008",
+   "REC-005"
+  ]
  },
  {
   "id": "CUR-08",
@@ -2952,7 +3036,11 @@
   "when": "S requests currency from P'.",
   "then": "A CurrencyReply with code 0 carries an attestation whose field 5 is 1, field 6 is P', and whose field 3 is fresh, signed by P'.",
   "oracle": "model",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CUR-001",
+   "CUR-009"
+  ]
  },
  {
   "id": "CUR-09",
@@ -2979,7 +3067,11 @@
   "when": "S requests currency from G.",
   "then": "A CurrencyReply with code 0 carries an attestation whose field 5 is 2 and field 6 is G, signed by G.",
   "oracle": "model",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CUR-001",
+   "CUR-009"
+  ]
  },
  {
   "id": "CUR-10",
@@ -3016,7 +3108,10 @@
   "when": "N is about to address X, and the staple it holds for X is stale.",
   "then": "N's first CurrencyRequest naming X is observed on its session toward I, and none toward X's patron unless I answers with code 1 or not at all.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CUR-005"
+  ]
  },
  {
   "id": "CUR-12",
@@ -3069,7 +3164,10 @@
   "when": "N evaluates the staple with its clock set before T, then with its clock set after T.",
   "then": "The staple is treated as current in the first case and as expired in the second, so the fallback query is sent only in the second.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CUR-007"
+  ]
  },
  {
   "id": "CUR-14",
@@ -3096,7 +3194,10 @@
   "when": "N proposes the adoption in each case.",
   "then": "The adoption body is produced in both cases, and no CurrencyRequest naming X precedes it. An implementation that withholds the adoption until a fresh staple arrives fails.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CUR-004"
+  ]
  },
  {
   "id": "CUR-15",
@@ -3123,7 +3224,10 @@
   "when": "S proposes a peering, and then a second one.",
   "then": "Both peering transactions are produced, and nothing about S's currency is asked of anyone first.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CUR-004"
+  ]
  },
  {
   "id": "CUR-16",
@@ -3154,7 +3258,10 @@
   "when": "The detectors settle, and a caller asks G for S's currency before and after the grandpatron's interval has elapsed on G's clock.",
   "then": "G's currency state holds P and P' dark since G's own clock, and S's holds P dark. G answers code 1 before the interval and issues a grandpatron attestation after it. A sibling issues only after its interval, and nobody issues for an outage shorter than the attestation lifetime.",
   "oracle": "behaviour",
-  "interpretation": "The design keys the table on outage duration in words, hours to days and days; the intervals are taken as the operator's numbers, the reference node using the attestation lifetime and two days."
+  "interpretation": "The design keys the table on outage duration in words, hours to days and days; the intervals are taken as the operator's numbers, the reference node using the attestation lifetime and two days.",
+  "families": [
+   "CUR-009"
+  ]
  },
  {
   "id": "CUR-17",
@@ -3181,7 +3288,10 @@
   "when": "Currency is issued twice with the clock advanced between them; the patron and its sibling are marked dark and the clock, not the view, advances by the grandpatron interval; a client asks the running node for currency at three clock readings.",
   "then": "Each attestation's issued_at is the clock's reading at issuance, and expires_at the lifetime past it; the outage stamp is the clock's reading; the grandpatron rung opens once the interval has elapsed on the clock; the running node's view reads the configured clock from start and each answer is issued at the reading current when asked. An implementation that stamps a value set at construction, or that a running node never advances, fails.",
   "oracle": "behaviour",
-  "interpretation": "The design fixes no clock source; the reference node reads one source for every time-dependent decision, its configuration's, and a test substitutes a controllable one."
+  "interpretation": "The design fixes no clock source; the reference node reads one source for every time-dependent decision, its configuration's, and a test substitutes a controllable one.",
+  "families": [
+   "CUR-007"
+  ]
  },
  {
   "id": "CUR-18",
@@ -3208,7 +3318,11 @@
   "when": "N asks about X's currency; P's attestation comes back; a reply naming no outstanding ask arrives; N asks again on the served session; the running N asks the running P.",
   "then": "The ask travels as one request toward P and nothing on stream 0, and is held by nonce; the reply settles it and the attestation becomes N's staple; the stray reply concludes nothing; on the served session nothing is sent and the ask is refused, since a light client answers no request stream; the running N's staple for X appears from P's answer on the request stream with no ask left open, and P cannot ask N. An implementation that writes a request as a stream-0 control frame fails.",
   "oracle": "behaviour",
-  "interpretation": "A request goes only up a session the node holds as the client; a party attached below cannot be asked, the light-client requirements asking no client to answer a request stream [author, 2026-09-11]."
+  "interpretation": "A request goes only up a session the node holds as the client; a party attached below cannot be asked, the light-client requirements asking no client to answer a request stream [author, 2026-09-11].",
+  "families": [
+   "CUR-005",
+   "CUR-006"
+  ]
  },
  {
   "id": "CUR-19",
@@ -3235,7 +3349,11 @@
   "when": "The party settles which key to address for X.",
   "then": "It addresses K, the key it holds by participant-authored evidence; the requirement resolves to proceed on K, and nothing in the decision re-points addressing to K'. An implementation that treats field 2 as the destination, addressing K', fails.",
   "oracle": "model",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CUR-004",
+   "CUR-012"
+  ]
  },
  {
   "id": "CUR-20",
@@ -3261,7 +3379,11 @@
   "when": "The relying party reads it as a staple for the subject in field 1.",
   "then": "It is accepted as a current staple, not rejected for the differing field 2: the object is the honest rotation-report and fork-signal form, so an implementation that requires field 2 to equal field 1, or that rejects the message, fails.",
   "oracle": "behaviour",
-  "interpretation": "The staple confirms currency of the queried key; the differing field 2 is a signal (CUR-19 fixes that it is not a redirect), never a ground for rejection."
+  "interpretation": "The staple confirms currency of the queried key; the differing field 2 is a signal (CUR-19 fixes that it is not a redirect), never a ground for rejection.",
+  "families": [
+   "CUR-010",
+   "CUR-011"
+  ]
  },
  {
   "id": "CUR-21",
@@ -3288,7 +3410,10 @@
   "when": "P's node issues a CurrencyAttestation for subject A and it is stapled to an introduction R receives.",
   "then": "Field 8 is present and equals D; field 7 verifies under k; R accepts the attestation as P's, having verified D under P's KeyMaterial and matched k to D's field 1, and addresses the key it holds for A by participant-authored evidence.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CUR-012"
+  ]
  },
  {
   "id": "CUR-22",
@@ -5030,7 +5155,10 @@
   "when": "Two adoptions are pushed into it over a session, a second process is then started as the subject of the first adoption, a resolution is requested for the party at the end of the path, and a further client attaches after every record has arrived.",
   "then": "It answers on the stream with the nonce it was asked with, and refers to the second process rather than serving for itself, because that process published an endpoint record and only infra nodes publish. The referral advances at least one nibble and names where to reach the next hop. The client that attached late is replayed the records it never saw arrive. A subject on a path it holds no record for is a stated failure rather than a hang or a silence.",
   "oracle": "behaviour",
-  "interpretation": "A session coming up is where the replay happens. The section also asks for a periodic reconciliation with siblings and patron, whose interval no document states; that half is not implemented."
+  "interpretation": "A session coming up is where the replay happens. The section also asks for a periodic reconciliation with siblings and patron, whose interval no document states; that half is not implemented.",
+  "families": [
+   "RES-004"
+  ]
  },
  {
   "id": "DMN-19",
@@ -7231,7 +7359,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "TOP-024"
+   "TOP-024",
+   "RES-010"
   ]
  },
  {
@@ -8315,7 +8444,11 @@
   "when": "N takes authenticated supersession evidence for C's binding: a verified reissue chain onto a new series, or a recovery it has validated.",
   "then": "N closes C's connection, and no payload or drain delivery reaches that session after the evidence was taken.",
   "oracle": "model",
-  "interpretation": "No close code is assigned for ending a session on supersession; the test checks that the connection is closed by N and not which code it carries."
+  "interpretation": "No close code is assigned for ending a session on supersession; the test checks that the connection is closed by N and not which code it carries.",
+  "families": [
+   "CUR-008",
+   "REC-005"
+  ]
  },
  {
   "id": "QUE-15",
@@ -8369,7 +8502,10 @@
   "when": "A client presenting K_new attaches to N.",
   "then": "N's AttachAck carries field 4 equal to 0 and no drain delivery carries any of the k ciphertexts.",
   "oracle": "model",
-  "interpretation": "That delivery is keyed by the queued recipient keyhash is the model's reading (tamarin/compliant/attach); the specification says nothing further goes to the superseded credential and does not say whether a successor collects material queued for its predecessor."
+  "interpretation": "That delivery is keyed by the queued recipient keyhash is the model's reading (tamarin/compliant/attach); the specification says nothing further goes to the superseded credential and does not say whether a successor collects material queued for its predecessor.",
+  "families": [
+   "REC-005"
+  ]
  },
  {
   "id": "QUE-17",
@@ -8572,7 +8708,10 @@
    ]
   ],
   "families": [
-   "UX-029"
+   "UX-029",
+   "REC-001",
+   "REC-002",
+   "REC-003"
   ]
  },
  {
@@ -8605,6 +8744,9 @@
     1,
     "recovery-successor-bound"
    ]
+  ],
+  "families": [
+   "REC-001"
   ]
  },
  {
@@ -8642,6 +8784,9 @@
     "verifier-auth-hybrid-in-recovery",
     "+"
    ]
+  ],
+  "families": [
+   "REC-002"
   ]
  },
  {
@@ -8675,7 +8820,11 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "TX-025"
+   "TX-025",
+   "REC-002",
+   "REC-003",
+   "REC-004",
+   "VER-018"
   ]
  },
  {
@@ -8747,7 +8896,8 @@
   ],
   "families": [
    "TX-015",
-   "TX-016"
+   "TX-016",
+   "REC-009"
   ]
  },
  {
@@ -8809,7 +8959,8 @@
   "families": [
    "ARC-014",
    "ARC-015",
-   "TX-015"
+   "TX-015",
+   "REC-012"
   ]
  },
  {
@@ -8902,7 +9053,10 @@
   "when": "The thief's locator reaches H first; S's locator in s at counter 6 arrives later.",
   "then": "H installs the thief's locator, rejects S's counter-6 locator, and no further record in s changes H's entry.",
   "oracle": "model",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "REC-012"
+  ]
  },
  {
   "id": "REC-12",
@@ -8928,7 +9082,10 @@
   "when": "O processes both.",
   "then": "O's binding for the identity is kX alone; kY is held as a distinct valid node and not as the continuation.",
   "oracle": "behaviour",
-  "interpretation": "Which patron an observer trusts is policy; the test fixes it and asserts that exactly one continuation results."
+  "interpretation": "Which patron an observer trusts is policy; the test fixes it and asserts that exactly one continuation results.",
+  "families": [
+   "REC-007"
+  ]
  },
  {
   "id": "REC-13",
@@ -8957,7 +9114,9 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "TOP-022"
+   "TOP-022",
+   "REC-006",
+   "REC-009"
   ]
  },
  {
@@ -9460,7 +9619,11 @@
   "when": "The node resolves a SignedLocator whose anchor is A and whose path leads to a subject beneath A.",
   "then": "A ResolveRequest is sent to an endpoint taken from the entry; the ResolveReply's Referral is followed to the next hop; at no point is A's key material fetched or a pin for A created, and the resolution still completes at the serving node.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "RES-007",
+   "RES-011"
+  ]
  },
  {
   "id": "RES-02",
@@ -9488,7 +9651,10 @@
   "when": "The node ingests both entries.",
   "then": "R2's entry is present in the anchor table and R1's is not; a locator anchored at R1 is reported unresolvable by this node while one anchored at R2 proceeds to a ResolveRequest.",
   "oracle": "behaviour",
-  "interpretation": "The quantity compared against n is AnchorEntry field 3 (subtree size), which the test reads as design §12.7.3's count of subordinates."
+  "interpretation": "The quantity compared against n is AnchorEntry field 3 (subtree size), which the test reads as design §12.7.3's count of subordinates.",
+  "families": [
+   "RES-011"
+  ]
  },
  {
   "id": "RES-03",
@@ -9511,7 +9677,11 @@
   "when": "The node is asked to resolve a valid SignedLocator anchored at A.",
   "then": "No ResolveRequest is emitted on any connection; the resolution result is reported as a caller-side condition distinct from every wire failure code.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "RES-002",
+   "RES-009"
+  ]
  },
  {
   "id": "RES-04",
@@ -9622,7 +9792,10 @@
   "when": "L resolves X.",
   "then": "L's only ResolveRequest is sent on its session with S; S sends a ResolveRequest to an endpoint of A and follows any referrals; L receives X's serving node and residual path from S and opens no connection to A.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "RES-003"
+  ]
  },
  {
   "id": "RES-08",
@@ -9650,7 +9823,11 @@
   "when": "S receives a ResolveRequest naming L, with the anchor and full anchor-relative path to L.",
   "then": "The reply has field 2 = 0 and a ServingInfra whose field 1 is S's keyhash and whose path field is the non-empty suffix identifying L beneath S; no request is forwarded to P.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "RES-003",
+   "RES-005"
+  ]
  },
  {
   "id": "RES-09",
@@ -9680,7 +9857,9 @@
   "oracle": "fixture",
   "interpretation": null,
   "families": [
-   "UX-014"
+   "UX-014",
+   "RES-001",
+   "RES-005"
   ]
  },
  {
@@ -9709,7 +9888,10 @@
   "when": "S receives a ResolveRequest whose path leads into C's subtree.",
   "then": "The reply has field 2 = 2 and a Referral whose field 1 is C's keyhash, whose field 2 is the endpoint list from C's record, and whose field 3 is at least 1; S opens no connection to C before replying.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "RES-003"
+  ]
  },
  {
   "id": "RES-11",
@@ -9731,7 +9913,10 @@
   "when": "N replies with field 2 = 2 and a Referral whose field 3 is 0.",
   "then": "The named next hop is not dialled and the reply is rejected as malformed.",
   "oracle": "behaviour",
-  "interpretation": "What the requester does after rejecting a malformed reply (retry at another endpoint of N, or report failure) is not stated; the test asserts only that the loop is not followed."
+  "interpretation": "What the requester does after rejecting a malformed reply (retry at another endpoint of N, or report failure) is not stated; the test asserts only that the loop is not followed.",
+  "families": [
+   "RES-004"
+  ]
  },
  {
   "id": "RES-12",
@@ -9763,7 +9948,11 @@
   "when": "The requester dials the listed endpoint.",
   "then": "The session is refused: the presented key is not the classical member of S's pinned KeyMaterial and nothing at the attach binds it to S, so no payload follows, and the result is reported as a failed contact with S, never as having reached S.",
   "oracle": "behaviour",
-  "interpretation": "Requoted 2026-09-21 to the three-way bind of wire-format.md §9.1; the expectation is unchanged, a refused session where nothing binds the key."
+  "interpretation": "Requoted 2026-09-21 to the three-way bind of wire-format.md §9.1; the expectation is unchanged, a refused session where nothing binds the key.",
+  "families": [
+   "RES-006",
+   "RES-007"
+  ]
  },
  {
   "id": "RES-13",
@@ -9785,7 +9974,10 @@
   "when": "The requester contacts S.",
   "then": "After the first endpoint fails the second is dialled, the handshake completes against S's pinned key, and the contact is reported as successful.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "RES-008"
+  ]
  },
  {
   "id": "RES-14",
@@ -9816,7 +10008,9 @@
   "interpretation": "The spec requires failure rather than referral and names codes 0 and 1 as the stale-locator outcomes; which of the two S returns is the test's reading, and either is accepted.",
   "families": [
    "TOP-007",
-   "TX-008"
+   "TX-008",
+   "RES-009",
+   "RES-010"
   ]
  },
  {
@@ -9845,7 +10039,10 @@
   "when": "C publishes a record with seqno [s, c+1] listing [E2, E1], and S then receives a ResolveRequest into C's subtree.",
   "then": "The Referral lists C's endpoints as [E2, E1], in the new record's order.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "RES-013"
+  ]
  },
  {
   "id": "RES-16",
@@ -9904,7 +10101,11 @@
   "when": "C publishes for A, for A again, for B, and for its second line; the restarted node starts.",
   "then": "The first record is at counter 1 and the position advances to 1; the second publication for A returns the held bytes and spends nothing; B takes counter 2, the position advances to 2, and the store takes the record as newer; the second line's record is at series 7 counter 1 with the primary line untouched. The restarted node's store holds its record at counter 2 for the new address, the position reads 2, and an unchanged republication replays those bytes. An implementation that publishes counter 1 at every start fails: on a restored store it collides with itself or publishes stale.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "RES-012",
+   "RES-013"
+  ]
  },
  {
   "id": "RES-18",
@@ -9931,7 +10132,10 @@
   "when": "Each is offered.",
   "then": "The slotless record is malformed whoever holds the key, and the failing signature is malformed under a held key, so neither is stored or forwarded; the failing record is stored as gossip only where the key is absent. The slotless anchor entry does not parse and the failing one is refused by the verifying table. An implementation that turns any verification error into an unavailable key fails.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "RES-012"
+  ]
  },
  {
   "id": "RES-19",
@@ -9954,7 +10158,10 @@
   "when": "The client makes one request of that node.",
   "then": "The dead address fails and the live one is tried in the same attempt; the request is answered and the work completes. No permanent failure is reported for a node that has a reachable address in its list.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "RES-008"
+  ]
  },
  {
   "id": "RSC-01",
@@ -12704,7 +12911,10 @@
   "when": "O verifies and applies the recovery adoption.",
   "then": "O's table answers K_new's patrons = {P}; K_old is no longer listed under P and is not a current key in O's table; O holds exactly one current key for the identity.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "REC-005"
+  ]
  },
  {
   "id": "TOP-16",
@@ -12726,7 +12936,10 @@
   "when": "O verifies and applies both adoptions, in each of the two orders.",
   "then": "O's table holds exactly one current key for the identity, K_a when O prefers P_a and K_b otherwise, the same one in both orders; both K_a and K_b are present as nodes under their own patrons.",
   "oracle": "behaviour",
-  "interpretation": "Independence from arrival order follows from resolving by patron trust rather than by arrival; no sentence states it."
+  "interpretation": "Independence from arrival order follows from resolving by patron trust rather than by arrival; no sentence states it.",
+  "families": [
+   "REC-007"
+  ]
  },
  {
   "id": "TOP-17",
@@ -13827,7 +14040,8 @@
   "oracle": "model",
   "interpretation": "Requoted 2026-09-21 to the three-way bind of wire-format.md §9.1; the expectation is unchanged, a refused session where nothing binds the key.",
   "families": [
-   "NET-002"
+   "NET-002",
+   "RES-006"
   ]
  },
  {
@@ -14342,7 +14556,10 @@
   "when": "Each connection proceeds.",
   "then": "A refuses the connection to B and sends no request on it. N does not attribute C's query to C: the query is rejected as from an unauthenticated requester, and no verifier answers it.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "VER-003"
+  ]
  },
  {
   "id": "TRN-21",
@@ -15168,7 +15385,8 @@
   "oracle": "behaviour",
   "interpretation": "The subnet is named by the locator and read by nobody who routes [author, 2026-10-15].",
   "families": [
-   "TOP-044"
+   "TOP-044",
+   "RES-001"
   ]
  },
  {
@@ -15228,7 +15446,8 @@
   "oracle": "behaviour",
   "interpretation": "The protocol names subnets and models nothing across them [author, 2026-10-15].",
   "families": [
-   "TOP-044"
+   "TOP-044",
+   "REC-009"
   ]
  },
  {
@@ -15694,7 +15913,8 @@
   "oracle": "behaviour",
   "interpretation": "",
   "families": [
-   "CER-029"
+   "CER-029",
+   "RES-001"
   ]
  },
  {

@@ -508,6 +508,7 @@ fn a_second_different_profile_within_one_ceremony_is_rejected() {
     assert!(v.awaiting().is_empty());
 }
 
+// functional: VER-005
 // acceptance: CER-16
 /// **A ceremony has two subjects, and one verifier may be asked about
 /// both.** The pre-commitment is one per ceremony and both parties

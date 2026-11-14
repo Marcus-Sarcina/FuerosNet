@@ -583,6 +583,7 @@ fn expiry_is_decided_against_the_relying_partys_own_clock() {
     assert_eq!(fab.request_count(REQUEST_CURRENCY), 1);
 }
 
+// functional: CUR-003
 /// Not a catalogue entry: the relying party places the issuer.  A staple
 /// signed by a party that does not stand where it claims for the subject
 /// establishes nothing, and one this node cannot place at all is not
