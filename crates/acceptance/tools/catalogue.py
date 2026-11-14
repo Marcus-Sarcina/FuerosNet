@@ -40,7 +40,9 @@ FIELDS = ["id", "area", "gap", "title", "milestone", "kind", "spec", "rule",
 # out rather than crossed from two lists, because an entry may check a rule
 # that binds on one type and not another and a cross product would claim
 # coverage nobody wrote.  `deferred` is why it cannot run yet.
-OPTIONAL = ["holds", "deferred"]
+# `families` lists the functional families (`functional_tests.md`) an entry
+# verifies, so the two registers are linked by id rather than by reading.
+OPTIONAL = ["holds", "deferred", "families"]
 # The six the wire defines, and 0 for a condition that binds whatever the
 # type — the envelope's shape, the COSE profile, the storage rule. Those
 # are checked before the type is looked at, so pairing them per type would
@@ -53,6 +55,10 @@ CITE_RE = re.compile(r"^(design|wire-format\.md|light-client-requirements\.md|"
                      r"(?:§([0-9]+(?:\.[0-9]+)*)|Appendix ([A-Z](?:\.[0-9]+)?))$")
 HEADING_RE = re.compile(r"^(#{1,6})\s+(?:Appendix\s+)?([0-9A-Z][0-9A-Za-z.]*)[\s.]")
 MARKER_RE = re.compile(r"acceptance:\s*([A-Z]{3}-\d{2})")
+# a test may name the functional family it holds directly
+FAMILY_MARKER_RE = re.compile(r"functional:\s*([A-Z]{2,4}-\d{3})")
+FAMILY_ROW_RE = re.compile(r"^\| ([A-Z]{2,4}-\d{3}) \| ([^|]*)\|", re.M)
+FUNCTIONAL = os.path.join(ROOT, "functional_tests.md")
 CONDITION_RE = re.compile(r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
 
 
@@ -114,5 +120,30 @@ def implemented_ids():
             if fn.endswith((".rs", ".kt", ".swift")):
                 p = os.path.join(dirpath, fn)
                 for m in MARKER_RE.finditer(open(p, encoding="utf-8").read()):
+                    found.setdefault(m.group(1), os.path.relpath(p, WORKSPACE))
+    return found
+
+
+def families():
+    """{family id: withdrawn?} for every numbered row of functional_tests.md."""
+    text = open(FUNCTIONAL, encoding="utf-8").read()
+    out = {}
+    for m in FAMILY_ROW_RE.finditer(text):
+        # a tombstone's second cell is the one dash (`Robot/countcheck.py`)
+        out[m.group(1)] = m.group(2).strip() == "—"
+    return out
+
+
+def family_markers():
+    """{family id: path} for every `functional: XXX-NNN` marker in a source."""
+    found = {}
+    for dirpath, dirnames, filenames in os.walk(WORKSPACE):
+        dirnames[:] = [d for d in dirnames if d != "target"]
+        if os.path.abspath(dirpath).startswith(os.path.abspath(TESTS_DIR)):
+            continue
+        for fn in filenames:
+            if fn.endswith((".rs", ".kt", ".swift")):
+                p = os.path.join(dirpath, fn)
+                for m in FAMILY_MARKER_RE.finditer(open(p, encoding="utf-8").read()):
                     found.setdefault(m.group(1), os.path.relpath(p, WORKSPACE))
     return found

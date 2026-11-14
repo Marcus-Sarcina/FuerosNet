@@ -21368,3 +21368,52 @@ per relation with versions and the migration), 6 (the FFI's `Refused`
 with a kind, the callerless exports pruned, `local-interfaces.md` carrying
 the data model), 7 (the registers linked), and the schema section in
 `light-client-requirements.md` the author placed there.
+
+**Restructure step 5 built, 2026-11-14 (gating).** The client's state at
+rest is six relations — `archive`, `store`, `payload`, `horizon`,
+`delegations`, `holder` — each `[version, body]`, written by
+`Client::durable_parts` and read by `restore_parts`; the one blob
+(`durable`/`restore_durable`) stays for the backups' shape and the
+migration, both readings sharing one `Parsed` so nothing lands before
+everything opened. The FFI's `save` fingerprints each relation and writes
+only those that changed (a contact held rewrites `store` and nothing
+else; a save with no change writes the sibling list alone); `open` reads
+the six, else the blob, migrating once and reducing the blob to a mark at
+the next clean start (`a_save_writes_only_the_relations_that_changed_and_the_one_blob_migrates_once`,
+`the_relations_hold_what_the_one_blob_held_and_a_missing_or_newer_one_refuses_whole`).
+Documents: light-client §9.0 (the schema, where the author placed it),
+APP-016 (575 families, APP 16). Seven tests that pinned the one blob's
+storage name now read the `payload` relation. **Not yet**: the vector per
+relation in `test-vectors/`, which the generator does not produce; owed
+with step 7. Seam scenario 61.9 s with the restart reading relations.
+
+**Restructure step 7 built, 2026-11-14: the registers linked.**
+`crates/acceptance/tools/check.py` now reads the functional families off
+`functional_tests.md` (the tombstone rule shared with `countcheck.py`:
+a second cell of one dash), an acceptance entry may list the `families` it
+verifies (an optional field; a name the functional register does not
+number is a flag), a test may carry `// functional: XXX-NNN` beside
+`// acceptance:`, and the report says how many live families are held by
+neither, by prefix. **First figure: 575 live families, 9 held by a test
+or an entry, 566 by neither** (APP 14, ARC 17, CAP 17, CAT 26, CER 31,
+CUR 12, ENC 13, GAT 41, INT 24, MAIL 27, NET 33, OPS 27, PAY 16, PKG 18,
+POL 22, REC 12, RES 16, SCH 27, SES 18, SIG 13, TOOL 7, TOP 46, TX 30,
+UX 30, VAL 11, VER 18). That is the "is it tested by reading" figure made
+a number; most of the 566 are held by tests that do not say so, and the
+linking is a pass of its own, one family at a time, not a claim to make
+in bulk. Linked so far: PRT-11 → SES-017, SES-019, PAY-020, UX-032;
+PAY-11 → PAY-020; PRT-01 → PAY-012; ARC-01 → ARC-001; markers on
+APP-015, APP-016, ARC-019.
+
+**Restructure step 6 built, 2026-11-14 (gating), smaller than the plan
+said, by measurement.** The review's "~50 callerless exports" was an
+estimate; counted against every caller (the shell, `rhtnp`, the sim,
+the boundary and conformance tests, the FFI itself, constructors by `::`
+included), 3 of 161 exported methods have none — `profiles`, `put_query`,
+`witness_window_s` — and are pruned; `package_offering_compose` has none
+and stays, exported on purpose for the applications repository. `Refused`
+keeps its one shape: the shell matches on a reason's text nowhere (the
+one match, `Leaving.kt`, is on a typed `LossReason`), so a kind would
+serve no reader; noted rather than built. The binding is regenerated.
+The gate on step 5 had failed on one unused import in a conformance test
+left by the pin change; fixed, and steps 5 to 7 gate together.

@@ -25,6 +25,8 @@ struct Shell {
     /// app-private storage a phone would give it, kept here so a second
     /// process can start from what the first wrote.
     store: Mutex<std::collections::BTreeMap<String, Vec<u8>>>,
+    /// Every write, by name, in order: what a save rewrote.
+    writes: Mutex<Vec<String>>,
     /// The storage key this platform keeps (`light-client-requirements.md`
     /// §9), beside the store for the same reason the store is here.
     custody: Mutex<Option<Vec<u8>>>,
@@ -57,6 +59,7 @@ impl Storage for Shell {
         self.store.lock().unwrap().get(&name).cloned()
     }
     fn write(&self, name: String, bytes: Vec<u8>) -> bool {
+        self.writes.lock().unwrap().push(name.clone());
         self.store.lock().unwrap().insert(name, bytes);
         true
     }
@@ -896,7 +899,7 @@ async fn a_kernel_restarts_from_the_storage_seam_with_its_session_and_its_queue_
     let alice = Arc::new(start("alice", Arc::new(Shell::default())).await.unwrap());
     let carol = Arc::new(start("carol", carol_shell.clone()).await.unwrap());
     assert!(
-        carol_shell.read("client".into()).is_none(),
+        carol_shell.read("payload".into()).is_none(),
         "nothing written before anything happened"
     );
     let attach = |p: Arc<Participant>, pop: Vec<Vec<u8>>| {
@@ -916,7 +919,7 @@ async fn a_kernel_restarts_from_the_storage_seam_with_its_session_and_its_queue_
         .unwrap()
         .expect("carol sweeps");
     let on_disk = carol_shell
-        .read("client".into())
+        .read("payload".into())
         .expect("an attach writes the state");
     assert!(
         rhtn_client::sealed::is_sealed(&on_disk),
@@ -964,7 +967,7 @@ async fn a_kernel_restarts_from_the_storage_seam_with_its_session_and_its_queue_
     drop(carol);
     // what the process left behind, exactly: a seal carries a fresh nonce
     // per write, so byte-equality is asserted across the restart alone
-    let written = carol_shell.read("client".into()).unwrap();
+    let written = carol_shell.read("payload".into()).unwrap();
     // meanwhile alice sends: the node queues it for carol's device
     let before = node.node.queued(&sid("carol").public.keyhash);
     send(alice.clone(), id("carol"), b"third")
@@ -981,7 +984,7 @@ async fn a_kernel_restarts_from_the_storage_seam_with_its_session_and_its_queue_
     // queued message opens on it, and the reply continues it
     let carol2 = Arc::new(start("carol", carol_shell.clone()).await.unwrap());
     assert_eq!(
-        carol_shell.read("client".into()).unwrap(),
+        carol_shell.read("payload".into()).unwrap(),
         written,
         "starting rewrote nothing"
     );
@@ -1054,7 +1057,7 @@ async fn a_kernel_restarts_from_the_storage_seam_with_its_session_and_its_queue_
             discarded: 0
         }
     );
-    assert!(empty_shell.read("client".into()).is_some());
+    assert!(empty_shell.read("payload".into()).is_some());
     // and another identity's kernel holds another key, so the blob does
     // not open there: the identity is the key (design §13.7.1)
     let bob_shell = Arc::new(Shell::default());
@@ -1216,7 +1219,7 @@ fn state_written_before_the_kernel_sealed_is_read_and_resealed() {
     let p = Participant::start(seeds("alice"), known.clone(), platform_of(before.clone()))
         .expect("starts unsealed, by declaration");
     p.save().expect("saves");
-    let plain = before.read("client".into()).expect("state written");
+    let plain = before.read("payload".into()).expect("state written");
     assert!(
         !rhtn_client::sealed::is_sealed(&plain),
         "a declared-unsealed platform holds the kernel's bytes as written"
@@ -1236,7 +1239,7 @@ fn state_written_before_the_kernel_sealed_is_read_and_resealed() {
         "a key was minted and kept"
     );
     p.save().expect("saves");
-    let now = after.read("client".into()).expect("state written");
+    let now = after.read("payload".into()).expect("state written");
     assert!(
         rhtn_client::sealed::is_sealed(&now),
         "the first write after the seam seals"
@@ -1580,4 +1583,101 @@ fn the_application_seals_its_own_files_through_the_kernel_under_a_key_it_never_s
         q.unseal("threads/bob".into(), sealed).is_err(),
         "a sealed blob on an unsealed platform is refused, never read as plaintext"
     );
+}
+
+/// **A save writes the relations that changed and no other** (APP-016),
+/// and **a client that kept the one blob opens it, writes the relations,
+/// and reduces the blob to a mark at the next clean start**.
+// functional: APP-016
+#[test]
+fn a_save_writes_only_the_relations_that_changed_and_the_one_blob_migrates_once() {
+    let shell = Arc::new(Shell {
+        ..Default::default()
+    });
+    let known: Vec<Vec<u8>> = ["alice", "bob"].iter().map(|n| material(n)).collect();
+    let p = Participant::start(seeds("alice"), known.clone(), platform_of(shell.clone()))
+        .expect("starts");
+    p.save().expect("saved");
+    let first: Vec<String> = std::mem::take(&mut *shell.writes.lock().unwrap());
+    for r in rhtn_client::ceremony::RELATIONS {
+        assert!(
+            first.iter().any(|w| w == r),
+            "the first save writes {r}: {first:?}"
+        );
+    }
+    p.save().expect("saved again");
+    let second: Vec<String> = std::mem::take(&mut *shell.writes.lock().unwrap());
+    assert_eq!(
+        second,
+        vec!["siblings".to_string()],
+        "nothing changed: nothing rewritten but the sibling list"
+    );
+    // a contact held changes the store and nothing else
+    p.hold_contact(material("bob")).expect("held");
+    p.save().expect("saved");
+    let third: Vec<String> = std::mem::take(&mut *shell.writes.lock().unwrap());
+    assert!(
+        third.contains(&"store".to_string()) && !third.contains(&"archive".to_string()),
+        "{third:?}"
+    );
+    drop(p);
+
+    // the migration: a shell holding the one blob and no relations, which
+    // is what a phone from before the split holds
+    let old = Arc::new(Shell {
+        ..Default::default()
+    });
+    {
+        let r = Participant::start(seeds("alice"), known.clone(), platform_of(old.clone()))
+            .expect("starts");
+        r.hold_contact(material("bob")).expect("held");
+        let whole = r.durable_blob();
+        drop(r);
+        let mut st = old.store.lock().unwrap();
+        st.clear();
+        st.insert("client".into(), whole);
+    }
+    old.writes.lock().unwrap().clear();
+    let r = Participant::start(seeds("alice"), known.clone(), platform_of(old.clone()))
+        .expect("opens the one blob");
+    assert_eq!(r.contacts().len(), 1, "what the blob held is held");
+    let wrote: Vec<String> = std::mem::take(&mut *old.writes.lock().unwrap());
+    assert!(
+        rhtn_client::ceremony::RELATIONS
+            .iter()
+            .all(|n| wrote.iter().any(|w| w == n)),
+        "the relations written at the migration: {wrote:?}"
+    );
+    assert!(
+        old.store
+            .lock()
+            .unwrap()
+            .get("client")
+            .map(|b| b.len() > 1)
+            .unwrap_or(false),
+        "the blob is kept at the migration"
+    );
+    drop(r);
+    let r = Participant::start(seeds("alice"), known.clone(), platform_of(old.clone()))
+        .expect("opens the relations");
+    assert_eq!(r.contacts().len(), 1);
+    let wrote: Vec<String> = std::mem::take(&mut *old.writes.lock().unwrap());
+    assert!(
+        wrote.contains(&"client".to_string())
+            && !wrote
+                .iter()
+                .any(|w| rhtn_client::ceremony::RELATIONS.contains(&w.as_str())),
+        "the blob is reduced to a mark once the relations read back cleanly, and nothing is migrated again: {wrote:?}"
+    );
+    drop(r);
+    // and a third start reads the relations alone: no mark, no migration
+    let r = Participant::start(seeds("alice"), known, platform_of(old.clone()))
+        .expect("opens the relations");
+    assert_eq!(r.contacts().len(), 1);
+    let wrote: Vec<String> = std::mem::take(&mut *old.writes.lock().unwrap());
+    assert!(
+        wrote.iter().all(|w| w == "siblings"),
+        "nothing but the sibling list: {wrote:?}"
+    );
+    drop(r);
 }

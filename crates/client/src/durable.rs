@@ -74,3 +74,9 @@ pub(crate) fn parse_array(b: &[u8], n: usize) -> Option<(Item, Vec<Item>)> {
     }
     Some((item, arr))
 }
+
+/// What a relation was last written as, for a writer that writes only
+/// what changed: a hash of the bytes, nothing a reader needs.
+pub fn fingerprint(bytes: &[u8]) -> [u8; 32] {
+    rhtn_codec::cose::sha256(bytes)
+}

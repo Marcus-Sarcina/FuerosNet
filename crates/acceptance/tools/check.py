@@ -137,6 +137,26 @@ print(f"deferred: {sum(1 for e in entries if e.get('deferred'))}")
 withdrawn = sum(1 for e in entries if e.get("kind") == "withdrawn")
 print(f"withdrawn: {withdrawn}")
 print(f"implemented: {sum(1 for e in entries if e.get('id') in impl)} of {len(entries) - withdrawn}")
+# **the registers linked** (restructure step 7): a functional family is
+# held by a test that names it, or by an acceptance entry that lists it;
+# the number of families with neither is the figure to report, by prefix
+fam = families()
+live = {f for f, w in fam.items() if not w}
+marked = family_markers()
+listed = {}
+for e in entries:
+    for f in e.get("families", []):
+        if f not in fam:
+            flags.append(f"{e.get('id')}: families names {f!r}, which functional_tests.md does not number")
+        listed.setdefault(f, e.get("id"))
+for f in marked:
+    if f not in fam:
+        flags.append(f"{marked[f]}: functional marker {f!r}, which functional_tests.md does not number")
+covered = {f for f in live if f in marked or f in listed}
+uncovered = sorted(live - covered)
+by_prefix = collections.Counter(f.split("-")[0] for f in uncovered)
+print(f"families: {len(live)} live; held by a test or an entry: {len(covered)}; by neither: {len(uncovered)}")
+print("  without, by prefix: " + ", ".join(f"{k} {v}" for k, v in sorted(by_prefix.items())))
 print(f"flags: {len(flags)}")
 for f in flags:
     print("  " + f)

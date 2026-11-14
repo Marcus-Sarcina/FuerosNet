@@ -1552,6 +1552,33 @@ on the wire.
   it rather than a silence the application has to interpret, which is design
   §1.1's posture at this boundary.
 
+### 9.0 What the kernel keeps, as relations
+
+**The kernel's state at rest is six relations, each its own blob**
+[author, 2026-11-14: the schema is the light client's own and belongs
+here, not on the wire]. Each is written `[version, body]`, the version a
+word the reader checks first and refuses whole where it does not know it;
+each is written when it changes and read whole or refused whole, so a
+message sent does not rewrite the archive and a bad write loses one
+relation, never the identity. Every relation is one identity's on one
+device (§4.2); nothing here is shared, and nothing but a sealed capture
+has a retention window (design §7.5.1). The names are the storage names.
+
+| Relation | Body | What sets its retention and visibility |
+|---|---|---|
+| `archive` | the records this identity signed or holds, each as its bytes; loaded in chain order whatever order they were kept in | design §10 for the chain, design §7.5.1 for the captures kept apart |
+| `store` | contacts, hints, the pruning checkpoint, the captures held and their windows (§2) | §2, design §7.5 |
+| `payload` | the PQXDH material, the sessions, the one-time pools per address, the nodes agreed to, the attachments, where each party's last message came by | §3, §4.1 |
+| `horizon` | what has been seen (txid and effective time) and the snapshot the horizon materialises from | design §8, and §4.2 above |
+| `delegations` | the delegations held for this device's keys | `wire-format.md` §8.2 |
+| `holder` | whose this state is (the keyhash), the provider credential, the application secret | §4.2, §10 |
+
+A client from before the split holds the one blob all six were written
+as; it is read once, written out as relations, kept until the next start
+reads the relations back cleanly, and then reduced to a mark. What the
+application keeps of its own (§9's sealing service, the conversation
+store) is beside these and not among them.
+
 ### 9.1 The nouns the kernel offers
 
 **What crosses outward is one vocabulary** [author, 2026-10-29]: the kernel

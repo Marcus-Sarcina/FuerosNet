@@ -204,16 +204,10 @@ async fn r08_failover_must_update_the_kernel_serving_identity() {
         .await
         .unwrap()
         .unwrap();
-    let saved = shell
-        .store
-        .lock()
-        .unwrap()
-        .values()
-        .find(|bytes| matches!(parse_all(bytes),Ok(Item::Array(ref a)) if a.len()==7))
-        .unwrap()
-        .clone();
+    // the payload relation, `[version, body]`, as the relations are kept
+    let saved = shell.store.lock().unwrap().get("payload").unwrap().clone();
     let fields = array_item_ranges(&saved, 0).unwrap();
-    let field = &saved[fields[2].clone()];
+    let field = &saved[fields[1].clone()];
     let Item::Bytes(ref r) = parse_all(field).unwrap() else {
         panic!("payload")
     };
@@ -981,7 +975,7 @@ fn n04_upgrade_must_not_delete_a_legacy_own_act_while_migrating_the_store() {
 
 #[test]
 fn control_restore_on_a_device_given_the_identity_writes_current_state() {
-    use rhtn_ffi::client::{Participant, STATE};
+    use rhtn_ffi::client::Participant;
     let source = client("alice");
     // the identity comes to the new device by its holder's hand
     // (light-client §2), never out of the blob: the blob opens under it
@@ -1017,7 +1011,7 @@ fn control_restore_on_a_device_given_the_identity_writes_current_state() {
         test_identity("alice").public.keyhash.to_vec()
     );
     assert!(
-        shell.store.lock().unwrap().contains_key(STATE),
+        shell.store.lock().unwrap().contains_key("payload"),
         "a successful replacement-device restore writes current durable state"
     );
 }

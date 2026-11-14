@@ -67,6 +67,9 @@ pub struct Participant {
     /// [2026-10-06]. The lock also orders the states, so what lands last
     /// is what was taken last.
     saving: Arc<std::sync::Mutex<()>>,
+    /// What each relation was last written as, by hash, so a save writes
+    /// only the relations that changed [restructure step 5, 2026-11-14].
+    written: std::sync::Mutex<std::collections::HashMap<&'static str, [u8; 32]>>,
     /// Nouns the kernel marked changed while an arrival was being handed
     /// up; raised as one `Event::Changed` at the next quiet call.
     pending_changed: std::sync::Mutex<Vec<Vec<rhtn_model::Noun>>>,
@@ -885,21 +888,43 @@ fn back_inward(back: &[Vec<Vec<u8>>]) -> Result<Vec<Vec<rhtn_archive::Txid>>, Re
 }
 
 impl Participant {
+    /// **The whole state as the one blob** every client wrote before the
+    /// relations were split: what a backup carries and what the
+    /// migration reads. Not for the shell, which saves relations.
+    pub fn durable_blob(&self) -> Vec<u8> {
+        self.handle.with_blocking(|c| c.durable())
+    }
+
     /// Restore what the last run wrote, if anything.  **A blob that does
     /// not open refuses the start**: a client begun fresh over state it
     /// could not read would publish new material and lose every message
     /// queued for the old, silently.
     fn open(&self) -> Result<(), Refused> {
-        // the sibling list, whole or not at all: a partial list is no list
         if let Some(bytes) = self.storage.read(SIBLINGS.into()) {
             self.net.restore_siblings(&bytes);
         }
-        let Some(bytes) = self.storage.read(STATE.into()) else {
+        // **the relations where they are, else the one blob every client
+        // wrote before them, read once and written out as relations**
+        // [restructure step 5, 2026-11-14]; the blob is kept until the next
+        // start reads the relations back cleanly, then reduced to a mark
+        let parts: Vec<(String, Vec<u8>)> = rhtn_client::ceremony::RELATIONS
+            .iter()
+            .filter_map(|n| self.storage.read((*n).into()).map(|b| (n.to_string(), b)))
+            .collect();
+        let blob = self.storage.read(STATE.into()).filter(|b| b.len() > 1);
+        let from_parts = parts.len() == rhtn_client::ceremony::RELATIONS.len();
+        let had_blob = blob.is_some();
+        if !from_parts && !had_blob {
             return Ok(());
-        };
-        self.handle
-            .with_blocking(move |c| -> Result<(), String> {
-                let r = c.restore_durable(&bytes)?;
+        }
+        let restored = self
+            .handle
+            .with_blocking(move |c| -> Result<(usize, Vec<String>), String> {
+                let r = if from_parts {
+                    c.restore_parts(&parts)?
+                } else {
+                    c.restore_durable(blob.as_deref().expect("one of the two"))?
+                };
                 let held: Vec<String> = c
                     .payload
                     .sessions
@@ -913,10 +938,19 @@ impl Participant {
                         )
                     })
                     .collect();
-                tracing::info!(target: "pay", sessions = r.sessions, ?held, "pay.restored");
-                Ok(())
+                Ok((r.sessions, held))
             })
             .map_err(|e| Refused::new(format!("the stored state does not open: {e}")))?;
+        tracing::info!(target: "pay", sessions = restored.0, held = ?restored.1, from_parts, "pay.restored");
+        if !from_parts {
+            // the migration: the relations written now, the blob kept
+            self.save()?;
+            tracing::info!(target: "pay", "pay.migrated");
+        } else if had_blob {
+            // the relations read back cleanly: the blob is spent
+            self.storage.write(STATE.into(), vec![0]);
+        }
+
         // the kernel re-learned its contacts from the state; the transport
         // binds a dial by them (`wire-format.md` §9.1), so it learns them too
         self.pin_known();
@@ -1091,6 +1125,7 @@ impl Participant {
                 storage,
                 app_key,
                 saving: Arc::new(std::sync::Mutex::new(())),
+                written: std::sync::Mutex::new(std::collections::HashMap::new()),
                 pending_changed: std::sync::Mutex::new(Vec::new()),
                 seeds: Some([ed, pq]),
             };
@@ -1296,15 +1331,6 @@ impl Participant {
         })
     }
 
-    /// Every profile held: this client's own, by subnet, and the subnets'
-    /// (`rhtn_model::Profile`; `wire-format.md` §7.11).
-    #[must_use]
-    pub fn profiles(&self) -> Vec<rhtn_model::Profile> {
-        crate::diag::call_plain("profiles", || {
-            self.handle.with_blocking(|c| c.profiles_held())
-        })
-    }
-
     /// **Seal bytes for the application** (`light-client-requirements.md`
     /// §9, APP-015): the kernel's own construction under a key derived from
     /// the storage key, the `label` bound as associated data so a blob
@@ -1341,20 +1367,35 @@ impl Participant {
             // a poisoned lock is a thread that panicked mid-save, and the
             // next save overwriting whatever it left is the repair
             let _one = self.saving.lock().unwrap_or_else(|e| e.into_inner());
-            let bytes = self.handle.with_blocking(|c| {
+            let parts = self.handle.with_blocking(|c| {
                 let held = c.payload.sessions.held().len();
                 tracing::debug!(target: "pay", sessions = held, "pay.saving");
-                c.durable()
+                c.durable_parts()
             });
-            let took = self.storage.write(STATE.into(), bytes)
-                && self.storage.write(SIBLINGS.into(), self.net.siblings());
-            if took {
-                Ok(())
-            } else {
-                Err(Refused::new(
-                    "the platform's storage did not take the state",
-                ))
+            // **only the relations that changed**: a message sent does not
+            // rewrite the archive, and what did not change is not resealed
+            let mut written = self.written.lock().unwrap_or_else(|e| e.into_inner());
+            let mut wrote = 0usize;
+            for (name, bytes) in parts {
+                let hash = rhtn_client::durable::fingerprint(&bytes);
+                if written.get(name) == Some(&hash) {
+                    continue;
+                }
+                if !self.storage.write(name.into(), bytes) {
+                    return Err(Refused::new(format!(
+                        "the platform's storage did not take the {name} relation"
+                    )));
+                }
+                written.insert(name, hash);
+                wrote += 1;
             }
+            tracing::debug!(target: "pay", wrote, "pay.saved");
+            if !self.storage.write(SIBLINGS.into(), self.net.siblings()) {
+                return Err(Refused::new(
+                    "the platform's storage did not take the sibling list",
+                ));
+            }
+            Ok(())
         })
     }
 
@@ -1471,6 +1512,7 @@ impl Participant {
                 storage,
                 app_key,
                 saving: Arc::new(std::sync::Mutex::new(())),
+                written: std::sync::Mutex::new(std::collections::HashMap::new()),
                 pending_changed: std::sync::Mutex::new(Vec::new()),
                 seeds: None,
             };
@@ -2285,16 +2327,6 @@ impl Participant {
         })
     }
 
-    /// **The window this client will not sign inside, as a witness**, in
-    /// seconds, measured from its own receipt of the request (design §7.1
-    /// item 9; `light-client-requirements.md` §1.2).
-    #[must_use]
-    pub fn witness_window_s(&self) -> u64 {
-        crate::diag::call_plain("witness_window_s", || {
-            self.handle.with_blocking(|c| c.cfg.witness_window_s)
-        })
-    }
-
     /// Set it.  **Not a control a shipped client offers its person** — the
     /// figure is the design's and a client that shortened it would be
     /// weakening its own attestation — but the instrument that drives
@@ -2476,18 +2508,6 @@ impl Participant {
         crate::diag::call("take_response", || {
             self.handle
                 .with_blocking(move |c| c.take_response(&bytes).map(|_| ()).map_err(Refused::new))
-        })
-    }
-
-    /// Put a consented query to its verifier (`wire-format.md` §5.6): the
-    /// request is built and carried on the end-to-end path — direct where
-    /// the path is held, through the serving nodes otherwise (design
-    /// §12.6.3) — and the answer comes back as
-    /// [`crate::net::Event::Answered`].
-    pub fn put_query(&self, query: Vec<u8>, consent: Vec<u8>, basis: u32) -> Result<(), Refused> {
-        crate::diag::call("put_query", || {
-            let req = self.request(query, consent, basis)?;
-            self.net.carry(vec![rhtn_client::ceremony::Msg::Query(req)])
         })
     }
 

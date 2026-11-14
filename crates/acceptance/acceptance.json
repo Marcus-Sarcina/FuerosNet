@@ -20,7 +20,10 @@
   "when": "K signs its first transaction through the archive component: an adoption of K under P, K in field 1, field 8 naming that record.",
   "then": "The adoption's key 0 list for K is exactly one 32-byte value equal to SHA-256 over the 32 bytes of K's keyhash. A verifier recomputing that value from K's keyhash reports K's chain as rooted at genesis at this record.",
   "oracle": "fixture",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "ARC-001"
+  ]
  },
  {
   "id": "ARC-02",
@@ -5593,7 +5596,10 @@
   "when": "S sends to P and then to T.",
   "then": "A one-time key request names P and one names T; both messages are encrypted under the payload construction; nothing rides the transport session as material for the node.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "PAY-020"
+  ]
  },
  {
   "id": "PAY-12",
@@ -7197,7 +7203,10 @@
   "when": "One attaches and publishes, the other attaches naming it and sweeps it, the first attaches again naming the second, and payload is sent.",
   "then": "Each attach reports the node it reached and that the session is the primary one. The payload comes out of the recipient's events decrypted, having crossed two sockets and a process that never held the plaintext. Nothing is asserted from inside a process: every claim is what one printed or what arrived at one.",
   "oracle": "behaviour",
-  "interpretation": "The order of the three attaches is the protocol's: a bundle must be published before it can be swept, and a recipient attributes an initial message only under a binding it already holds."
+  "interpretation": "The order of the three attaches is the protocol's: a bundle must be published before it can be swept, and a recipient attributes an initial message only under a binding it already holds.",
+  "families": [
+   "PAY-012"
+  ]
  },
  {
   "id": "PRT-02",
@@ -7440,7 +7449,13 @@
   "when": "mrk takes an invitation naming gxv2's node and attaches there while holding gxv's; messages go both ways on each node; mrk saves, restarts, and attaches each node it agreed to.",
   "then": "mrk holds a session per node; gxv2's message arrives at mrk and mrk's reply reaches gxv2 through the node it came by; gxv's message arrives and mrk's reply reaches the person gxv although gxv's node speaks as gxv; after the restart both agreements are held, both sessions are held again, and messages cross on each node.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "SES-017",
+   "SES-019",
+   "PAY-020",
+   "UX-032"
+  ]
  },
  {
   "id": "QUE-01",

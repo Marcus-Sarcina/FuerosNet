@@ -4090,112 +4090,162 @@ impl Client {
         out
     }
 
-    /// Start from what [`Client::durable`] wrote, whole or not at all: a
-    /// blob that does not open leaves this client as it was and says so,
-    /// because a client that restored half its state would hold sessions
-    /// it cannot advance.  Positions are re-derived from the archive, and
-    /// the horizon wakes from its snapshot, replaying where the snapshot
-    /// cannot account for the records held.
+    /// **The relations of this client's state, each as its own blob**
+    /// [restructure step 5, 2026-11-14]: the archive, the store, the
+    /// payload material, the horizon, the delegations and the holder, each
+    /// `[version, body]` so a reader refuses what it cannot read rather than
+    /// misreading it, and each written when it changes — a message sent
+    /// does not rewrite the archive, and a bad write loses one relation.
+    pub fn durable_parts(&self) -> Vec<(&'static str, Vec<u8>)> {
+        use rhtn_codec::encode::*;
+        let mut out = Vec::new();
+        let mut part = |name: &'static str, body: &dyn Fn(&mut Vec<u8>)| {
+            let mut b = Vec::new();
+            emit_array_head(&mut b, 2);
+            emit_uint(&mut b, RELATION_VERSION);
+            body(&mut b);
+            out.push((name, b));
+        };
+        part(RELATION_ARCHIVE, &|b| {
+            let records: Vec<&Vec<u8>> = self.archive.records().map(|r| &r.bytes).collect();
+            emit_array_head(b, records.len());
+            for r in records {
+                emit_bstr(b, r);
+            }
+        });
+        part(RELATION_STORE, &|b| emit_bstr(b, &self.store.encode()));
+        part(RELATION_PAYLOAD, &|b| emit_bstr(b, &self.payload.encode()));
+        part(RELATION_HORIZON, &|b| {
+            emit_array_head(b, 2);
+            let seen = self.horizon.seen();
+            emit_array_head(b, seen.len());
+            for (txid, effective) in seen {
+                emit_array_head(b, 2);
+                emit_bstr(b, &txid);
+                emit_uint(b, effective);
+            }
+            emit_bstr(b, &self.horizon.materialise().encode());
+        });
+        part(RELATION_DELEGATIONS, &|b| {
+            emit_bstr(b, &self.horizon.delegations_held())
+        });
+        part(RELATION_HOLDER, &|b| {
+            emit_array_head(b, 3);
+            emit_bstr(b, &self.public.keyhash);
+            crate::durable::emit_opt_bstr(b, self.provider_credential.as_deref());
+            crate::durable::emit_opt_bstr(b, self.application_secret.as_ref().map(|s| &s[..]));
+        });
+        out
+    }
+
+    /// Restore from the relations [`Client::durable_parts`] wrote: every
+    /// relation must be present and open, or nothing changes.
+    pub fn restore_parts(&mut self, parts: &[(String, Vec<u8>)]) -> Result<Restored, String> {
+        use crate::durable::*;
+        let get = |name: &str| -> Result<(&[u8], rhtn_codec::cbor::Item), String> {
+            let (_, b) = parts
+                .iter()
+                .find(|(n, _)| n == name)
+                .ok_or_else(|| format!("no {name} relation"))?;
+            let (_, f) = parse_array(b, 2).ok_or_else(|| format!("{name}: not a relation"))?;
+            if uint(&f[0]) != Some(RELATION_VERSION) {
+                return Err(format!("{name}: a version this reader does not know"));
+            }
+            Ok((b.as_slice(), f[1].clone()))
+        };
+        let (ab, archive) = get(RELATION_ARCHIVE)?;
+        let (sb, store) = get(RELATION_STORE)?;
+        let (pb, payload) = get(RELATION_PAYLOAD)?;
+        let (hb, horizon) = get(RELATION_HORIZON)?;
+        let (db, delegations) = get(RELATION_DELEGATIONS)?;
+        let (ob, holder) = get(RELATION_HOLDER)?;
+        let hz = array(&horizon).ok_or("horizon")?;
+        if hz.len() != 2 {
+            return Err("horizon".into());
+        }
+        let parsed = Parsed::read(
+            &archive,
+            ab,
+            &store,
+            sb,
+            &payload,
+            pb,
+            &hz[0],
+            &hz[1],
+            hb,
+            &delegations,
+            db,
+            &holder,
+            ob,
+            &self.cfg.payload,
+        )?;
+        self.apply_parsed(parsed)
+    }
+
+    /// Restore from the one blob [`Client::durable`] wrote: the shape every
+    /// client wrote before the relations were split, read for the
+    /// migration and by the backups.
     pub fn restore_durable(&mut self, b: &[u8]) -> Result<Restored, String> {
         use crate::durable::*;
         let (_, f) = parse_array(b, 7).ok_or("not a durable state")?;
-        // bound to an identity and a device before anything is read: a
-        // client restoring another's state, or another device's, would
-        // hold sessions and material that are not its own
-        // **the preceding format is read, not refused** (OPS-009): field 6
-        // carried the provider credential alone before the holder was named
-        // beside it, and a client that refused its own last state would lose
-        // the archive, the sessions and the obligations it wrote.  Where the
-        // holder is named it is checked; where it is not, the device and the
-        // archive's own signer rule are what bind the state to this client.
-        let holder: Option<[u8; 32]> = match &f[6] {
-            rhtn_codec::cbor::Item::Array(a) if a.len() == 2 || a.len() == 3 => {
-                let parts = array(&f[6]).ok_or("holder")?;
-                Some(fixed::<32>(b, &parts[0]).ok_or("owner")?)
-            }
-            _ => None,
-        };
-        if let Some(owner) = holder
+        let parsed = Parsed::read(
+            &f[0],
+            b,
+            &f[1],
+            b,
+            &f[2],
+            b,
+            &f[3],
+            &f[4],
+            b,
+            &f[5],
+            b,
+            &f[6],
+            b,
+            &self.cfg.payload,
+        )?;
+        self.apply_parsed(parsed)
+    }
+
+    /// **Everything is built into temporaries before any of it lands**: the
+    /// last fallible step is behind the first replacement, so a refusal
+    /// leaves this client exactly as it was.
+    fn apply_parsed(&mut self, parsed: Parsed) -> Result<Restored, String> {
+        let Parsed {
+            owner,
+            recs,
+            store,
+            payload,
+            held,
+            snap,
+            delegations,
+            provider,
+            application_secret,
+        } = parsed;
+        if let Some(owner) = owner
             && owner != self.public.keyhash
         {
             return Err("this state belongs to another identity".into());
         }
-        let recs: Vec<Vec<u8>> = array(&f[0])
-            .ok_or("records")?
-            .iter()
-            .map(|x| bytes(b, x))
-            .collect::<Option<_>>()
-            .ok_or("records")?;
-        let store = ClientStore::decode(&bytes(b, &f[1]).ok_or("store")?).ok_or("store")?;
-        let payload =
-            PayloadState::decode(self.cfg.payload.clone(), &bytes(b, &f[2]).ok_or("payload")?)
-                .ok_or("payload")?;
-        // each entry is a seen fact, or a whole record where the blob was
-        // written before the fact replaced the act
-        enum Held {
-            Fact(Txid, u64),
-            Act(Vec<u8>),
-        }
-        let held: Vec<Held> = array(&f[3])
-            .ok_or("horizon")?
-            .iter()
-            .map(|x| match x {
-                rhtn_codec::cbor::Item::Array(_) => {
-                    let pair = array(x)?;
-                    if pair.len() != 2 {
-                        return None;
-                    }
-                    Some(Held::Fact(fixed::<32>(b, &pair[0])?, uint(&pair[1])?))
-                }
-                _ => bytes(b, x).map(Held::Act),
-            })
-            .collect::<Option<_>>()
-            .ok_or("horizon")?;
-        let snap = rhtn_archive::topology::Snapshot::decode(&bytes(b, &f[4]).ok_or("snapshot")?)
-            .ok_or("snapshot")?;
-        let delegations = bytes(b, &f[5]).ok_or("delegations")?;
-        let provider = match &f[6] {
-            rhtn_codec::cbor::Item::Array(a) if a.len() == 2 || a.len() == 3 => {
-                let parts = array(&f[6]).ok_or("holder")?;
-                optional(&parts[1], |it| bytes(b, it)).ok_or("provider")?
-            }
-            // the preceding shapes: a byte string, or nothing
-            rhtn_codec::cbor::Item::Bytes(_) => Some(bytes(b, &f[6]).ok_or("provider")?),
-            _ => None,
-        };
-        // the application secret, where the blob was written since one
-        // was kept (three in the holder's array); a blob without one is a
-        // device that has signed nothing yet
-        let application_secret: Option<Zeroizing<[u8; 32]>> = match &f[6] {
-            rhtn_codec::cbor::Item::Array(a) if a.len() == 3 => {
-                let parts = array(&f[6]).ok_or("holder")?;
-                optional(&parts[2], |it| fixed::<32>(b, it))
-                    .ok_or("application secret")?
-                    .map(Zeroizing::new)
-            }
-            _ => None,
-        };
         if payload.device != self.payload.device {
             return Err("this state belongs to another device".into());
         }
-        // everything is built into temporaries before any of it lands:
-        // the last fallible step is behind the first replacement, so a
-        // refusal leaves this client exactly as it was
         let kh = self.public.keyhash;
-        let parsed: Vec<Record> = recs
+        let parsed_records: Vec<Record> = recs
             .iter()
             .map(|r| Record::parse(r))
             .collect::<Result<_, _>>()
             .map_err(|e| format!("record: {e}"))?;
         // in chain order, whatever order they were kept in: the archive's
         // one loader (`rhtn_archive::chain::Archive::from_records`)
-        let archive = Archive::from_records(kh, parsed).map_err(|e| format!("record: {e}"))?;
+        let archive =
+            Archive::from_records(kh, parsed_records).map_err(|e| format!("record: {e}"))?;
         let records = archive.len();
         let mut horizon = Horizon::new(kh);
         for h in held {
             match h {
-                Held::Fact(txid, effective) => horizon.restore_seen(txid, effective),
-                Held::Act(bytes) => {
+                HeldSeen::Fact(txid, effective) => horizon.restore_seen(txid, effective),
+                HeldSeen::Act(bytes) => {
                     horizon.restore_record(bytes);
                 }
             }
@@ -7680,4 +7730,128 @@ fn point_address(bytes: &[u8]) -> Option<String> {
     // key 3 is omitted at the default port, as the transport's decoder reads it
     let port = map_get(m, 3).and_then(as_uint).unwrap_or(DEFAULT_QUIC_PORT);
     Some(format!("{}.{}.{}.{}:{}", ip[0], ip[1], ip[2], ip[3], port))
+}
+
+/// The names of the relations [`Client::durable_parts`] writes.
+pub const RELATION_ARCHIVE: &str = "archive";
+/// The store relation.
+pub const RELATION_STORE: &str = "store";
+/// The payload relation: keys, sessions, agreements, attachments.
+pub const RELATION_PAYLOAD: &str = "payload";
+/// The horizon relation: what was seen, and the snapshot.
+pub const RELATION_HORIZON: &str = "horizon";
+/// The delegations relation.
+pub const RELATION_DELEGATIONS: &str = "delegations";
+/// The holder relation: whose this is, the provider credential, the application secret.
+pub const RELATION_HOLDER: &str = "holder";
+/// Every relation, in the order written.
+pub const RELATIONS: [&str; 6] = [
+    RELATION_ARCHIVE,
+    RELATION_STORE,
+    RELATION_PAYLOAD,
+    RELATION_HORIZON,
+    RELATION_DELEGATIONS,
+    RELATION_HOLDER,
+];
+/// The version word every relation carries first.
+pub const RELATION_VERSION: u64 = 1;
+
+enum HeldSeen {
+    Fact(Txid, u64),
+    Act(Vec<u8>),
+}
+
+/// What a stored state parses to before any of it lands.
+struct Parsed {
+    owner: Option<[u8; 32]>,
+    recs: Vec<Vec<u8>>,
+    store: ClientStore,
+    payload: PayloadState,
+    held: Vec<HeldSeen>,
+    snap: rhtn_archive::topology::Snapshot,
+    delegations: Vec<u8>,
+    provider: Option<Vec<u8>>,
+    application_secret: Option<Zeroizing<[u8; 32]>>,
+}
+
+impl Parsed {
+    /// The same reading for the one blob and for the relations: each item
+    /// with the bytes it indexes into.
+    #[allow(clippy::too_many_arguments)]
+    fn read(
+        archive: &rhtn_codec::cbor::Item,
+        ab: &[u8],
+        store: &rhtn_codec::cbor::Item,
+        sb: &[u8],
+        payload: &rhtn_codec::cbor::Item,
+        pb: &[u8],
+        seen: &rhtn_codec::cbor::Item,
+        snapshot: &rhtn_codec::cbor::Item,
+        hb: &[u8],
+        delegations: &rhtn_codec::cbor::Item,
+        db: &[u8],
+        holder: &rhtn_codec::cbor::Item,
+        ob: &[u8],
+        cfg: &crate::payload::PayloadConfig,
+    ) -> Result<Parsed, String> {
+        use crate::durable::*;
+        let recs: Vec<Vec<u8>> = array(archive)
+            .ok_or("records")?
+            .iter()
+            .map(|x| bytes(ab, x))
+            .collect::<Option<_>>()
+            .ok_or("records")?;
+        let store = ClientStore::decode(&bytes(sb, store).ok_or("store")?).ok_or("store")?;
+        let payload = PayloadState::decode(cfg.clone(), &bytes(pb, payload).ok_or("payload")?)
+            .ok_or("payload")?;
+        let held: Vec<HeldSeen> = array(seen)
+            .ok_or("horizon")?
+            .iter()
+            .map(|x| match x {
+                rhtn_codec::cbor::Item::Array(_) => {
+                    let pair = array(x)?;
+                    if pair.len() != 2 {
+                        return None;
+                    }
+                    Some(HeldSeen::Fact(fixed::<32>(hb, &pair[0])?, uint(&pair[1])?))
+                }
+                _ => bytes(hb, x).map(HeldSeen::Act),
+            })
+            .collect::<Option<_>>()
+            .ok_or("horizon")?;
+        let snap =
+            rhtn_archive::topology::Snapshot::decode(&bytes(hb, snapshot).ok_or("snapshot")?)
+                .ok_or("snapshot")?;
+        let delegations = bytes(db, delegations).ok_or("delegations")?;
+        let (owner, provider, application_secret) = match holder {
+            rhtn_codec::cbor::Item::Array(a) if a.len() == 2 || a.len() == 3 => {
+                let parts = array(holder).ok_or("holder")?;
+                let owner = Some(fixed::<32>(ob, &parts[0]).ok_or("owner")?);
+                let provider = optional(&parts[1], |it| bytes(ob, it)).ok_or("provider")?;
+                let secret = if a.len() == 3 {
+                    optional(&parts[2], |it| fixed::<32>(ob, it))
+                        .ok_or("application secret")?
+                        .map(Zeroizing::new)
+                } else {
+                    None
+                };
+                (owner, provider, secret)
+            }
+            rhtn_codec::cbor::Item::Bytes(_) => {
+                (None, Some(bytes(ob, holder).ok_or("provider")?), None)
+            }
+            _ => (None, None, None),
+        };
+        Ok(Parsed {
+            owner,
+            recs,
+            store,
+            payload,
+            held,
+            snap,
+            delegations,
+            provider,
+            application_secret,
+        })
+    }
 }
