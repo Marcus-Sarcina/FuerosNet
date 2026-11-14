@@ -21502,3 +21502,18 @@ the shell's clock, ms 2023). The reading on the 14th counted both. One
 same doubling holds for every storage event and was already so for the
 relation reads above it. Not a defect; the diag's two layers each say
 what they did, by design, and a count of writes must pick one layer.
+
+**T7 on `6eddfc6`, 2026-11-14 10:05 — four of four, correct behaviour
+[author].** Read off the phones' `pay.arrival` lines, the route stated
+rather than inferred: GXV-2 → MRK relayed by GXV-2's own node (`via
+"serving node"` at GXV; `pay.arrival from=feb8843a via=feb8843a` at MRK,
+7 bytes). MRK → GXV-2 by the direct path (`pay.direct.deliver ok`; GXV
+receives 5 bytes). GXV → MRK relayed by the node serving MRK's address
+(`via "their node"` at GXV; `pay.arrival from=703a82c2 via=703a82c2` at
+MRK, 11 bytes). **MRK → GXV, the one that never arrived on the 14th's
+first run: by the direct path, GXV receives 13 bytes** — a payload to the
+person 703a82c2 took the leaf construction and the direct path, where
+before it was handed to the node as its own material. Nothing crossed
+between the two nodes. The tab route stays unexercised on this bench: the
+phones share a LAN and the direct path wins both replies, as SES-017's
+proof in the seam scenario covers it in process.
