@@ -219,6 +219,40 @@ class AndroidShell(
      *
      * Whether nothing is there now, which is true where there never was.
      */
+    /**
+     * **The thread files' layer** ([Threads]): raw appends and ranged
+     * reads under the scope directory, no custody wrapping — what is
+     * written here was sealed by the kernel before it arrived.
+     */
+    fun files(): Threads.Files = object : Threads.Files {
+        override fun read(name: String): ByteArray? = File(dir, name).let { if (it.isFile) it.readBytes() else null }
+        override fun write(name: String, bytes: ByteArray): Boolean = runCatching {
+            val f = File(dir, name)
+            f.parentFile?.mkdirs()
+            val tmp = File.createTempFile("${f.name}.", ".tmp", f.parentFile ?: dir)
+            try {
+                tmp.writeBytes(bytes)
+                tmp.renameTo(f)
+            } finally {
+                tmp.delete()
+            }
+        }.getOrDefault(false)
+        override fun append(name: String, bytes: ByteArray): Boolean = runCatching {
+            val f = File(dir, name)
+            f.parentFile?.mkdirs()
+            java.io.FileOutputStream(f, true).use { it.write(bytes); it.fd.sync() }
+            true
+        }.getOrDefault(false)
+        override fun size(name: String): Long = File(dir, name).let { if (it.isFile) it.length() else 0L }
+        override fun readAt(name: String, at: Long, len: Int): ByteArray? = runCatching {
+            java.io.RandomAccessFile(File(dir, name), "r").use { r ->
+                if (at < 0 || at + len > r.length()) return@runCatching null
+                r.seek(at)
+                ByteArray(len).also { r.readFully(it) }
+            }
+        }.getOrNull()
+    }
+
     fun forget(name: String): Boolean {
         val f = File(dir, name)
         return !f.isFile || f.delete()

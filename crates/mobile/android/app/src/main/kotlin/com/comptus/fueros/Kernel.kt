@@ -1969,6 +1969,24 @@ object Kernel {
         Diag.event("agree_to", "node" to spec.take(8), "addr" to addr)
     }
 
+    /** The kernel's sealing service for one identity, as [Threads] reaches it. */
+    private fun sealerOf(p: Participant) = object : Threads.Sealer {
+        override fun seal(label: String, bytes: ByteArray): ByteArray = p.seal(label, bytes)
+        override fun unseal(label: String, bytes: ByteArray): ByteArray? = runCatching { p.unseal(label, bytes) }.getOrNull()
+    }
+
+    /** The one JSON file of 2026-11-12, written out as sealed records once and forgotten. */
+    private fun migrateThreads(shell: AndroidShell, s: Threads) {
+        val old = shell.read(THREADS) ?: return
+        val threads = Threads.decodeLegacy(old)
+        for (t in threads) {
+            for (m in t.messages) s.append(t.peerKey, Threads.Record.Said(m.mine, m.who, m.text, m.delivery, m.reason))
+        }
+        if (threads.isNotEmpty()) s.writeIndex(threads.map { Threads.Entry(it.peerKey, it.peerName, it.direct) })
+        shell.forget(THREADS)
+        Diag.event("threads.migrated", "threads" to threads.size, "messages" to threads.sumOf { it.messages.size })
+    }
+
     fun provision(context: Context, blob: String) {
         AndroidShell(context.applicationContext).write("provision", blob.toByteArray())
         synchronized(lock) {
@@ -2707,16 +2725,27 @@ object Kernel {
         // gets its own ([launchHeld])
         // **every identity's conversations, back from its own scope, and
         // written there after each change** [author, 2026-11-12]
+        // **sealed through the kernel, appended per message, read when
+        // opened** [author, 2026-11-14] (`light-client-requirements.md`
+        // §9, APP-015): one store per identity over its own scope and its
+        // own kernel's sealing; the 12th's one file migrated once
         appContext?.let { a ->
+            val stores = HashMap<String, Threads>()
+            fun storeOf(by: String): Threads? {
+                stores[by]?.let { return it }
+                val h = index.firstOrNull { it.id == by } ?: return null
+                val p = loaded[by] ?: return null
+                val shell = AndroidShell(a, h.scope)
+                return Threads(shell.files(), sealerOf(p), by).also { stores[by] = it }
+            }
             for (h in index) {
-                front.restore(Threads.decode(runCatching { AndroidShell(a, h.scope).read(THREADS) }.getOrNull()))
+                val s = storeOf(h.id) ?: continue
+                migrateThreads(AndroidShell(a, h.scope), s)
+                front.restore(h.id, s.index())
             }
-            front.persist = { by ->
-                val scope = identities(a).firstOrNull { it.id == by }?.scope
-                val mine = front.threads().filter { it.by == by }
-                runCatching { AndroidShell(a, scope).write(THREADS, Threads.encode(mine)) }
-                    .onFailure { Diag.warn("threads.persist", "who" to by.take(8), "why" to (it.message ?: "unsaid")) }
-            }
+            front.appender = { by, peer, rec -> storeOf(by)?.append(peer, rec) }
+            front.indexer = { by -> storeOf(by)?.writeIndex(front.entries(by)) }
+            front.loader = { by, peer, before, pending -> storeOf(by)?.page(peer, before, Threads.PAGE, pending) }
         }
         for ((hid, hp) in loaded) {
             if (hid != activeId) launchHeld(hid, hp, index.firstOrNull { it.id == hid }?.scope)

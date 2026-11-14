@@ -1510,3 +1510,74 @@ fn a_key_succeeds_another_with_its_backup_and_without_one() {
     };
     assert!(short.reason().contains("64 bytes"), "{}", short.reason());
 }
+
+/// **The kernel seals the application's own files** (APP-015): bytes
+/// sealed under a label open under that label and no other, never under
+/// the storage key the custody keeps, and a platform that declared itself
+/// unsealed gets its bytes back as they were.
+// functional: APP-015
+#[test]
+fn the_application_seals_its_own_files_through_the_kernel_under_a_key_it_never_sees() {
+    let shell = Arc::new(Shell {
+        ..Default::default()
+    });
+    let known: Vec<Vec<u8>> = ["alice", "bob"].iter().map(|n| material(n)).collect();
+    let p = Participant::start(seeds("alice"), known.clone(), platform_of(shell.clone()))
+        .expect("starts");
+    let plain = b"the first line of a thread".to_vec();
+    let sealed = p.seal("threads/bob".into(), plain.clone());
+    assert_ne!(sealed, plain);
+    assert!(
+        rhtn_client::sealed::is_sealed(&sealed),
+        "the kernel's own construction"
+    );
+    assert_eq!(
+        p.unseal("threads/bob".into(), sealed.clone())
+            .expect("opens"),
+        plain
+    );
+    assert!(
+        p.unseal("threads/carol".into(), sealed.clone()).is_err(),
+        "another label refuses: a blob cannot be moved"
+    );
+    let mut bent = sealed.clone();
+    let last = bent.len() - 1;
+    bent[last] ^= 1;
+    assert!(
+        p.unseal("threads/bob".into(), bent).is_err(),
+        "a byte changed refuses"
+    );
+    let storage_key: [u8; 32] = shell
+        .custody
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("the custody keeps the storage key")
+        .try_into()
+        .unwrap();
+    assert!(
+        rhtn_client::sealed::open(&storage_key, "threads/bob", &sealed).is_none(),
+        "the storage key does not open the application's blob: the key is derived, not shared"
+    );
+    drop(p);
+
+    let open = Arc::new(Shell {
+        declared_unsealed: true,
+        ..Default::default()
+    });
+    let q = Participant::start(seeds("alice"), known, platform_of(open)).expect("starts");
+    assert_eq!(
+        q.seal("threads/bob".into(), plain.clone()),
+        plain,
+        "unsealed by declaration: through"
+    );
+    assert_eq!(
+        q.unseal("threads/bob".into(), plain.clone())
+            .expect("through"),
+        plain
+    );
+    assert!(
+        q.unseal("threads/bob".into(), sealed).is_err(),
+        "a sealed blob on an unsealed platform is refused, never read as plaintext"
+    );
+}

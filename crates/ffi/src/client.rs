@@ -34,6 +34,8 @@ impl Drop for Participant {
                 s.zeroize();
             }
         }
+        // the application's sealing key goes the same way
+        self.app_key = None;
     }
 }
 
@@ -48,6 +50,13 @@ pub struct Participant {
     net: Net,
     /// Where the client's state goes between runs, under [`STATE`].
     storage: Arc<dyn crate::device::Storage>,
+    /// **The application's sealing key** (`light-client-requirements.md` §9,
+    /// APP-015): derived from the storage key so no blob of the
+    /// application's opens as one of the kernel's or the reverse; absent
+    /// where the platform declared itself unsealed, and then
+    /// [`Participant::seal`] and [`Participant::unseal`] pass bytes through.
+    /// It never crosses the seam.
+    app_key: AppKey,
     /// **One save at a time.** The state is saved after every call that
     /// can change it and after every event that arrived, and those run
     /// on two of the shell's threads at once — a conversation step on one,
@@ -102,6 +111,11 @@ struct SealedStore {
     key: [u8; 32],
 }
 
+/// The application's sealing key as the participant holds it: derived at
+/// start, wiped with it, absent where the platform is unsealed by
+/// declaration.
+type AppKey = Option<zeroize::Zeroizing<[u8; 32]>>;
+
 impl SealedStore {
     /// The storage a start runs on, per the platform's declared custody:
     /// the plain seam where the platform is unsealed by configuration, and
@@ -109,14 +123,14 @@ impl SealedStore {
     /// here and kept there. **A source that cannot keep the key refuses the
     /// start**; falling quietly to plaintext is the one thing this must
     /// never do.
-    fn over(platform: &Platform) -> Result<Arc<dyn crate::device::Storage>, Refused> {
+    fn over(platform: &Platform) -> Result<(Arc<dyn crate::device::Storage>, AppKey), Refused> {
         // the platform's storage with the diagnostic events on it: name,
         // size and outcome of each read and write, never the bytes
         let under: Arc<dyn crate::device::Storage> =
             Arc::new(crate::diag::TracedStorage(platform.storage.clone()));
         if platform.custody.unsealed() {
             tracing::info!(target: "platform", state = "unsealed", "platform.custody");
-            return Ok(under);
+            return Ok((under, None));
         }
         let key: [u8; 32] = match platform.custody.key() {
             Some(k) => {
@@ -149,7 +163,10 @@ impl SealedStore {
                 }
             }
         };
-        Ok(Arc::new(SealedStore { under, key }))
+        // the application's key, derived rather than shared: the storage
+        // key seals the kernel's blobs, this one the application's
+        let app_key = zeroize::Zeroizing::new(rhtn_client::sealed::application_key(&key));
+        Ok((Arc::new(SealedStore { under, key }), Some(app_key)))
     }
 }
 
@@ -1057,7 +1074,7 @@ impl Participant {
             let known = ids.clone();
             // the storage this run persists through: the platform's, with the
             // kernel's sealing on it per the platform's declared custody
-            let storage = SealedStore::over(&platform)?;
+            let (storage, app_key) = SealedStore::over(&platform)?;
             let reachable = net.reachable();
             let handle = Handle::spawn(move || {
                 let me = rhtn_crypto::SigningIdentity::from_seeds(&ed, &pq);
@@ -1072,6 +1089,7 @@ impl Participant {
                 handle,
                 net,
                 storage,
+                app_key,
                 saving: Arc::new(std::sync::Mutex::new(())),
                 pending_changed: std::sync::Mutex::new(Vec::new()),
                 seeds: Some([ed, pq]),
@@ -1287,6 +1305,34 @@ impl Participant {
         })
     }
 
+    /// **Seal bytes for the application** (`light-client-requirements.md`
+    /// §9, APP-015): the kernel's own construction under a key derived from
+    /// the storage key, the `label` bound as associated data so a blob
+    /// cannot be moved from one place to another; the application keeps
+    /// the ciphertext wherever and however it likes. Where the platform
+    /// declared itself unsealed the bytes pass through, which is the one
+    /// declared exception §9 has. The key never crosses the seam.
+    pub fn seal(&self, label: String, bytes: Vec<u8>) -> Vec<u8> {
+        crate::diag::call_plain("seal", || match &self.app_key {
+            Some(k) => rhtn_client::sealed::seal(k, &label, &bytes),
+            None => bytes,
+        })
+    }
+
+    /// **Open bytes [`Participant::seal`] sealed** under the same label, or
+    /// refuse: another label, another key, a byte changed, or a sealed blob
+    /// on a platform that declared itself unsealed.
+    pub fn unseal(&self, label: String, bytes: Vec<u8>) -> Result<Vec<u8>, Refused> {
+        crate::diag::call("unseal", || match &self.app_key {
+            Some(k) => rhtn_client::sealed::open(k, &label, &bytes)
+                .ok_or_else(|| Refused::new("the bytes do not open under this label")),
+            None if rhtn_client::sealed::is_sealed(&bytes) => Err(Refused::new(
+                "sealed bytes on a platform that declared itself unsealed",
+            )),
+            None => Ok(bytes),
+        })
+    }
+
     /// Write the client's state to the platform's storage.  Called by the
     /// kernel after every step that changes what a restart would need,
     /// and by a shell at any point it is about to be suspended.
@@ -1404,7 +1450,7 @@ impl Participant {
                 Arc::new(move || nonce_drawn(random.as_ref()));
             let net = Net::new(Party::of(credential), pins_for(&ids), nonce)?;
             let known = ids.clone();
-            let storage = SealedStore::over(&platform)?;
+            let (storage, app_key) = SealedStore::over(&platform)?;
             let reachable = net.reachable();
             let handle = Handle::spawn(move || {
                 let direct: std::rc::Rc<dyn DirectPath> = std::rc::Rc::new(reachable);
@@ -1423,6 +1469,7 @@ impl Participant {
                 handle,
                 net,
                 storage,
+                app_key,
                 saving: Arc::new(std::sync::Mutex::new(())),
                 pending_changed: std::sync::Mutex::new(Vec::new()),
                 seeds: None,

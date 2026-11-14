@@ -21217,3 +21217,32 @@ the per-address relation until step 5 splits the relations. Found by the
 compiler: one more read of the field than the grep counted, a multi-line
 access in `take_signed_bundle` (the lesson of the sweep rule, again: a
 grep for `payload.serving` misses `.serving` on its own line).
+
+**Restructure step 2 built, 2026-11-14 (gating).** Kernel:
+`rhtn_client::sealed::application_key(storage_key)` = sha256(key ‖
+label), `Participant::seal(label, bytes)` / `unseal` over the kernel's own
+AES-GCM construction with the label as associated data, pass-through
+where the platform declared itself unsealed, the key zeroized with the
+participant; `the_application_seals_its_own_files_through_the_kernel_under_a_key_it_never_sees`
+(boundary.rs: another label refuses, a byte changed refuses, the storage
+key does not open it, a sealed blob on an unsealed platform refuses).
+Shell: `Threads.kt` is now the store — `dm/<peer>` files of
+`[len][sealed][len]` records (a message, or a delivery change naming a
+message's id), the label `<by>/dm/<peer>/@<offset>` so a record cannot
+move, the id the record's offset; `dm/index` sealed, rewritten on a thread
+added or renamed or its direct flag changing, never on a message; `page()`
+walks backwards 50 at a time folding delivery changes in and carrying the
+ones whose message lies earlier; a record that does not open stops the
+walk and what opened is returned. `Front`: `restore(by, index)`,
+`open(by, peer)` reads the newest page when the conversation is opened,
+`earlier()` the page before on the person's ask, `appender`/`indexer`/
+`loader` hooks replace `persist`; `thread().more` says earlier messages
+exist. `Kernel`: a store per identity over its scope and its own kernel's
+sealing (`sealerOf(p)`); the 12th's `threads` JSON migrated once
+(`threads.migrated` event) and forgotten — the new directory is `dm/`
+because a file `threads` and a directory `threads/` cannot share a name.
+`ConversationActivity`: opens lazily on start, an "earlier messages"
+button while `more`. `AndroidShell.files()`: raw appends with fsync and
+ranged reads, no custody wrapping. `ThreadsTest.kt` rewritten (paging
+with changes folded and carried; a corrupted record; the sealed index and
+another identity's index not opening; the legacy file; the wiring).

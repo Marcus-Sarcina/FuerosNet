@@ -88,7 +88,7 @@ Each step is gated and installed; each removes one class of the veneer.
 |---|---|---|---|
 | 0 | ~~The seam scenario~~ **Done 2026-11-14**: `crates/participant/tests/seam.rs` (PRT-11), over the scripted participant `rhtnp` (now with `agree`/`agreed`/`disagree`/`attachments`/`detach-from`/`invitation`/`save` and a `--store` so a restart holds what it held) and two spawned `rhtnd`, each speaking as its operator; 68 s; found two defects on its first runs (the archive loader's order, ARC-019; the driver must save as the shell does) | the bench as the only test of composition | it runs in minutes and fails for each of this week's defects when reverted |
 | 1 | ~~`Agreed`, `Serving`, `LastFrom` as relations in the kernel~~ **Done 2026-11-14**: `Agreed` and `LastFrom` were correction 3's; this step removed the last singleton, `PayloadState.serving` (its storage slot written empty so older blobs parse), made the catalog sweep name the node it reads (`Client::browse_at(node)`, `browsing_at()`, the courier sending over the session held with that node, the FFI `browse(node)`, the shell sweeping each node an identity is attached to), published a signed bundle wherever a session is held, and deleted the shell's `serving` file format and its one-time import (`Serving.kt`, `ServingTest.kt`). `Serving (identity, subnet) -> node` stays `serving_at` for now; deriving it from `Agreed` is step 5's, with the relations split | the shell's `serving` file; `serving: Option` | the scenario, plus relation tests |
-| 2 | **Restated 2026-11-14 [author]**: the kernel offers the shell a sealing service (encrypt/decrypt bytes, keys never leaving the kernel); the thread store stays the shell's, keyed by identity, as an append-only file of per-message ciphertext through that service; `Front.convos`/`Threads.kt` are rewritten onto it rather than moved into the kernel | conversations in the clear at rest; the history resealed whole on every change | the scenario sends, restarts, reads back; the stored file holds no plaintext; the (N+1)th message appends |
+| 2 | **Built 2026-11-14, gating** (`Participant::seal`/`unseal` under `rhtn_client::sealed::application_key`; `Threads.kt` the store, `Front` paging, `AndroidShell.files()`, the kernel's wiring and migration; tests both sides). Was: the kernel offers the shell a sealing service (encrypt/decrypt bytes, keys never leaving the kernel); the thread store stays the shell's, keyed by identity, as an append-only file of per-message ciphertext through that service; `Front.convos`/`Threads.kt` are rewritten onto it rather than moved into the kernel | conversations in the clear at rest; the history resealed whole on every change | the scenario sends, restarts, reads back; the stored file holds no plaintext; the (N+1)th message appends |
 | 3 | `Net` as a map over `Attachment`; one `watch` per attachment; status per attachment | `live`/`current`/`status` singulars; `primary: bool` | failover and re-attach per attachment in the scenario |
 | 4 | The shell model keyed by identity everywhere: `Model` rows carry `by`; the focused-identity accessors go; `Kernel` split into `Identities`, `Attachments`, `Ceremony`, `Levers` | two notions of "whose"; the god object | the pins become behavioural tests of the split objects |
 | 5 | The client blob split per relation with versions, with the migration | the 2.6 MB whole-state write; versioning by array length | a vector per relation, pinned |
@@ -138,6 +138,50 @@ backward walk with a fake sealer; the Rust side's `seal`/`open` round
 trip, the label binding (a blob opened under another label is refused),
 and the derived key differing from the storage key; the seam scenario
 unchanged, since the instrument keeps no threads.
+
+## 4b. Step 3 as designed, 2026-11-14
+
+**What the reads found.** `Net` holds `live: Option<Live>` (the first
+session, with *the* courier), `tabs: BTreeMap<Keyhash, Tab>`, `current`
+(the first session's handle) and one `status`; `watch` tells status and
+raises `Event::Connection` only for the primary; `detach()` kills every
+tab with the first session; a tab borrows `live_courier()`, so it cannot
+outlive the first attachment. Underneath, `Courier` carries its own
+singleton, `serving: Arc<dyn Serving>`, which `servings()` puts first and
+which `Msg::StockOneTime`, `AssertHorizon`, `ProfileRequest` and
+`PrekeyRequest` (after the held-session paths), `ResourceRequest` (its
+`node` field ignored), `Record` and `Transport` all go to by default,
+while `PublishBundle`/`PublishProfile` go to every serving and
+`StockOneTimeAt`/`CatalogQuery` to a named one. That singleton, not the
+`Net`'s, is the one that decides where a message goes.
+
+**The change.**
+
+- `Courier` keeps `servings` alone, none first; `Courier::new` takes no
+  serving; `serve_also`/`drop_serving` are the whole lifecycle. Every
+  message names its node or is for every node: `PublishBundle`,
+  `PublishProfile`, `AssertHorizon` to all (each attachment serves an
+  address); `StockOneTime` goes, the client emitting `StockOneTimeAt` for
+  the first attachment as it does for a tab; `ResourceRequest { node }`
+  honoured; `Record` becomes `RecordAt { node, bytes }`, the client naming
+  the node serving the address the record belongs to; `PrekeyRequest` and
+  `ProfileRequest` fall back from the held-session paths to the node
+  serving the subject's address (`Client::upstream_of`-derived
+  `serving_for`), else the first serving held; `Transport` to a named node
+  or refused. `attach(population)` becomes `attach_at(node, population)`.
+- `Net` keeps `attachments: BTreeMap<Keyhash, Attachment { serving,
+  current, status, tasks }>` and one courier, made at `stand_detached` and
+  never replaced; `attach` is today's `attach_tab` for every node, the
+  first included; `detach_from(node)` closes one, `detach()` all;
+  `attachments()` is the keys; `watch` per attachment tells that
+  attachment's status and raises `Event::Connection` for every one; the
+  client's `reattached` goes, `moved_tab(from, to)` being the one move.
+  `status()` answers the first attachment's until step 4 keys the shell by
+  attachment; `statuses()` answers all.
+- Tests: the adaptors tests build couriers with no serving and add them;
+  the boundary tests read `statuses()`; the seam scenario is the proof, and
+  gains one leg: the first node detached while the second stays, a message
+  still arriving by the second.
 
 ## 5. Rules the restructure must not move
 

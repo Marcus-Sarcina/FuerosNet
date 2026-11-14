@@ -70,3 +70,22 @@ pub fn open(key: &[u8; 32], name: &str, bytes: &[u8]) -> Option<Vec<u8>> {
 fn aead(k: &[u8; 32]) -> LessSafeKey {
     LessSafeKey::new(UnboundKey::new(&AES_256_GCM, k).expect("a 32-byte key"))
 }
+
+/// **The application's sealing key, derived from the storage key**
+/// (`light-client-requirements.md` §9, APP-015): a hash over the key and
+/// a label, so it is a different function from any other use of the key
+/// and no blob of the application's opens as one of the kernel's or the
+/// reverse. The kernel offers sealing under it across the seam; the key
+/// itself never crosses.
+pub fn application_key(storage_key: &[u8; 32]) -> [u8; 32] {
+    use zeroize::Zeroize;
+    let mut buf = Vec::with_capacity(32 + APPLICATION_KEY_LABEL.len());
+    buf.extend_from_slice(storage_key);
+    buf.extend_from_slice(APPLICATION_KEY_LABEL);
+    let k = rhtn_codec::cose::sha256(&buf);
+    buf.zeroize();
+    k
+}
+
+/// What is hashed after the storage key to derive the application's key.
+const APPLICATION_KEY_LABEL: &[u8] = b"rhtn/1:application-sealing-key";

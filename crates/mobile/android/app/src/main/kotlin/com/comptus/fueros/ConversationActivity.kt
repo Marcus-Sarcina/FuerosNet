@@ -95,6 +95,9 @@ class ConversationActivity : Activity() {
     override fun onStart() {
         super.onStart()
         Kernel.bind(sink)
+        // the thread is read when it is opened, its newest page first
+        val (b, p) = Pair(by, peerKey)
+        if (b != null && p != null) Thread { Kernel.front.open(b, p) }.start()
     }
 
     override fun onStop() {
@@ -127,6 +130,17 @@ class ConversationActivity : Activity() {
                 },
             )
             return
+        }
+        if (t.more) {
+            messages.addView(
+                Button(this).apply {
+                    text = "earlier messages"
+                    setOnClickListener {
+                        isEnabled = false
+                        Thread { Kernel.front.earlier(t.by, t.peerKey) }.start()
+                    }
+                },
+            )
         }
         t.messages.forEach { m -> messages.addView(bubble(m)) }
         scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
