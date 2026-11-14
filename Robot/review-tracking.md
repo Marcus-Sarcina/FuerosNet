@@ -21445,3 +21445,18 @@ cryptography and no wire function; those are the Rust kernel's
 `crates/ffi`'s `Participant`). The Kotlin object is the shell's gateway to
 that kernel for an identity, naming which identity acts and carrying the
 answer to a screen; the name predates the split and is kept as a name.
+
+**Installed on all four, 2026-11-14 08:45, `b45f44f`** [author: "Yes, do
+it now"]. Each phone: `standing state=granted` twice (the request, then
+the service's own start), `pay.restored` from the one blob, `pay.saved
+wrote=6` and `pay.migrated` at the first start, later saves writing 0 to
+2 relations; `threads.migrated` (MRK 2 threads, 5 messages; GXV 1 and 3
+across its two identities); every agreed node re-attached (MRK 12.5 s and
+13.5 s, ZU8 17.4 s, 4VC 18.4 s behind its keyguard, GXV 13.3 s and
+15.2 s); zero refused sends. **The standing's field reading**: MRK put to
+sleep (`mWakefulness=Dozing`, keyguard up) and its app restarted there —
+`standing granted`, both nodes attached at 13.9 s and 15.6 s, zero
+refused sends, where on the 13th the same phone in the same state
+refused every send. The foreground service is what the Android 15
+handsets needed; SES-020's refused state remains tested in the unit test
+alone until a platform refuses it.
