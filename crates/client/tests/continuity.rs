@@ -204,6 +204,7 @@ fn the_gaps_summing_past_the_allowed_share_ends_it_too() {
     assert!(matches!(run(faces, &c), Held::Lost(Lost::Ratio)));
 }
 
+// functional: CAP-017
 /// **A floor lengthens the window and changes nothing else** — which is
 /// what leaving the four minutes inactive means: the same loop, over the
 /// span the capture takes.
@@ -225,6 +226,7 @@ fn a_set_floor_holds_the_same_face_over_a_longer_window() {
     }
 }
 
+// functional: CAP-001
 /// **The prompts fall through the window rather than clustering** (design
 /// §7.5): held over many draws, because one capture's three to five
 /// instants are a sample and a single run proves nothing about spread.

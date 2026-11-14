@@ -105,6 +105,7 @@ fn a_query_and_a_grant_unanswered_at_half_the_patience_go_again_once() {
     assert_eq!(asks(s.client("alice").maintain()), 0);
 }
 
+// functional: CAP-007
 /// The retention a client declares is its own to set (design §7.5.1;
 /// `light-client-requirements.md` §1.3), in whole years, before a ceremony
 /// and not during one, whose intent has already stated it.

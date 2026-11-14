@@ -3,6 +3,7 @@ use rhtn_archive::{record::Record, tx::{envelope, formation_body, TYPE_PRESENCE}
 use rhtn_client::record::*;
 use rhtn_crypto::identity::testkit::test_identity;
 
+// functional: CAP-011
 #[test]
 fn cap_011_all_64_disclosure_subsets_preserve_identity_and_the_exact_audience_view() {
     // The requested subset is the oracle; this is not an independent hash vector.

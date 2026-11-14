@@ -204,6 +204,7 @@ fn a_brokered_service_is_routed_to_only_where_it_matches_the_signed_entry() {
     assert!(page(&ids(), &[(forged, vec![])]).is_empty());
 }
 
+// functional: CAT-019
 #[test]
 fn an_unrecognised_declaration_is_surfaced_and_a_known_one_is_not() {
     let hook = Hook(RefCell::new(vec![]));

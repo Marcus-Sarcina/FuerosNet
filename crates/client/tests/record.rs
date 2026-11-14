@@ -1055,6 +1055,7 @@ fn a_revealed_integrity_value_is_held_to_its_evidence_width() {
     }
 }
 
+// functional: CAP-001
 /// **The guided capture's prompts are drawn from the source it is given**
 /// (design §7.5), held here against a controlled one rather than against
 /// two live ceremonies agreeing by chance.

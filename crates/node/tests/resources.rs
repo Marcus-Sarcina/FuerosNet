@@ -1157,6 +1157,7 @@ fn an_abuse_report_is_stored_only_from_the_resource_it_names_and_carried_nowhere
     assert!(fab.frames().is_empty(), "no report bytes leave the node");
 }
 
+// functional: CAT-020
 #[test]
 fn the_catalog_page_shows_what_the_viewer_holds_with_the_roles_held() {
     let sc = scene();

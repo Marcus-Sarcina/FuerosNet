@@ -41,6 +41,10 @@ fn parse_frame(raw: &[u8]) -> Result<frame::Frame, Error> {
     }
 }
 
+// functional: ENC-001
+// functional: ENC-003
+// functional: ENC-006
+// functional: ENC-007
 // functional: TX-001
 // functional: TX-010
 // functional: TX-013

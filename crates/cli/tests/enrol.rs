@@ -174,6 +174,7 @@ fn a_renewal_leaves_the_entry_alone_where_the_count_is_what_it_claims() {
     assert!(asked.iter().all(|(l, _)| !l.contains("anchor-entry")));
 }
 
+// functional: ENC-011
 /// **An enrolment carries where the machine is into both records it
 /// signs** [author, 2026-11-06]: *"If we disperse by ASN + region, then we
 /// are remediating war, disaster, power grid, physical network backbone,

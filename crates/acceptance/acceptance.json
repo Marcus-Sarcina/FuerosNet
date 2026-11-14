@@ -23,7 +23,8 @@
   "interpretation": null,
   "families": [
    "ARC-001",
-   "TX-018"
+   "TX-018",
+   "SIG-002"
   ]
  },
  {
@@ -349,7 +350,8 @@
   "interpretation": "Re-derived 2026-09-21 to the frontier form.",
   "families": [
    "ARC-016",
-   "REC-010"
+   "REC-010",
+   "SIG-013"
   ]
  },
  {
@@ -701,7 +703,8 @@
   ],
   "families": [
    "ARC-009",
-   "ARC-016"
+   "ARC-016",
+   "CAT-022"
   ]
  },
  {
@@ -840,7 +843,9 @@
   "oracle": "behaviour",
   "interpretation": "A capture expires on its subject's declared window, since §7.5.1 makes the window a default the subject enforces and the record carries each participant's own declaration; a holder applying its own to somebody else's likeness would substitute its policy for theirs.",
   "families": [
-   "ARC-013"
+   "ARC-013",
+   "CAP-007",
+   "VAL-003"
   ]
  },
  {
@@ -866,7 +871,8 @@
   "oracle": "behaviour",
   "interpretation": "What the scan discarded is returned beside the contents because a person restoring is entitled to know their backup held material their own commitment had run out on.",
   "families": [
-   "ARC-013"
+   "ARC-013",
+   "CAP-007"
   ]
  },
  {
@@ -992,7 +998,10 @@
   "when": "Each capture sequence runs.",
   "then": "Each sealed capture holds between three and five frames whose timestamps span between ten and fifteen seconds, and the two runs' prompt sequences differ.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CAP-001"
+  ]
  },
  {
   "id": "CER-04",
@@ -1018,7 +1027,10 @@
   "when": "The client derives k_capture.",
   "then": "The 32 bytes equal HKDF-SHA-256 computed independently with empty salt, the seed as IKM and the stated info; a different holder or ceremony_id yields a different key.",
   "oracle": "fixture",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CAP-004"
+  ]
  },
  {
   "id": "CER-63",
@@ -1051,7 +1063,9 @@
   "oracle": "fixture",
   "interpretation": null,
   "families": [
-   "ARC-017"
+   "ARC-017",
+   "CAP-004",
+   "CAP-006"
   ]
  },
  {
@@ -1079,7 +1093,10 @@
   "when": "The holder seals the capture and opens it again under the same key.",
   "then": "There is one slot for the template and one per frame, in that order; each begins with the framing's version byte and carries its own 24-byte nonce, no nonce repeating across the capture; one key opens every slot; the capture comes back as it went; another key opens nothing; and no frame appears in the clear in any slot.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CAP-005"
+  ]
  },
  {
   "id": "CER-65",
@@ -1106,7 +1123,10 @@
   "when": "A slot of the second is put in place of a slot of the first; the template's slot and an image's are exchanged; the stored ceremony id is edited; a slot is truncated, a ciphertext byte is flipped, and a slot's version byte is set to one the reader does not know; and the template's length is read as another version's.",
   "then": "Each is a decryption failure reported as such and never as a no-match or a short template: the lifted slot, the exchanged slots and the edited ceremony id fail to authenticate, a truncated slot shorter than a nonce and a tag is refused as truncated, and an unknown version byte and a template of the wrong length are refused as framing.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CAP-005"
+  ]
  },
  {
   "id": "CER-05",
@@ -1165,7 +1185,9 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "NET-021"
+   "NET-021",
+   "CAP-006",
+   "VAL-001"
   ]
  },
  {
@@ -1193,7 +1215,10 @@
   "when": "A second consented query about the same record arrives with no new grant, and the test inspects B's storage.",
   "then": "The released key is absent from storage and the second query is answered `unavailable`.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CAP-006"
+  ]
  },
  {
   "id": "CER-08",
@@ -1220,7 +1245,10 @@
   "when": "A consented query arrives with a KeyGrant whose field 1 is R2's txid.",
   "then": "B answers from R2's capture; R1's capture is still sealed afterwards and R1's key was never derived.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CAP-005"
+  ]
  },
  {
   "id": "CER-09",
@@ -1247,7 +1275,10 @@
   "when": "A's client releases a capture key for a query directed at B.",
   "then": "The KeyGrant's field 1 is R2's txid.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CAP-008"
+  ]
  },
  {
   "id": "CER-10",
@@ -1336,7 +1367,8 @@
   "interpretation": null,
   "families": [
    "TX-025",
-   "VER-012"
+   "VER-012",
+   "CAP-007"
   ]
  },
  {
@@ -1442,7 +1474,8 @@
    "TX-025",
    "VER-012",
    "VER-013",
-   "VER-014"
+   "VER-014",
+   "CAP-015"
   ]
  },
  {
@@ -1607,6 +1640,13 @@
     5,
     "revealed-value-matches-schema"
    ]
+  ],
+  "families": [
+   "CAP-009",
+   "CAP-010",
+   "CAP-011",
+   "CAP-012",
+   "VAL-002"
   ]
  },
  {
@@ -1741,7 +1781,11 @@
   "when": "Client B captures and seals, and the test opens the capture with the subject's key.",
   "then": "No frame in the opened capture carries EXIF or other metadata.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CAP-003",
+   "CAP-014"
+  ]
  },
  {
   "id": "CER-24",
@@ -1833,7 +1877,8 @@
   "interpretation": "The content and form of the disclosure are not specified; the test asserts its occurrence and timing. Re-derived 2026-09-21: design §19.6 owes a witness or verifier no warning [author, 2026-09-17].",
   "families": [
    "UX-001",
-   "UX-002"
+   "UX-002",
+   "CAP-013"
   ]
  },
  {
@@ -2118,6 +2163,11 @@
     5,
     "disclosure-root-recomputes"
    ]
+  ],
+  "families": [
+   "CAP-009",
+   "CAP-010",
+   "CAP-011"
   ]
  },
  {
@@ -2172,7 +2222,9 @@
    ]
   ],
   "families": [
-   "TX-027"
+   "TX-027",
+   "CAP-012",
+   "VAL-002"
   ]
  },
  {
@@ -2236,7 +2288,8 @@
    ]
   ],
   "families": [
-   "TX-026"
+   "TX-026",
+   "CAP-001"
   ]
  },
  {
@@ -2493,7 +2546,8 @@
    "CER-022",
    "NET-031",
    "NET-022",
-   "NET-023"
+   "NET-023",
+   "CAP-013"
   ]
  },
  {
@@ -2755,7 +2809,12 @@
   "when": "Five runs: one face present throughout; nobody at all; a face withdrawn past the maximum gap; a second face substituted while the first is away; and gaps each inside the maximum but summing past the presence ratio.",
   "then": "The first keeps one frame per prompt, in the order taken, spread through the window rather than clustered; the others are abandoned by this party's own decision and nothing of the check enters a transaction. With the floor inactive the maximum gap exceeds the window, so the ratio is what catches a long absence and the gap rule is exercised against a shorter maximum; a floor set to the reference duration lengthens the window and changes nothing else.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CAP-001",
+   "CAP-015",
+   "CAP-017"
+  ]
  },
  {
   "id": "CER-54",
@@ -2933,7 +2992,8 @@
    "CUR-002",
    "CUR-005",
    "CUR-006",
-   "REC-006"
+   "REC-006",
+   "VAL-004"
   ]
  },
  {
@@ -3142,7 +3202,10 @@
   "when": "The test inspects P's archive and persistent storage after the reply.",
   "then": "No record of the request, of Q, or of the reply is present.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "VAL-004"
+  ]
  },
  {
   "id": "CUR-13",
@@ -3321,7 +3384,8 @@
   "interpretation": "A request goes only up a session the node holds as the client; a party attached below cannot be asked, the light-client requirements asking no client to answer a request stream [author, 2026-09-11].",
   "families": [
    "CUR-005",
-   "CUR-006"
+   "CUR-006",
+   "CAT-022"
   ]
  },
  {
@@ -3468,7 +3532,10 @@
   "when": "Each prefix is presented to the decoder as a complete input, at whichever layer the entry's expect.kind names (body, envelope, frame, reply, record).",
   "then": "Every prefix yields structural = malformed. The decoder returns a verdict for every prefix; the process neither terminates abnormally nor hangs beyond T nor exceeds M on any of them.",
   "oracle": "fixture",
-  "interpretation": "An incomplete CBOR data item is not well-formed under RFC 8949; the profile adopts RFC 8949 without restating well-formedness, so the malformed verdict on a truncated item rests on the RFC rather than on a sentence of the profile."
+  "interpretation": "An incomplete CBOR data item is not well-formed under RFC 8949; the profile adopts RFC 8949 without restating well-formedness, so the malformed verdict on a truncated item rests on the RFC rather than on a sentence of the profile.",
+  "families": [
+   "ENC-013"
+  ]
  },
  {
   "id": "DEC-02",
@@ -3500,7 +3567,10 @@
   "when": "Each variant is presented to the decoder as a complete input at the entry's layer.",
   "then": "Every variant yields exactly one of structural = valid or structural = malformed. No variant terminates the process abnormally, runs beyond T, or drives memory above M. Any variant reported valid is re-checked by re-serialisation: its emitted bytes equal the variant's bytes.",
   "oracle": "behaviour",
-  "interpretation": "Crash-freedom and a time bound are not stated in any document; §1.3 states only that the bounds exist to stop memory exhaustion by a hostile peer. The test parameterises M and T and records them with the run."
+  "interpretation": "Crash-freedom and a time bound are not stated in any document; §1.3 states only that the bounds exist to stop memory exhaustion by a hostile peer. The test parameterises M and T and records them with the run.",
+  "families": [
+   "ENC-013"
+  ]
  },
  {
   "id": "DEC-03",
@@ -3532,7 +3602,10 @@
   "when": "Each input is presented to the decoder as a complete body.",
   "then": "structural = malformed for all three. Peak memory during each decode stays within M, which is set far below the declared sizes; the decoder returns rather than waiting for the declared content.",
   "oracle": "behaviour",
-  "interpretation": "The specification bounds memory through the array ceilings and says bounds exist to stop exhaustion; that a declared length beyond the input or beyond any ceiling is rejected on sight, without reserving the declared size, is implied by that purpose rather than stated."
+  "interpretation": "The specification bounds memory through the array ceilings and says bounds exist to stop exhaustion; that a declared length beyond the input or beyond any ceiling is rejected on sight, without reserving the declared size, is implied by that purpose rather than stated.",
+  "families": [
+   "ENC-013"
+  ]
  },
  {
   "id": "DEC-04",
@@ -3564,7 +3637,10 @@
   "when": "Each tagged form is presented to the decoder at its layer.",
   "then": "structural = malformed for all three; none is accepted as the untagged object it wraps. The untagged originals remain accepted.",
   "oracle": "behaviour",
-  "interpretation": "No document names tag 55799. The expectation rests on the schema's top-level item being a map (§3's Envelope, §8.0's frame array) and a tag being a different major type, so a library that strips the tag silently would give one object two accepted encodings — the outcome §1 forbids for nested COSE tags."
+  "interpretation": "No document names tag 55799. The expectation rests on the schema's top-level item being a map (§3's Envelope, §8.0's frame array) and a tag being a different major type, so a library that strips the tag silently would give one object two accepted encodings — the outcome §1 forbids for nested COSE tags.",
+  "families": [
+   "SIG-004"
+  ]
  },
  {
   "id": "DEC-05",
@@ -3610,6 +3686,9 @@
     0,
     "envelope-shape"
    ]
+  ],
+  "families": [
+   "ENC-008"
   ]
  },
  {
@@ -3644,7 +3723,10 @@
   "when": "Each object is presented to the decoder at its layer.",
   "then": "structural = valid for all three. An implementation whose ceiling is off by one on the low side — 1023 bytes, or 31 responses — rejects one of these and fails conformance.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "ENC-008"
+  ]
  },
  {
   "id": "DEC-07",
@@ -3671,7 +3753,10 @@
   "when": "Each variant is presented to the decoder as a CatalogReply.",
   "then": "structural = malformed for both variants. The 111-entry original remains accepted.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CAT-014"
+  ]
  },
  {
   "id": "DEC-08",
@@ -3698,7 +3783,10 @@
   "when": "Each modified message is presented to the decoder at its layer.",
   "then": "Each is rejected as malformed; none is accepted with the key preserved, and none is accepted with the key ignored. The unmodified vectors remain accepted.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "ENC-006"
+  ]
  },
  {
   "id": "DEC-09",
@@ -3757,7 +3845,10 @@
   "when": "Each variant body is presented to the decoder.",
   "then": "structural = malformed for both variants. The single-key original remains accepted. An implementation that collects unknown keys into a list rather than a keyed structure, and so never sees the collision, accepts these and fails.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "ENC-001"
+  ]
  },
  {
   "id": "DEC-11",
@@ -3787,7 +3878,10 @@
   "when": "Each variant body is presented to the decoder.",
   "then": "structural = malformed for all three. An implementation that skips an unknown value by walking its framing without checking the profile's encoding rules inside the slice accepts these and fails.",
   "oracle": "behaviour",
-  "interpretation": "'The profile's encoding rules govern the slice's framing' is read as requiring the whole slice, not only its outermost header, to be deterministically encoded; whether the protocol-map key rules (unsigned-integer keys, ascending) also reach a map nested inside the slice is a question for the author and is not tested here."
+  "interpretation": "'The profile's encoding rules govern the slice's framing' is read as requiring the whole slice, not only its outermost header, to be deterministically encoded; whether the protocol-map key rules (unsigned-integer keys, ascending) also reach a map nested inside the slice is a question for the author and is not tested here.",
+  "families": [
+   "ENC-001"
+  ]
  },
  {
   "id": "DEC-12",
@@ -3814,7 +3908,10 @@
   "when": "The body is presented to the decoder.",
   "then": "structural = valid; the decoder returns within T and within M; the unknown key's slice is preserved, so the body re-serialises to bytes identical to the input. An implementation with a recursion limit below 1024 reports malformed or terminates abnormally here and fails.",
   "oracle": "behaviour",
-  "interpretation": "§1.3 sets no nesting-depth ceiling; depth is bounded only through the 1024-byte encoded-slice bound, so a decoder that caps depth lower is over-strict under the text as written. Whether the author wants a depth ceiling is raised in the notes."
+  "interpretation": "§1.3 sets no nesting-depth ceiling; depth is bounded only through the 1024-byte encoded-slice bound, so a decoder that caps depth lower is over-strict under the text as written. Whether the author wants a depth ceiling is raised in the notes.",
+  "families": [
+   "ENC-004"
+  ]
  },
  {
   "id": "DEC-13",
@@ -3841,7 +3938,10 @@
   "when": "The body is presented to the decoder.",
   "then": "structural = valid, and the body re-serialises to bytes identical to the input with all 32 keys present. An implementation counting unknown keys per object rather than per map reports malformed here and fails.",
   "oracle": "behaviour",
-  "interpretation": "'Per map' is read as each map counted independently, so 32 unknown keys across two maps are within bound; the specification does not say whether the count is per map or per object in any other words."
+  "interpretation": "'Per map' is read as each map counted independently, so 32 unknown keys across two maps are within bound; the specification does not say whether the count is per map or per object in any other words.",
+  "families": [
+   "ENC-004"
+  ]
  },
  {
   "id": "DEC-14",
@@ -3871,7 +3971,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "NET-009"
+   "NET-009",
+   "ENC-003"
   ]
  },
  {
@@ -3901,7 +4002,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "NET-009"
+   "NET-009",
+   "ENC-003"
   ]
  },
  {
@@ -3933,7 +4035,10 @@
   "when": "Each entry is decoded and then emitted again by the implementation's encoder — the same path it uses to reconstruct a signed payload, to store an object, or to hand it onward.",
   "then": "For every entry the emitted bytes equal the input bytes exactly, unknown keys, their positions and their encoded values included. No entry is emitted with an unknown key dropped, reordered, or re-encoded.",
   "oracle": "fixture",
-  "interpretation": "§1.2 states preservation for re-serialisation for signature verification; this entry asserts the same for every re-serialisation the implementation performs, on the reading that a key dropped on any other path yields a different object, and a different txid, at the next holder."
+  "interpretation": "§1.2 states preservation for re-serialisation for signature verification; this entry asserts the same for every re-serialisation the implementation performs, on the reading that a key dropped on any other path yields a different object, and a different txid, at the next holder.",
+  "families": [
+   "ENC-004"
+  ]
  },
  {
   "id": "DEC-17",
@@ -3965,7 +4070,11 @@
   "oracle": "fixture",
   "interpretation": null,
   "families": [
-   "TX-022"
+   "TX-022",
+   "ENC-001",
+   "ENC-002",
+   "SIG-007",
+   "SIG-009"
   ]
  },
  {
@@ -3992,7 +4101,10 @@
   "when": "Each is decoded.",
   "then": "Sixteen keys and 1024 bytes are accepted; seventeen keys and 1025 bytes are rejected, the nested map counted on its own. An implementation counting only the outermost map fails.",
   "oracle": "fixture",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "ENC-005"
+  ]
  },
  {
   "id": "DEC-19",
@@ -4026,7 +4138,11 @@
   "interpretation": null,
   "families": [
    "TX-005",
-   "TX-007"
+   "TX-007",
+   "ENC-002",
+   "ENC-007",
+   "SIG-004",
+   "SIG-006"
   ]
  },
  {
@@ -4168,7 +4284,8 @@
    "TX-001",
    "TX-013",
    "TX-015",
-   "TX-018"
+   "TX-018",
+   "SIG-008"
   ]
  },
  {
@@ -4210,6 +4327,9 @@
     "locator-nibble-in-range",
     "+"
    ]
+  ],
+  "families": [
+   "ENC-009"
   ]
  },
  {
@@ -4277,7 +4397,10 @@
   "when": "Each is verified.",
   "then": "Both are refused: the signature is authentic, and the algorithm it declares is not the one the classical profile requires. An implementation that reads the header only for its shape and verifies with the algorithm it assumed fails.",
   "oracle": "fixture",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "SIG-006"
+  ]
  },
  {
   "id": "DEC-26",
@@ -4311,7 +4434,8 @@
   "interpretation": null,
   "families": [
    "TOP-014",
-   "TX-006"
+   "TX-006",
+   "SIG-012"
   ]
  },
  {
@@ -4395,7 +4519,10 @@
   "when": "It is given a series of 2^32 and a counter of 2^32.",
   "then": "Both are refused as malformed. Narrowing either to fit would leave two parties holding different beliefs about which series a node is on, with nothing raised on either side, which is worse than a rejection.",
   "oracle": "fixture",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "ENC-012"
+  ]
  },
  {
   "id": "DEC-30",
@@ -4505,7 +4632,8 @@
   ],
   "families": [
    "TX-007",
-   "TX-009"
+   "TX-009",
+   "ENC-008"
   ]
  },
  {
@@ -4560,6 +4688,10 @@
     "verifier-auth-hybrid-in-recovery",
     "-"
    ]
+  ],
+  "families": [
+   "SIG-009",
+   "SIG-010"
   ]
  },
  {
@@ -4612,7 +4744,8 @@
    ]
   ],
   "families": [
-   "TX-019"
+   "TX-019",
+   "SIG-008"
   ]
  },
  {
@@ -4640,7 +4773,10 @@
   "when": "A node verifies it.",
   "then": "The envelope fails signature verification: the delegated key is not the identity's key material and a held delegation does not stand in for it; the transaction is not stored and not forwarded.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "VAL-005"
+  ]
  },
  {
   "id": "DEC-36",
@@ -4803,7 +4939,11 @@
   "when": "Each is decoded under the kind the corpus declares for it.",
   "then": "Each prints its shape and its verdict. What the corpus expects accepted is never reported refused; what it expects refused is never reported clean; and a signed object no key is held for is reported unverifiable rather than failing.",
   "oracle": "fixture",
-  "interpretation": "The tool decodes with the parser a node uses and no other: a second, laxer decoder written for convenience would disagree with the first invisibly."
+  "interpretation": "The tool decodes with the parser a node uses and no other: a second, laxer decoder written for convenience would disagree with the first invisibly.",
+  "families": [
+   "SIG-012",
+   "SIG-013"
+  ]
  },
  {
   "id": "DMN-06",
@@ -5341,7 +5481,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "UX-017"
+   "UX-017",
+   "VAL-005"
   ]
  },
  {
@@ -5392,7 +5533,10 @@
   "when": "The phone delegates a run over the desktop's public key; the desktop starts from alice's key material, the transport seed and the run, attaches, and its bundle payload is signed on the phone.",
   "then": "A start with no delegation, or with a delegation by another identity, is refused; the desktop presents the delegated key where the phone presents the classical member; signing a body on the desktop is refused; the attach binds under the delegation with the pool stocked and no bundle until the phone's signature is taken, after which the node holds the bundle under the desktop's device.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "VAL-005"
+  ]
  },
  {
   "id": "MET-01",
@@ -6395,7 +6539,8 @@
   "interpretation": null,
   "families": [
    "PAY-008",
-   "PAY-012"
+   "PAY-012",
+   "CAT-022"
   ]
  },
  {
@@ -6595,7 +6740,8 @@
   "families": [
    "GAT-008",
    "UX-009",
-   "UX-010"
+   "UX-010",
+   "CAT-020"
   ]
  },
  {
@@ -7761,7 +7907,8 @@
   "interpretation": "",
   "families": [
    "TOP-046",
-   "UX-025"
+   "UX-025",
+   "SIG-002"
   ]
  },
  {
@@ -8137,7 +8284,10 @@
   "when": "C attaches to N again.",
   "then": "N's AttachAck carries field 4 equal to 0 and no drain delivery follows; N's inspectable queue store holds no copy of any of the k ciphertexts.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "VAL-003"
+  ]
  },
  {
   "id": "QUE-04",
@@ -8191,7 +8341,10 @@
   "when": "The test inspects N's record of the waiting message.",
   "then": "The record consists of the ciphertext, C's keyhash, the device the submission named and an arrival time, and carries nothing further: in particular no identity or address of X.",
   "oracle": "behaviour",
-  "interpretation": "Re-derived 2026-09-22: the queue is per device, so the device the submission named is part of the minimum."
+  "interpretation": "Re-derived 2026-09-22: the queue is per device, so the device the submission named is part of the minimum.",
+  "families": [
+   "VAL-001"
+  ]
  },
  {
   "id": "QUE-06",
@@ -8711,7 +8864,8 @@
    "UX-029",
    "REC-001",
    "REC-002",
-   "REC-003"
+   "REC-003",
+   "SIG-010"
   ]
  },
  {
@@ -8786,7 +8940,8 @@
    ]
   ],
   "families": [
-   "REC-002"
+   "REC-002",
+   "SIG-010"
   ]
  },
  {
@@ -9317,7 +9472,8 @@
   "interpretation": null,
   "families": [
    "TX-013",
-   "UX-026"
+   "UX-026",
+   "ENC-011"
   ]
  },
  {
@@ -10134,7 +10290,9 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "RES-012"
+   "RES-012",
+   "SIG-012",
+   "SIG-013"
   ]
  },
  {
@@ -10188,7 +10346,10 @@
   "when": "O submits the entry over O's session; P submits the same bytes over P's session.",
   "then": "O's submission is answered with code 0 and the entry is served; P's is answered with code 1 and the served entry is unchanged.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CAT-004"
+  ]
  },
  {
   "id": "RSC-02",
@@ -10215,7 +10376,11 @@
   "when": "Owner O2 submits a valid entry naming R over O2's session.",
   "then": "The reply carries code 1 and H still serves O1's entry for R.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CAT-004",
+   "CAT-006"
+  ]
  },
  {
   "id": "RSC-03",
@@ -10246,7 +10411,12 @@
   "when": "O submits a new entry E2 for R, and the test inspects H's storage and archive.",
   "then": "Queries return E2 and never E1, E1 is absent from H's storage, and H's archive did not advance.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CAT-001",
+   "CAT-006",
+   "CAT-011"
+  ]
  },
  {
   "id": "RSC-04",
@@ -10268,7 +10438,11 @@
   "when": "O queries H, and another horizon member M queries H.",
   "then": "O's reply carries R's entry; M's does not.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CAT-008",
+   "CAT-013"
+  ]
  },
  {
   "id": "RSC-05",
@@ -10295,7 +10469,12 @@
   "when": "O re-registers R requesting scope self, then M queries.",
   "then": "M's reply omits R, and no TopologyPush or other frame carrying the entry leaves H.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CAT-001",
+   "CAT-008",
+   "CAT-011"
+  ]
  },
  {
   "id": "RSC-06",
@@ -10321,7 +10500,10 @@
   "when": "X sends a CatalogQuery.",
   "then": "The stream is closed and no CatalogReply, empty or otherwise, is sent.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CAT-013"
+  ]
  },
  {
   "id": "RSC-07",
@@ -10347,7 +10529,10 @@
   "when": "M sends an unfiltered CatalogQuery.",
   "then": "The reply's field 2 holds the first 111 entries in ascending resource-then-owner keyhash order and field 3 names the service type of the 112th.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CAT-014"
+  ]
  },
  {
   "id": "RSC-08",
@@ -10374,7 +10559,10 @@
   "when": "Two different askers query H.",
   "then": "Each reply carries E byte-for-byte, with O's signature and no signature by H.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CAT-003"
+  ]
  },
  {
   "id": "RSC-09",
@@ -10400,7 +10588,10 @@
   "when": "H processes it and a member requests the resource.",
   "then": "The registration is answered code 0 and the entry is served; the scope grants nothing, so the request is decided by the role row alone. An implementation that rejects the entry fails.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CAT-010"
+  ]
  },
  {
   "id": "RSC-10",
@@ -10422,7 +10613,10 @@
   "when": "The owner registers it and a member's client fetches it.",
   "then": "Registration is accepted, the reply carries field 9 unchanged, and the client's hook records that a declaration exists and is unrecognised. An implementation that rejects the entry fails.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CAT-019"
+  ]
  },
  {
   "id": "RSC-11",
@@ -10788,7 +10982,9 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "GAT-033"
+   "GAT-033",
+   "CAT-002",
+   "CAT-005"
   ]
  },
  {
@@ -10844,7 +11040,9 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "UX-011"
+   "UX-011",
+   "CAT-015",
+   "CAT-017"
   ]
  },
  {
@@ -10875,7 +11073,8 @@
   "families": [
    "GAT-034",
    "UX-010",
-   "UX-011"
+   "UX-011",
+   "CAT-019"
   ]
  },
  {
@@ -10964,7 +11163,9 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "GAT-001"
+   "GAT-001",
+   "CAT-002",
+   "CAT-010"
   ]
  },
  {
@@ -11185,7 +11386,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "GAT-017"
+   "GAT-017",
+   "VAL-001"
   ]
  },
  {
@@ -11219,7 +11421,8 @@
    "GAT-006",
    "GAT-009",
    "GAT-012",
-   "GAT-037"
+   "GAT-037",
+   "CAT-002"
   ]
  },
  {
@@ -11242,7 +11445,12 @@
   "when": "A well-formed reply carrying valid entries arrives under a different nonce.",
   "then": "The sweep reports the wrong nonce and no entry out of that reply reaches the view. The query stays outstanding, and the honest reply under the nonce it sent is taken normally.",
   "oracle": "behaviour",
-  "interpretation": "The wire says the reply echoes the query's nonce; that an asker must therefore refuse one that does not is the rule the other three askers (resolution, currency, the archive walk) already apply, asserted here for the catalog sweep."
+  "interpretation": "The wire says the reply echoes the query's nonce; that an asker must therefore refuse one that does not is the rule the other three askers (resolution, currency, the archive walk) already apply, asserted here for the catalog sweep.",
+  "families": [
+   "CAT-012",
+   "CAT-017",
+   "CAT-022"
+  ]
  },
  {
   "id": "RSC-38",
@@ -11295,7 +11503,9 @@
   "interpretation": "",
   "families": [
    "UX-011",
-   "UX-018"
+   "UX-018",
+   "CAT-007",
+   "CAT-016"
   ]
  },
  {
@@ -11371,7 +11581,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "GAT-006"
+   "GAT-006",
+   "VAL-003"
   ]
  },
  {
@@ -12271,7 +12482,10 @@
   "when": "S sends one of each of the four request types, each with a distinct nonce, some of which N refuses.",
   "then": "Each reply is a two-field map whose field 1 is the nonce of the request that drew it and whose field 2 is one of 0, 1 and 2; no reply carries any other field.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CAT-022"
+  ]
  },
  {
   "id": "SUB-09",
@@ -12734,7 +12948,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "GAT-004"
+   "GAT-004",
+   "VAL-003"
   ]
  },
  {
@@ -14478,7 +14693,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "NET-002"
+   "NET-002",
+   "SIG-003"
   ]
  },
  {
@@ -14987,7 +15203,10 @@
   "when": "L1 and L2 exchange candidates and connect.",
   "then": "The reflexive addresses travel only in the candidate exchange between the two leaves; no TopologyPush, EndpointRecord, memo or replicated state at either serving node carries either address.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CAP-014"
+  ]
  },
  {
   "id": "TRV-07",
@@ -15883,7 +16102,8 @@
   "interpretation": "",
   "families": [
    "TX-002",
-   "UX-025"
+   "UX-025",
+   "SIG-002"
   ]
  },
  {
@@ -16844,7 +17064,9 @@
   "oracle": "behaviour",
   "interpretation": "§6 requires the warning, not a claim of completeness. A client holds no predicate and cannot evaluate one, so the honest answer is a lower bound stated as a lower bound; a stale portion shown as stale is the same obligation read from the other side, and is why a partial answer is still worth giving.",
   "families": [
-   "UX-006"
+   "UX-006",
+   "CAT-018",
+   "CAT-021"
   ]
  },
  {
@@ -16899,7 +17121,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "UX-018"
+   "UX-018",
+   "CAT-024"
   ]
  },
  {
@@ -16929,7 +17152,8 @@
   "oracle": "behaviour",
   "interpretation": "§11.2's requirements are written for the node, in the request direction. The hazard they close is a property of a boundary rather than of a direction, and §11 has the node parse and re-serialise the response on the same reasoning — so the client's half of the rule is to refuse what reaches it ambiguous, which also reports a node that did not do its own half.",
   "families": [
-   "UX-018"
+   "UX-018",
+   "CAT-023"
   ]
  },
  {
@@ -16957,7 +17181,10 @@
   "when": "A reviewer serves a page that attempts script, a fetch, storage, a file URL and a navigation away.",
   "then": "None of them takes effect: the document has no origin to share, nothing is published into it, no fetch is served, nothing it stored outlives the screen, and the navigation is refused with the person told the frame did not go. The client's own styling applies where the page sets none and loses where it sets any, and the page's markup is unaltered.",
   "oracle": "behaviour",
-  "interpretation": " **Closed by an instrumentation run** [2026-11-08]: `app/src/androidTest/.../FrameIsolationTest.kt`, five tests, run on GXV (SM-G996U1, Android 15) with `./gradlew connectedFieldtestDebugAndroidTest` — 0 failures. A real `WebView` is fed a page that tries to run script, write local storage, fetch, open a window, navigate away, load a remote image and read `file:///etc/hosts`. The settings both screens had inline moved into `Frames`, so the run applies **the same code the screens use**: a test asserting a copy would pass while the screens drifted. **The gate compiles the source set and does not run it**, there being no device in the gate and a test nothing compiles being one that rots. **The first attempt failed on the device and was right to**: it asserted the frame was never *asked* to navigate, and an `iframe src=\"file://…\"` reaches `shouldOverrideUrlLoading` — being asked is the page trying, refusing is the frame's answer, and the two were conflated. The decision is now `Frames.nodeGoing` and `Frames.resourceGoing`, which the screen and the run both ask rather than the run standing in for the screen's client. One test allows script on purpose, to establish that the page is loud when it can be; without it a frame that rendered nothing would pass everything."
+  "interpretation": " **Closed by an instrumentation run** [2026-11-08]: `app/src/androidTest/.../FrameIsolationTest.kt`, five tests, run on GXV (SM-G996U1, Android 15) with `./gradlew connectedFieldtestDebugAndroidTest` — 0 failures. A real `WebView` is fed a page that tries to run script, write local storage, fetch, open a window, navigate away, load a remote image and read `file:///etc/hosts`. The settings both screens had inline moved into `Frames`, so the run applies **the same code the screens use**: a test asserting a copy would pass while the screens drifted. **The gate compiles the source set and does not run it**, there being no device in the gate and a test nothing compiles being one that rots. **The first attempt failed on the device and was right to**: it asserted the frame was never *asked* to navigate, and an `iframe src=\"file://…\"` reaches `shouldOverrideUrlLoading` — being asked is the page trying, refusing is the frame's answer, and the two were conflated. The decision is now `Frames.nodeGoing` and `Frames.resourceGoing`, which the screen and the run both ask rather than the run standing in for the screen's client. One test allows script on purpose, to establish that the page is loud when it can be; without it a frame that rendered nothing would pass everything.",
+  "families": [
+   "CAT-025"
+  ]
  },
  {
   "id": "RSC-59",
@@ -17187,7 +17414,8 @@
   "interpretation": "",
   "families": [
    "TX-027",
-   "UX-022"
+   "UX-022",
+   "CAT-026"
   ]
  },
  {

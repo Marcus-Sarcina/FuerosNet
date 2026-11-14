@@ -21838,3 +21838,42 @@ the two sim resolutions are the node's, run on the client's behalf, and
 RES-07 routes through the serving node — the row's 2026-10-05 restatement
 has no test and, as far as read, no client code path). Figure: 575 live,
 305 held, 270 by neither; CUR 0, REC 0, VER 0, RES 3.
+
+**Second group — CAP, CAT, ENC, SIG, VAL — linked, 2026-11-14.** CAP by
+the CER capture entries, ARC-26/27, TRV-06 and five unmarked tests
+(continuity's spread and floor, the random-source prompts, the store's
+rest state, the declared retention) plus the conformance crate's 64-subset
+test for CAP-011; CAT by the RSC catalog entries, DEC-07, PRD-06, SUB-08,
+PAY-24, ARC-21, CUR-18 and four unmarked tests; ENC by the DEC entries,
+REP-06, the corpus test (N-cbor-*, N-witness-empty-array, N-retired-*,
+N-*-version-2), the fuzz test and the enrolment's zone test; SIG by
+DEC-17/19/22/25/26/33/34/35, TRN-17, ARC-01, CER-71, PRP-31, REC-01/03,
+RES-18, DMN-05, ARC-11; VAL by the entries that hold each data class and
+the three RFC/FIPS vector tests in `crypto/tests/primitives.rs`. **A count
+to rule on**: CAP-009 says six disclosures and lists six; CAP-010 says
+"the seven leaf digests", and CER-18/35 say seven fields — one of the
+rows is wrong by one and I did not change either. The partials: CAP-003
+(metadata stripped; cropping and the background warning have no test);
+CAP-008 (the default; the explanation to the person has no test); CAP-010
+(independent vectors for the leaf and root are the corpus's records, not
+a separate KAT); CAP-015 (the version travels and another version is
+unavailable; that version 2 means SFace/YuNet is asserted by nothing);
+CAT-001 (no slot, no standing, no flood; that a resource is no participant
+is the shape); CAT-007 (one portion per node; a merge of unlike owners
+refused is asserted by nothing); CAT-012 (byte-exact type compare has no
+test); CAT-016 (the sweep; its triggers have no test); CAT-018 (RSC-54
+names the stale portion; expiry has none, and the connect-scope reading
+has none); ENC-011 (IPv4, ASN and zone in signed records; the 7431 default
+and the IPv6 refusal have no test); SIG-003 (TRN-17's shape check;
+swapped halves and a private key are not among its variants); SIG-013
+(the outcomes are distinct at the decoder and the probe; "stale" and
+"untrusted" are policy's). **Held by neither, and said so**: CAP-002,
+CAP-016 (E and O rows: liveness evaluation and the fuzzing scheme are
+programmes), ENC-010 (a signed locator's path never truncated; no test
+truncates one), SIG-001 (txid as SHA-256 of the body map; no test
+recomputes it against a vector), SIG-005 (the fourteen domains; no test
+moves a signature between two), SIG-011 (deterministic ML-DSA and
+Ed25519/ML-DSA/COSE known answers; `primitives.rs` has the DH, KDF and KEM
+vectors and no signature KAT), VAL-007 to VAL-011 (E rows and the kinds'
+own rule: measurement programmes, not tests). Figure: 575 live, 374 held,
+201 by neither; CAP 2, CAT 0, ENC 1, SIG 3, VAL 5.

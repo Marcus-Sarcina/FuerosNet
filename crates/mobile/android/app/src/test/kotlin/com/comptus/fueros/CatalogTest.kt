@@ -32,6 +32,7 @@ class CatalogTest {
         )
     }
 
+    // functional: CAT-017
     // functional: UX-011
     // functional: UX-018
     @Test

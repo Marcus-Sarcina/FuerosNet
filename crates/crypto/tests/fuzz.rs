@@ -29,6 +29,7 @@ impl Rng {
     }
 }
 
+// functional: ENC-013
 #[test]
 fn mutate_until_the_budget_runs_out() {
     let Some(secs) = std::env::var("RHTN_FUZZ_SECONDS")

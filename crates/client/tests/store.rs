@@ -147,6 +147,7 @@ fn the_holder_is_bound_by_the_key_it_was_handed() {
     );
 }
 
+// functional: CAP-006
 #[test]
 fn the_store_shows_what_it_holds_and_discards_beside_a_record() {
     let p = SealParams::default();

@@ -28,6 +28,7 @@ fn h32(s: &str) -> [u8; 32] {
     hex(s).try_into().expect("32 bytes")
 }
 
+// functional: VAL-006
 /// **RFC 7748 §6.1**, the X25519 Diffie-Hellman test vector: Alice's and
 /// Bob's private and public keys, and the shared secret both sides reach.
 ///
@@ -61,6 +62,7 @@ fn x25519_agrees_with_rfc_7748_section_6_1() {
     );
 }
 
+// functional: VAL-006
 /// **RFC 5869 Appendix A.1**, the HKDF-SHA-256 test case the KDF is built
 /// on: a 22-byte IKM, a 13-byte salt, a 10-byte info and 42 bytes out.
 #[test]
@@ -76,6 +78,7 @@ fn hkdf_sha256_agrees_with_rfc_5869_case_1() {
     assert_eq!(out, want, "OKM, RFC 5869 A.1");
 }
 
+// functional: VAL-006
 /// **FIPS 203's parameter set for ML-KEM-768**, which is what §14.2.4.2
 /// names: the sizes are what tell 768 from 512 and 1024, and getting the
 /// parameter set wrong is the failure this catches.

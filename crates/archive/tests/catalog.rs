@@ -32,6 +32,7 @@ fn body_of_frame(f: &[u8]) -> Vec<u8> {
     p[outer[1].clone()].to_vec()
 }
 
+// functional: CAT-003
 #[test]
 fn the_corpus_catalog_entry_and_abuse_report_read_and_verify_and_their_forgeries_do_not() {
     let w = World::new(&["alice", "bob", "carol"]);
@@ -88,6 +89,8 @@ fn the_corpus_catalog_entry_and_abuse_report_read_and_verify_and_their_forgeries
     assert!(forged.verify(&ids).is_err());
 }
 
+// functional: CAT-009
+// functional: CAT-012
 #[test]
 fn the_scope_forms_and_the_frames_and_replies_round_trip() {
     assert_eq!(Scope::decode(&fixture("P-scope-self")).unwrap(), Scope::Own);
