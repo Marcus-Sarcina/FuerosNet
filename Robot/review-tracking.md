@@ -21672,3 +21672,37 @@ no transaction and no frame. **Held by neither, and said so**: TOP-010 (an
 O row: h_process=3 as a bound on processing, nothing to assert), TOP-021
 (the memo's schema; memos are decoded in two tests and no malformed memo
 is refused by any). Figure: 575 live, 122 held, 453 by neither; TOP 2.
+
+**The GAT families linked, 2026-11-14 [author].** No GAT acceptance entry
+exists; the gateway is held by the RSC entries (the gateway ladder, the
+credential, the HTTP parsing both ways, the sandbox), with TOP-07/08/09/41/44
+for the acknowledgement, DMN-21/44, PRD-06, TRN-30 and seven unmarked
+tests in `node/tests/resources.rs` and `daemon/tests/hosting.rs`. The
+partials: GAT-005 (a P row: the positional path is RSC-12's code 4, the
+named path the outside-horizon row test; another trusted acknowledgement
+is TOP-41's delegated key and nothing wider); 007 (the §10.3 vocabulary
+test covers tiers, tenure, named, most-trusted and percent clauses; that
+raw score thresholds are not offered is asserted by nothing); 008 (the
+templates test and PRD-06, which is manual; population name and count
+before binding has no automated test); 009 (membership and configuration
+changes; the scheduled time boundary for tenure and expiry has no test);
+010 (the outside-horizon named row is dropped at the refresh; a
+time-limited exception has no test, nothing in `grant.rs` expires); 012
+(RSC-36 for membership following the horizon; hosting migration has no
+test); 016 (RSC-15 asserts the header equals `base64url(pairwise_principal
+(resource, user))` — the derivation is the function's own, not recomputed
+in the test); 018 (audience named and no network primitive; rejecting
+another resource's credential at a package is the application's and is in
+the other repository); 020 (the ladder in order, one failure at a time;
+the pairs of simultaneous failures the row asks for are not driven); 028
+(CONNECT and Upgrade refused; `Expect: 100-continue` is not among RSC-16's
+cases); 030 (ambiguous targets refused and the forged host stripped;
+that the caller's Host never selects the destination is implied by the
+addressing and asserted by nothing); 033 (brokered with no backend, and
+the operator told the model; the hand-off to client-to-vendor TLS as the
+default is not a thing the node can be tested for). **Held by neither,
+and said so**: GAT-031 (the application's own credential parsing lives in
+`../FuerosNet-applications`), GAT-035 (an O row: IdP adapters planned),
+and nothing else — GAT-041's multi-frame request and response are TRN-30's
+scenario, found under the transport prefix. Figure: 575 live, 161 held,
+414 by neither; GAT 2.

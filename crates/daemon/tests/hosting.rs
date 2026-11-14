@@ -331,6 +331,7 @@ fn a_manifest_declares_administrative_operations_and_their_bounds() {
     }
 }
 
+// functional: GAT-008
 /// **A package ships its grants ready-made** (`infra-client-requirements.md`
 /// §10.4), written in the same clause vocabulary an operator's own grant
 /// is, so that what a one-click choice grants is legible before the click.
@@ -505,6 +506,7 @@ fn an_operators_grant_is_written_in_clauses_and_refused_as_a_whole() {
     }
 }
 
+// functional: GAT-032
 /// **A resource that holds its own port**, reached over
 /// `resource-requirements.md` §3's second leg: the node authenticates, the
 /// credential of §2 travels as request headers, and what comes back is the
@@ -632,6 +634,7 @@ fn an_address_and_a_component_at_once_is_refused() {
     assert!(e.contains("is not an address"), "{e}");
 }
 
+// functional: GAT-033
 /// A manifest with no component at all and no address: the node
 /// authenticates and the traffic goes elsewhere (design §11.7, §10.6).
 #[test]
@@ -655,6 +658,7 @@ fn a_resource_with_neither_component_nor_address_is_brokered() {
     );
 }
 
+// functional: GAT-032
 /// **Plain HTTP only on a local socket** (`resource-requirements.md` §3).
 /// The node already read the request, so what the far leg protects is
 /// everyone else; until that leg can be given TLS, an address across a

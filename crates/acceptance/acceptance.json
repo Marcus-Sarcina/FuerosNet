@@ -4994,7 +4994,10 @@
   "when": "Grants are written for a role the package did not declare, for a name reserved to the node's own evaluation, and for a resource no line hosts, and a file is presented whose last line is refused.",
   "then": "Each is refused at configuration with the line and the name, rather than at request time. A file refused anywhere in it binds nothing from anywhere else in it. A grant of the declared roles is applied, and a grant without connect is a row an operator may write.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "GAT-011"
+  ]
  },
  {
   "id": "DMN-22",
@@ -6319,7 +6322,10 @@
   "when": "A reviewer binds each resource and views a member's access.",
   "then": "The binding view shows hosted against brokered; the operator view states the exposure the configuration creates; the accessing user's view shows the roles held and not the predicates.",
   "oracle": "behaviour",
-  "interpretation": "**Built on the node and framed by the client** [2026-11-08]. All three rules are `rhtn_daemon::operator`'s: §10.6's binding view renders hosted against brokered, §10.7's role view renders the roles a principal holds and never the predicates that granted them, and §8's exposure view states what the configuration exposes the identities below it to — each with its own test in that module. The client's part is to frame those pages rather than to re-render them, which is PRD-12 (closed by an instrumentation run on hardware), and `Disclosure.Topic.OPERATOR_EXPOSURE` records that the words live there rather than in the client's own table. **The exposure view was read off the live node on 2026-11-08** over its loopback, where arriving is the authorisation: \"What this exposes the identities below it to\", with how many sit below, whether their payload is relayed and what is hosted. The other two views need a bound resource to render and the bench node hosts none, so they stand on their tests."
+  "interpretation": "**Built on the node and framed by the client** [2026-11-08]. All three rules are `rhtn_daemon::operator`'s: §10.6's binding view renders hosted against brokered, §10.7's role view renders the roles a principal holds and never the predicates that granted them, and §8's exposure view states what the configuration exposes the identities below it to — each with its own test in that module. The client's part is to frame those pages rather than to re-render them, which is PRD-12 (closed by an instrumentation run on hardware), and `Disclosure.Topic.OPERATOR_EXPOSURE` records that the words live there rather than in the client's own table. **The exposure view was read off the live node on 2026-11-08** over its loopback, where arriving is the authorisation: \"What this exposes the identities below it to\", with how many sit below, whether their payload is relayed and what is hosted. The other two views need a bound resource to render and the bench node hosts none, so they stand on their tests.",
+  "families": [
+   "GAT-008"
+  ]
  },
  {
   "id": "PRD-07",
@@ -10043,7 +10049,10 @@
   "when": "C sends a ResourceRequest for R on a new bidirectional stream in early data, and later two requests on one stream.",
   "then": "No ResourceResponse and no backend traffic for the early-data request are observed before the handshake completes; on the shared stream only the first request is answered.",
   "oracle": "behaviour",
-  "interpretation": "What happens to a second request on one stream is not stated; the test asserts only that it is not answered as a second exchange."
+  "interpretation": "What happens to a second request on one stream is not stated; the test asserts only that it is not answered as a second exchange.",
+  "families": [
+   "GAT-019"
+  ]
  },
  {
   "id": "RSC-12",
@@ -10074,7 +10083,14 @@
   "when": "Each sends a ResourceRequest for R.",
   "then": "The six responses carry codes 1, 4, 5, 3, 2 and 0 respectively, and only the last reaches the backend.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "GAT-003",
+   "GAT-005",
+   "GAT-020",
+   "GAT-021",
+   "GAT-022"
+  ]
  },
  {
   "id": "RSC-13",
@@ -10101,7 +10117,12 @@
   "when": "S requests R, then Q.",
   "then": "Both responses carry code 1 and nothing else, and no backend traffic follows.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "GAT-001",
+   "GAT-021",
+   "GAT-026"
+  ]
  },
  {
   "id": "RSC-14",
@@ -10127,7 +10148,11 @@
   "when": "M requests the resource; the operator saves the configuration.",
   "then": "M's request is delivered on the strength of the row; the 65-role row is refused at configuration and no request ever yields a code for it.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "GAT-006",
+   "GAT-011"
+  ]
  },
  {
   "id": "RSC-15",
@@ -10163,7 +10188,16 @@
   "when": "M requests R1 and R2 over one session.",
   "then": "Each backend receives rhtn-principal, rhtn-audience naming itself, rhtn-session and an empty rhtn-roles, with the forged value absent; the two session identifiers differ.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "GAT-016",
+   "GAT-017",
+   "GAT-018",
+   "GAT-024",
+   "GAT-025",
+   "GAT-029",
+   "GAT-030"
+  ]
  },
  {
   "id": "RSC-16",
@@ -10193,7 +10227,12 @@
   "when": "H processes each.",
   "then": "Each is answered code 3 and nothing reaches the backend.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "GAT-022",
+   "GAT-027",
+   "GAT-028"
+  ]
  },
  {
   "id": "RSC-17",
@@ -10215,7 +10254,10 @@
   "when": "A member with connect sends a request.",
   "then": "Exactly one attempt reaches the backend and the response carries code 2.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "GAT-023"
+  ]
  },
  {
   "id": "RSC-18",
@@ -10246,7 +10288,12 @@
   "when": "The operator revokes M's grant during the request, then M sends another.",
   "then": "The in-flight request completes and its response is delivered; the next request is answered code 5; M's QUIC session to H stays open throughout.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "GAT-013",
+   "GAT-014",
+   "GAT-025"
+  ]
  },
  {
   "id": "RSC-19",
@@ -10272,7 +10319,11 @@
   "when": "The host instantiates it.",
   "then": "Instantiation fails for want of the import, and the host's export list contains no such binding.",
   "oracle": "behaviour",
-  "interpretation": "The sandbox mechanism is an implementation choice the requirement calls expected rather than mandated; the test assumes a capability-based component host."
+  "interpretation": "The sandbox mechanism is an implementation choice the requirement calls expected rather than mandated; the test assumes a capability-based component host.",
+  "families": [
+   "GAT-017",
+   "GAT-018"
+  ]
  },
  {
   "id": "RSC-20",
@@ -10302,7 +10353,12 @@
   "when": "G's adoption reaches H; later S departs.",
   "then": "A SubtreeAck for G is issued with no prompt recorded; after S's departure G's request for H's resource is answered code 4.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "GAT-003",
+   "GAT-004",
+   "GAT-021"
+  ]
  },
  {
   "id": "RSC-21",
@@ -10324,7 +10380,10 @@
   "when": "H processes it.",
   "then": "The reply carries code 0. An implementation requiring a local package fails.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "GAT-033"
+  ]
  },
  {
   "id": "RSC-22",
@@ -10403,7 +10462,10 @@
   "when": "The user opens R.",
   "then": "The client routes no traffic to Y, and shows the owner named in the entry; a resource the catalog page filtered out is not shown.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "GAT-034"
+  ]
  },
  {
   "id": "RSC-25",
@@ -10434,7 +10496,11 @@
   "when": "The gateway parses each.",
   "then": "Both are refused as ambiguous and nothing is forwarded. No serialised message reaching a backend contains an `rhtn-` header the caller wrote, whatever line ending that backend recognises.",
   "oracle": "behaviour",
-  "interpretation": "This parser ends a line at CRLF and a backend may end one at LF, which is the multi-parser hazard §11.2 names. The value is refused rather than stripped, since §11.2 rejects the ambiguous instead of normalising it."
+  "interpretation": "This parser ends a line at CRLF and a backend may end one at LF, which is the multi-parser hazard §11.2 names. The value is refused rather than stripped, since §11.2 rejects the ambiguous instead of normalising it.",
+  "families": [
+   "GAT-027",
+   "GAT-029"
+  ]
  },
  {
   "id": "RSC-26",
@@ -10456,7 +10522,10 @@
   "when": "The gateway decodes it.",
   "then": "It returns a refusal. No offset is computed past the end of the message, in any build profile.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "GAT-027"
+  ]
  },
  {
   "id": "RSC-27",
@@ -10482,7 +10551,10 @@
   "when": "The owner's entry declares `Down(3)`, and the reverse chain declares `Up(3)`.",
   "then": "Neither admits the asker, and neither entry is rejected: both are stored and forwarded and grant nothing. A scope naming a party two edges away still admits it.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "GAT-001"
+  ]
  },
  {
   "id": "RSC-28",
@@ -10508,7 +10580,10 @@
   "when": "The manifest is instantiated and the row is set.",
   "then": "Both are refused naming the reserved name. A manifest and row of `read` alone are accepted, and the credential a backend receives carries `read` and neither reserved name.",
   "oracle": "behaviour",
-  "interpretation": "Refused where the operator writes it rather than filtered where it is emitted: silently dropping a role would let an operator believe they granted something."
+  "interpretation": "Refused where the operator writes it rather than filtered where it is emitted: silently dropping a role would let an operator believe they granted something.",
+  "families": [
+   "GAT-011"
+  ]
  },
  {
   "id": "RSC-29",
@@ -10531,7 +10606,11 @@
   "when": "Each is sent.",
   "then": "The first is answered `ResourceResponse` with status 3 and nothing about any resource is disclosed; the second fails its stream with no response. A malformed body on any other request type still fails its stream.",
   "oracle": "behaviour",
-  "interpretation": "Only the resource family has an answer defined for a body that does not decode, so the fallback is scoped to it: every other type's malformed body has no specified response and §9.2's stream failure stands."
+  "interpretation": "Only the resource family has an answer defined for a body that does not decode, so the fallback is scoped to it: every other type's malformed body has no specified response and §9.2's stream failure stands.",
+  "families": [
+   "GAT-021",
+   "GAT-026"
+  ]
  },
  {
   "id": "RSC-30",
@@ -10692,7 +10771,10 @@
   "when": "A resource request is evaluated and handed on.",
   "then": "What crosses is the four credential headers, the authority the node addressed the package by, and the requester's own request. Nothing about the network crosses with it.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "GAT-017"
+  ]
  },
  {
   "id": "RSC-36",
@@ -10719,7 +10801,14 @@
   "when": "The grant is expanded, expanded again over unchanged membership, expanded over a party the operator gave a row of their own, and expanded after two parties have left the org.",
   "then": "Every member of the owner's horizon has a row and nobody outside it does. An expansion over unchanged membership writes nothing, because the moments that call for one are membership changes and not requests. A row the operator set is left as they wrote it. A departing party's row and hosted session are both removed.",
   "oracle": "behaviour",
-  "interpretation": "The standing grant is the simplest predicate there is, the one §10.1 calls membership being the outer gate. Richer predicate classes are §10.2's and are not here."
+  "interpretation": "The standing grant is the simplest predicate there is, the one §10.1 calls membership being the outer gate. Richer predicate classes are §10.2's and are not here.",
+  "families": [
+   "GAT-001",
+   "GAT-006",
+   "GAT-009",
+   "GAT-012",
+   "GAT-037"
+  ]
  },
  {
   "id": "RSC-37",
@@ -10764,7 +10853,11 @@
   "when": "A party between the owner and the deepest generation departs, and the role tables are refreshed.",
   "then": "The departing party and everything that reached the horizon only through it lose their rows and their sessions, on both resources. Nothing enumerates a subtree: the horizon is a walk over open bindings, so a generation cannot be missed. A party still inside keeps what it had.",
   "oracle": "behaviour",
-  "interpretation": "§10.2 states the rule for a departing member; that it reaches the member's down-line follows from membership being the owner's horizon, and that it reaches resources with no standing grant is the author's ruling of 2026-09-14 — membership is the outer gate whoever wrote the row."
+  "interpretation": "§10.2 states the rule for a departing member; that it reaches the member's down-line follows from membership being the owner's horizon, and that it reaches resources with no standing grant is the author's ruling of 2026-09-14 — membership is the outer gate whoever wrote the row.",
+  "families": [
+   "GAT-010",
+   "GAT-036"
+  ]
  },
  {
   "id": "RSC-39",
@@ -10810,7 +10903,13 @@
   "when": "One resource's grant is replaced by a narrower one, then by the original again.",
   "then": "Every row that grant wrote carries the new grant and its sessions are retired; the operator's own row is untouched; the other resource is not disturbed. Widening it again writes the members back and still leaves the operator's row alone. Re-standing an unchanged grant disturbs no row.",
   "oracle": "behaviour",
-  "interpretation": "§10.2 names the configuration change as a moment to re-evaluate; that a grant can only rewrite what it wrote — not what an operator set — is the floor-under-the-table reading the same section gives for a departing member's rows."
+  "interpretation": "§10.2 names the configuration change as a moment to re-evaluate; that a grant can only rewrite what it wrote — not what an operator set — is the floor-under-the-table reading the same section gives for a departing member's rows.",
+  "families": [
+   "GAT-009",
+   "GAT-013",
+   "GAT-025",
+   "GAT-037"
+  ]
  },
  {
   "id": "RSC-41",
@@ -10854,7 +10953,10 @@
   "when": "The table is inspected after each change and after a restart.",
   "then": "Only the current row is held at each step and nothing after removal; nothing in the table, its provenance marks or its store says what M's roles used to be.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "GAT-006"
+  ]
  },
  {
   "id": "SES-01",
@@ -12139,7 +12241,11 @@
   "when": "G's node verifies an adoption of N under P with txid a.",
   "then": "G's node emits a SubtreeAck with field 1 = a, field 2 = G, field 3 = N, and field 5 a signature by G that verifies over fields 1 to 4 with external_aad rhtn/1:subtree-ack; no prompt and no operator input occurs between verification and emission.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "GAT-002",
+   "GAT-004"
+  ]
  },
  {
   "id": "TOP-08",
@@ -12162,7 +12268,10 @@
   "when": "P and N sign an adoption of N under P and S verifies it, with no SubtreeAck ever arriving.",
   "then": "S's table answers N's patrons = {P} and lists N under P; S holds no acknowledgement for N; the adoption is neither held pending nor rejected for the missing acknowledgement.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "GAT-004"
+  ]
  },
  {
   "id": "TOP-09",
@@ -12190,7 +12299,10 @@
   "when": "H verifies P's departure from G; in a second run, G's disavowal of P.",
   "then": "In both runs H's list of held acknowledgements no longer contains the acknowledgement for N, no revocation object having been received; N's binding under P is still in H's table.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "GAT-004"
+  ]
  },
  {
   "id": "TOP-10",
@@ -13184,7 +13296,11 @@
   "when": "G's node verifies an adoption of N under its subordinate P and emits a SubtreeAck; S receives it.",
   "then": "Field 5 verifies under k with external_aad rhtn/1:subtree-ack and under no key of G's identity; S accepts the acknowledgement, having matched field 2 to D's field 2 and the signing key to D's field 1.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "GAT-002",
+   "GAT-005"
+  ]
  },
  {
   "id": "TOP-42",
@@ -13269,7 +13385,11 @@
   "when": "An adoption of N under P is pushed to G.",
   "then": "G's runtime issues the acknowledgement and pushes it; G's gateway admits N's resource request (no code 4); S holds the acknowledgement and admits N by its policy; the acknowledgement lapses at all three when P departs.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "GAT-003",
+   "GAT-004"
+  ]
  },
  {
   "id": "TOP-45",
@@ -14181,7 +14301,10 @@
   "when": "The client sends the request as a sequence of ResourceRequest frames naming the one resource and closes its side; the node joins them, hands the resource one HTTP message, and writes the answer back as repeated delivered frames.",
   "then": "The resource receives the whole body once; the client reads every reply frame until the node closes, joins the bodies, and holds the resource's whole answer under one delivered status; a one-frame request is unchanged; a portion naming another resource fails the stream.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "GAT-041"
+  ]
  },
  {
   "id": "TRV-01",
@@ -15437,7 +15560,12 @@
   "when": "The member names each reserved path in turn, and then spellings that decode to one: a percent-escape of an unreserved character, an escaped separator, and a dot segment. The control header and the origin and relation marks are also written by the member on an ordinary path.",
   "then": "Every reserved target is refused and no backend is called; every ambiguous spelling is refused by the parser rather than normalised and forwarded; the normal form of an unreserved path that merely begins with the same letters is carried; a percent-escape of a reserved character is left as written; and none of the member's rhtn- headers reaches the package.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "GAT-027",
+   "GAT-029",
+   "GAT-030"
+  ]
  },
  {
   "id": "RSC-44",
@@ -16246,7 +16374,10 @@
   "when": "The package answers with two HTTP messages, or with an ambiguity no rewriting could settle: two lengths, a length beside an encoding, an encoding the node does not decode, a folded header, two content-types, an interim status, a protocol switch, an extended chunk size, a trailer section, a version other than HTTP/1.1, or a control character in a header value.",
   "then": "The asker is told the resource is unavailable and no body travels. The status is the one the node already gives for a trapped or oversized answer, because each is a defect in the package rather than a refusal of the asker, and the operator is who can act on it.",
   "oracle": "behaviour",
-  "interpretation": "§11.2's requirements are written in the request direction, and §11 field 2 extends them to the response by *same reasoning as the request* — whose own note is that opaque means the node does not interpret the application's semantics, not that it forwards unexamined input. The hazard is a property of the party in the middle, so the leg without a parser was the gap."
+  "interpretation": "§11.2's requirements are written in the request direction, and §11 field 2 extends them to the response by *same reasoning as the request* — whose own note is that opaque means the node does not interpret the application's semantics, not that it forwards unexamined input. The hazard is a property of the party in the middle, so the leg without a parser was the gap.",
+  "families": [
+   "GAT-038"
+  ]
  },
  {
   "id": "RSC-60",
@@ -16268,7 +16399,11 @@
   "when": "The node parses the answer and writes it back.",
   "then": "All three framings become one canonical message whose length is declared exactly once and agrees with its own content, and parsing that output again yields the same response. Every byte of the body survives, including bytes that read as a second message, since the declared length now settles the extent. Repeatable headers stay repeated and a declared type or content-encoding is untouched: the node settles framing and never semantics.",
   "oracle": "behaviour",
-  "interpretation": "Being tolerant of a bare newline or a chunked body is safe precisely because the node re-serialises: its own output is the canonical form, so the tolerance leaves no second reading downstream. Refusing those would restrict what a package may be written in, and settle nothing a rewrite does not already settle."
+  "interpretation": "Being tolerant of a bare newline or a chunked body is safe precisely because the node re-serialises: its own output is the canonical form, so the tolerance leaves no second reading downstream. Refusing those would restrict what a package may be written in, and settle nothing a rewrite does not already settle.",
+  "families": [
+   "GAT-022",
+   "GAT-039"
+  ]
  },
  {
   "id": "RSC-61",
@@ -16295,7 +16430,10 @@
   "when": "The package answers with the four credential headers and a control header of its own in the reserved namespace, beside a header of its own.",
   "then": "The answer is delivered and not one header of the namespace travels; the package's own headers and its whole body are untouched. It is stripped rather than refused, matching the rule on the way in: the stray header is a defect in the package, named to the operator in the node's own diagnostics, where refusing the answer would take the resource down over a header nobody reads. The node's control exchanges with a resource are not on this path and keep theirs.",
   "oracle": "behaviour",
-  "interpretation": "Nothing in this version reads an `rhtn-*` header off a response, so this closes no live hole; it buys a property. `resource-requirements.md` §3.1 makes *an `rhtn-*` header was written by the node* true on the way in, and the same rule on the way out makes it true rather than undefined — so a reader added later need not ask who could have written one, and no package exists yet for the rule to break."
+  "interpretation": "Nothing in this version reads an `rhtn-*` header off a response, so this closes no live hole; it buys a property. `resource-requirements.md` §3.1 makes *an `rhtn-*` header was written by the node* true on the way in, and the same rule on the way out makes it true rather than undefined — so a reader added later need not ask who could have written one, and no package exists yet for the rule to break.",
+  "families": [
+   "GAT-040"
+  ]
  },
  {
   "id": "RSC-62",
@@ -16321,7 +16459,10 @@
   "when": "Each reads an answer, in each of the three framings RFC 9112 allows and in each of the ambiguities no rewriting could settle.",
   "then": "One reader answers how the body is delimited, and the socket reads that much while the parser reads what arrived to the same decision; a counted, a chunked and an unframed answer each come to the same canonical message. The reader refuses a duplicated or comma-listed length, a length beside an encoding and an encoding the node does not decode, so the refusal happens once rather than differently in each place. The socket hands up what it read without re-framing it, and the host path joins a chunked answer with the same parser rather than handing a caller its chunk sizes.",
   "oracle": "behaviour",
-  "interpretation": "§11.2's hazard is two parties disagreeing about a message boundary. A socket must parse enough to know when to stop reading and cannot defer that, so the division is between reading — which stays where the bytes arrive, with the bound an unauthenticated far end can make the node spend — and deciding, which belongs to one reader. Three implementations of the second is the hazard inside one node."
+  "interpretation": "§11.2's hazard is two parties disagreeing about a message boundary. A socket must parse enough to know when to stop reading and cannot defer that, so the division is between reading — which stays where the bytes arrive, with the bound an unauthenticated far end can make the node spend — and deciding, which belongs to one reader. Three implementations of the second is the hazard inside one node.",
+  "families": [
+   "GAT-038"
+  ]
  },
  {
   "id": "RSC-63",
@@ -16562,6 +16703,10 @@
   "when": "The operator reads each binding.",
   "then": "The brokered one says it is brokered, that a session there continues on the service's terms, and that revoking here does not end it — with where to close it; the hosted one says a session ends when this node ends it and warns of nothing further. Neither is said to the member, for whom retained access is no hazard.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "GAT-015",
+   "GAT-033"
+  ]
  }
 ]

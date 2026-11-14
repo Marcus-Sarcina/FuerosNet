@@ -1894,6 +1894,9 @@ fn rsc_42_a_role_table_holds_the_current_row_and_no_history_of_it() {
     // and nothing of what they were (`infra-client-requirements.md` §10.2)
 }
 
+// functional: GAT-001
+// functional: GAT-005
+// functional: GAT-010
 /// Permission past the horizon is refused, scope or grant alike (design
 /// §11.4): a row an operator set by name for a party outside the owner's
 /// horizon grants nothing, since §11.2's gate sits before the row is
@@ -1928,6 +1931,7 @@ fn a_named_row_for_a_party_outside_the_horizon_grants_nothing() {
     assert!(g.row(&R1, &kh("w2")).is_none(), "dropped at the refresh");
 }
 
+// functional: GAT-007
 /// The whole of `infra-client-requirements.md` §10.3's vocabulary, each
 /// clause against the same scene: alice owns the resource, bob and carol
 /// are her clients, w1 is carol's, and w2 hangs off w3 outside the
@@ -2082,6 +2086,7 @@ fn a_grant_selects_by_the_vocabulary_section_10_3_fixes_and_two_grants_union() {
     );
 }
 
+// functional: GAT-011
 /// What the node declines to hold, asked once when the operator writes it
 /// (§10.2: "the operator hears about it at configuration time, never a
 /// requester at request time").
