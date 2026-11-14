@@ -21468,3 +21468,16 @@ not `Socket` (an operating-system object this is not). Renamed across the
 shell and its tests (37 files; `Kernel.kt` → `Gateway.kt`); `KernelService`
 keeps its name, being the kernel's standing. The Rust kernel is the
 kernel.
+
+**Found on the phones at the Gateway install, 2026-11-14 09:05:** after
+the relations read back and the old blob was reduced to its mark (42
+sealed bytes on GXV's two scopes and ZU8), MRK and 4VC wrote the whole
+blob again — `storage write name=client bytes=4332704`, 3,069,932 on
+4VC — after the first inbound message. The after-arrivals hook in
+`Participant::schedule` still wrote `c.durable()` under the old name;
+step 5 had converted `save()` alone. Now `save_relations(handle, storage,
+written)` is the one write both make (the fingerprint map shared behind
+an `Arc`), and the restart test with arrivals asserts the old name is
+never written on a store that never held it. The seam scenario and the
+first boundary test could not see it: neither drives an arrival after a
+migration on a store that held the blob.

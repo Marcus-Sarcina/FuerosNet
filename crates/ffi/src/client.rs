@@ -69,7 +69,7 @@ pub struct Participant {
     saving: Arc<std::sync::Mutex<()>>,
     /// What each relation was last written as, by hash, so a save writes
     /// only the relations that changed [restructure step 5, 2026-11-14].
-    written: std::sync::Mutex<std::collections::HashMap<&'static str, [u8; 32]>>,
+    written: Arc<std::sync::Mutex<std::collections::HashMap<&'static str, [u8; 32]>>>,
     /// Nouns the kernel marked changed while an arrival was being handed
     /// up; raised as one `Event::Changed` at the next quiet call.
     pending_changed: std::sync::Mutex<Vec<Vec<rhtn_model::Noun>>>,
@@ -1008,22 +1008,21 @@ impl Participant {
 impl Participant {
     /// Start the kernel's own maintenance clock ([`MAINTAIN_EVERY`]).
     fn schedule(&self) {
-        let (h, st, one) = (
+        let (h, st, one, written) = (
             self.handle.clone(),
             self.storage.clone(),
             self.saving.clone(),
+            self.written.clone(),
         );
         // the same write [`Participant::save`] makes, under the same lock:
         // run after a maintenance round that carried anything, and after
         // every inbound dispatch
         let after: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
             let _one = one.lock().unwrap_or_else(|e| e.into_inner());
-            let bytes = h.with_blocking(|c| {
-                let held = c.payload.sessions.held().len();
-                tracing::debug!(target: "pay", sessions = held, "pay.saving");
-                c.durable()
-            });
-            let _ = st.write(STATE.into(), bytes);
+            // the relations that changed, never the one blob: that write
+            // outlived step 5 here for one day and wrote 4 MB after every
+            // arrival on the bench [2026-11-14]
+            let _ = save_relations(&h, &st, &written);
         });
         self.net.persist_with(after.clone());
         self.net
@@ -1032,6 +1031,39 @@ impl Participant {
         self.net
             .schedule_contact(self.handle.clone(), crate::net::PEER_CONTACT_EVERY, after);
     }
+}
+
+/// **The one write a save makes** (`light-client-requirements.md` §9.0):
+/// every relation whose fingerprint changed since it was last written,
+/// and no other. Both the shell's `save` and the after-arrivals hook make
+/// it, so neither can write the state another way.
+fn save_relations(
+    handle: &Handle,
+    storage: &Arc<dyn crate::device::Storage>,
+    written: &std::sync::Mutex<std::collections::HashMap<&'static str, [u8; 32]>>,
+) -> Result<usize, String> {
+    let parts = handle.with_blocking(|c| {
+        let held = c.payload.sessions.held().len();
+        tracing::debug!(target: "pay", sessions = held, "pay.saving");
+        c.durable_parts()
+    });
+    let mut written = written.lock().unwrap_or_else(|e| e.into_inner());
+    let mut wrote = 0usize;
+    for (name, bytes) in parts {
+        let hash = rhtn_client::durable::fingerprint(&bytes);
+        if written.get(name) == Some(&hash) {
+            continue;
+        }
+        if !storage.write(name.into(), bytes) {
+            return Err(format!(
+                "the platform's storage did not take the {name} relation"
+            ));
+        }
+        written.insert(name, hash);
+        wrote += 1;
+    }
+    tracing::debug!(target: "pay", wrote, "pay.saved");
+    Ok(wrote)
 }
 
 #[uniffi::export]
@@ -1125,7 +1157,7 @@ impl Participant {
                 storage,
                 app_key,
                 saving: Arc::new(std::sync::Mutex::new(())),
-                written: std::sync::Mutex::new(std::collections::HashMap::new()),
+                written: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
                 pending_changed: std::sync::Mutex::new(Vec::new()),
                 seeds: Some([ed, pq]),
             };
@@ -1367,29 +1399,7 @@ impl Participant {
             // a poisoned lock is a thread that panicked mid-save, and the
             // next save overwriting whatever it left is the repair
             let _one = self.saving.lock().unwrap_or_else(|e| e.into_inner());
-            let parts = self.handle.with_blocking(|c| {
-                let held = c.payload.sessions.held().len();
-                tracing::debug!(target: "pay", sessions = held, "pay.saving");
-                c.durable_parts()
-            });
-            // **only the relations that changed**: a message sent does not
-            // rewrite the archive, and what did not change is not resealed
-            let mut written = self.written.lock().unwrap_or_else(|e| e.into_inner());
-            let mut wrote = 0usize;
-            for (name, bytes) in parts {
-                let hash = rhtn_client::durable::fingerprint(&bytes);
-                if written.get(name) == Some(&hash) {
-                    continue;
-                }
-                if !self.storage.write(name.into(), bytes) {
-                    return Err(Refused::new(format!(
-                        "the platform's storage did not take the {name} relation"
-                    )));
-                }
-                written.insert(name, hash);
-                wrote += 1;
-            }
-            tracing::debug!(target: "pay", wrote, "pay.saved");
+            save_relations(&self.handle, &self.storage, &self.written).map_err(Refused::new)?;
             if !self.storage.write(SIBLINGS.into(), self.net.siblings()) {
                 return Err(Refused::new(
                     "the platform's storage did not take the sibling list",
@@ -1512,7 +1522,7 @@ impl Participant {
                 storage,
                 app_key,
                 saving: Arc::new(std::sync::Mutex::new(())),
-                written: std::sync::Mutex::new(std::collections::HashMap::new()),
+                written: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
                 pending_changed: std::sync::Mutex::new(Vec::new()),
                 seeds: None,
             };

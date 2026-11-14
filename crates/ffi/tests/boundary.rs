@@ -1070,6 +1070,17 @@ async fn a_kernel_restarts_from_the_storage_seam_with_its_session_and_its_queue_
             .expect_err("another identity's key opens nothing")
     };
     assert!(e.reason().contains("did not unwrap"), "{e}");
+    // **and nothing in the run wrote the one blob**: a save and the
+    // after-arrivals hook both write relations, so the old name is never
+    // written on a store that never held it
+    let blob_writes = carol_shell
+        .writes
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|w| *w == "client")
+        .count();
+    assert_eq!(blob_writes, 0, "the one blob is not written by any path");
 }
 
 /// **A party the kernel learned is pinned for the transport, and still
