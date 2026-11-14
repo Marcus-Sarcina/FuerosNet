@@ -5572,7 +5572,7 @@
   "id": "PAY-11",
   "area": "payload",
   "gap": "payload",
-  "title": "Use the asynchronous construction only leaf to leaf",
+  "title": "Use the asynchronous construction for every identity, the patron included",
   "milestone": "after-5",
   "kind": "positive",
   "spec": [
@@ -5582,16 +5582,16 @@
   "rule": [
    {
     "where": "light-client-requirements.md §3",
-    "text": "Only leaf-to-leaf needs this."
+    "text": "Every identity is a leaf."
    },
    {
     "where": "design §14.2.4.1",
-    "text": "Leaf → patron | Nothing new."
+    "text": "Leaf → patron | The full construction, the same as any leaf."
    }
   ],
-  "given": "Client S with a session to its patron P and a first message for leaf T.",
+  "given": "Client S attached at the node its patron P operates, which speaks as P, with a first message for P and one for leaf T.",
   "when": "S sends to P and then to T.",
-  "then": "No prekey request names P and the message to P rides the transport session; a one-time key request names T and the message to T is encrypted under the payload construction.",
+  "then": "A one-time key request names P and one names T; both messages are encrypted under the payload construction; nothing rides the transport session as material for the node.",
   "oracle": "behaviour",
   "interpretation": null
  },

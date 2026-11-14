@@ -6453,16 +6453,16 @@ This is a gap in §5, not merely in this section.
 **There is directly applicable prior art, specified and formally verified.** The
 requirement below is to adopt it, not to design a replacement.
 
-##### 14.2.4.1 Only leaf-to-leaf needs the asynchronous machinery
+##### 14.2.4.1 Only a resource is reached without the asynchronous machinery
 
 | Case | What it needs |
 |---|---|
-| **Leaf → patron** | Nothing new. The endpoint is online by definition and the §14.1.1 transport handshake already gives an authenticated, PQ-hybrid channel |
+| **Leaf → patron** | The full construction, the same as any leaf. A patron is an identity: a person on devices of their own that may be offline, and one who runs no node is a light client like any other [author, 2026-11-14]. Where the patron runs a node, that node is online for the mailbox and the bundle, never as the patron |
 | **Leaf → resource** | Nothing new. The resource is reached through an infra node that is online by definition (§11) |
 | **Leaf → leaf** | **The full construction below.** The recipient may be offline, which is the whole difficulty |
 
-That narrows the import considerably: two of the three endpoint cases are already
-covered by transport.
+That narrows the import: one of the three endpoint cases is covered by transport
+alone, and the other two are one case.
 
 ##### 14.2.4.2 Key agreement: PQXDH
 

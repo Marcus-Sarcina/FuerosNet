@@ -21102,3 +21102,54 @@ are an identity's" item. Owed after the bench run: key that file by the
 focused identity's scope (a `Front.persist`-style per-identity store, as
 the threads were moved on the 12th), and in the restructure the
 `Instance` row carries its operator like every other row.
+
+**T7 on remote nodes, 2026-11-14: three of four crossed; the fourth found
+a design-level collision.** GXV-2 → MRK: `pay.relay via="serving node"`,
+MRK `pay.receive from feb8843a Application 11 bytes`. MRK → GXV-2:
+`path="direct"`, `pay.direct.deliver ok 43 ms` — the phones share a LAN,
+so the direct path won and the tab was not exercised (the bench cannot
+close the direct path without a second network). GXV → MRK: relay via
+GXV's node, MRK `pay.receive from 703a82c2 Application 13 bytes`. **MRK
+→ GXV: `pay.send kind=application to=703a82c2 path="transport"`, nothing
+at GXV.** Cause, in `Client::send_payload`: `if Some(to) ==
+self.payload.serving` the bytes go as `Msg::Transport` to the serving
+node, addressed to the device the node presented (courier, `wire-format.md`
+§7.10) — design §14.2.4.1's "Leaf → patron: nothing new, the endpoint is
+online by definition", pinned by acceptance PAY-11 and
+`the_asynchronous_construction_is_used_leaf_to_leaf_only`. GXV's node
+speaks as 703a82c2, MRK's serving session is with that node, so a message
+to the *person* 703a82c2 was treated as material for the *node* and
+handed to the node's own device; GXV's phone (device 753febfb) polls its
+own mailbox and never sees it. The laptop's minted bench node had its own
+key, which is why no run before today could hit this. **The row assumes
+the patron is its node**; since the delegated credential (design §23.3)
+the operator is a person on a leaf device and the node is another
+device. Decision owed to the author, asked 2026-11-14: (A) the patron's
+devices are leaves like any other, reached by the §14.2.4 construction
+through the node that is online by definition — the branch deleted,
+PAY-11 and §14.2.4.1's row restated, light-client §3's "only leaf-to-leaf"
+kept with the patron counted a leaf; or (B) the node forwards material
+addressed to its own device to its operator's devices (new node
+machinery). Nothing changed meanwhile.
+
+**Ruled 2026-11-14 [author]: *"the rule that talking to a patron
+necessarily means talking to the patron's node is incorrect, since a
+patron can be a light client only user."*** Applied: `send_payload`'s
+serving-node branch deleted (a payload to an identity is never material
+for the node that speaks as it); `record_arrival` now says `pay.arrival
+from= via=` so a route can be read off a phone; design §14.2.4.1's
+heading and "Leaf → patron" row restated, light-client §3's bullet
+restated as "Every identity is a leaf", PAY-11 restated and its test
+rewritten with the node speaking as its operator (`("w1","w1")` in the
+test net, 22 payload tests green), PAY-0xx row added (572 families);
+pins regenerated. **The author's inference corrected with the log**: MRK's
+reply to GXV-2 went `path="direct"` over the LAN (`pay.direct.deliver ok
+43 ms`), through no node; GXV-2's message to MRK went by GXV-2's own
+participant's serving node, which holds one session, to 167.99.153.102
+— nothing crossed between the two nodes, which have not been introduced.
+**And the restructure question answered plainly**: `payload.serving` is
+per identity (each identity is its own `Client`), not per device, but
+within an identity it is still a singleton "the serving node" beside the
+tabs (`attachments`, `serving_at`); the restructure plan replaces it with
+sessions as rows keyed by (identity, address, node) and is not begun —
+its five decisions are still owed.

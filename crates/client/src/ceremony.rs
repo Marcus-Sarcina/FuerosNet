@@ -6156,6 +6156,7 @@ impl Client {
     /// tie, the first otherwise; a node serving none of them records
     /// nothing.
     pub fn record_arrival(&mut self, from: Keyhash, via: &Keyhash) {
+        tracing::debug!(target: "pay", from = %id8(&from), via = %id8(via), "pay.arrival");
         let anchors: Vec<Keyhash> = self
             .payload
             .serving_at
@@ -6397,27 +6398,18 @@ impl Client {
         out
     }
 
-    /// Send `bytes` of `kind` to `to` (design §14.2.4.1): to the serving
-    /// node it rides the transport session; to a leaf it goes on the
-    /// session held, or waits for the one-time key requested now, and
-    /// takes the direct path where one exists and the relay otherwise.
+    /// Send `bytes` of `kind` to `to` (design §14.2.4.1): every identity
+    /// is a leaf, the patron included [author, 2026-11-14] — it goes on
+    /// the session held with each of the recipient's devices, or waits for
+    /// the one-time key requested now, and takes the direct path where one
+    /// exists and the relay otherwise. Nothing addressed to an identity is
+    /// material for the node that speaks as it.
     pub fn send_payload(
         &mut self,
         to: Keyhash,
         kind: u64,
         bytes: &[u8],
     ) -> Result<Vec<Msg>, PayloadError> {
-        if Some(to) == self.payload.serving {
-            tracing::debug!(
-                target: "pay",
-                kind = crate::diag::kind_name(kind),
-                to = %id8(&to),
-                path = "transport",
-                bytes = bytes.len(),
-                "pay.send"
-            );
-            return Ok(vec![Msg::Transport(bytes.to_vec())]);
-        }
         let plaintext = payload::wrap(kind, bytes);
         // a session is with a device (design §14.2.4): every device of the
         // recipient with a session open gets its own ciphertext, and every

@@ -234,42 +234,38 @@ fn a_one_time_key_is_requested_only_when_opening_a_session() {
 
 // acceptance: PAY-11
 #[test]
-fn the_asynchronous_construction_is_used_leaf_to_leaf_only() {
-    let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);
+fn the_patron_is_reached_by_the_construction_like_any_leaf() {
+    // the node w1 speaks as its operator w1, who is also a leaf on a device
+    // of their own — the shape a launched node has
+    let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1"), ("w1", "w1")]);
+    n.attach("w1");
     n.attach("bob");
     n.attach("alice");
-    n.sweep("bob");
-    // to the patron: on the transport session, no prekey request
+    n.sweep("alice");
+    // to the patron: the construction, through the node holding P's bundle,
+    // and never bare material for the node
     let msgs =
         n.s.client("alice")
             .send_payload(kh("w1"), KIND_APPLICATION, b"to my patron")
             .unwrap();
-    assert!(matches!(msgs.as_slice(), [Msg::Transport(b)] if b == b"to my patron"));
+    assert!(
+        msgs.iter().all(|m| !matches!(m, Msg::Transport(_))),
+        "nothing rides the transport session as material for the node"
+    );
     n.carry(kh("alice"), msgs);
     assert!(
-        n.requests("alice")
-            .iter()
-            .all(|r| !matches!(r, PrekeyRequest::One { subject, .. } if *subject == kh("w1"))),
-        "no prekey request names P"
+        n.requests("alice").iter().any(
+            |r| matches!(r, PrekeyRequest::One { subject, one_time: true, .. } if *subject == kh("w1"))
+        ),
+        "a one-time key request names P"
     );
-    // to a leaf: a one-time request and the construction
+    assert!(n.delivered.iter().any(|d| d.2.contains("to my patron")));
+    // to a leaf: the same construction
     n.send("alice", "bob", "to a leaf");
     assert!(n.requests("alice").iter().any(
         |r| matches!(r, PrekeyRequest::One { subject, one_time: true, .. } if *subject == kh("bob"))
     ));
-    let (_, _, m) = n
-        .log
-        .iter()
-        .find(|(f, _, m)| f == "alice" && matches!(m, Msg::Payload { .. }))
-        .unwrap();
-    let Msg::Payload { bytes, .. } = m else {
-        unreachable!()
-    };
-    assert!(
-        !bytes.windows(9).any(|w| w == b"to a leaf"),
-        "encrypted under the payload construction"
-    );
-    assert!(n.delivered[0].2.contains("to a leaf"));
+    assert!(n.delivered.iter().any(|d| d.2.contains("to a leaf")));
 }
 
 // acceptance: PAY-12

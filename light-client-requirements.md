@@ -700,10 +700,15 @@ only party who can tell them is their own client.
   well before exhaustion (`wire-format.md` §7.8).
 - **Rotate the signed prekey on a policy interval**, and never reuse a one-time
   prekey.
-- **Only leaf-to-leaf needs this.** Sessions to a patron or a resource terminate
-  at an endpoint that is online by definition and already run over an
-  authenticated transport — the `rhtn/1` session, or the service's own TLS on a
-  brokered connection (design §14.2.4, `resource-requirements.md` §3).
+- **Every identity is a leaf.** A patron is a person on devices that may be
+  offline, and a patron who runs no node is a light client like any other
+  [author, 2026-11-14]: a message to one takes this construction, through
+  the node that holds the device's bundle, and never rides a session to a
+  node as material for the node. Only a resource is reached without it: a
+  session to a resource terminates at an endpoint that is online by
+  definition and already runs over an authenticated transport — the
+  `rhtn/1` session, or the service's own TLS on a brokered connection
+  (design §14.2.4, `resource-requirements.md` §3).
 - **Prefetch reusable prekey material for the whole trust horizon as a batch request**
   (`wire-format.md` §7.8), which is structurally distinct from a targeted fetch —
   so the serving node sees a sweep rather than having to take your word for it. A fetch driven by peers' rotation schedules reveals *past* activity —
