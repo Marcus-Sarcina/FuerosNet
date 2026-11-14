@@ -54,7 +54,7 @@ object Notify {
      * is a resource's keyhash and means nothing on a notification, so the
      * utility is the title and the resource's own purpose is the line.
      */
-    fun words(ask: Kernel.Ask): Pair<String, String> {
+    fun words(ask: Gateway.Ask): Pair<String, String> {
         val title = when (ask.utility) {
             "notify" -> "A resource asks to notify you"
             "export" -> "A resource has a file for you"
@@ -74,7 +74,7 @@ object Notify {
      * platform allows it.  Whether anything was posted, so a screen can
      * say so in a diagnostic line and never pretend.
      */
-    fun post(context: Context, ask: Kernel.Ask): Boolean {
+    fun post(context: Context, ask: Gateway.Ask): Boolean {
         if (!allowed(context, ask.resource)) return false
         if (android.os.Build.VERSION.SDK_INT >= 33 &&
             context.checkSelfPermission("android.permission.POST_NOTIFICATIONS") !=

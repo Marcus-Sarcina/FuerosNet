@@ -94,21 +94,21 @@ class ConversationActivity : Activity() {
 
     override fun onStart() {
         super.onStart()
-        Kernel.bind(sink)
+        Gateway.bind(sink)
         // the thread is read when it is opened, its newest page first
         val (b, p) = Pair(by, peerKey)
-        if (b != null && p != null) Thread { Kernel.front.open(b, p) }.start()
+        if (b != null && p != null) Thread { Gateway.front.open(b, p) }.start()
     }
 
     override fun onStop() {
-        Kernel.unbind(sink)
+        Gateway.unbind(sink)
         super.onStop()
     }
 
     private fun header(): TextView =
         TextView(this).apply {
-            val t = by?.let { b -> peerKey?.let { Kernel.front.thread(b, it) } }
-            text = t?.let { Kernel.aliasOfHeld(it.by, it.peerKey) ?: it.peerName } ?: "conversation"
+            val t = by?.let { b -> peerKey?.let { Gateway.front.thread(b, it) } }
+            text = t?.let { Gateway.aliasOfHeld(it.by, it.peerKey) ?: it.peerName } ?: "conversation"
             textSize = 22f
             typeface = Typeface.DEFAULT_BOLD
             setPadding(0, 0, 0, 16)
@@ -116,7 +116,7 @@ class ConversationActivity : Activity() {
 
     private fun redraw() {
         messages.removeAllViews()
-        val t = by?.let { b -> peerKey?.let { Kernel.front.thread(b, it) } }
+        val t = by?.let { b -> peerKey?.let { Gateway.front.thread(b, it) } }
         if (t == null) {
             // **a screen with nobody behind it says so**: this opens from
             // the thread list, and a thread exists for every party met,
@@ -137,7 +137,7 @@ class ConversationActivity : Activity() {
                     text = "earlier messages"
                     setOnClickListener {
                         isEnabled = false
-                        Thread { Kernel.front.earlier(t.by, t.peerKey) }.start()
+                        Thread { Gateway.front.earlier(t.by, t.peerKey) }.start()
                     }
                 },
             )

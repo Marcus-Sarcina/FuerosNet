@@ -123,8 +123,8 @@ class ThreadsTest {
         assertTrue("the index is not restored per identity at bring-up", k.contains("front.restore(h.id, s.index())"))
         assertTrue("the old file is not migrated", k.contains("Threads.decodeLegacy("))
         val c = source("ConversationActivity.kt")
-        assertTrue("a conversation does not open its thread lazily", c.contains("Kernel.front.open("))
-        assertTrue("there is no way to read earlier messages", c.contains("Kernel.front.earlier("))
+        assertTrue("a conversation does not open its thread lazily", c.contains("Gateway.front.open("))
+        assertTrue("there is no way to read earlier messages", c.contains("Gateway.front.earlier("))
         val f = source("Front.kt")
         assertTrue("a message is not appended as it accumulates", f.contains("appender?.invoke("))
     }
@@ -137,7 +137,7 @@ class ThreadsTest {
     private fun module(): java.io.File {
         var at: java.io.File? = java.io.File(".").canonicalFile
         while (at != null) {
-            if (java.io.File(at, "app/src/main/kotlin/com/comptus/fueros/Kernel.kt").exists()) return at
+            if (java.io.File(at, "app/src/main/kotlin/com/comptus/fueros/Gateway.kt").exists()) return at
             at = at.parentFile
         }
         error("the android module was not found above ${java.io.File(".").canonicalFile}")

@@ -31,7 +31,7 @@ class GivingTest {
         channel: String? = null,
         payload: ByteArray? = null,
         seconds: ULong? = null,
-    ) = Kernel.Ask(
+    ) = Gateway.Ask(
         id = 1UL,
         utility = utility,
         purpose = "the reading",

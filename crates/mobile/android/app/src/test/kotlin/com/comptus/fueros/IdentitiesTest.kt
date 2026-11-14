@@ -296,7 +296,7 @@ class IdentitiesTest {
         // recreation mid-add reads as a wipe
         assertTrue(
             "the choice is offered before the name step, which a recreation would undo",
-            first.indexOf("Kernel.defaultAlias(Identities.focused()) == null -> name()") <
+            first.indexOf("Gateway.defaultAlias(Identities.focused()) == null -> name()") <
                 first.indexOf("intent.getBooleanExtra(ADDING, false) -> choice()"),
         )
         // **and a phrase owed outranks both** [bench, 2026-11-10]: the
@@ -364,7 +364,7 @@ class IdentitiesTest {
         )
         assertTrue(
             "the network callback reaches only the focused identity",
-            loopSource.contains("Kernel.loaded.values.flatMap { q -> q.networkChanged() }"),
+            loopSource.contains("Gateway.loaded.values.flatMap { q -> q.networkChanged() }"),
         )
         // **step 4: the node an identity agrees to is its own**, so an
         // identity attaches only to one it agreed to and never inherits
@@ -377,7 +377,7 @@ class IdentitiesTest {
         )
         assertTrue(
             "launchHeld attaches from something other than the identity's own kernel",
-            loopSource.contains("val tabs = Kernel.call(\"agreed\", { emptyList() }) { p.agreed() }"),
+            loopSource.contains("val tabs = Gateway.call(\"agreed\", { emptyList() }) { p.agreed() }"),
         )
         assertFalse(
             "an identity out of focus is still handed the device's provision",
@@ -417,11 +417,11 @@ class IdentitiesTest {
         assertTrue(
             "a reply goes out as the focused identity rather than the one holding the thread",
             loopSource.contains("fun send(by: String, to: String, text: String)") &&
-                loopSource.contains("val p = Kernel.asHolder(by)"),
+                loopSource.contains("val p = Gateway.asHolder(by)"),
         )
         assertTrue(
             "an incoming message is not filed under the identity that received it",
-            loopSource.contains("Kernel.front.incoming(id, from, who, String(e.bytes))"),
+            loopSource.contains("Gateway.front.incoming(id, from, who, String(e.bytes))"),
         )
         // **and the removal is on the Options screen**, two steps deep
         assertTrue(
@@ -432,7 +432,7 @@ class IdentitiesTest {
         )
 
         // the kernel, the attachments and the identities: one object until step 4 split it
-        val kernel = source("Kernel.kt") + source("Attachments.kt") + source("Identities.kt")
+        val kernel = source("Gateway.kt") + source("Attachments.kt") + source("Identities.kt")
         // **adding, not replacing** [author, 2026-11-07]: an identity
         // already held stays held, which is the whole of "Add an identity"
         assertTrue(
@@ -456,7 +456,7 @@ class IdentitiesTest {
         // source: a new archive for the new identity, the same address,
         // and the departure after the adoption
         // the kernel, the attachments and the identities: one object until step 4 split it
-        val kernel = source("Kernel.kt") + source("Attachments.kt") + source("Identities.kt")
+        val kernel = source("Gateway.kt") + source("Attachments.kt") + source("Identities.kt")
         assertTrue(
             "the rotation's marks are not sealed in the new identity's own scope",
             kernel.contains("val own = AndroidShell(app, scope)") &&
@@ -507,7 +507,7 @@ class IdentitiesTest {
         for (noun in listOf("contacts", "subnets", "lines", "resources", "meetings")) {
             assertTrue(
                 "$noun is not read across every held identity",
-                model.contains("Kernel.${noun}Held()"),
+                model.contains("Gateway.${noun}Held()"),
             )
         }
         assertTrue(
@@ -516,20 +516,20 @@ class IdentitiesTest {
         )
         // **instances are the exception**, every act on one being an
         // operator action: read from the identity that acts, no holder
-        assertTrue("instances are not the active identity's", model.contains("Kernel.instances(Identities.focused())"))
-        assertFalse("instances should carry no holder", model.contains("Kernel.instancesHeld()"))
+        assertTrue("instances are not the active identity's", model.contains("Gateway.instances(Identities.focused())"))
+        assertFalse("instances should carry no holder", model.contains("Gateway.instancesHeld()"))
 
         // acting inside a subnet goes through the row's holder
         assertTrue(
             "leaving a line does not go through the identity that holds it",
-            source("LeavingActivity.kt").contains("Kernel.departAs(holder, patron.first)"),
+            source("LeavingActivity.kt").contains("Gateway.departAs(holder, patron.first)"),
         )
         val catalog = source("CatalogActivity.kt")
-        assertTrue("the catalog does not ask as the entry's holder", catalog.contains("Kernel.askAs("))
+        assertTrue("the catalog does not ask as the entry's holder", catalog.contains("Gateway.askAs("))
         assertTrue("the entry's holder does not travel to the resource screen", catalog.contains("\"by\", entry.by"))
         assertTrue(
             "the resource screen does not ask as the holder it was given",
-            source("ResourceActivity.kt").contains("Kernel.askAs(holder, node, resource, path)"),
+            source("ResourceActivity.kt").contains("Gateway.askAs(holder, node, resource, path)"),
         )
 
         // **and a meeting and an operator action stay the active one's**
@@ -537,7 +537,7 @@ class IdentitiesTest {
             val text = source(screen)
             assertFalse(
                 "$screen reads subnets across identities, but a meeting and an operator action take the active one",
-                text.contains("Kernel.subnetsHeld()"),
+                text.contains("Gateway.subnetsHeld()"),
             )
         }
     }

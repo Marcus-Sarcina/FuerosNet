@@ -46,8 +46,8 @@ class AttachActivity : Activity() {
 
     private val sink = object : Front.Ui {
         override fun render() = runOnUiThread {
-            statusLine.text = Kernel.front.status()
-            said.text = Kernel.front.notices().takeLast(NOTICE_LINES).joinToString("\n")
+            statusLine.text = Gateway.front.status()
+            said.text = Gateway.front.notices().takeLast(NOTICE_LINES).joinToString("\n")
         }
     }
 
@@ -94,19 +94,19 @@ class AttachActivity : Activity() {
 
     override fun onStart() {
         super.onStart()
-        Kernel.bind(sink)
+        Gateway.bind(sink)
         // **off the drawing thread, and once per visit**: reading the
         // horizon is a blocking call into the client, which may be parked
         // in `nextEvent` for its poll interval, and this screen must not
         // wait on that where the person is looking
         Thread({
-            val roll = Attach.roll(Kernel.instances(by))
+            val roll = Attach.roll(Gateway.instances(by))
             runOnUiThread { known.text = roll }
         }, "fueros-nodes").start()
     }
 
     override fun onStop() {
-        Kernel.unbind(sink)
+        Gateway.unbind(sink)
         super.onStop()
     }
 
@@ -159,7 +159,7 @@ class AttachActivity : Activity() {
      */
     private fun drawMine() {
         mine.removeAllViews()
-        val me = Kernel.keyhash(by)
+        val me = Gateway.keyhash(by)
         val rows = ownInstances()
         if (me == null || rows.isEmpty()) {
             return

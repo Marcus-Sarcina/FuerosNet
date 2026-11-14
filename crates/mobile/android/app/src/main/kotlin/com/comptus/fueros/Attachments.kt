@@ -46,23 +46,23 @@ object Attachments {
     internal val REATTACH_AFTER_S = longArrayOf(15, 30, 60, 120, 300)
 
     fun forgetCaptures(by: String, hexKey: String) {
-        val p = Kernel.loaded[by] ?: run { Kernel.front.note("· no kernel yet"); return }
-        val who = runCatching { Kernel.unhex(hexKey) }.getOrNull() ?: run { Kernel.front.note("· not a key: $hexKey"); return }
+        val p = Gateway.loaded[by] ?: run { Gateway.front.note("· no kernel yet"); return }
+        val who = runCatching { Gateway.unhex(hexKey) }.getOrNull() ?: run { Gateway.front.note("· not a key: $hexKey"); return }
         Thread({
-            Kernel.call("forget_captures", { e -> Kernel.front.note("· forget refused: ${e.reason}") }) {
+            Gateway.call("forget_captures", { e -> Gateway.front.note("· forget refused: ${e.reason}") }) {
                 val n = p.forgetCaptures(who)
-                Kernel.front.note("· forgot $n sealed capture(s) of ${hexKey.take(8)}…")
+                Gateway.front.note("· forgot $n sealed capture(s) of ${hexKey.take(8)}…")
             }
         }, "fueros-forget").start()
     }
 
     fun contactPeersNow(by: String) {
-        val p = Kernel.loaded[by] ?: run { Kernel.front.note("· no kernel yet"); return }
+        val p = Gateway.loaded[by] ?: run { Gateway.front.note("· no kernel yet"); return }
         Thread({
-            Kernel.call("contact_peers", { e -> Kernel.front.note("· contact refused: ${e.reason}") }) {
+            Gateway.call("contact_peers", { e -> Gateway.front.note("· contact refused: ${e.reason}") }) {
                 val round = p.contactPeers()
                 Diag.event("peer.round", "peers" to round.size, "held" to round.count { it.held }, "how" to round.joinToString(",") { it.how })
-                Kernel.front.note("· peers: " + round.joinToString("; ") { "${Kernel.hex(it.who).take(8)}… ${it.how}" }.ifEmpty { "none" })
+                Gateway.front.note("· peers: " + round.joinToString("; ") { "${Gateway.hex(it.who).take(8)}… ${it.how}" }.ifEmpty { "none" })
             }
         }, "fueros-contact").start()
     }
@@ -111,29 +111,29 @@ object Attachments {
         // row-holder rule exists to prevent, and nothing would have
         // refused it. Refused here rather than fallen back from
         // ([asHolder]).
-        val p = Kernel.asHolder(by)
-        val who = runCatching { Kernel.unhex(to) }.getOrNull()
+        val p = Gateway.asHolder(by)
+        val who = runCatching { Gateway.unhex(to) }.getOrNull()
         if (p == null || who == null || who.size != 32) {
-            Kernel.front.note(
+            Gateway.front.note(
                 if (p == null) "· that identity is not open on this device" else "· not a party to send to: ${to.take(8)}…",
             )
             return
         }
-        val id = Kernel.front.outgoing(by, to, text)
+        val id = Gateway.front.outgoing(by, to, text)
         Thread({
-            Kernel.call("send", { e -> Kernel.front.settle(by, to, id, Front.Delivery.UNSENT, e.reason) }) {
+            Gateway.call("send", { e -> Gateway.front.settle(by, to, id, Front.Delivery.UNSENT, e.reason) }) {
                 p.send(who, kindApplication(), text.toByteArray())
-                Kernel.front.settle(by, to, id, Front.Delivery.SENT, null)
+                Gateway.front.settle(by, to, id, Front.Delivery.SENT, null)
             }
         }, "fueros-send").start()
     }
 
     fun provision(context: Context, blob: String) {
         AndroidShell(context.applicationContext).write("provision", blob.toByteArray())
-        synchronized(Kernel.lock) {
+        synchronized(Gateway.lock) {
             if (!started || provisioned) return
         }
-        Kernel.front.note("· provision stored. Restart the app for it to take effect.")
+        Gateway.front.note("· provision stored. Restart the app for it to take effect.")
     }
 
     /**
@@ -143,11 +143,11 @@ object Attachments {
      * is kept.
      */
     fun detachNow(by: String) {
-        val p = Kernel.loaded[by] ?: run { Kernel.front.note("· no kernel yet"); return }
+        val p = Gateway.loaded[by] ?: run { Gateway.front.note("· no kernel yet"); return }
         Thread({
-            Kernel.call("detach", { e -> Kernel.front.note("· detach refused: ${e.reason}") }) {
+            Gateway.call("detach", { e -> Gateway.front.note("· detach refused: ${e.reason}") }) {
                 p.detach()
-                Kernel.front.note("· detached. Nothing is queued for this device from here.")
+                Gateway.front.note("· detached. Nothing is queued for this device from here.")
                 show(p, Connection.Detached)
             }
         }, "fueros-detach").start()
@@ -169,30 +169,30 @@ object Attachments {
      * Off the caller's thread: an attach dials, publishes and sweeps.
      */
     fun attachTo(by: String, nodeHex: String, address: String) {
-        val p = Kernel.loaded[by] ?: run { Kernel.front.note("· no kernel yet"); return }
-        val node = Attach.node(nodeHex)?.let { runCatching { Kernel.unhex(it) }.getOrNull() }
+        val p = Gateway.loaded[by] ?: run { Gateway.front.note("· no kernel yet"); return }
+        val node = Attach.node(nodeHex)?.let { runCatching { Gateway.unhex(it) }.getOrNull() }
         val at = Attach.address(address)
         if (node == null || at == null) {
-            Kernel.front.note("· not a node and an address: ${nodeHex.take(8)}… at $address")
+            Gateway.front.note("· not a node and an address: ${nodeHex.take(8)}… at $address")
             return
         }
         Thread({
-            val population = Kernel.call("contacts", { emptyList() }) {
+            val population = Gateway.call("contacts", { emptyList() }) {
                 // the people, not the infrastructure: `how` 4 is a node
                 p.contacts().filter { it.how != How.INFRA }.map { it.keyhash }
             }
-            val a = Kernel.call("attach", { e -> Kernel.front.note("· attach refused: ${e.reason}"); null }) {
+            val a = Gateway.call("attach", { e -> Gateway.front.note("· attach refused: ${e.reason}"); null }) {
                 p.attach(node, listOf(at), population)
             }
             if (a == null) {
                 // **a node that did not answer is the detached case**, as
                 // it is on the provision's path: the loop goes on running
-                Kernel.front.note("· $at did not answer: this device stays detached.")
+                Gateway.front.note("· $at did not answer: this device stays detached.")
                 show(p, Connection.Detached)
             } else {
                 // **not the provision's flag**: that one says a blob was
                 // read, and this attach is the person's own
-                Kernel.front.note("· attached to ${Kernel.hex(node).take(8)}… at $at; ${a.queued} queued there.")
+                Gateway.front.note("· attached to ${Gateway.hex(node).take(8)}… at $at; ${a.queued} queued there.")
                 show(p, Connection.Attached(node, a.primary))
             }
         }, "fueros-attach").start()
@@ -200,12 +200,12 @@ object Attachments {
 
     /** The bench's lever: `<node hex>@<host:port>` agreed to by the identity in focus. */
     fun agreeToNow(by: String, spec: String) {
-        val p = Kernel.loaded[by] ?: return
+        val p = Gateway.loaded[by] ?: return
         val cut = spec.indexOf('@')
         if (cut <= 0) return
-        val node = runCatching { Kernel.unhex(spec.substring(0, cut)) }.getOrNull() ?: return
+        val node = runCatching { Gateway.unhex(spec.substring(0, cut)) }.getOrNull() ?: return
         val addr = spec.substring(cut + 1)
-        Kernel.call("agreeTo", { e -> Diag.warn("agree_to", "why" to e.reason) }) { p.agreeTo(node, listOf(addr)) }
+        Gateway.call("agreeTo", { e -> Diag.warn("agree_to", "why" to e.reason) }) { p.agreeTo(node, listOf(addr)) }
         Diag.event("agree_to", "node" to spec.take(8), "addr" to addr)
     }
 
@@ -250,13 +250,13 @@ object Attachments {
         val scope = Identities.activeId?.let { id -> Identities.identities(app).firstOrNull { it.id == id }?.scope }
         // **one tab per address** [author, 2026-11-11], **kept by the kernel**
         // [review, 2026-11-13: the one store of what an identity agreed to]
-        val p = Kernel.loaded[by] ?: run { Kernel.front.note("· no kernel yet"); return }
-        val node = Attach.node(nodeHex)?.let { runCatching { Kernel.unhex(it) }.getOrNull() }
+        val p = Gateway.loaded[by] ?: run { Gateway.front.note("· no kernel yet"); return }
+        val node = Attach.node(nodeHex)?.let { runCatching { Gateway.unhex(it) }.getOrNull() }
         if (node == null) {
-            Kernel.front.note("· not a node: ${nodeHex.take(8)}…")
+            Gateway.front.note("· not a node: ${nodeHex.take(8)}…")
             return
         }
-        Kernel.call("agreeTo", { e -> Kernel.front.note("· the node could not be remembered: ${e.reason}") }) {
+        Gateway.call("agreeTo", { e -> Gateway.front.note("· the node could not be remembered: ${e.reason}") }) {
             p.agreeTo(node, listOf(address))
         }
         attachTo(by, nodeHex, address)
@@ -273,14 +273,14 @@ object Attachments {
      * callback's thread: a round dials, and a dial waits.
      */
     internal fun watchNetwork(p: Participant) {
-        val cm = Kernel.appContext?.getSystemService(android.net.ConnectivityManager::class.java) ?: return
+        val cm = Gateway.appContext?.getSystemService(android.net.ConnectivityManager::class.java) ?: return
         try {
             cm.registerDefaultNetworkCallback(object : android.net.ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: android.net.Network) {
-                    Diag.event("Kernel.shell.network", "state" to "available")
+                    Diag.event("Gateway.shell.network", "state" to "available")
                     Thread({
-                        Kernel.call("network_changed", { _ -> }) {
-                            val round = Kernel.loaded.values.flatMap { q -> q.networkChanged() }
+                        Gateway.call("network_changed", { _ -> }) {
+                            val round = Gateway.loaded.values.flatMap { q -> q.networkChanged() }
                             Diag.event(
                                 "peer.round",
                                 "peers" to round.size,
@@ -288,19 +288,19 @@ object Attachments {
                                 "how" to round.joinToString(",") { it.how },
                             )
                             round.forEach { c ->
-                                val who = Kernel.hex(c.who).take(8)
-                                if (c.how == "dialled") Kernel.front.note("· peer $who… reached directly")
+                                val who = Gateway.hex(c.who).take(8)
+                                if (c.how == "dialled") Gateway.front.note("· peer $who… reached directly")
                             }
                         }
                     }, "fueros-network").start()
                 }
 
                 override fun onLost(network: android.net.Network) {
-                    Diag.event("Kernel.shell.network", "state" to "lost")
+                    Diag.event("Gateway.shell.network", "state" to "lost")
                 }
             })
         } catch (e: Exception) {
-            Diag.warn("Kernel.shell.network", "state" to "unwatched", "error" to (e.message ?: e.javaClass.simpleName))
+            Diag.warn("Gateway.shell.network", "state" to "unwatched", "error" to (e.message ?: e.javaClass.simpleName))
         }
     }
 
@@ -328,14 +328,14 @@ object Attachments {
             Construction.DOUBLE_RATCHET -> "the Double Ratchet (the floor)"
             Construction.TRIPLE_RATCHET -> "the Triple Ratchet"
         }
-        Kernel.front.setStatus("$line · presents $key…\npayload: $construction")
+        Gateway.front.setStatus("$line · presents $key…\npayload: $construction")
         // **every thread's chip, not the latest party's** [2026-10-27]:
         // the chip is per peer on the thread list (C1), and reading it off
         // one slot left every other thread's showing whatever it showed
         // when that party was the current one
-        for (t in Kernel.front.threads()) {
-            runCatching { Kernel.unhex(t.peerKey) }.getOrNull()?.let { who ->
-                if (who.size == 32) Kernel.loaded[t.by]?.let { h -> Kernel.front.directPath(t.by, t.peerKey, h.directTo(who)) }
+        for (t in Gateway.front.threads()) {
+            runCatching { Gateway.unhex(t.peerKey) }.getOrNull()?.let { who ->
+                if (who.size == 32) Gateway.loaded[t.by]?.let { h -> Gateway.front.directPath(t.by, t.peerKey, h.directTo(who)) }
             }
         }
     }
@@ -389,7 +389,7 @@ object Attachments {
             // characters; a payload's bytes are counted, never shown
             if (e != null && Diag.enabled()) {
                 Diag.event(
-                    "Kernel.shell.event",
+                    "Gateway.shell.event",
                     "kind" to e::class.simpleName,
                     "from" to when (e) {
                         is Event.Payload -> Diag.id8(e.from)
@@ -415,9 +415,9 @@ object Attachments {
             } else {
                 when (e) {
                     is Event.Payload -> {
-                        val from = Kernel.hex(e.from)
+                        val from = Gateway.hex(e.from)
                         val who = if (from == peerKey) peerName else from.take(16)
-                        Kernel.front.incoming(id, from, who, String(e.bytes))
+                        Gateway.front.incoming(id, from, who, String(e.bytes))
                     }
                     is Event.Connection -> {
                         // every identity's connection is recorded for itself
@@ -432,12 +432,12 @@ object Attachments {
                     // request or a return came to, in the kernel's words
                     is Event.Peer -> {
                         Diag.event("peer.event", "from" to Diag.id8(e.from), "what" to e.what)
-                        Kernel.front.note("· peer: ${e.what}")
+                        Gateway.front.note("· peer: ${e.what}")
                     }
-                    is Event.Answered -> Kernel.front.note("· a response was refused: ${e.refused}")
-                    is Event.Conversed -> Kernel.front.note("· ${e.what}")
+                    is Event.Answered -> Gateway.front.note("· a response was refused: ${e.refused}")
+                    is Event.Conversed -> Gateway.front.note("· ${e.what}")
                     null -> {}
-                    else -> Kernel.front.note("· $e")
+                    else -> Gateway.front.note("· $e")
                 }
             }
             Ceremony.tick(id, p, diag)
@@ -474,7 +474,7 @@ object Attachments {
      * first's. Where one did not answer, [reattachLater] tries again.
      */
     internal fun attachTabs(id: String, p: Participant, scope: String?, attempt: Int) {
-        val tabs = Kernel.call("agreed", { emptyList() }) { p.agreed() }
+        val tabs = Gateway.call("agreed", { emptyList() }) { p.agreed() }
         if (tabs.isEmpty()) {
             Diag.event("identity.attach", "who" to id.take(8), "node" to "none")
             Model.connectionOf(id, Connection.Detached)
@@ -485,7 +485,7 @@ object Attachments {
         for (t in tabs) {
             val node = t.serving
             val hex = node.hex()
-            val a = Kernel.call("attach", { e -> Diag.event("identity.attach", "who" to id.take(8), "node" to hex.take(8), "refused" to e.reason); null }) {
+            val a = Gateway.call("attach", { e -> Diag.event("identity.attach", "who" to id.take(8), "node" to hex.take(8), "refused" to e.reason); null }) {
                 p.attach(node, t.addresses, listOf())
             }
             Diag.event("identity.attach", "who" to id.take(8), "node" to hex.take(8), "attached" to (a != null), "attempt" to attempt)
@@ -525,12 +525,12 @@ object Attachments {
     }
 
     internal fun bringUp(shell: AndroidShell) {
-        Kernel.shell = shell
+        Gateway.shell = shell
         val provision = shell.read("provision")?.let {
             try { JSONObject(String(it)) } catch (_: Exception) { null }
         }
-        synchronized(Kernel.lock) { provisioned = provision != null }
-        Kernel.front.setProvisioned(provision != null)
+        synchronized(Gateway.lock) { provisioned = provision != null }
+        Gateway.front.setProvisioned(provision != null)
         // the identity is this device's own, whether or not anybody has
         // been told about it yet
         // **`opt`, not `get`** [2026-11-04]: `getJSONArray` throws where the
@@ -541,13 +541,13 @@ object Attachments {
         // bench phones would not launch at all. A provision is a thing
         // other code writes, and every field of it is optional to this.
         val known = provision?.optJSONArray("known")
-            ?.let { a -> (0 until a.length()).map { Kernel.unhex(a.getString(it)) } }
+            ?.let { a -> (0 until a.length()).map { Gateway.unhex(a.getString(it)) } }
             ?: listOf()
         // **every identity this device holds, opened at once**
         // ([Identities]; author, 2026-11-07): a key rotation replaces the
         // key one subnet knows and leaves the others live, so a device
         // that has rotated holds a key still usable elsewhere.
-        val app = Kernel.appContext ?: return
+        val app = Gateway.appContext ?: return
         var index = Identities.decode(shell.unseal(Identities.INDEX))
         // **the identity held before this model is brought into the index
         // and nothing is moved**: its scope is the top-level directory it
@@ -559,13 +559,13 @@ object Attachments {
         if (adopt is Identities.Migration.Adopt) {
             index = index + Identities.Held(adopt.id, Identities.LEGACY_SCOPE, null)
             if (!shell.seal(Identities.INDEX, Identities.encode(index))) {
-                Kernel.front.setStatus("this device's storage would not keep its list of identities")
+                Gateway.front.setStatus("this device's storage would not keep its list of identities")
                 return
             }
             Diag.event("identity.adopted")
         }
         if (index.isEmpty()) {
-            Kernel.front.setStatus("no identity on this device")
+            Gateway.front.setStatus("no identity on this device")
             return
         }
         for (h in index) {
@@ -582,14 +582,14 @@ object Attachments {
         // before this loop has opened any — so the request joins the saved
         // choice, which [Identities.active] already falls back from where
         // the identity named is not held.
-        Identities.activeId = Identities.active(index.filter { Kernel.loaded.containsKey(it.id) }, Identities.requestedActive ?: saved)
+        Identities.activeId = Identities.active(index.filter { Gateway.loaded.containsKey(it.id) }, Identities.requestedActive ?: saved)
         Identities.requestedActive = null
         // **a departure a rotation owes is owed at every start**, since a
         // process that died between the Ceremony.adoption() and the departure left
         // the mark behind ([concludeRotation])
         Identities.concludeRotation()
-        val p = Identities.activeId?.let { Kernel.loaded[it] } ?: run {
-            Kernel.front.setStatus("no identity on this device came up")
+        val p = Identities.activeId?.let { Gateway.loaded[it] } ?: run {
+            Gateway.front.setStatus("no identity on this device came up")
             return
         }
         show(p, Connection.Detached)
@@ -604,10 +604,10 @@ object Attachments {
         // empty (run 58a6883-a5-2, 2026-10-24)
         provision?.optJSONArray("introductions")?.let { a ->
             for (k in 0 until a.length()) {
-                val bytes = runCatching { Kernel.unhex(a.getString(k)) }.getOrNull() ?: continue
-                Kernel.call("takeIntroduction", { e -> Kernel.front.note("· an introduction was refused: ${e.reason}") }) {
+                val bytes = runCatching { Gateway.unhex(a.getString(k)) }.getOrNull() ?: continue
+                Gateway.call("takeIntroduction", { e -> Gateway.front.note("· an introduction was refused: ${e.reason}") }) {
                     val who = p.takeIntroduction(bytes)
-                    Kernel.front.note("· introduced: ${Kernel.hex(who).take(16)}…")
+                    Gateway.front.note("· introduced: ${Gateway.hex(who).take(16)}…")
                 }
             }
         }
@@ -626,16 +626,16 @@ object Attachments {
             // the material is this device's public identity, shown
             // because nothing else exposes it: no flavour logs it and the
             // Report bundle carries identities as eight characters only
-            Kernel.front.note("· this device's public key material:")
-            Kernel.front.note("    $material")
-            Kernel.front.note("· nobody known, nothing attached: a meeting crosses the bearer alone.")
+            Gateway.front.note("· this device's public key material:")
+            Gateway.front.note("    $material")
+            Gateway.front.note("· nobody known, nothing attached: a meeting crosses the bearer alone.")
         }
 
         // the retention this device declares (design §7.5.1), where the
         // provision names one; the kernel's own default otherwise
         val retention = provision?.optLong("retention_years", 0L) ?: 0L
         if (retention > 0L) {
-            Kernel.call("set_retention_years", { e -> Kernel.front.note("· retention refused: ${e.reason}") }) {
+            Gateway.call("set_retention_years", { e -> Gateway.front.note("· retention refused: ${e.reason}") }) {
                 p.setRetentionYears(retention.toULong())
             }
         }
@@ -644,14 +644,14 @@ object Attachments {
         // introduces the first counterparty ([counterparty]); a named peer
         // here is only a convenience for messaging before any meeting.
         val to = provision?.optString("peer", "")?.takeIf { it.isNotEmpty() }
-            ?.let { runCatching { Kernel.unhex(it) }.getOrNull() }
+            ?.let { runCatching { Gateway.unhex(it) }.getOrNull() }
         peer = to
         peerName = provision?.optString("peer_name", "the other person") ?: "the other person"
         nominees = provision?.optJSONArray("nominees")
-            ?.let { a -> (0 until a.length()).map { Kernel.unhex(a.getString(it)) } }
+            ?.let { a -> (0 until a.length()).map { Gateway.unhex(a.getString(it)) } }
             ?: listOf()
-        peerKey = to?.let { Kernel.hex(it) }
-        Identities.activeId?.let { by -> peerKey?.let { Kernel.front.peerKnown(by, it, peerName) } }
+        peerKey = to?.let { Gateway.hex(it) }
+        Identities.activeId?.let { by -> peerKey?.let { Gateway.front.peerKnown(by, it, peerName) } }
         // **a provision may name no node, and then this device stays
         // detached** (design §6.4): a pair can Ceremony.meet() with nothing reachable
         // but each other, and what they form is the witnessless shape —
@@ -662,13 +662,13 @@ object Attachments {
         val nodeHex = provision?.optString("node", "") ?: ""
         if (nodeHex.isEmpty()) {
             if (provision != null) {
-                Kernel.front.note("· no node in the provision: this device stays detached,")
-                Kernel.front.note("  and a meeting crosses the bearer alone (design §6.4).")
+                Gateway.front.note("· no node in the provision: this device stays detached,")
+                Gateway.front.note("  and a meeting crosses the bearer alone (design §6.4).")
             }
             show(p, Connection.Detached)
         } else {
-            val node = Kernel.unhex(nodeHex)
-            val a = Kernel.call("attach", { e -> Kernel.front.setStatus("attach refused: ${e.reason}"); null }) {
+            val node = Gateway.unhex(nodeHex)
+            val a = Gateway.call("attach", { e -> Gateway.front.setStatus("attach refused: ${e.reason}"); null }) {
                 // a device that has met nobody attaches with no peers to
                 // follow; the first one is learned at the meeting
                 p.attach(node, listOf(provision?.optString("addr", "") ?: ""), listOfNotNull(to))
@@ -687,9 +687,9 @@ object Attachments {
             // conversation that received every byte it needed and acted
             // on none of it (2026-10-24).
             if (a == null) {
-                Kernel.front.note("· the node named in the provision did not answer:")
-                Kernel.front.note("  this device stays detached, and a meeting crosses")
-                Kernel.front.note("  the bearer alone (design §6.4).")
+                Gateway.front.note("· the node named in the provision did not answer:")
+                Gateway.front.note("  this device stays detached, and a meeting crosses")
+                Gateway.front.note("  the bearer alone (design §6.4).")
                 show(p, Connection.Detached)
             } else {
                 show(p, Connection.Attached(node, a.primary))
@@ -701,10 +701,10 @@ object Attachments {
         run {
             val scope = Identities.activeId?.let { id -> index.firstOrNull { it.id == id }?.scope }
             var missed = 0
-            for (t in Kernel.call("agreed", { emptyList() }) { p.agreed() }) {
+            for (t in Gateway.call("agreed", { emptyList() }) { p.agreed() }) {
                 val hex = t.serving.hex()
                 if (hex == nodeHex) continue
-                val a = Kernel.call("attach", { e -> Kernel.front.note("· tab ${hex.take(8)}… refused: ${e.reason}"); null }) {
+                val a = Gateway.call("attach", { e -> Gateway.front.note("· tab ${hex.take(8)}… refused: ${e.reason}"); null }) {
                     p.attach(t.serving, t.addresses, listOfNotNull(to))
                 }
                 if (a == null) missed += 1
@@ -725,25 +725,25 @@ object Attachments {
         // opened** [author, 2026-11-14] (`light-client-requirements.md`
         // §9, APP-015): one store per identity over its own scope and its
         // own kernel's sealing; the 12th's one file migrated once
-        Kernel.appContext?.let { a ->
+        Gateway.appContext?.let { a ->
             val stores = HashMap<String, Threads>()
             fun storeOf(by: String): Threads? {
                 stores[by]?.let { return it }
                 val h = index.firstOrNull { it.id == by } ?: return null
-                val p = Kernel.loaded[by] ?: return null
+                val p = Gateway.loaded[by] ?: return null
                 val shell = AndroidShell(a, h.scope)
                 return Threads(shell.files(), sealerOf(p), by).also { stores[by] = it }
             }
             for (h in index) {
                 val s = storeOf(h.id) ?: continue
                 migrateThreads(AndroidShell(a, h.scope), s)
-                Kernel.front.restore(h.id, s.index())
+                Gateway.front.restore(h.id, s.index())
             }
-            Kernel.front.appender = { by, peer, rec -> storeOf(by)?.append(peer, rec) }
-            Kernel.front.indexer = { by -> storeOf(by)?.writeIndex(Kernel.front.entries(by)) }
-            Kernel.front.loader = { by, peer, before, pending -> storeOf(by)?.page(peer, before, Threads.PAGE, pending) }
+            Gateway.front.appender = { by, peer, rec -> storeOf(by)?.append(peer, rec) }
+            Gateway.front.indexer = { by -> storeOf(by)?.writeIndex(Gateway.front.entries(by)) }
+            Gateway.front.loader = { by, peer, before, pending -> storeOf(by)?.page(peer, before, Threads.PAGE, pending) }
         }
-        for ((hid, hp) in Kernel.loaded) {
+        for ((hid, hp) in Gateway.loaded) {
             if (hid != Identities.activeId) launchHeld(hid, hp, index.firstOrNull { it.id == hid }?.scope)
         }
         runLoop(p, Identities.activeId ?: "")
@@ -758,10 +758,10 @@ object Attachments {
      */
     fun start(context: Context) {
         val app = context.applicationContext
-        synchronized(Kernel.lock) {
+        synchronized(Gateway.lock) {
             if (started) return
             started = true
-            Kernel.appContext = app
+            Gateway.appContext = app
         }
         Thread({ bringUp(AndroidShell(app)) }, "fueros-kernel").start()
         // **the standing the platform gives a process that keeps a

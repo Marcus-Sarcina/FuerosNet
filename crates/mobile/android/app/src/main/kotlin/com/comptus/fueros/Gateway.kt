@@ -31,7 +31,7 @@ import uniffi.rhtn_ffi.kindApplication
  * Every context used is the application's, so nothing here retains an
  * Activity.
  */
-object Kernel {
+object Gateway {
 
     /** The state a screen renders. Screens read it and bind to it; only the
      *  kernel mutates it. It lives in [Front], which a JVM test can hold. */

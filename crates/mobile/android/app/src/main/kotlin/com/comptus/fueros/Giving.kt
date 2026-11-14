@@ -86,7 +86,7 @@ object Giving {
      * utility, the channel and media the resource asked for, and what
      * this device has.
      */
-    fun plan(ask: Kernel.Ask, has: Facts): Plan {
+    fun plan(ask: Gateway.Ask, has: Facts): Plan {
         val photograph = Plan(
             Way.PHOTOGRAPH,
             listOf(CAMERA),
@@ -207,11 +207,11 @@ object Giving {
 
     /** Whether the ask will take `media`: an ask naming none takes what
      *  it is given. */
-    fun takes(ask: Kernel.Ask, media: String): Boolean =
+    fun takes(ask: Gateway.Ask, media: String): Boolean =
         ask.media.isEmpty() || ask.media.any { it == media || it == "*/*" || it == media.substringBefore('/') + "/*" }
 
     /** The types a picker offers for an ask: what it named, or anything. */
-    fun types(ask: Kernel.Ask): Array<String> =
+    fun types(ask: Gateway.Ask): Array<String> =
         if (ask.media.isEmpty()) arrayOf("*/*") else ask.media.toTypedArray()
 
     // ---- a place ------------------------------------------------------

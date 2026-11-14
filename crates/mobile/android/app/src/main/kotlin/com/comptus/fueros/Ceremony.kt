@@ -155,15 +155,15 @@ object Ceremony {
     /** One step of the conversation: null where it went, the kernel's
      *  reason where it refused. */
     private inline fun refusal(method: String, body: () -> Unit): String? =
-        Kernel.call(method, { it.reason }) { body(); null }
+        Gateway.call(method, { it.reason }) { body(); null }
 
     /** One kernel call whose refusal is the adoption's to carry. */
     private inline fun <T> result(method: String, body: () -> T): Adoption.Result<T> =
-        Kernel.call(method, { Adoption.Result.Refused(it.reason) }) { Adoption.Result.Ok(body()) }
+        Gateway.call(method, { Adoption.Result.Refused(it.reason) }) { Adoption.Result.Ok(body()) }
 
     /** One kernel call whose refusal is the peering's to carry. */
     private inline fun <T> peered(method: String, body: () -> T): Peering.Result<T> =
-        Kernel.call(method, { Peering.Result.Refused(it.reason) }) { Peering.Result.Ok(body()) }
+        Gateway.call(method, { Peering.Result.Refused(it.reason) }) { Peering.Result.Ok(body()) }
 
     /**
      * Begin a ceremony, meeting or adopting as chosen, with whoever the
@@ -171,8 +171,8 @@ object Ceremony {
      * live is returned as-is.
      */
     fun startMeet(by: String, kind: Meet.Kind, role: Meet.Role): Meet? {
-        val p = Kernel.loaded[by] ?: return null
-        val retention = Kernel.call("retention_years", { 2UL }) { p.retentionYears() }
+        val p = Gateway.loaded[by] ?: return null
+        val retention = Gateway.call("retention_years", { 2UL }) { p.retentionYears() }
         synchronized(lock) {
             // a meeting still under way is the one to return to; one that
             // ended either way is residue, and the next starts clean
@@ -191,7 +191,7 @@ object Ceremony {
                 // the kernel's ceremony ends with the screen's: a Stop from
                 // any live step abandons it, so nothing of the conversation
                 // is answered after the person has left it
-                m.onStopped = { Kernel.call("abandon", { }) { p.abandon() } }
+                m.onStopped = { Gateway.call("abandon", { }) { p.abandon() } }
                 // and begins with the brief's Accept, which is the one
                 // question a ceremony asks the person, answered once
                 m.onAccepted = { beginCeremony(p, m) }
@@ -205,7 +205,7 @@ object Ceremony {
      * names the initiator, whose bootstrap it read; the initiator names
      * nobody and learns who read its code from their first optical code.
      * Witnesses are nominated from the counterparty's neighbourhood
-     * (design §7.1). This Kernel.shell holds no horizon to nominate from yet, so
+     * (design §7.1). This Gateway.shell holds no horizon to nominate from yet, so
      * the nomination is empty and the ceremony is that much weaker, which
      * the record carries honestly — unless the provision named Attachments.nominees,
      * which is the bench standing in for that horizon (`field-run.sh`): a
@@ -214,8 +214,8 @@ object Ceremony {
      */
     private fun beginCeremony(p: Participant, m: Meet) {
         Thread {
-            Kernel.call("begin", { e -> m.stop("begin refused: ${e.reason}") }) {
-                p.begin(m.counterpartyKey?.let { Kernel.unhex(it) }, Attachments.nominees, m.role == Meet.Role.INITIATOR)
+            Gateway.call("begin", { e -> m.stop("begin refused: ${e.reason}") }) {
+                p.begin(m.counterpartyKey?.let { Gateway.unhex(it) }, Attachments.nominees, m.role == Meet.Role.INITIATOR)
                 m.begunCeremony()
                 m.note("ceremony open; the two codes are ready to cross.")
             }
@@ -247,7 +247,7 @@ object Ceremony {
                 Diag.warn("witness.engage", "why" to why)
                 return
             }
-            val reached = Kernel.call("nomineesEngaged", { null }) { p.nomineesEngaged() } ?: return
+            val reached = Gateway.call("nomineesEngaged", { null }) { p.nomineesEngaged() } ?: return
             // **the decision is [Engagement]'s and the asking is this
             // function's** [author, 2026-11-05]: the retry and the words
             // were in here, where nothing could reach them without a live
@@ -278,7 +278,7 @@ object Ceremony {
      * the two people's and the screen is asking it.
      */
     fun adoptionBegins(by: String) {
-        val p = Kernel.loaded[by] ?: return
+        val p = Gateway.loaded[by] ?: return
         val m = meet ?: return
         val txid = m.recordTxid() ?: return
         val them = m.counterpartyKey ?: return
@@ -300,8 +300,8 @@ object Ceremony {
             presence = txid,
             kern = adoptionKern(p),
             post = { bytes ->
-                Kernel.call("send", { e -> Diag.warn("adopt.send", "refused" to e.reason); false }) {
-                    p.send(Kernel.unhex(them), Adoption.KIND, bytes)
+                Gateway.call("send", { e -> Diag.warn("adopt.send", "refused" to e.reason); false }) {
+                    p.send(Gateway.unhex(them), Adoption.KIND, bytes)
                     true
                 }
             },
@@ -321,9 +321,9 @@ object Ceremony {
         // phone while its rail said GXV]: the subnet's own name for it,
         // else the default, else the keyhash's first characters
         val label = m.labelForCounterparty(
-            Kernel.subnets(by).firstNotNullOfOrNull { it.ownAlias?.takeIf { a -> a.isNotBlank() } }
-                ?: Kernel.defaultAlias(by)
-                ?: Kernel.hex(p.me()).take(8),
+            Gateway.subnets(by).firstNotNullOfOrNull { it.ownAlias?.takeIf { a -> a.isNotBlank() } }
+                ?: Gateway.defaultAlias(by)
+                ?: Gateway.hex(p.me()).take(8),
         )
         Thread { if (settled != null) a.settle(settled, label) else a.begin() }.start()
     }
@@ -331,15 +331,15 @@ object Ceremony {
     /** The kernel calls an [Adoption] makes, bracketed like every other. */
     private fun adoptionKern(p: Participant): Adoption.Kern = object : Adoption.Kern {
         override fun freshSeries(): Int? =
-            Kernel.call("freshSeries", { null }) { p.freshSeries((1u..16u).toList()) }?.toInt()
+            Gateway.call("freshSeries", { null }) { p.freshSeries((1u..16u).toList()) }?.toInt()
 
         override fun backPointers(): List<ByteArray> =
-            Kernel.call("backPointers", { emptyList() }) { p.backPointers() }
+            Gateway.call("backPointers", { emptyList() }) { p.backPointers() }
 
         override fun carrying(): String? =
             meet?.carrying()?.id?.takeIf { it.length == 64 }
 
-        override fun position(): String = Kernel.hex(p.position())
+        override fun position(): String = Gateway.hex(p.position())
 
         override fun propose(
             node: String,
@@ -351,8 +351,8 @@ object Ceremony {
             // into the subnet this device chose as patron: one it holds a
             // position in, or none for a new one under its own key; and
             // the scope the other brings, their claim, copied
-            val into = meet?.scope()?.id?.takeIf { it.length == 64 }?.let { Kernel.unhex(it) }
-            p.proposeAdoption(into, Kernel.unhex(node), Kernel.unhex(presence), series.toUInt(), nodeBack, carrying?.let { Kernel.unhex(it) })
+            val into = meet?.scope()?.id?.takeIf { it.length == 64 }?.let { Gateway.unhex(it) }
+            p.proposeAdoption(into, Gateway.unhex(node), Gateway.unhex(presence), series.toUInt(), nodeBack, carrying?.let { Gateway.unhex(it) })
         }
 
         override fun reviewAndSign(body: ByteArray): Adoption.Result<ByteArray> =
@@ -363,16 +363,16 @@ object Ceremony {
             entries: List<Pair<String, ByteArray>>,
         ): Adoption.Result<ByteArray> = result("adoptionEnvelope") {
             val mine = p.signBody(body)
-            val all = entries.map { (who, e) -> uniffi.rhtn_ffi.SignedEntries(Kernel.unhex(who), e) } +
+            val all = entries.map { (who, e) -> uniffi.rhtn_ffi.SignedEntries(Gateway.unhex(who), e) } +
                 uniffi.rhtn_ffi.SignedEntries(p.me(), mine)
             uniffi.rhtn_ffi.adoptionEnvelope(body, all)
         }
 
         override fun take(envelope: ByteArray): Adoption.Result<String> =
-            result("takeAdoption") { Kernel.hex(p.takeAdoption(envelope)) }
+            result("takeAdoption") { Gateway.hex(p.takeAdoption(envelope)) }
 
         override fun positionIn(anchor: String): String? =
-            Kernel.call("positionIn", { null }) { p.positionIn(Kernel.unhex(anchor)) }?.let { Kernel.hex(it) }
+            Gateway.call("positionIn", { null }) { p.positionIn(Gateway.unhex(anchor)) }?.let { Gateway.hex(it) }
     }
 
     /**
@@ -391,21 +391,21 @@ object Ceremony {
      * nothing here consults the adoption's state.
      */
     fun peeringBegins(by: String) {
-        val p = Kernel.loaded[by] ?: return
+        val p = Gateway.loaded[by] ?: return
         val m = meet ?: return
         if (!m.peeringAsked()) return
         val txid = m.recordTxid() ?: return
         val them = m.counterpartyKey ?: return
         if (peering != null) return
         val pr = Peering(
-            me = Kernel.hex(p.me()),
+            me = Gateway.hex(p.me()),
             counterparty = them,
             counterpartyName = m.counterpartyName,
             presence = txid,
             kern = peeringKern(p),
             post = { bytes ->
-                Kernel.call("send", { e -> Diag.warn("Attachments.peer.send", "refused" to e.reason); false }) {
-                    p.send(Kernel.unhex(them), Peering.KIND, bytes)
+                Gateway.call("send", { e -> Diag.warn("Attachments.peer.send", "refused" to e.reason); false }) {
+                    p.send(Gateway.unhex(them), Peering.KIND, bytes)
                     true
                 }
             },
@@ -422,7 +422,7 @@ object Ceremony {
     /** The kernel calls a [Peering] makes, bracketed like every other. */
     private fun peeringKern(p: Participant): Peering.Kern = object : Peering.Kern {
         override fun backPointers(): List<ByteArray> =
-            Kernel.call("backPointers", { emptyList() }) { p.backPointers() } ?: emptyList()
+            Gateway.call("backPointers", { emptyList() }) { p.backPointers() } ?: emptyList()
 
         override fun propose(
             other: String,
@@ -431,7 +431,7 @@ object Ceremony {
         ): Peering.Result<ByteArray> = peered("proposePeering") {
             // no replication commitment: `wire-format.md` §4.4 field 6 is
             // optional and what it promises is an operator's to offer
-            p.proposePeering(Kernel.unhex(other), Kernel.unhex(presence), otherBack, null)
+            p.proposePeering(Gateway.unhex(other), Gateway.unhex(presence), otherBack, null)
         }
 
         override fun reviewAndSign(body: ByteArray): Peering.Result<ByteArray> =
@@ -442,29 +442,29 @@ object Ceremony {
             entries: List<Pair<String, ByteArray>>,
         ): Peering.Result<ByteArray> = peered("peeringEnvelope") {
             val mine = p.signBody(body)
-            val all = entries.map { (who, e) -> uniffi.rhtn_ffi.SignedEntries(Kernel.unhex(who), e) } +
+            val all = entries.map { (who, e) -> uniffi.rhtn_ffi.SignedEntries(Gateway.unhex(who), e) } +
                 uniffi.rhtn_ffi.SignedEntries(p.me(), mine)
             uniffi.rhtn_ffi.peeringEnvelope(body, all)
         }
 
         override fun take(envelope: ByteArray): Peering.Result<String> =
-            peered("takePeering") { Kernel.hex(p.takePeering(envelope)) }
+            peered("takePeering") { Gateway.hex(p.takePeering(envelope)) }
     }
 
     /**
      * **The bootstrap QR's payload** (D1a): this device's identifier and
      * the kind of transaction, and nothing of the ceremony's own anchor.
      *
-     * **This one is not a §14.3 object and the Kernel.shell owns it.** §14.3 fixes
+     * **This one is not a §14.3 object and the Gateway.shell owns it.** §14.3 fixes
      * the ANCHORED exchange, which is D2's; the bootstrap carries only what
      * design §7.1.1 needs to start a conversation between two people who
      * have not yet exchanged a contribution, so there is nothing here for
-     * the kernel to check and nothing for it to encode. The Kernel.shell's own
+     * the kernel to check and nothing for it to encode. The Gateway.shell's own
      * framing, versioned so a later one can differ.
      */
     fun bootstrap(by: String): ByteArray? {
         val m = meet ?: return null
-        val me = Kernel.loaded[by]?.me() ?: return null
+        val me = Gateway.loaded[by]?.me() ?: return null
         val kind = when (m.adopt) {
             Meet.Adopt.NONE -> 0
             Meet.Adopt.THEM_UNDER_ME -> 1
@@ -474,10 +474,10 @@ object Ceremony {
         // there, as its claim: the scope chosen as patron, or the subnet
         // this device acts in otherwise, so a regular meeting carries a
         // name too (`light-client-requirements.md` §7)
-        val scope = m.scope() ?: Kernel.subnets(by).firstOrNull { it.id.hex() == Kernel.subnet(by) }?.let { Meet.Scope.of(it) }
+        val scope = m.scope() ?: Gateway.subnets(by).firstOrNull { it.id.hex() == Gateway.subnet(by) }?.let { Meet.Scope.of(it) }
         // **and the name, so it is visible from the scan** [author,
         // 2026-10-29]: the one published there, else the default
-        val alias = scope?.ownAlias?.takeIf { it.isNotBlank() } ?: Kernel.defaultAlias(by)
+        val alias = scope?.ownAlias?.takeIf { it.isNotBlank() } ?: Gateway.defaultAlias(by)
         return Bootstrap.encode(me, kind, m.kind.peering, scope, alias)
     }
 
@@ -522,8 +522,8 @@ object Ceremony {
      * read the other side's contribution yet.
      */
     fun optical(by: String): ByteArray? {
-        val p = Kernel.loaded[by] ?: return null
-        return Kernel.call(if (opticalTaken) "transcriptConfirm" else "opticalContribution", { null }) {
+        val p = Gateway.loaded[by] ?: return null
+        return Gateway.call(if (opticalTaken) "transcriptConfirm" else "opticalContribution", { null }) {
             if (opticalTaken) p.transcriptConfirm() else p.opticalContribution()
         }
     }
@@ -532,7 +532,7 @@ object Ceremony {
      * Bytes the selfie camera read. Null where they were taken, a reason
      * otherwise — and a reason here stops the ceremony, because every
      * refusal at this step is either a bearer disagreeing with a screen or
-     * a party who is not the one in Kernel.front of you.
+     * a party who is not the one in Gateway.front of you.
      */
     /**
      * **The optical exchange's trace to this side's Attachments.nominees** (kind 21)
@@ -547,7 +547,7 @@ object Ceremony {
      */
     fun opticalTrace(by: String, events: List<OpticalExchange.Event>) {
         if (events.isEmpty()) return
-        val p = Kernel.loaded[by] ?: return
+        val p = Gateway.loaded[by] ?: return
         val m = meet ?: return
         // **off the thread that drives the exchange, always** [bench,
         // 2026-10-24]: each event is a relayed request to the nominee's
@@ -572,15 +572,15 @@ object Ceremony {
     }
 
     fun takeOptical(by: String, bytes: ByteArray): String? {
-        val p = Kernel.loaded[by] ?: return "the kernel is not running"
+        val p = Gateway.loaded[by] ?: return "the kernel is not running"
         val m = meet ?: return "no meeting is open here"
         if (!opticalTaken) {
-            return Kernel.call("takeOptical", { it.reason }) {
+            return Gateway.call("takeOptical", { it.reason }) {
                 // the kernel pins the key the code carries and names the
                 // party by its hash; the flow learns who that is, or
                 // refuses a code from anyone but the one it already knows
                 val who = p.takeOptical(bytes)
-                m.counterparty(Kernel.hex(who))?.let { return@call it }
+                m.counterparty(Gateway.hex(who))?.let { return@call it }
                 adopt(by, who)
                 opticalTaken = true
                 m.note("their contribution is in; showing the meeting id.")
@@ -589,10 +589,10 @@ object Ceremony {
         }
         if (transcriptTaken) return null
         var refused: String? = null
-        val id = Kernel.call("takeTranscript", { refused = it.reason; null }) { p.takeTranscript(bytes) }
+        val id = Gateway.call("takeTranscript", { refused = it.reason; null }) { p.takeTranscript(bytes) }
             ?: return refused ?: "the transcript was refused"
         transcriptTaken = true
-        m.note("the two meeting ids agree: ${Kernel.hex(id).take(16)}…")
+        m.note("the two meeting ids agree: ${Gateway.hex(id).take(16)}…")
         // THE BEARER'S TURN. The optical step is what the integrity
         // rests on (§14.3.1); from here a radio carries the bulk,
         // and everything it carries is checked against what the
@@ -612,19 +612,19 @@ object Ceremony {
      * remains only for messaging before any meeting.
      */
     private fun adopt(by: String, who: ByteArray) {
-        val key = Kernel.hex(who)
+        val key = Gateway.hex(who)
         synchronized(lock) {
             Attachments.peer = who
             Attachments.peerKey = key
             if (Attachments.peerName.isEmpty() || Attachments.peerName == "the other person") Attachments.peerName = key.take(8)
         }
-        Kernel.front.peerKnown(by, key, Attachments.peerName)
+        Gateway.front.peerKnown(by, key, Attachments.peerName)
     }
 
     /** Who this device is talking to: the meeting's counterparty while one
      *  is open, the adopted or provisioned Attachments.peer otherwise. */
     private fun counterparty(): ByteArray? =
-        meet?.counterpartyKey?.let { runCatching { Kernel.unhex(it) }.getOrNull() } ?: Attachments.peer
+        meet?.counterpartyKey?.let { runCatching { Gateway.unhex(it) }.getOrNull() } ?: Attachments.peer
 
     /**
      * **The bearer's load** (`wire-format.md` §14.3.2): this device's
@@ -637,12 +637,12 @@ object Ceremony {
      * for.
      *
      * **Who advertises and who scans carries no meaning.** §14.3.1 leaves
-     * the bearer to the Kernel.shell, so this uses the invitation's own asymmetry:
+     * the bearer to the Gateway.shell, so this uses the invitation's own asymmetry:
      * the party that showed it offers, the party that read it seeks.
      */
     private fun carryIntent(m: Meet, ceremony: ByteArray) {
-        val p = Kernel.loaded[m.by] ?: return
-        val radio = BleBearer(Kernel.appContext ?: return)
+        val p = Gateway.loaded[m.by] ?: return
+        val radio = BleBearer(Gateway.appContext ?: return)
         // ONE inbound handler for the whole conversation. Each phase is
         // apart in the carriage (`Carriage.Phase`), so a packet arriving
         // is just dropped into its phase and the step waiting on that phase
@@ -695,7 +695,7 @@ object Ceremony {
             // ready; a link that does not is a stopped meeting with a
             // reason, never an intent that silently did not cross.
             if (!awaitLink(radio, m, "intent")) return@Thread
-            val mine = Kernel.call("intentCarriage", { e ->
+            val mine = Gateway.call("intentCarriage", { e ->
                 m.stop("the intent could not be built: ${e.reason}")
                 null
             }) { p.intentCarriage() } ?: return@Thread
@@ -708,7 +708,7 @@ object Ceremony {
                 // other that no node carried — the one the conversation's
                 // legs and an adoption after a nodeless record take. Not
                 // fatal: with nothing to offer the relay stands, and it is said
-                Kernel.call("candidateOffer", { e -> m.note("no candidates offered: ${e.reason}"); null }) {
+                Gateway.call("candidateOffer", { e -> m.note("no candidates offered: ${e.reason}"); null }) {
                     p.candidateOffer()
                 }?.let { offer ->
                     if (carriage?.send(listOf(offer), Carriage.Phase.CANDIDATES) == true) {
@@ -759,7 +759,7 @@ object Ceremony {
      */
     private fun sendCarriages(p: Participant) {
         val live = carriage ?: return
-        val out = Kernel.call("carriages", { listOf() }) { p.carriages() }
+        val out = Gateway.call("carriages", { listOf() }) { p.carriages() }
         for (bytes in out) {
             val phase = Carriage.Phase.conversation(sentCarriages.getAndIncrement())
             if (!live.send(listOf(bytes), phase)) {
@@ -816,7 +816,7 @@ object Ceremony {
         // and the ceremony ends at finalization on the kernel's own clock
         live.received(Carriage.Phase.PREKEY)?.let { set ->
             set.firstOrNull()?.let { bytes ->
-                Kernel.call("takePrekeyCarriage", { e -> m.note("their prekey handover was refused: ${e.reason}") }) {
+                Gateway.call("takePrekeyCarriage", { e -> m.note("their prekey handover was refused: ${e.reason}") }) {
                     p.takePrekeyCarriage(bytes)
                     m.note("their prekeys are in: a channel can open later without a node.")
                 }
@@ -841,7 +841,7 @@ object Ceremony {
         // there is no node [bench, 2026-10-24]
         live.received(Carriage.Phase.CANDIDATES)?.let { set ->
             set.firstOrNull()?.let { bytes ->
-                Kernel.call("takeCandidateOffer", { e -> m.note("their candidates were refused: ${e.reason}") }) {
+                Gateway.call("takeCandidateOffer", { e -> m.note("their candidates were refused: ${e.reason}") }) {
                     val held = p.takeCandidateOffer(bytes)
                     m.note(if (held) "state: a direct path to ${m.counterpartyName} is open." else "state: their candidates did not open a path; the relay stands.")
                 }
@@ -857,7 +857,7 @@ object Ceremony {
                     // this ceremony's id in the kernel, and their key is
                     // what comes back. It seals MY capture of them
                     // (design §7.5.2.6)
-                    val k = Kernel.call("takeCaptureKeyCarriage", { e -> m.stop("the capture could not be sealed: ${e.reason}"); null }) {
+                    val k = Gateway.call("takeCaptureKeyCarriage", { e -> m.stop("the capture could not be sealed: ${e.reason}"); null }) {
                         p.takeCaptureKeyCarriage(bytes)
                     }
                     if (k != null) {
@@ -878,7 +878,7 @@ object Ceremony {
                 // every refusal here is the kernel catching a bearer
                 // that disagrees with the screens (§14.3.2), which is
                 // the one thing the anchor is for
-                Kernel.call("takeIntentCarriage", { e -> m.stop("the carried intent was refused: ${e.reason}") }) {
+                Gateway.call("takeIntentCarriage", { e -> m.stop("the carried intent was refused: ${e.reason}") }) {
                     val taken = p.takeIntentCarriage(to, set)
                     m.note("their intent is in, with $taken continuation(s).")
                     // the capture starts once ours has gone as well
@@ -894,7 +894,7 @@ object Ceremony {
                 for (phase in Carriage.Phase.CONVERSATION until Bearer.PHASES) {
                     val set = live.received(phase) ?: continue
                     for (bytes in set) {
-                        Kernel.call("takeCarriage", { e -> m.note("a carriage was refused: ${e.reason}") }) {
+                        Gateway.call("takeCarriage", { e -> m.note("a carriage was refused: ${e.reason}") }) {
                             p.takeCarriage(bytes)
                         }
                         taken += 1
@@ -931,7 +931,7 @@ object Ceremony {
             val k = theirCaptureKey ?: return
             theirCaptureKey = null
             try {
-                Kernel.call("captureSeal", { e -> m.stop("the capture could not be sealed: ${e.reason}"); false }) {
+                Gateway.call("captureSeal", { e -> m.stop("the capture could not be sealed: ${e.reason}"); false }) {
                     p.captureSeal(k)
                     m.note("captures sealed under their key.")
                     m.captureSealed()
@@ -964,7 +964,7 @@ object Ceremony {
             // **A frame asked for after this reopens the camera**, which
             // [AndroidShell.capture] already does and retries: releasing
             // early is therefore recoverable, where holding on is not.
-            Kernel.shell?.endCapture()
+            Gateway.shell?.endCapture()
             m.poll(courier(m.by, p))
         }
     }
@@ -995,13 +995,13 @@ object Ceremony {
      * lands last.
      */
     fun runWindow(m: Meet) {
-        val p = Kernel.loaded[m.by] ?: return
+        val p = Gateway.loaded[m.by] ?: return
         // the handover carries my key in clear: once the bearer has
-        // had it, this Kernel.shell keeps no copy, the packets it was cut
+        // had it, this Gateway.shell keeps no copy, the packets it was cut
         // into included (design §7.5.2)
         val radio = ble ?: return m.stop("no radio carries the capture key")
         if (!awaitLink(radio, m, "capture key")) return
-        val mine = Kernel.call("captureKeyCarriage", { e -> m.stop("capture: ${e.reason}"); null }) {
+        val mine = Gateway.call("captureKeyCarriage", { e -> m.stop("capture: ${e.reason}"); null }) {
             p.captureKeyCarriage()
         } ?: return
         val sent = try {
@@ -1016,7 +1016,7 @@ object Ceremony {
         // a channel afterwards with no node to ask. Not the record's
         // concern: a handover that will not cross is noted, and the meeting
         // goes on
-        val prekeys = Kernel.call("prekeyCarriage", { e -> m.note("no prekey handover: ${e.reason}"); null }) {
+        val prekeys = Gateway.call("prekeyCarriage", { e -> m.note("no prekey handover: ${e.reason}"); null }) {
             p.prekeyCarriage()
         }
         if (prekeys != null && carriage?.send(listOf(prekeys), Carriage.Phase.PREKEY) != true) {
@@ -1033,7 +1033,7 @@ object Ceremony {
         var face: Boolean? = null
         var faceSaidAt = 0L
         while (m.step() == Meet.Step.WINDOW || m.step() == Meet.Step.REVIEW) {
-            val turn = Kernel.call("captureTick", { lost(it); null }) { p.captureTick() } ?: return
+            val turn = Gateway.call("captureTick", { lost(it); null }) { p.captureTick() } ?: return
             if (turn.templateReady && !said) {
                 said = true
                 m.note("state: a frame yielded a template; the queries can go.")
@@ -1080,9 +1080,9 @@ object Ceremony {
          *  to be named before a profile exists, and the inviter's again. */
         override fun hello(): String? {
             val them = meet?.counterpartyKey ?: return "no counterparty yet"
-            val name = Kernel.defaultAlias(by) ?: return null
-            return Kernel.call("send", { it.reason }) {
-                p.send(Kernel.unhex(them), Adoption.KIND, Adoption.Frame.hello(name))
+            val name = Gateway.defaultAlias(by) ?: return null
+            return Gateway.call("send", { it.reason }) {
+                p.send(Gateway.unhex(them), Adoption.KIND, Adoption.Frame.hello(name))
                 null
             }
         }
@@ -1090,7 +1090,7 @@ object Ceremony {
         override fun gathered(): String? = refusal("converseGathered") { p.converseGathered() }.also { sendCarriages(p) }
         override fun propose(): String? = refusal("conversePropose") { p.conversePropose() }.also { sendCarriages(p) }
         override fun progress(): Meet.Progress? =
-            Kernel.call("progress", { null }) { p.progress() }?.let { pr ->
+            Gateway.call("progress", { null }) { p.progress() }?.let { pr ->
                 Meet.Progress(
                     proposer = pr.proposer,
                     queriesOutstanding = pr.queriesOutstanding.toInt(),
@@ -1100,13 +1100,13 @@ object Ceremony {
                     proposable = pr.proposable,
                     noWitness = pr.noWitness,
                     waitingOn = pr.waitingOn,
-                    attesting = pr.attesting.map { Kernel.hex(it) },
-                    declined = pr.declined.map { Kernel.hex(it) },
-                    backFrom = pr.backFrom.map { Kernel.hex(it) },
+                    attesting = pr.attesting.map { Gateway.hex(it) },
+                    declined = pr.declined.map { Gateway.hex(it) },
+                    backFrom = pr.backFrom.map { Gateway.hex(it) },
                     theirResponses = pr.theirResponses,
                     proposed = pr.proposed,
-                    signed = pr.signed.map { Kernel.hex(it) },
-                    refused = pr.refused.map { Kernel.hex(it) },
+                    signed = pr.signed.map { Gateway.hex(it) },
+                    refused = pr.refused.map { Gateway.hex(it) },
                 )
             }
     }
@@ -1120,14 +1120,14 @@ object Ceremony {
      */
     private fun startConversation(p: Participant, m: Meet) {
         Thread {
-            Kernel.call("Attachments.nominees", { null }) { p.nominees() }?.let { n ->
-                m.nominated(n.mine.map { Kernel.hex(it) }, n.theirs.map { Kernel.hex(it) })
+            Gateway.call("Attachments.nominees", { null }) { p.nominees() }?.let { n ->
+                m.nominated(n.mine.map { Gateway.hex(it) }, n.theirs.map { Gateway.hex(it) })
             }
-            val picked = Kernel.call("selectVerifiers", { e -> m.note("selection refused: ${e.reason}"); null }) {
+            val picked = Gateway.call("selectVerifiers", { e -> m.note("selection refused: ${e.reason}"); null }) {
                 p.selectVerifiers()
             }
             if (picked != null) {
-                m.selected(picked.map { Meet.Chosen(Kernel.hex(it.verifier), basisOf(it.basis)) })
+                m.selected(picked.map { Meet.Chosen(Gateway.hex(it.verifier), basisOf(it.basis)) })
                 if (picked.isEmpty()) {
                     m.note("no verifier is required: the counterparty handed over")
                     m.note("no records, so wire-format §5.2 obliges none.")
@@ -1137,7 +1137,7 @@ object Ceremony {
         }.start()
     }
 
-    /** `wire-format.md` §5.5's `selection_basis`, as the Kernel.shell's own words
+    /** `wire-format.md` §5.5's `selection_basis`, as the Gateway.shell's own words
      *  render it; an unknown value is the discretionary tier, which claims
      *  the least. */
     private fun verdictOf(a: Answer): Meet.Verdict = when (a) {
@@ -1155,16 +1155,16 @@ object Ceremony {
             // later scanner in the room does not find this phone first
             ble?.quiet()
             // who the record says witnessed it, from the signed body
-            val named: List<List<ByteArray>> = Kernel.loaded[m.by]?.recordWitnesses(c.txid) ?: listOf()
+            val named: List<List<ByteArray>> = Gateway.loaded[m.by]?.recordWitnesses(c.txid) ?: listOf()
             val witnesses: List<String> = named.mapNotNull { pair: List<ByteArray> ->
-                pair.firstOrNull()?.let { key: ByteArray -> Kernel.hex(key) }
+                pair.firstOrNull()?.let { key: ByteArray -> Gateway.hex(key) }
             }
-            Meet.Turn.Finalized(Kernel.hex(c.txid), witnesses)
+            Meet.Turn.Finalized(Gateway.hex(c.txid), witnesses)
         }
         is Conversation.Reviewed ->
             c.refused?.let { Meet.Turn.BodyRefused(it.code.toInt(), it.why) } ?: Meet.Turn.Other
         is Conversation.Signed ->
-            c.refused?.let { Meet.Turn.SignerRefused(Kernel.hex(c.signer), it.code.toInt(), it.why) } ?: Meet.Turn.Other
+            c.refused?.let { Meet.Turn.SignerRefused(Gateway.hex(c.signer), it.code.toInt(), it.why) } ?: Meet.Turn.Other
         else -> Meet.Turn.Other
     }
 
@@ -1195,12 +1195,12 @@ object Ceremony {
     fun told(notice: Told) {
         when (notice) {
             is Told.QuerySurfaced -> {
-                val v = Kernel.hex(notice.verifier).take(16)
-                meet?.querySurfaced(v) ?: Kernel.front.note("· a query about you was answered by $v…")
+                val v = Gateway.hex(notice.verifier).take(16)
+                meet?.querySurfaced(v) ?: Gateway.front.note("· a query about you was answered by $v…")
             }
             is Told.NomineesOutnumbered ->
                 meet?.note("· witnesses: ${notice.mine} of mine, ${notice.theirs} of theirs")
-            else -> Kernel.front.note("· $notice")
+            else -> Gateway.front.note("· $notice")
         }
     }
 
@@ -1227,7 +1227,7 @@ object Ceremony {
         work?.shutdownNow()
         // the camera goes back with the meeting: held behind a dead
         // ceremony it is the kind of thing nobody consented to
-        Kernel.shell?.endCapture()
+        Gateway.shell?.endCapture()
     }
 
     /** The meeting in progress, where one is open. */
@@ -1258,7 +1258,7 @@ object Ceremony {
         // 2026-10-24]
         val rt = Runtime.getRuntime()
         Diag.event(
-            "Kernel.shell.memory",
+            "Gateway.shell.memory",
             "java_kb" to (rt.totalMemory() - rt.freeMemory()) / 1024,
             "native_kb" to android.os.Debug.getNativeHeapAllocatedSize() / 1024,
         )
@@ -1289,7 +1289,7 @@ object Ceremony {
         val another = meet != null && m == null
         when (e) {
             is Event.Payload -> {
-                val from = Kernel.hex(e.from)
+                val from = Gateway.hex(e.from)
                 val said = if (e.kind == Adoption.KIND) Adoption.Frame.heard(e.bytes) else null
                 if (said != null) {
                     if (m != null && m.counterpartyKey == from) m.heard(said)
@@ -1297,21 +1297,21 @@ object Ceremony {
                 }
                 if (e.kind != Adoption.KIND && e.kind != Peering.KIND) return false
                 if (another) {
-                    Kernel.front.note("· a message of a meeting arrived for an identity not in focus, and was not acted on")
+                    Gateway.front.note("· a message of a meeting arrived for an identity not in focus, and was not acted on")
                     return true
                 }
                 if (e.kind == Adoption.KIND) {
                     val a = adoption
                     when {
                         a == null -> synchronized(lock) { earlyAdoption += from to e.bytes }
-                        from != a.counterparty -> Kernel.front.note("· a message of an adoption arrived from somebody who is not party to this one")
+                        from != a.counterparty -> Gateway.front.note("· a message of an adoption arrived from somebody who is not party to this one")
                         else -> a.frame(e.bytes)
                     }
                 } else {
                     val pr = peering
                     when {
                         pr == null -> synchronized(lock) { earlyPeering += from to e.bytes }
-                        from != pr.counterparty -> Kernel.front.note("· a message of a peering arrived from somebody who is not party to this one")
+                        from != pr.counterparty -> Gateway.front.note("· a message of a peering arrived from somebody who is not party to this one")
                         else -> pr.frame(e.bytes)
                     }
                 }
@@ -1319,7 +1319,7 @@ object Ceremony {
             }
             is Event.Answered -> {
                 val v = e.answer ?: return false
-                m?.responded(Kernel.hex(e.from), verdictOf(v))
+                m?.responded(Gateway.hex(e.from), verdictOf(v))
                 return true
             }
             is Event.Conversed -> {

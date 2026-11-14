@@ -25,7 +25,7 @@ import java.security.SecureRandom
  * reversible: a credential handed over is one the far side keeps.
  *
  * **This object holds the exchange and no keys.** The signing is
- * [Kernel]'s, because the seed is; what is here is HTTP and parsing, which
+ * [Gateway]'s, because the seed is; what is here is HTTP and parsing, which
  * is why a test can drive it against an ordinary socket.
  */
 object Provision {

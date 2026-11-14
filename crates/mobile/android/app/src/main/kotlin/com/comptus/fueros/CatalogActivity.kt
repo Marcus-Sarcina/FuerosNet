@@ -79,7 +79,7 @@ class CatalogActivity : Activity() {
                 isEnabled = false
                 narration.text = "asking…"
                 Thread {
-                    val why = Kernel.browse()
+                    val why = Gateway.browse()
                     runOnUiThread {
                         narration.text = why ?: "swept."
                         isEnabled = true
@@ -145,7 +145,7 @@ class CatalogActivity : Activity() {
                 isEnabled = false
                 answer.text = "asking ${entry.row.node}…"
                 Thread {
-                    val got = Kernel.askAs(
+                    val got = Gateway.askAs(
                         entry.by,
                         entry.row.node.hex(),
                         entry.row.resource.hex(),
@@ -220,12 +220,12 @@ class CatalogActivity : Activity() {
         // carrying whose it is: reaching a resource is acting within a
         // subnet, so the ask goes through the identity that holds the
         // entry rather than through whichever one acts
-        return Kernel.resourcesHeld().firstOrNull { it.row.resource.hex() == want }
+        return Gateway.resourcesHeld().firstOrNull { it.row.resource.hex() == want }
     }
 
     private fun draw() {
-        roll.text = Catalog.roll(Kernel.resourcesHeld().map { it.row })
+        roll.text = Catalog.roll(Gateway.resourcesHeld().map { it.row })
     }
 
-    private fun said(a: Kernel.Answered): String = Catalog.answer(a)
+    private fun said(a: Gateway.Answered): String = Catalog.answer(a)
 }

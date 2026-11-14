@@ -29,7 +29,7 @@ import uniffi.rhtn_ffi.launchUserData
  * runs. What is this shell's is the one thing the kernel cannot do on a
  * phone: the HTTPS exchange, over the system's trust roots, through the
  * platform's own connection class ([HttpTransport]). This object holds no
- * key: the provider credential is the kernel's to keep (`Kernel.
+ * key: the provider credential is the kernel's to keep (`Gateway.
  * providerCredentials`), carried in the backup under the identity. The
  * credential is a token the operator makes at the provider's own page
  * and pastes; the page and the steps there are the kernel's too.
@@ -107,7 +107,7 @@ object Launch {
      *
      *  **With the operator's own way in** [author, 2026-10-31]: the
      *  `authorized_keys` line this identity derives, so the machine takes
-     *  a key that comes back with the phrase ([Kernel.hostControlPublicKey]).
+     *  a key that comes back with the phrase ([Gateway.hostControlPublicKey]).
      *  Given none, the machine takes no key and the only shell is the
      *  provider's console. */
     fun userData(
@@ -116,8 +116,8 @@ object Launch {
         token: String,
         registry: String = REGISTRY_DEFAULT,
         tag: String = TAG_DEFAULT,
-        sshPublicLine: String? = Kernel.hostControlPublicKey(by),
-        runnerRestrictedLine: String? = Kernel.hostRunnerAuthorizedLine(by),
+        sshPublicLine: String? = Gateway.hostControlPublicKey(by),
+        runnerRestrictedLine: String? = Gateway.hostRunnerAuthorizedLine(by),
     ): String = launchUserData(
         operatorMaterialHex,
         token,

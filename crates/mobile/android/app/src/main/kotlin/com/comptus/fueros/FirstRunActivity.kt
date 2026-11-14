@@ -79,9 +79,9 @@ class FirstRunActivity : Activity() {
         // reached the name would come back as the choice of new or
         // restored and read as a wipe.
         when {
-            owedPhrase != null -> shown(Kernel.materialHex(Identities.focused()), owedPhrase)
+            owedPhrase != null -> shown(Gateway.materialHex(Identities.focused()), owedPhrase)
             !Identities.hasIdentity(this) -> choice()
-            intent.getBooleanExtra(NAME_ONLY, false) || Kernel.defaultAlias(Identities.focused()) == null -> name()
+            intent.getBooleanExtra(NAME_ONLY, false) || Gateway.defaultAlias(Identities.focused()) == null -> name()
             // **the picker already asked which way**, so neither door is
             // offered a second time
             intent.getBooleanExtra(GENERATE, false) -> create()
@@ -103,7 +103,7 @@ class FirstRunActivity : Activity() {
          * holds an identity: the selector's own last row
          * ([Identities.ANOTHER]) is the only thing that passes it, and
          * both doors behind it add rather than replace
-         * ([Kernel.createIdentity]).
+         * ([Gateway.createIdentity]).
          */
         const val ADDING = "adding"
 
@@ -203,7 +203,7 @@ class FirstRunActivity : Activity() {
     private fun waitForMaterial(): String? {
         val until = System.currentTimeMillis() + 30_000
         while (System.currentTimeMillis() < until) {
-            Kernel.materialHex(Identities.focused())?.let { return it }
+            Gateway.materialHex(Identities.focused())?.let { return it }
             Thread.sleep(200)
         }
         return null
@@ -411,7 +411,7 @@ class FirstRunActivity : Activity() {
         // — unlike the phrase, which is not stored and genuinely cannot
         // come back. A person who lost the first screen is not asked to
         // wipe the device to see their own public identity.
-        Kernel.materialHex(Identities.focused())?.let {
+        Gateway.materialHex(Identities.focused())?.let {
             heading("Public key material")
             para("What a node is told about you. The bench reads it from here.")
             mono(it)
@@ -438,7 +438,7 @@ class FirstRunActivity : Activity() {
             Identity.aliasRefusal(typed)?.let { said.text = it; return@button }
             said.text = "keeping it…"
             Thread({
-                val why = Kernel.setDefaultAlias(typed)
+                val why = Gateway.setDefaultAlias(typed)
                 runOnUiThread {
                     if (isFinishing) return@runOnUiThread
                     if (why != null) {

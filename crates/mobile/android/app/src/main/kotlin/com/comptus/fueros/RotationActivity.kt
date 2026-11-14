@@ -92,7 +92,7 @@ class RotationActivity : Activity() {
     private fun draw() {
         body.removeAllViews()
         heading("Changing your key")
-        val lines = Kernel.lines(by)
+        val lines = Gateway.lines(by)
         if (lines.isEmpty()) {
             para(
                 "This key stands under no patron, so there is nothing to carry across " +
@@ -110,10 +110,10 @@ class RotationActivity : Activity() {
         // **each line, named**, because the author's sentences name the
         // parties and a warning about "your subnets" names nobody
         for (line in lines) {
-            val patron = Rotation.name(line.patron.hex(), Kernel.aliasOf(by, line.patron.hex()))
+            val patron = Rotation.name(line.patron.hex(), Gateway.aliasOf(by, line.patron.hex()))
             val subnet = Rotation.name(
                 line.anchor.hex(),
-                Kernel.subnets(by).firstOrNull { it.id.hex() == line.anchor.hex() }?.alias,
+                Gateway.subnets(by).firstOrNull { it.id.hex() == line.anchor.hex() }?.alias,
             )
             heading("$subnet, under $patron")
             for (said in Disclosure.words(Disclosure.Topic.UNLINKED_PATH, patron = patron, subnet = subnet)) {
@@ -156,7 +156,7 @@ class RotationActivity : Activity() {
     private var said: String? = null
 
     /**
-     * **Begin the rotation** ([Kernel.beginRotation]).
+     * **Begin the rotation** ([Gateway.beginRotation]).
      *
      * A new identity is minted here and the one this device holds signs
      * for it. **The phrase is not asked for**: design §9.0 has the old key

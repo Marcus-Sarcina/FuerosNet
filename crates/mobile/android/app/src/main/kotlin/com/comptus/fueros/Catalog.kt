@@ -36,7 +36,7 @@ object Catalog {
      * diagnostic beside that, and it says the same words about a status
      * so the two never disagree about one.
      */
-    fun answer(a: Kernel.Answered): String {
+    fun answer(a: Gateway.Answered): String {
         val what = ResourcePage.delivery(a.status)
         a.unreadable?.let { return "$what, and unreadable: $it" }
         val p = a.page ?: return what

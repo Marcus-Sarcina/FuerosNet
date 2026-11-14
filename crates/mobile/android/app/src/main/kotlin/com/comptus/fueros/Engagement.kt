@@ -4,7 +4,7 @@ package com.comptus.fueros
  * **What to do after one attempt at engaging this side's nominees** — the
  * pure part, so a test can hold it, as [Chrome] and [Leaving] are.
  *
- * [author, 2026-11-05] ruled this out of [Kernel]: the retry and the words
+ * [author, 2026-11-05] ruled this out of [Gateway]: the retry and the words
  * were inside a private function that needed a live `Participant`, so
  * PRD-17's second and third clauses — *"the unreachable one is retried
  * while its binding is fetched"* and *"the person is told how many of the
@@ -13,7 +13,7 @@ package com.comptus.fueros
  * reached did.
  *
  * **What is still not here**: that the engagement happens *before the code
- * is shown* (PRD-17's first clause) is the order [Kernel] calls things in,
+ * is shown* (PRD-17's first clause) is the order [Gateway] calls things in,
  * not a decision this makes, and the trace owed to each nominee is
  * `OpticalExchange`'s, already held by
  * `a_whole_exchange_traces_every_part_it_moved_and_no_content`.

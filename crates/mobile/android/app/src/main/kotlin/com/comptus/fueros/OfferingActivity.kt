@@ -240,12 +240,12 @@ class OfferingActivity : Activity() {
             answer.text = "name one of your instances"
             return
         }
-        val owner = Kernel.keyhash(by)
+        val owner = Gateway.keyhash(by)
         if (owner == null) {
             answer.text = "this device holds no identity, so there is no owner to install under"
             return
         }
-        val resource = Kernel.mintResource()
+        val resource = Gateway.mintResource()
         if (resource == null) {
             answer.text = "this device could not mint an identity for the resource"
             return

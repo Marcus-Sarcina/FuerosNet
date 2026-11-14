@@ -61,12 +61,12 @@ class ResourceActivity : Activity() {
     private var by: String? = null
 
     /** Ask as that identity, or as the one that acts where none came. */
-    private fun askAsHolder(node: String, resource: String, path: String): Kernel.Answered? {
+    private fun askAsHolder(node: String, resource: String, path: String): Gateway.Answered? {
         val holder = by
         return if (holder == null) {
-            Kernel.ask(node, resource, path)
+            Gateway.ask(node, resource, path)
         } else {
-            Kernel.askAs(holder, node, resource, path)
+            Gateway.askAs(holder, node, resource, path)
         }
     }
 
@@ -137,13 +137,13 @@ class ResourceActivity : Activity() {
     private var reading: android.nfc.NfcAdapter? = null
     private var cancelling: android.os.CancellationSignal? = null
     /** The ask a permission request is for, held across the dialogue. */
-    private var waiting: Pair<Kernel.Ask, Giving.Plan>? = null
+    private var waiting: Pair<Gateway.Ask, Giving.Plan>? = null
     /** The ask a file picker is for, held across the other app. */
-    private var pending: Kernel.Ask? = null
+    private var pending: Gateway.Ask? = null
     /** What a save is about to write, held across the picker. */
     private var saving: ByteArray? = null
     /** What the resource last answered with, for the save control. */
-    private var last: Kernel.Page? = null
+    private var last: Gateway.Page? = null
 
     private companion object {
         const val PERMISSION = 71
@@ -152,7 +152,7 @@ class ResourceActivity : Activity() {
     }
 
     /** Draw what the resource answered, from any thread. */
-    private fun show(answered: Kernel.Answered?) {
+    private fun show(answered: Gateway.Answered?) {
         runOnUiThread {
             if (isFinishing) return@runOnUiThread
             val held = held ?: return@runOnUiThread
@@ -191,7 +191,7 @@ class ResourceActivity : Activity() {
      * told while it happens; this screen only draws it and drives the
      * capability.
      */
-    private fun asking(ask: Kernel.Ask): LinearLayout {
+    private fun asking(ask: Gateway.Ask): LinearLayout {
         val plan = Giving.plan(ask, facts())
         Diag.event(
             "utility",
@@ -255,7 +255,7 @@ class ResourceActivity : Activity() {
             android.hardware.biometrics.BiometricManager.Authenticators.DEVICE_CREDENTIAL
 
     /** Give what the ask wants, once what it needs is held. */
-    private fun give(ask: Kernel.Ask, plan: Giving.Plan) {
+    private fun give(ask: Gateway.Ask, plan: Giving.Plan) {
         val missing = plan.permissions.filterNot { held(it) }
         if (missing.isNotEmpty()) {
             waiting = Pair(ask, plan)
@@ -301,7 +301,7 @@ class ResourceActivity : Activity() {
         }
     }
 
-    private fun proceed(ask: Kernel.Ask, plan: Giving.Plan) {
+    private fun proceed(ask: Gateway.Ask, plan: Giving.Plan) {
         Diag.event("utility", "which" to ask.utility, "state" to "giving")
         when (plan.way) {
             Giving.Way.PHOTOGRAPH -> photographing(ask, plan)
@@ -321,7 +321,7 @@ class ResourceActivity : Activity() {
     // ---- a photograph -------------------------------------------------
 
     /** The camera, with the preview the person frames the shot in. */
-    private fun photographing(ask: Kernel.Ask, plan: Giving.Plan) {
+    private fun photographing(ask: Gateway.Ask, plan: Giving.Plan) {
         val h = held ?: return
         h.removeAllViews()
         h.addView(note(plan.says))
@@ -364,7 +364,7 @@ class ResourceActivity : Activity() {
 
     /** **The photograph is sent only when the person sends it**: what was
      *  taken, how large it is, and the three ways on from there. */
-    private fun offering(ask: Kernel.Ask, bytes: ByteArray) {
+    private fun offering(ask: Gateway.Ask, bytes: ByteArray) {
         val h = held ?: return
         still?.close()
         if (bytes.size > Giving.RESULT_CAP) {
@@ -416,7 +416,7 @@ class ResourceActivity : Activity() {
     // ---- a file, either way -------------------------------------------
 
     /** A file the person picks, handed over as its own declared type. */
-    private fun picking(ask: Kernel.Ask) {
+    private fun picking(ask: Gateway.Ask) {
         pending = ask
         val types = Giving.types(ask)
         val intent = android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT)
@@ -477,7 +477,7 @@ class ResourceActivity : Activity() {
 
     /** Offer to save what a resource answered with, which is how an
      *  `export` the person agreed to reaches them. */
-    private fun saveable(page: Kernel.Page): LinearLayout {
+    private fun saveable(page: Gateway.Page): LinearLayout {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(Screen.gutter(context), 0, Screen.gutter(context), 16)
@@ -508,7 +508,7 @@ class ResourceActivity : Activity() {
 
     /** Where this device is, as a geohash at the precision asked, shown
      *  before anything is sent. */
-    private fun placing(ask: Kernel.Ask) {
+    private fun placing(ask: Gateway.Ask) {
         val h = held ?: return
         h.removeAllViews()
         h.addView(note("Finding where this device is…"))
@@ -535,7 +535,7 @@ class ResourceActivity : Activity() {
         }.onFailure { answer(ask, declined("this device would not give its place: $it")) }
     }
 
-    private fun placed(ask: Kernel.Ask, where: android.location.Location) {
+    private fun placed(ask: Gateway.Ask, where: android.location.Location) {
         val h = held ?: return
         val hash = Giving.geohash(where.latitude, where.longitude, ask.precision ?: 5)
         h.removeAllViews()
@@ -558,7 +558,7 @@ class ResourceActivity : Activity() {
 
     // ---- a tag, read two ways -----------------------------------------
 
-    private fun readingCode(ask: Kernel.Ask, plan: Giving.Plan) {
+    private fun readingCode(ask: Gateway.Ask, plan: Giving.Plan) {
         val h = held ?: return
         h.removeAllViews()
         h.addView(note(plan.says))
@@ -586,7 +586,7 @@ class ResourceActivity : Activity() {
     /** **The near-field radio, in reader mode**: the tag's own text where
      *  it carries one, and its identifier where it does not. Nothing is
      *  written to a tag, ever. */
-    private fun readingTag(ask: Kernel.Ask, plan: Giving.Plan) {
+    private fun readingTag(ask: Gateway.Ask, plan: Giving.Plan) {
         val h = held ?: return
         val adapter = android.nfc.NfcAdapter.getDefaultAdapter(this)
         if (adapter == null) {
@@ -619,7 +619,7 @@ class ResourceActivity : Activity() {
         }.onFailure { answer(ask, declined("this device would not start the radio: $it")) }
     }
 
-    private fun tagRead(ask: Kernel.Ask, tag: android.nfc.Tag) {
+    private fun tagRead(ask: Gateway.Ask, tag: android.nfc.Tag) {
         stopReading()
         val said = runCatching {
             val ndef = android.nfc.tech.Ndef.get(tag)
@@ -640,7 +640,7 @@ class ResourceActivity : Activity() {
     /** **The exact payload, then the platform's unlock.** The kernel
      *  signs; this only shows what is being signed and gets the person's
      *  authorisation for it. */
-    private fun unlocking(ask: Kernel.Ask, plan: Giving.Plan) {
+    private fun unlocking(ask: Gateway.Ask, plan: Giving.Plan) {
         val h = held ?: return
         h.removeAllViews()
         h.addView(words(Giving.payloadSays(ask.payload)))
@@ -654,7 +654,7 @@ class ResourceActivity : Activity() {
         h.addView(buttons)
     }
 
-    private fun unlock(ask: Kernel.Ask) {
+    private fun unlock(ask: Gateway.Ask) {
         val prompt = runCatching {
             android.hardware.biometrics.BiometricPrompt.Builder(this)
                 .setTitle("Sign for this resource")
@@ -689,7 +689,7 @@ class ResourceActivity : Activity() {
 
     /** Standing permission, kept by this shell per resource — the
      *  kernel holds none of it, and the person can take it back here. */
-    private fun allowing(ask: Kernel.Ask) {
+    private fun allowing(ask: Gateway.Ask) {
         getSharedPreferences(Giving.NOTIFY_STORE, MODE_PRIVATE)
             .edit()
             .putBoolean(ask.resource, true)
@@ -700,7 +700,7 @@ class ResourceActivity : Activity() {
     // ---- the plumbing the flows share ---------------------------------
 
     /** Hand the outcome to the kernel and draw what comes back. */
-    private fun answer(ask: Kernel.Ask, outcome: uniffi.rhtn_ffi.UtilityOutcome) {
+    private fun answer(ask: Gateway.Ask, outcome: uniffi.rhtn_ffi.UtilityOutcome) {
         stopReading()
         still?.close()
         camera?.close()
@@ -713,14 +713,14 @@ class ResourceActivity : Activity() {
             h.removeAllViews()
             h.addView(note("answering…"))
         }
-        Thread({ show(Kernel.answerUtility((by ?: Identities.focused()), ask.id, outcome)) }, "fueros-resource-answer").start()
+        Thread({ show(Gateway.answerUtility((by ?: Identities.focused()), ask.id, outcome)) }, "fueros-resource-answer").start()
     }
 
     private fun declined(reason: String) = uniffi.rhtn_ffi.UtilityOutcome.Declined(reason)
 
     /** A refusal from a capability, said where the person is looking, the
      *  ask left standing so they can decline it deliberately. */
-    private fun said(ask: Kernel.Ask, why: String) {
+    private fun said(ask: Gateway.Ask, why: String) {
         runOnUiThread {
             still?.close()
             camera?.close()

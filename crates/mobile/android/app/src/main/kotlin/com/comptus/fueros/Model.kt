@@ -18,7 +18,7 @@ import uniffi.rhtn_model.Subnet
  * thread and replaced whole. **What refreshes it is the kernel saying
  * so**: the kernel marks a noun at each place its store changes it, the
  * FFI hands those up as `Event.Changed` at the next quiet turn of the
- * event loop, and [Kernel] calls [refresh] with exactly those. A screen
+ * event loop, and [Gateway] calls [refresh] with exactly those. A screen
  * reads the snapshot and watches for the nouns it draws, instead of
  * calling the kernel at every `onStart` and redrawing on every status
  * line, which is what the rail did until now.
@@ -67,7 +67,7 @@ object Model {
         if (nouns.isEmpty()) return
         Thread({
             if (Noun.CONTACTS in nouns || Noun.PROFILES in nouns) {
-                val held = Kernel.contactsHeld()
+                val held = Gateway.contactsHeld()
                 contacts = held
                 // **an alias is a name for a party, not for a party under
                 // one identity**: two identities that both know somebody
@@ -76,11 +76,11 @@ object Model {
                 aliases = held.mapNotNull { o -> o.row.alias?.let { o.row.keyhash.hex() to it } }
                     .toMap()
             }
-            if (Noun.SUBNETS in nouns || Noun.PROFILES in nouns) subnets = Kernel.subnetsHeld()
-            if (Noun.LINES in nouns) lines = Kernel.linesHeld()
-            if (Noun.INSTANCES in nouns) instances = Kernel.instances(Identities.focused())
-            if (Noun.RESOURCES in nouns) resources = Kernel.resourcesHeld()
-            if (Noun.MEETINGS in nouns) meetings = Kernel.meetingsHeld()
+            if (Noun.SUBNETS in nouns || Noun.PROFILES in nouns) subnets = Gateway.subnetsHeld()
+            if (Noun.LINES in nouns) lines = Gateway.linesHeld()
+            if (Noun.INSTANCES in nouns) instances = Gateway.instances(Identities.focused())
+            if (Noun.RESOURCES in nouns) resources = Gateway.resourcesHeld()
+            if (Noun.MEETINGS in nouns) meetings = Gateway.meetingsHeld()
             Diag.event("model.refreshed", "nouns" to nouns.joinToString(",") { it.name.lowercase() })
             tell(nouns)
         }, "fueros-model").start()

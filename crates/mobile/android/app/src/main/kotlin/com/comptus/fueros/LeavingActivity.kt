@@ -111,8 +111,8 @@ class LeavingActivity : Activity() {
             // leaving a patron is acting within a subnet, so the lines of
             // every identity are shown and each is left **by the identity
             // that holds it** rather than by whichever one acts
-            val held = Kernel.linesHeld()
-            val known = Kernel.aliases(shown)
+            val held = Gateway.linesHeld()
+            val known = Gateway.aliases(shown)
             runOnUiThread {
                 names = known
                 if (isFinishing) return@runOnUiThread
@@ -152,7 +152,7 @@ class LeavingActivity : Activity() {
         leave.visibility = android.view.View.GONE
         said.text = ""
         Thread({
-            val (c, why) = Kernel.costOfLeaving(by ?: shown, patron.first)
+            val (c, why) = Gateway.costOfLeaving(by ?: shown, patron.first)
             runOnUiThread {
                 if (isFinishing || chosen != patron) return@runOnUiThread
                 if (c == null) {
@@ -194,9 +194,9 @@ class LeavingActivity : Activity() {
             // somewhere this screen did not record
             val holder = by
             val out = if (holder == null) {
-                Kernel.departFrom(shown, patron.first)
+                Gateway.departFrom(shown, patron.first)
             } else {
-                Kernel.departAs(holder, patron.first)
+                Gateway.departAs(holder, patron.first)
             }
             runOnUiThread {
                 if (isFinishing) return@runOnUiThread

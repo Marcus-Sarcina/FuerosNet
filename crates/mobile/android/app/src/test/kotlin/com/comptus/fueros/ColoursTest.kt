@@ -63,7 +63,7 @@ class ColoursTest {
         // its contacts without a thread of its own, opened held as it
         assertTrue(
             "the direct list offers no way to start a thread as the focused identity",
-            list.contains("Kernel.contactsHeld()") && list.contains(".putExtra(\"by\", by)") &&
+            list.contains("Gateway.contactsHeld()") && list.contains(".putExtra(\"by\", by)") &&
                 list.contains("Identities.colourOf(colours, by)") &&
                 list.contains(".filter { it.row.how == How.COUNTERPARTY }"),
         )
@@ -80,7 +80,7 @@ class ColoursTest {
     private fun module(): java.io.File {
         var at: java.io.File? = java.io.File(".").canonicalFile
         while (at != null) {
-            if (java.io.File(at, "app/src/main/kotlin/com/comptus/fueros/Kernel.kt").exists()) return at
+            if (java.io.File(at, "app/src/main/kotlin/com/comptus/fueros/Gateway.kt").exists()) return at
             at = at.parentFile
         }
         error("the android module was not found above ${java.io.File(".").canonicalFile}")

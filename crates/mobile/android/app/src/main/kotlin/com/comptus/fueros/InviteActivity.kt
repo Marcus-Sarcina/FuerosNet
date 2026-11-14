@@ -45,7 +45,7 @@ import android.widget.TextView
  * No request goes out to place it: an invitation that had to be checked
  * with somebody would be one whose sender chose who to ask.
  *
- * **Agreeing is remembered.** [Kernel.serveFrom] writes the node into the
+ * **Agreeing is remembered.** [Gateway.serveFrom] writes the node into the
  * provision, which is what every later start attaches from, so a device
  * that becomes detached comes back without being asked again.
  */
@@ -100,17 +100,17 @@ class InviteActivity : Activity() {
         // the bring-up runs on its own thread, so this waits for it rather
         // than reading once and calling the absence a bad link
         Thread({
-            var read = Kernel.invitation(by, link)
+            var read = Gateway.invitation(by, link)
             var waited = 0
             while (read == null && waited < KERNEL_WAIT_MS) {
                 Thread.sleep(STEP_MS.toLong())
                 waited += STEP_MS
-                read = Kernel.invitation(by, link)
+                read = Gateway.invitation(by, link)
             }
             val r = read
             runOnUiThread {
                 if (r == null) {
-                    val why = Kernel.invitationSay(link)
+                    val why = Gateway.invitationSay(link)
                     narration.text = if (why.isEmpty()) {
                         "The invitation reads correctly, but this device's kernel did not start, " +
                             "so there is nothing to agree with yet."

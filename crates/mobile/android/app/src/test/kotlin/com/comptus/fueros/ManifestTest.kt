@@ -216,7 +216,7 @@ class ManifestTest {
         // operator holding positions in two can enrol in the second
         val kernel = File(
             module(),
-            "app/src/main/kotlin/com/comptus/fueros/Kernel.kt",
+            "app/src/main/kotlin/com/comptus/fueros/Gateway.kt",
         ).readText()
         assertTrue(
             "the endpoint record is not signed on the chosen subnet's line",

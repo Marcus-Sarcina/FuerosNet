@@ -145,7 +145,7 @@ class SizingTest {
         )
         assertTrue(
             "nothing asks the kernel how crowded this provider's zones are",
-            screen.contains("Kernel.crowdedZones(by, provider.asn, allRegions.map { it.slug })"),
+            screen.contains("Gateway.crowdedZones(by, provider.asn, allRegions.map { it.slug })"),
         )
         assertTrue(
             "the count is not shown beside the region",

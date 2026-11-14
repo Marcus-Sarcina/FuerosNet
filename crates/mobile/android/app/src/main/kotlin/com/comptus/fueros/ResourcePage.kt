@@ -43,7 +43,7 @@ package com.comptus.fueros
  *    within, so every navigation is refused and the frame says so.
  *
  * **What the declared type decides, and what nothing decides.** The
- * kernel reads the one declared media type ([Kernel.Shape]); a page is
+ * kernel reads the one declared media type ([Gateway.Shape]); a page is
  * `text/html`, text is `text/plain`, and everything else — including
  * anything undeclared — is named to the person rather than rendered.
  * **Nothing is sniffed.** A body inspected to find out what it is arrives
@@ -141,7 +141,7 @@ object ResourcePage {
 
         /** **Put this ask to the person**: a question, not a page
          *  (`light-client-requirements.md` §8.1). */
-        data class Ask(val ask: Kernel.Ask) : Showing()
+        data class Ask(val ask: Gateway.Ask) : Showing()
     }
 
     /**
@@ -150,7 +150,7 @@ object ResourcePage {
      * its own words and marked as such, and where what they give goes.
      * The kernel's reading decides the kind; this only words it.
      */
-    fun asking(a: Kernel.Ask): String {
+    fun asking(a: Gateway.Ask): String {
         val what = when (a.utility) {
             "scan" -> "a document scanned with the camera"
             "capture" -> "a photograph or video taken now, with the time it was taken and a claim, signed by this device, that it took it"
@@ -182,7 +182,7 @@ object ResourcePage {
      * on the type itself would be a second place the policy lived, and
      * the two would come apart.
      */
-    fun showing(a: Kernel.Answered?): Showing {
+    fun showing(a: Gateway.Answered?): Showing {
         if (a == null) return Showing.Said("The kernel did not carry the request.")
         if (a.status.toInt() != 0) {
             return Showing.Said("Not delivered: ${delivery(a.status)}.")
@@ -196,9 +196,9 @@ object ResourcePage {
         a.ask?.let { return Showing.Ask(it) }
         val p = a.page ?: return Showing.Said("The resource answered with nothing.")
         return when (p.shape) {
-            Kernel.Shape.PAGE -> Showing.Page(styled(String(p.body)))
-            Kernel.Shape.TEXT -> Showing.Text(String(p.body))
-            Kernel.Shape.OTHER -> Showing.Said(said(p))
+            Gateway.Shape.PAGE -> Showing.Page(styled(String(p.body)))
+            Gateway.Shape.TEXT -> Showing.Text(String(p.body))
+            Gateway.Shape.OTHER -> Showing.Said(said(p))
         }
     }
 
@@ -207,7 +207,7 @@ object ResourcePage {
      * size, never a guess**: a person told *this is a PDF of 40 kB* knows
      * what happened, where *could not display* tells them nothing.
      */
-    fun said(p: Kernel.Page): String {
+    fun said(p: Gateway.Page): String {
         val what = p.media ?: "nothing"
         return "The resource answered with $what, ${p.body.size} bytes, which this app " +
             "does not display. It is not guessed at: the declared type decides, and " +

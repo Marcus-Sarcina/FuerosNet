@@ -20,10 +20,10 @@ import org.junit.Test
 class ResourcePageTest {
 
     private fun page(
-        shape: Kernel.Shape,
+        shape: Gateway.Shape,
         body: String,
         media: String? = "text/html",
-    ) = Kernel.Page(
+    ) = Gateway.Page(
         httpStatus = 200,
         media = media,
         charset = "utf-8",
@@ -33,19 +33,19 @@ class ResourcePageTest {
 
     private fun answered(
         status: ULong = 0UL,
-        page: Kernel.Page? = null,
+        page: Gateway.Page? = null,
         unreadable: String? = null,
-    ) = Kernel.Answered(status, page, unreadable)
+    ) = Gateway.Answered(status, page, unreadable)
 
     // ---- what is shown, and what is not -------------------------------
 
     @Test
     fun html_is_framed_text_is_not_and_everything_else_is_named() {
-        val html = ResourcePage.showing(answered(page = page(Kernel.Shape.PAGE, "<p>hi</p>")))
+        val html = ResourcePage.showing(answered(page = page(Gateway.Shape.PAGE, "<p>hi</p>")))
         assertTrue(html.toString(), html is ResourcePage.Showing.Page)
 
         val text = ResourcePage.showing(
-            answered(page = page(Kernel.Shape.TEXT, "the yard tap", "text/plain")),
+            answered(page = page(Gateway.Shape.TEXT, "the yard tap", "text/plain")),
         )
         assertEquals(
             "text is not a page and takes no frame",
@@ -54,7 +54,7 @@ class ResourcePageTest {
         )
 
         val other = ResourcePage.showing(
-            answered(page = page(Kernel.Shape.OTHER, "%PDF", "application/pdf")),
+            answered(page = page(Gateway.Shape.OTHER, "%PDF", "application/pdf")),
         )
         val said = (other as ResourcePage.Showing.Said).why
         assertTrue(said, said.contains("application/pdf") && said.contains("4 bytes"))
@@ -64,7 +64,7 @@ class ResourcePageTest {
     @Test
     fun an_undeclared_body_is_named_as_declaring_nothing_rather_than_sniffed() {
         val other = ResourcePage.showing(
-            answered(page = page(Kernel.Shape.OTHER, "<p>hi</p>", media = null)),
+            answered(page = page(Gateway.Shape.OTHER, "<p>hi</p>", media = null)),
         )
         val said = (other as ResourcePage.Showing.Said).why
         assertTrue("the absence is named: $said", said.contains("with nothing,"))

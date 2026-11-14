@@ -299,7 +299,7 @@ class ActActivity : Activity() {
             // the kernel holds the seed, and nothing of the key is written
             // down here or there
             if (a.brings == Acts.Brings.HOST_KEY) {
-                val key = Kernel.hostRunnerPrivateKey(by)
+                val key = Gateway.hostRunnerPrivateKey(by)
                 if (key == null) {
                     runOnUiThread {
                         answer.text = "this device could not derive the key for that machine; " +

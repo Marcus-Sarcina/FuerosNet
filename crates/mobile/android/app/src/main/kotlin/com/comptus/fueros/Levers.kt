@@ -35,16 +35,16 @@ object Levers {
     fun apply(intent: Intent) {
         if (!BuildConfig.FIELD_TEST) return
         val by = Identities.focused()
-        intent.getStringExtra("forget_contact")?.let { Kernel.forgetContact(by, it) }
+        intent.getStringExtra("forget_contact")?.let { Gateway.forgetContact(by, it) }
         intent.getStringExtra("agree_to")?.let { Attachments.agreeToNow(by, it) }
         intent.getStringExtra("export_material")?.let {
             Diag.event(
                 "identity.material",
                 "who" to by.take(8),
-                "hex" to Kernel.materialHex(by),
+                "hex" to Gateway.materialHex(by),
             )
         }
-        if (intent.getBooleanExtra("forget_contacts", false)) Kernel.forgetContacts(by)
+        if (intent.getBooleanExtra("forget_contacts", false)) Gateway.forgetContacts(by)
         intent.getStringExtra("forget_captures")?.let { Attachments.forgetCaptures(by, it) }
         if (intent.getBooleanExtra("contact_peers", false)) Attachments.contactPeersNow(by)
     }

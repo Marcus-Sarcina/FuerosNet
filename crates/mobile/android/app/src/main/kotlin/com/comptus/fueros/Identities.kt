@@ -70,7 +70,7 @@ object Identities {
 
     /**
      * What a single-identity device sealed its seeds under, before this
-     * model: `Kernel` and `FirstRunActivity` both still write it for the
+     * model: `Gateway` and `FirstRunActivity` both still write it for the
      * first identity, and [migrated] is what brings it into the index.
      */
     const val LEGACY_SEEDS = "seeds"
@@ -297,7 +297,7 @@ object Identities {
      * would also mean the drop down never had only one item and wouldn't
      * necessitate adding a new screen/button."* Before this, a device
      * holding one identity answered the press and hold with a notice and
-     * nothing opened, and nothing anywhere reached [Kernel.createIdentity]
+     * nothing opened, and nothing anywhere reached [Gateway.createIdentity]
      * past the first run.
      */
     const val ANOTHER = "<New Identity>"
@@ -403,37 +403,37 @@ object Identities {
      * rotation just made.
      */
     internal fun concludeRotation() {
-        val app = Kernel.appContext ?: return
+        val app = Gateway.appContext ?: return
         for (h in identities(app)) {
             val own = AndroidShell(app, h.scope)
             val priorId = own.unseal(Rotation.MARK_SUCCEEDS)
                 ?.toString(Charsets.UTF_8)?.trim()
                 ?.takeIf { Identities.names(it) }
                 ?: continue
-            val fresh = Kernel.loaded[h.id] ?: continue
+            val fresh = Gateway.loaded[h.id] ?: continue
             // the rotation has not reached its Ceremony.adoption() yet: nothing owed
-            val patron = Kernel.call("lines", { null }) { fresh.lines().firstOrNull()?.patron }
+            val patron = Gateway.call("lines", { null }) { fresh.lines().firstOrNull()?.patron }
                 ?: continue
-            val old = Kernel.loaded[priorId] ?: run {
+            val old = Gateway.loaded[priorId] ?: run {
                 // the key being succeeded is not open here — taken off the
                 // device, or never held. Nothing can sign its departure,
                 // and the mark is spent rather than retried forever
                 own.forget(Rotation.MARK_SUCCEEDS)
-                Kernel.front.note("· the key this rotation succeeded is not on this device, so its departure was not signed")
+                Gateway.front.note("· the key this rotation succeeded is not on this device, so its departure was not signed")
                 return@run null
             } ?: continue
-            val said = Kernel.call("depart", { e -> e.reason }) {
+            val said = Gateway.call("depart", { e -> e.reason }) {
                 old.depart(patron, null)
                 null
             }
             if (said == null) {
                 own.forget(Rotation.MARK_SUCCEEDS)
                 Diag.event("rotation.departed", "who" to priorId.take(8))
-                Kernel.front.note("· the key you rotated away from has left that subnet")
+                Gateway.front.note("· the key you rotated away from has left that subnet")
             } else {
                 // **left for the next start**: the mark stays, so the
                 // departure is owed rather than lost
-                Kernel.front.note("· that departure was refused and is still owed: $said")
+                Gateway.front.note("· that departure was refused and is still owed: $said")
             }
         }
     }
@@ -503,7 +503,7 @@ object Identities {
         Diag.event("rotation.begun")
         if (Attachments.started) {
             openHeld(app, Identities.Held(newId, scope, null), listOf())
-            Kernel.loaded[newId]?.let { Attachments.launchHeld(newId, it, scope) }
+            Gateway.loaded[newId]?.let { Attachments.launchHeld(newId, it, scope) }
             chooseActive(context, newId)
         } else {
             Attachments.start(context)
@@ -548,8 +548,8 @@ object Identities {
      * not carry, and the seed phrase is how it comes back.
      */
     fun exportBackup(by: String): ByteArray? {
-        val p = Kernel.loaded[by] ?: return null
-        return Kernel.call("exportBackup", { null }) { p.exportBackup() }
+        val p = Gateway.loaded[by] ?: return null
+        return Gateway.call("exportBackup", { null }) { p.exportBackup() }
     }
 
     /**
@@ -568,10 +568,10 @@ object Identities {
      */
     fun restoreBackup(blob: ByteArray): Result<uniffi.rhtn_ffi.Restored> {
         val until = System.currentTimeMillis() + 30_000
-        var p = activeId?.let { Kernel.loaded[it] }
+        var p = activeId?.let { Gateway.loaded[it] }
         while (p == null && System.currentTimeMillis() < until) {
             Thread.sleep(200)
-            p = activeId?.let { Kernel.loaded[it] }
+            p = activeId?.let { Gateway.loaded[it] }
         }
         val held = p ?: return Result.failure(IllegalStateException("the kernel did not start"))
         return runCatching { held.restoreBackup(blob) }
@@ -614,12 +614,12 @@ object Identities {
     internal fun openHeld(app: Context, h: Identities.Held, known: List<ByteArray>) {
         val own = AndroidShell(app, h.scope)
         val p = openOn(own, known) ?: return
-        Kernel.loaded[h.id] = p
+        Gateway.loaded[h.id] = p
     }
 
     /** The keyhash a seed pair names, or null where it does not read. */
     internal fun idOfSeeds(seeds: ByteArray): String? =
-        Kernel.call("keyhashOfSeeds", { null }) { uniffi.rhtn_ffi.keyhashOfSeeds(seeds) }
+        Gateway.call("keyhashOfSeeds", { null }) { uniffi.rhtn_ffi.keyhashOfSeeds(seeds) }
             ?.takeIf { Identities.names(it) }
 
     /**
@@ -662,13 +662,13 @@ object Identities {
                     // admits no variant carrying one half), so the mark is
                     // dropped and the device starts as it was
                     shell.forget(Rotation.MARK_NEW)
-                    Kernel.front.note("· a rotation was begun without its prior key and was dropped")
-                    Kernel.call("Participant.start", { e -> Kernel.front.setStatus("kernel refused: ${e.reason}"); null }) {
+                    Gateway.front.note("· a rotation was begun without its prior key and was dropped")
+                    Gateway.call("Participant.start", { e -> Gateway.front.setStatus("kernel refused: ${e.reason}"); null }) {
                         Participant.start(heldSeeds(shell), known, platformOf(shell))
                     } ?: return null
                 } else {
-                    val out = Kernel.call("Participant.rotating", { e ->
-                        Kernel.front.setStatus("the rotation was refused: ${e.reason}"); null
+                    val out = Gateway.call("Participant.rotating", { e ->
+                        Gateway.front.setStatus("the rotation was refused: ${e.reason}"); null
                     }) {
                         Participant.rotating(fresh.copyOf(), prior.copyOf(), null, known, platformOf(shell))
                     }
@@ -678,19 +678,19 @@ object Identities {
                     // the mark goes after them: cleared first and the
                     // process dying would leave an archive nothing names
                     if (!shell.seal(Identities.LEGACY_SEEDS, fresh)) {
-                        Kernel.front.setStatus("the rotation held but its seeds could not be kept")
+                        Gateway.front.setStatus("the rotation held but its seeds could not be kept")
                         return null
                     }
                     shell.forget(Rotation.MARK_PRIOR)
                     shell.forget(Rotation.MARK_NEW)
                     fresh.fill(0)
                     Diag.event("rotation.done")
-                    Kernel.front.note("· the rotation completed and this device holds its new key")
+                    Gateway.front.note("· the rotation completed and this device holds its new key")
                     out
                 }
             }
             is Rotation.Start.Ordinary ->
-                Kernel.call("Participant.start", { e -> Kernel.front.setStatus("kernel refused: ${e.reason}"); null }) {
+                Gateway.call("Participant.start", { e -> Gateway.front.setStatus("kernel refused: ${e.reason}"); null }) {
                     Participant.start(heldSeeds(shell), known, platformOf(shell))
                 } ?: return null
         }
@@ -720,7 +720,7 @@ object Identities {
      * list is a device holding no identity.
      */
     fun wipe(context: Context): List<String> {
-        Kernel.loaded.clear()
+        Gateway.loaded.clear()
         activeId = null
         Ceremony.meet = null
         val app = context.applicationContext
@@ -794,7 +794,7 @@ object Identities {
             // waiting for a restart, and let it act since a person who
             // just made an identity means to use it
             openHeld(app, Identities.Held(id, scope, null), listOf())
-            Kernel.loaded[id]?.let { Attachments.launchHeld(id, it, scope) }
+            Gateway.loaded[id]?.let { Attachments.launchHeld(id, it, scope) }
             chooseActive(context, id)
         } else {
             Attachments.start(context)
@@ -803,11 +803,11 @@ object Identities {
     }
 
     fun chooseActive(context: Context, id: String): Boolean {
-        if (!Kernel.loaded.containsKey(id)) return false
+        if (!Gateway.loaded.containsKey(id)) return false
         activeId = id
         AndroidShell(context.applicationContext).seal(Identities.ACTIVE, id.toByteArray())
         Diag.event("identity.active", "who" to id.take(8))
-        activeId?.let { Kernel.loaded[it] }?.let { Attachments.show(it, Connection.Detached) }
+        activeId?.let { Gateway.loaded[it] }?.let { Attachments.show(it, Connection.Detached) }
         Model.refreshAll()
         return true
     }
@@ -856,10 +856,10 @@ object Identities {
             return "this device's storage would not keep its list of identities"
         }
         // nothing opens it from here on: the index no longer names it
-        Kernel.loaded.remove(id)
+        Gateway.loaded.remove(id)
         val left = scope?.let { java.io.File(app.filesDir, "${Wipe.KERNEL_DIR}/$it").deleteRecursively() } ?: false
         if (activeId == id) {
-            Identities.active(kept.filter { Kernel.loaded.containsKey(it.id) }, null)?.let { chooseActive(context, it) }
+            Identities.active(kept.filter { Gateway.loaded.containsKey(it.id) }, null)?.let { chooseActive(context, it) }
         }
         Diag.event("identity.removed", "who" to id.take(8), "storage" to left.toString())
         Model.refreshAll()
@@ -876,7 +876,7 @@ object Identities {
         val now = LinkedHashMap(identityColours(context))
         now[id] = argb
         runCatching { shell.write(Identities.COLOURS, Identities.encodeColours(now)) }
-            .onFailure { Kernel.front.note("· the colour could not be kept: ${it.message}") }
+            .onFailure { Gateway.front.note("· the colour could not be kept: ${it.message}") }
     }
 
     /**

@@ -21460,3 +21460,11 @@ refused sends, where on the 13th the same phone in the same state
 refused every send. The foreground service is what the Android 15
 handsets needed; SES-020's refused state remains tested in the unit test
 alone until a platform refuses it.
+
+**Ruled 2026-11-14 [author]: the Kotlin object is `Gateway`** — *"you
+have been using 'seam' to refer to IPC more generally"* — not `Adaptor`
+(the Rust crate of bearers and couriers already carries that word) and
+not `Socket` (an operating-system object this is not). Renamed across the
+shell and its tests (37 files; `Kernel.kt` → `Gateway.kt`); `KernelService`
+keeps its name, being the kernel's standing. The Rust kernel is the
+kernel.

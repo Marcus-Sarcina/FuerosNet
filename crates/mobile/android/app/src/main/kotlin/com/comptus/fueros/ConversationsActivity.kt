@@ -55,17 +55,17 @@ class ConversationsActivity : Activity() {
 
     override fun onStart() {
         super.onStart()
-        Kernel.bind(sink)
+        Gateway.bind(sink)
     }
 
     override fun onStop() {
-        Kernel.unbind(sink)
+        Gateway.unbind(sink)
         super.onStop()
     }
 
     private fun redraw() {
         list.removeAllViews()
-        val threads = Kernel.front.threads()
+        val threads = Gateway.front.threads()
         if (threads.isEmpty()) {
             // the empty state is the provisioning guidance, not a blank
             list.addView(
@@ -75,7 +75,7 @@ class ConversationsActivity : Activity() {
                     setPadding(0, 0, 0, 24)
                 },
             )
-            Kernel.front.notices().forEach { line ->
+            Gateway.front.notices().forEach { line ->
                 list.addView(
                     TextView(this).apply {
                         text = line
@@ -106,7 +106,7 @@ class ConversationsActivity : Activity() {
         val own = Identities.identities(this).map { it.id }.toSet()
         val open = threads.map { it.by to it.peerKey }.toSet()
         val seen = HashSet<Pair<String, String>>()
-        val fresh = Kernel.contactsHeld()
+        val fresh = Gateway.contactsHeld()
             .filter { it.row.how == How.COUNTERPARTY }
             .map { it.by to it.row.keyhash.hex() }
             .filter { it.second !in own && it !in open && seen.add(it) }
@@ -121,7 +121,7 @@ class ConversationsActivity : Activity() {
         )
         for ((by, key) in fresh) {
             val name = TextView(this).apply {
-                text = (Kernel.aliasOfHeld(by, key) ?: "${key.take(8)}…") + holderLabel(by)
+                text = (Gateway.aliasOfHeld(by, key) ?: "${key.take(8)}…") + holderLabel(by)
                 textSize = 20f
             }
             list.addView(
@@ -166,7 +166,7 @@ class ConversationsActivity : Activity() {
         val name = TextView(this).apply {
             // the alias they published where one has reached this device,
             // else what the thread was opened as
-            text = (Kernel.aliasOfHeld(t.by, t.peerKey) ?: t.peerName) + holderLabel(t.by)
+            text = (Gateway.aliasOfHeld(t.by, t.peerKey) ?: t.peerName) + holderLabel(t.by)
             textSize = 20f
         }
         val chip = TextView(this).apply {

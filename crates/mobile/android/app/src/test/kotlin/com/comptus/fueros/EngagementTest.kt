@@ -6,13 +6,13 @@ import org.junit.Test
 
 /**
  * **PRD-17's retry and its words** (`light-client-requirements.md` §1.1,
- * design §7.1), now that [Engagement] holds the decision and [Kernel] only
+ * design §7.1), now that [Engagement] holds the decision and [Gateway] only
  * asks how many were reached.
  *
  * The clause about the trace each nominee receives is held by
  * `OpticalExchangeTest`'s
  * `a_whole_exchange_traces_every_part_it_moved_and_no_content`, and the
- * clause about engaging *before the code is shown* is the order [Kernel]
+ * clause about engaging *before the code is shown* is the order [Gateway]
  * calls things in rather than a decision made here.
  */
 class EngagementTest {

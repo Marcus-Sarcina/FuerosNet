@@ -25,7 +25,7 @@ import android.widget.FrameLayout
 /**
  * Meet: the ceremony flow (screens sheet section D). One Activity walks the
  * whole sequence, because a ceremony is one continuous flow and not a set
- * of places you navigate between. The state lives in [Kernel]'s [Meet], so
+ * of places you navigate between. The state lives in [Gateway]'s [Meet], so
  * a recreation mid-flow rejoins it.
  *
  * The flow, its front-loaded brief, its hands-off phase and its
@@ -277,7 +277,7 @@ class MeetActivity : Activity() {
         // initiator between the choice of transaction and the invitation,
         // for the party that read it between the scan and the acceptance
         val choice = if (m.step() == Meet.Step.INTENT || m.step() == Meet.Step.BRIEF) {
-            m.pendingChoice(Kernel.subnets(by).map(Meet.Scope::of), Kernel.subnetsRooted(by).map(Meet.Scope::of))
+            m.pendingChoice(Gateway.subnets(by).map(Meet.Scope::of), Gateway.subnetsRooted(by).map(Meet.Scope::of))
         } else {
             null
         }
@@ -485,7 +485,7 @@ class MeetActivity : Activity() {
     }
 
     private fun start(kind: Meet.Kind, role: Meet.Role) {
-        Kernel.declareNumber(by, ownNumber())
+        Gateway.declareNumber(by, ownNumber())
         Ceremony.startMeet(by, kind, role)?.bind(sink) ?: para("could not begin: the kernel is not running")
         redraw()
     }
@@ -754,14 +754,14 @@ class MeetActivity : Activity() {
             Meet.Choice.ADOPT_INTO -> {
                 heading("Adopt into which scope?")
                 para("${m.counterpartyName} will sit one hop below you. Which of your subnets do they join?")
-                (Kernel.subnets(by).map(Meet.Scope::of) + Meet.Scope.OWN).forEach { s ->
+                (Gateway.subnets(by).map(Meet.Scope::of) + Meet.Scope.OWN).forEach { s ->
                     button(s.label()) { m.chooseScope(s) }
                 }
             }
             Meet.Choice.SUBMIT_AS -> {
                 heading("Submit as which scope?")
                 para("${m.counterpartyName} will be your patron. Do you bring a scope you root with you — everyone in it coming to sit in their subnet — or join as an individual, your scopes standing as they are?")
-                Kernel.subnetsRooted(by).map(Meet.Scope::of).forEach { s ->
+                Gateway.subnetsRooted(by).map(Meet.Scope::of).forEach { s ->
                     button("Bring ${s.label()}") { m.chooseCarrying(s) }
                 }
                 button("Join as an individual") { m.chooseCarrying(Meet.Scope.INDIVIDUAL) }
@@ -1262,7 +1262,7 @@ class MeetActivity : Activity() {
             }
             Diag.event("meet.subnet_name", "state" to "publishing", "bytes" to typed.toByteArray().size)
             Thread({
-                val why = Kernel.publishSubnetAlias(by, txid, typed)
+                val why = Gateway.publishSubnetAlias(by, txid, typed)
                 runOnUiThread {
                     if (isFinishing) return@runOnUiThread
                     if (why == null) subnetNamed = typed

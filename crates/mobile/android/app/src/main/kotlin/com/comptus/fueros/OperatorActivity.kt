@@ -162,7 +162,7 @@ class OperatorActivity : Activity() {
      * turning each into a tap.
      */
     private fun sendInvitations(at: String) {
-        val owed = Kernel.invitations(by, at).filter { invitedTo(it.who) != at }
+        val owed = Gateway.invitations(by, at).filter { invitedTo(it.who) != at }
         if (owed.isEmpty()) return
         if (checkSelfPermission(android.Manifest.permission.SEND_SMS) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -284,7 +284,7 @@ class OperatorActivity : Activity() {
                             isEnabled = true
                         } else {
                             Thread {
-                                val said = Kernel.renew(by, i.at, token, 45, i.subnet)
+                                val said = Gateway.renew(by, i.at, token, 45, i.subnet)
                                 runOnUiThread {
                                     narration.text = said.joinToString("\n")
                                     isEnabled = true
@@ -322,7 +322,7 @@ class OperatorActivity : Activity() {
      * before it appears rather than after.
      */
     private fun showControlKey() {
-        val line = Kernel.hostControlPublicKey(by)
+        val line = Gateway.hostControlPublicKey(by)
         if (line == null) {
             narration.text = "this device holds no seed, so it derives no key"
             return
@@ -344,7 +344,7 @@ class OperatorActivity : Activity() {
     }
 
     private fun showPrivateKey() {
-        val key = Kernel.hostControlPrivateKey(by)
+        val key = Gateway.hostControlPrivateKey(by)
         if (key == null) {
             narration.text = "this device holds no seed, so it derives no key"
             return
@@ -446,7 +446,7 @@ class OperatorActivity : Activity() {
         }
         // **which subnet the instance serves** [author, 2026-10-15]: one
         // it holds a position in, chosen here; where it holds one, that one
-        val scopes = Kernel.subnets(by).map(Meet.Scope::of)
+        val scopes = Gateway.subnets(by).map(Meet.Scope::of)
         chosen = scopes.singleOrNull()
         val choice = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -509,7 +509,7 @@ class OperatorActivity : Activity() {
                 // host that may not answer, and a screen that froze while
                 // waiting would tell its operator nothing
                 Thread {
-                    val said = Kernel.enrol(by, 
+                    val said = Gateway.enrol(by, 
                         ask.at,
                         ask.token,
                         ask.credentials,
@@ -682,7 +682,7 @@ class OperatorActivity : Activity() {
         // (PRD-11; `light-client-requirements.md` §6): the ordering speaks
         // to this operator's own redundancy rather than the network's, it
         // hides none and it scores none
-        val all = Launch.providers().sortedBy { Kernel.crowded(by, it.asn).first }
+        val all = Launch.providers().sortedBy { Gateway.crowded(by, it.asn).first }
         var provider = all.first()
         // **and the ordering says what it is** (PRD-11), in the author's
         // own words rather than this screen's: what the table holds is
@@ -693,7 +693,7 @@ class OperatorActivity : Activity() {
             setTextColor(Palette.now.sub)
             text = Disclosure.words(Disclosure.Topic.PROVISIONING).joinToString("\n\n")
         }
-        val heldFor = { p: Launch.Provider -> Kernel.providerCredentials(by)[p.name.lowercase()] ?: "" }
+        val heldFor = { p: Launch.Provider -> Gateway.providerCredentials(by)[p.name.lowercase()] ?: "" }
         val credential = field("${provider.name} API token", heldFor(provider), secret = true)
         // the token is the operator's own, made at the provider's page:
         // open it, and say the steps there
@@ -781,7 +781,7 @@ class OperatorActivity : Activity() {
             about.text = Sizing.note() + "\n\n" + Sizing.whyBehind()
         }
         fun describe() {
-            val (count, crowded) = Kernel.crowded(by, provider.asn)
+            val (count, crowded) = Gateway.crowded(by, provider.asn)
             about.text = "${provider.name} (AS${provider.asn}): " +
                 (if (crowded) "$count of the parties in your horizon already run there — crowded, and still yours to choose. " else "nobody in your horizon runs there. ") +
                 "That speaks to your own redundancy, not the network's."
@@ -794,7 +794,7 @@ class OperatorActivity : Activity() {
                 this@OperatorActivity,
                 android.R.layout.simple_spinner_dropdown_item,
                 all.map { p ->
-                    val (count, crowded) = Kernel.crowded(by, p.asn)
+                    val (count, crowded) = Gateway.crowded(by, p.asn)
                     "${p.name} (AS${p.asn})" + if (crowded) "  — $count in your horizon" else ""
                 },
             )
@@ -851,7 +851,7 @@ class OperatorActivity : Activity() {
                         // 2026-11-06]: the provider chooser above orders
                         // by ASN, and this orders that provider's own
                         // places, the pair being what disperses
-                        crowding = Kernel.crowdedZones(by, provider.asn, allRegions.map { it.slug })
+                        crowding = Gateway.crowdedZones(by, provider.asn, allRegions.map { it.slug })
                         // **the two pickers constrain each other**
                         // (`Robot/future-features.md` entry 2): both lists
                         // already knew how they intersect — a size carries
@@ -902,7 +902,7 @@ class OperatorActivity : Activity() {
                             }
                         // the credential is kept once it has worked, and
                         // travels in the backup from here
-                        Kernel.holdProviderCredential(by, provider.name.lowercase(), cred)?.let { narration.text = it }
+                        Gateway.holdProviderCredential(by, provider.name.lowercase(), cred)?.let { narration.text = it }
                             ?: run { narration.text = "${regionRows.size} regions, ${sizeRows.size} sizes" }
                     }
                 }.start()
@@ -918,12 +918,12 @@ class OperatorActivity : Activity() {
                     narration.text = "fetch the regions and sizes first, and pick one of each"
                     return@setOnClickListener
                 }
-                val scopes = Kernel.subnets(by).map(Meet.Scope::of)
+                val scopes = Gateway.subnets(by).map(Meet.Scope::of)
                 if (scopes.size > 1 && chosen == null) {
                     narration.text = "choose which subnet the instance serves first"
                     return@setOnClickListener
                 }
-                val material = Kernel.materialHex(by) ?: run { narration.text = "the kernel is not running"; return@setOnClickListener }
+                val material = Gateway.materialHex(by) ?: run { narration.text = "the kernel is not running"; return@setOnClickListener }
                 isEnabled = false
                 val plan = Launch.Plan(region.slug, size.slug, registry = registry.text.toString().trim(), tag = tag.text.toString().trim())
                 val minted = Launch.token()
@@ -993,7 +993,7 @@ class OperatorActivity : Activity() {
                     // endpoint record and the anchor entry, which is what
                     // the next operator's ordering reads
                     // (`light-client-requirements.md` §6)
-                    said += Kernel.enrol(by, 
+                    said += Gateway.enrol(by, 
                         surface, minted, creds, "$ip:${Launch.QUIC_PORT}", subnet,
                         provider.asn, region.slug,
                     )
@@ -1017,7 +1017,7 @@ class OperatorActivity : Activity() {
                             // is this device's own, because an operator's
                             // node speaks as its operator; the address is
                             // the machine it just launched.
-                            Kernel.keyhash(by)?.let { me ->
+                            Gateway.keyhash(by)?.let { me ->
                                 Attachments.serveFrom(by, this@OperatorActivity, me, "$ip:${Launch.QUIC_PORT}")
                             }
                             atField.setText(surface)
@@ -1060,7 +1060,7 @@ class OperatorActivity : Activity() {
      */
     private fun destroy(i: Instance) {
         val provider = Launch.providers().firstOrNull { it.name.lowercase() == i.provider } ?: return
-        val cred = Kernel.providerCredentials(by)[i.provider] ?: run {
+        val cred = Gateway.providerCredentials(by)[i.provider] ?: run {
             narration.text = "no ${provider.name} credential is held; paste it above first"
             return
         }
@@ -1096,7 +1096,7 @@ class OperatorActivity : Activity() {
      */
     private fun assertHorizon(at: String, token: String, narration: TextView) {
         Thread {
-            val rows = Kernel.horizonRows(by)
+            val rows = Gateway.horizonRows(by)
             if (rows.isEmpty()) {
                 return@Thread
             }

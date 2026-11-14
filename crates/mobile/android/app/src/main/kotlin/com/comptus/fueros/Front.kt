@@ -62,7 +62,7 @@ class Front {
          * every other on the device, so a thread is keyed by the identity
          * that holds it and the peer, never by the peer alone — two
          * identities' conversations with one party are two threads, and a
-         * reply goes out as the one that holds it ([Kernel.send]).
+         * reply goes out as the one that holds it ([Gateway.send]).
          */
         val by: String,
         /** The counterparty's keyhash in hex, which with [by] identifies the thread. */

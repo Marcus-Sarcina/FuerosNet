@@ -85,7 +85,7 @@ class ShellActivity : Activity() {
 
     private val sink = object : Front.Ui {
         override fun render() {
-            val line = Kernel.front.status()
+            val line = Gateway.front.status()
             runOnUiThread { connection?.text = Attach.statusLine(line) }
         }
     }
@@ -148,7 +148,7 @@ class ShellActivity : Activity() {
         // alone (`FuerosApp.streamTo`); the releasable never reads it
         Levers.beforeStart(this, intent)
         // **the identity lever is read before the kernel starts**, since
-        // the bring-up is what applies it ([Kernel.requestActive]); every
+        // the bring-up is what applies it ([Gateway.requestActive]); every
         // other lever needs a kernel that is already up
         Attachments.start(this)
         Levers.apply(intent)
@@ -171,14 +171,14 @@ class ShellActivity : Activity() {
     override fun onStart() {
         super.onStart()
         Consent.host(this)
-        Kernel.bind(sink)
+        Gateway.bind(sink)
         Model.watch(watcher)
         drawFromModel()
         // **ask for what each contact and each subnet published**
         // (`light-client-requirements.md` §4.3): this is the screen that
         // shows names, so it is where the asking belongs; what comes back
         // reaches the rail through the model
-        Thread({ Kernel.requestProfiles(Identities.focused()) }, "fueros-profiles").start()
+        Thread({ Gateway.requestProfiles(Identities.focused()) }, "fueros-profiles").start()
     }
 
     /**
@@ -194,8 +194,8 @@ class ShellActivity : Activity() {
         colours = Identities.identityColours(this)
         drawRail(rows)
         Thread({
-            val mine = Kernel.ownAlias(Identities.focused())
-            val unnamed = mine.second.isNotEmpty() && Kernel.defaultAlias(Identities.focused()) == null
+            val mine = Gateway.ownAlias(Identities.focused())
+            val unnamed = mine.second.isNotEmpty() && Gateway.defaultAlias(Identities.focused()) == null
             runOnUiThread {
                 if (isFinishing) return@runOnUiThread
                 if (unnamed) {
@@ -421,7 +421,7 @@ class ShellActivity : Activity() {
                     drawFromModel()
                     go(place)
                 } else {
-                    Kernel.front.note("· that identity is not open on this device")
+                    Gateway.front.note("· that identity is not open on this device")
                 }
             }
             .show()
@@ -481,13 +481,13 @@ class ShellActivity : Activity() {
             .setItems(rows.toTypedArray()) { _, which ->
                 val chosen = held.getOrNull(which) ?: return@setItems
                 Identities.removable(held, chosen.id)?.let {
-                    Kernel.front.note("· $it")
+                    Gateway.front.note("· $it")
                     return@setItems
                 }
                 AlertDialog.Builder(this)
                     .setMessage(Identities.removes(Identities.label(chosen)))
                     .setPositiveButton("Remove") { _, _ ->
-                        Identities.removeIdentity(this, chosen.id)?.let { Kernel.front.note("· $it") }
+                        Identities.removeIdentity(this, chosen.id)?.let { Gateway.front.note("· $it") }
                         drawFromModel()
                         go(place)
                     }
@@ -571,7 +571,7 @@ class ShellActivity : Activity() {
      * modal, which a person can act on or scroll past. The words are the
      * author's, from [Disclosure]; the decision is [Chrome]'s and asks only
      * how many patrons this key stands under — one line per patron
-     * (`Kernel.lines`).
+     * (`Gateway.lines`).
      *
      * **It is not timed against an eclipse** [author, 2026-11-05], that
      * being a theoretical attack rather than something to wait for.
@@ -582,7 +582,7 @@ class ShellActivity : Activity() {
         // counting the lines of every identity would silence the prompt on
         // a device holding two identities with one patron each — the case
         // it exists for
-        if (!Chrome.suggestingSecondPatron(Kernel.lines(Identities.focused()).size)) return null
+        if (!Chrome.suggestingSecondPatron(Gateway.lines(Identities.focused()).size)) return null
         val said = Disclosure.words(Disclosure.Topic.SECOND_PATRON)
         if (said.isEmpty()) return null
         return TextView(this).apply {
@@ -674,7 +674,7 @@ class ShellActivity : Activity() {
                     textSize = 12f
                     typeface = Typeface.MONOSPACE
                     setTextColor(Palette.now.sub)
-                    text = Attach.statusLine(Kernel.front.status())
+                    text = Attach.statusLine(Gateway.front.status())
                 }
                 connection = line
                 column.addView(
@@ -825,7 +825,7 @@ class ShellActivity : Activity() {
                     Identity.aliasRefusal(typed)?.let { said.text = it; return@setOnClickListener }
                     said.text = "publishing…"
                     Thread({
-                        val why = Kernel.publishSubnetAlias(Identities.focused(), id, typed)
+                        val why = Gateway.publishSubnetAlias(Identities.focused(), id, typed)
                         runOnUiThread {
                             if (isFinishing) return@runOnUiThread
                             said.text = why?.let { "not published: $it" } ?: "Named $typed; published to your node."

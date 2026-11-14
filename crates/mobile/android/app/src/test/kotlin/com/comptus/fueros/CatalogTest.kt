@@ -42,8 +42,8 @@ class CatalogTest {
         assertEquals("nothing held yet", Catalog.roll(emptyList()))
     }
 
-    private fun said(status: ULong, page: Kernel.Page? = null, unreadable: String? = null) =
-        Catalog.answer(Kernel.Answered(status, page, unreadable))
+    private fun said(status: ULong, page: Gateway.Page? = null, unreadable: String? = null) =
+        Catalog.answer(Gateway.Answered(status, page, unreadable))
 
     /**
      * **The diagnostic line, which is not the page** [2026-10-28]. It
@@ -58,13 +58,13 @@ class CatalogTest {
             "delivered — HTTP 200, text/html, 4 bytes",
             said(
                 0UL,
-                Kernel.Page(200, "text/html", "utf-8", Kernel.Shape.PAGE, "body".toByteArray()),
+                Gateway.Page(200, "text/html", "utf-8", Gateway.Shape.PAGE, "body".toByteArray()),
             ),
         )
         assertEquals(
             "a type nobody declared is said to be nothing, never guessed at",
             "delivered — HTTP 200, nothing declared, 0 bytes",
-            said(0UL, Kernel.Page(200, null, null, Kernel.Shape.OTHER, ByteArray(0))),
+            said(0UL, Gateway.Page(200, null, null, Gateway.Shape.OTHER, ByteArray(0))),
         )
         assertEquals(
             "delivered, and unreadable: content-length twice",
