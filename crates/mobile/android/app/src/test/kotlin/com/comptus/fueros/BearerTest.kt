@@ -61,6 +61,7 @@ class BearerTest {
         assertEquals(1000L, clock)
     }
 
+    // functional: NET-020
     @Test
     fun a_carriage_crosses_a_twenty_byte_link_and_arrives_in_order() {
         // twenty is what Bluetooth LE gives before any negotiation, and
@@ -92,6 +93,7 @@ class BearerTest {
         assertArrayEquals(messages[1], back[1])
     }
 
+    // functional: NET-020
     @Test
     fun a_gap_yields_nothing_rather_than_bytes_that_were_not_sent() {
         val wire = Wire(20)
@@ -115,6 +117,7 @@ class BearerTest {
         assertNull("no last packet, no message", r.carriage(0, 1))
     }
 
+    // functional: NET-020
     @Test
     fun a_peer_asking_for_memory_is_refused_rather_than_allocated_for() {
         val r = Bearer.Reassembly()

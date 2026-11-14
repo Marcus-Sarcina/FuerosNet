@@ -37,6 +37,7 @@ class OpticalExchangeTest {
         return rounds
     }
 
+    // functional: NET-020
     @Test
     fun a_two_kilobyte_object_crosses_in_eight_parts_each_way_in_step() {
         val ma = bytes(2022, 1); val mb = bytes(2022, 9)
@@ -210,6 +211,7 @@ class OpticalExchangeTest {
      *  once the other side's count is known, a frame with a different
      *  count is some other phone's exchange, read by accident, and nothing
      *  of this one is wrong. A frame that cannot be a frame at all is. */
+    // functional: NET-020
     @Test
     fun another_ceremonys_code_is_not_ours_and_a_broken_one_is_malformed() {
         val a = OpticalExchange(0, bytes(40, 1), chunk = 20)

@@ -1115,7 +1115,8 @@
   "oracle": "fixture",
   "interpretation": null,
   "families": [
-   "CER-005"
+   "CER-005",
+   "NET-015"
   ]
  },
  {
@@ -1143,7 +1144,10 @@
   "when": "The test inspects B's persistent storage and asks B to open A's capture without a grant.",
   "then": "Storage holds the sealed capture of A and nothing that opens it: no plaintext frame, no plaintext template and no k_capture for A's capture is present, and the open attempt fails. Where B is itself a subject its storage holds no capture seed either, B deriving its own capture keys from its identity (design §7.5.2.6).",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "NET-021"
+  ]
  },
  {
   "id": "CER-07",
@@ -1357,7 +1361,10 @@
   "when": "B sends its response.",
   "then": "The signed VerifierResponse reaches C, and a copy with identical bytes reaches A over the association the grant established.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "NET-018"
+  ]
  },
  {
   "id": "CER-15",
@@ -1879,7 +1886,10 @@
   "when": "C sends type-4 requests on N's request stream: one addressed to N, one to V, one to a verifier N hosts nothing for, and one naming a querier other than C. For V's, S's grant arrives on the payload channel while the stream waits.",
   "then": "N's and V's streams each carry a signed VerifierResponse from the verifier named, V's within the grant buffer rather than at its end, and S receives a copy of each over the payload channel. The other two streams fail with nothing signed.",
   "oracle": "behaviour",
-  "interpretation": "The documents route a query to its verifier's serving node and stop there; how that node carries it to a client attached over the wire is unwritten. The reference answers for the verifiers hosted in the node's own process, a node that is a participant for its own key and a light client beside it, and the subject's copy travels as a payload kind of the reference's own."
+  "interpretation": "The documents route a query to its verifier's serving node and stop there; how that node carries it to a client attached over the wire is unwritten. The reference answers for the verifiers hosted in the node's own process, a node that is a participant for its own key and a light client beside it, and the subject's copy travels as a payload kind of the reference's own.",
+  "families": [
+   "NET-018"
+  ]
  },
  {
   "id": "CER-31",
@@ -2318,7 +2328,10 @@
   "when": "The querier's client hands the request to the courier.",
   "then": "The request reaches the verifier's client as plaintext kind 7 attributed to the querier's session; the verifier answers on the same path as kind 8, after its grant bound where no grant comes; the querier verifies the response under the verifier, finds it answers a query it issued, and holds it for the record; the subject receives the verifier's copy. A response to a query the querier never issued is refused on arrival and enters nothing.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "NET-018"
+  ]
  },
  {
   "id": "CER-44",
@@ -2351,7 +2364,12 @@
   "interpretation": "The anchor authenticates nobody (§14.3.1): every value is public, so these catch a bearer contradicting the screens and never one quoting them. What stands in their place is §14.1's property, and it is physical.",
   "families": [
    "CER-005",
-   "CER-024"
+   "CER-024",
+   "NET-015",
+   "NET-016",
+   "NET-019",
+   "NET-021",
+   "NET-027"
   ]
  },
  {
@@ -2379,7 +2397,10 @@
   "interpretation": "The in-process harness remains for tests that move messages by hand; this is the path a device runs.",
   "families": [
    "CER-032",
-   "CER-022"
+   "CER-022",
+   "NET-031",
+   "NET-022",
+   "NET-023"
   ]
  },
  {
@@ -2410,7 +2431,8 @@
   "interpretation": "A witness that receives a kind before the request cannot attribute it; the ordering is what makes the rest of the sequence evidence to it.",
   "families": [
    "CER-032",
-   "CER-003"
+   "CER-003",
+   "NET-023"
   ]
  },
  {
@@ -2440,7 +2462,8 @@
   "oracle": "behaviour",
   "interpretation": "",
   "families": [
-   "CER-009"
+   "CER-009",
+   "NET-023"
   ]
  },
  {
@@ -2561,7 +2584,9 @@
   "interpretation": "This is the escape design §13.2 rests on, so the test's value is in what is absent: there is no serving node in it at all. A witnessed ceremony is the contrasting case and legitimately reaches each witness through that witness's own locator and upstream node.",
   "families": [
    "CER-009",
-   "CER-025"
+   "CER-025",
+   "NET-022",
+   "NET-026"
   ]
  },
  {
@@ -2659,7 +2684,11 @@
   "when": "Each builds a prekey handover and takes the other's, and one then sends application payload to the other.",
   "then": "The send produces an initial message and no prekey request: nothing is addressed to a node. The recipient opens it and the payload reaches its application. A handover naming another party's bundle is refused, as is one carrying another ceremony's id, and bytes that are not of this ceremony's session do not open at all.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "NET-016",
+   "NET-025"
+  ]
  },
  {
   "id": "CER-55",
@@ -3679,7 +3708,10 @@
   "when": "The frame is presented to the decoder as a stream-0 control frame.",
   "then": "The frame is accepted: structural = valid with an empty capability set. An implementation that applies the omit-if-empty rule to a required field, or requires at least one capability parameter, rejects this and fails.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "NET-009"
+  ]
  },
  {
   "id": "DEC-15",
@@ -3706,7 +3738,10 @@
   "when": "The frame is presented to the decoder as a stream-0 control frame.",
   "then": "structural = malformed. An implementation that reads the omit-if-empty rule as licensing omission of a required map accepts this and fails.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "NET-009"
+  ]
  },
  {
   "id": "DEC-16",
@@ -4433,7 +4468,11 @@
   "when": "Each is decoded and re-encoded by the implementation the shell depends on.",
   "then": "Every one decodes, and re-encodes to the same bytes the corpus holds — the corpus being generated from the specification by a tool sharing no code with the implementation, so a mismatch convicts one of the two and neither gets to say which. A bundle larger than one carriage splits into an exchange at the 256 ceiling and consecutive continuations, and reads back entry for entry. A continuation anchored to another ceremony, or arriving out of order, ends the bundle with the entries held rather than failing the ceremony. An unknown version, a short contribution, and an object presented as the wrong kind are all refused.",
   "oracle": "fixture",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "NET-017",
+   "NET-019"
+  ]
  },
  {
   "id": "DMN-01",
@@ -10051,7 +10090,9 @@
   "oracle": "behaviour",
   "interpretation": "What happens to a second request on one stream is not stated; the test asserts only that it is not answered as a second exchange.",
   "families": [
-   "GAT-019"
+   "GAT-019",
+   "NET-005",
+   "NET-007"
   ]
  },
  {
@@ -10609,7 +10650,8 @@
   "interpretation": "Only the resource family has an answer defined for a body that does not decode, so the fallback is scoped to it: every other type's malformed body has no specified response and §9.2's stream failure stands.",
   "families": [
    "GAT-021",
-   "GAT-026"
+   "GAT-026",
+   "NET-006"
   ]
  },
  {
@@ -11396,7 +11438,10 @@
   "when": "C reconnects with 0-RTT and sends Attach in early data.",
   "then": "No AttachAck is sent before the handshake of that connection completes; after completion an AttachAck arrives, either for the deferred early Attach or for an Attach C sends after the handshake if the early one was rejected.",
   "oracle": "model",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "NET-007"
+  ]
  },
  {
   "id": "SES-16",
@@ -11450,7 +11495,11 @@
   "when": "N's control loop runs through the outbound send between the two fragments.",
   "then": "The outbound frame goes, and the second heartbeat is received whole afterwards: two heartbeats received, nothing discarded, the session alive. An implementation whose frame read is abandoned when another event wins, dropping the bytes it had consumed, fails.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "NET-004",
+   "NET-011"
+  ]
  },
  {
   "id": "SES-25",
@@ -11603,7 +11652,10 @@
   "when": "Both initial messages are delivered.",
   "then": "Each side keeps the session the lower keyhash opened; the message the other side sent on its own opening is still read, since that session is held for what was already sent on it, bounded, and then let go; nothing sent on either is lost.",
   "oracle": "behaviour",
-  "interpretation": "The reference client holds two displaced sessions; the bound is the holder's."
+  "interpretation": "The reference client holds two displaced sessions; the bound is the holder's.",
+  "families": [
+   "NET-023"
+  ]
  },
  {
   "id": "SES-31",
@@ -13515,7 +13567,10 @@
   "when": "The implementation opens a connection to that endpoint.",
   "then": "The ClientHello's supported_groups extension lists exactly one group, X25519MLKEM768, and its key_share extension carries no share for any other group.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "NET-001"
+  ]
  },
  {
   "id": "TRN-02",
@@ -13541,7 +13596,10 @@
   "when": "The test client attempts the handshake.",
   "then": "No handshake completes: the connection ends during the handshake, no session is established, and no AttachAck can be obtained on it.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "NET-001"
+  ]
  },
  {
   "id": "TRN-03",
@@ -13572,7 +13630,10 @@
   "when": "The implementation dials the endpoint intending to reach K.",
   "then": "The connection never becomes a session with K: the implementation sends nothing beyond its Attach, accepts no session state or payload on it, abandons it once the AttachAck binds nothing, and reports the dial as a refused session rather than as a session with K.",
   "oracle": "model",
-  "interpretation": "Requoted 2026-09-21 to the three-way bind of wire-format.md §9.1; the expectation is unchanged, a refused session where nothing binds the key."
+  "interpretation": "Requoted 2026-09-21 to the three-way bind of wire-format.md §9.1; the expectation is unchanged, a refused session where nothing binds the key.",
+  "families": [
+   "NET-002"
+  ]
  },
  {
   "id": "TRN-04",
@@ -13625,7 +13686,10 @@
   "when": "A handshake is run in each role.",
   "then": "As dialling party, the ClientHello's ALPN extension carries rhtn/1. As serving node, the negotiated application protocol is rhtn/1 and the handshake completes.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "NET-001"
+  ]
  },
  {
   "id": "TRN-06",
@@ -13656,7 +13720,10 @@
   "when": "The client attaches.",
   "then": "The first bytes the client sends on stream 0 are a 4-byte big-endian length N followed by exactly N bytes of deterministic CBOR decoding to a two-element array [1, Attach], whose body with any greased capability entry removed equals the corpus fixture body. The serving node's reply on stream 0 is likewise a length prefix followed by CBOR decoding to [2, AttachAck]. Neither frame appears on any other stream.",
   "oracle": "fixture",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "NET-003"
+  ]
  },
  {
   "id": "TRN-07",
@@ -13687,7 +13754,10 @@
   "when": "The test serving node sends on stream 0 a frame whose type is 99 and whose CBOR payload [99, bstr] is exactly 65,536 bytes, so the length prefix reads 65,536, followed by a valid AttachAck. In the other role, the test client sends the same 65,536-byte unknown frame mid-session.",
   "then": "In neither role is the connection closed. As client, the AttachAck that follows is accepted and the session is attached in the mode the ack states. As serving node, a request opened on a bidirectional stream after the unknown frame is answered.",
   "oracle": "fixture",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "NET-003"
+  ]
  },
  {
   "id": "TRN-08",
@@ -13709,7 +13779,10 @@
   "when": "The test peer sends on stream 0 a 4-byte length prefix reading 65,537, followed by bytes.",
   "then": "The implementation closes the connection: a CONNECTION_CLOSE is observed, and no frame sent on that session after the oversized prefix is acted on. The close code is not stated by the profile and is not checked.",
   "oracle": "fixture",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "NET-004"
+  ]
  },
  {
   "id": "TRN-09",
@@ -13740,7 +13813,10 @@
   "when": "The test serving node sends on stream 0 a frame [4, body] within the length bound whose body is not a well-formed SiblingUpdate (a text string), then a valid SiblingUpdate carrying list L2.",
   "then": "After the malformed frame the connection remains open and the cached sibling list is still L. After the valid update the cached sibling list is L2.",
   "oracle": "fixture",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "NET-003"
+  ]
  },
  {
   "id": "TRN-10",
@@ -13772,7 +13848,10 @@
   "when": "The frame carrying the unrecognised parameter arrives.",
   "then": "The session continues in both roles: the serving node answers with an AttachAck, the client attaches on the ack it receives, and no close and no error frame follows the unrecognised parameter.",
   "oracle": "fixture",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "NET-009"
+  ]
  },
  {
   "id": "TRN-11",
@@ -13804,7 +13883,10 @@
   "when": "The frame carrying the empty Capabilities map arrives.",
   "then": "The session is established in both roles: the serving node sends an AttachAck, the client attaches on the ack, and the connection is not closed. No absent capability and no absent greased parameter is reported as an error.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "NET-010"
+  ]
  },
  {
   "id": "TRN-12",
@@ -13826,7 +13908,10 @@
   "when": "Two sessions are opened, and the Attach it sends as client and the AttachAck it sends as serving node are captured in each.",
   "then": "Each captured Capabilities map contains an entry whose id is the id of no published name and whose value is 8 bytes long, and the id of that entry differs between the two sessions.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "NET-010"
+  ]
  },
  {
   "id": "TRN-13",
@@ -13914,7 +13999,10 @@
   "when": "C's UDP source address and port change mid-session (a new local socket, or a simulated NAT rebinding) and C continues the same QUIC connection from the new address; the test then enqueues an item for C.",
   "then": "No new Attach or AttachAck is exchanged, heartbeats continue in both directions on the same connection from the new address, and the item enqueued after the change is delivered to C over that same connection.",
   "oracle": "behaviour",
-  "interpretation": "The serving node is taken to permit client-initiated migration, which RFC 9000 lets a server disable; the documents state that migration is relied upon and place no obligation on the operator in infra-client-requirements.md §7."
+  "interpretation": "The serving node is taken to permit client-initiated migration, which RFC 9000 lets a server disable; the documents state that migration is relied upon and place no obligation on the operator in infra-client-requirements.md §7.",
+  "families": [
+   "NET-008"
+  ]
  },
  {
   "id": "TRN-16",
@@ -13945,7 +14033,10 @@
   "when": "C opens connection A and sends Attach with field 1 = C as 0-RTT early data. The test captures A's early-data packets and replays them as a second connection B whose handshake it never completes. A's handshake then completes.",
   "then": "On A, no AttachAck and no queued delivery is observed before A's handshake completes; afterwards either an AttachAck follows or none is ever sent for that Attach. On B, no AttachAck is ever sent and the queued item is not delivered: it remains queued at S or is delivered on A alone.",
   "oracle": "model",
-  "interpretation": "Handshake completion is read as completion of the handshake of the connection that carried the early data, as the compliant Tamarin theory states it; the wire says only 'until handshake completion', and a completed handshake on A is taken not to admit B's replay."
+  "interpretation": "Handshake completion is read as completion of the handshake of the connection that carried the early data, as the compliant Tamarin theory states it; the wire says only 'until handshake completion', and a completed handshake on A is taken not to admit B's replay.",
+  "families": [
+   "NET-007"
+  ]
  },
  {
   "id": "TRN-17",
@@ -13976,7 +14067,10 @@
   "when": "Each is pinned.",
   "then": "The identity's own material pins and yields its classical key. Every variant is refused and yields nothing: it is not an identity, whatever it hashes to. An implementation that pins anything hashing to the keyhash it was given fails.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "NET-002"
+  ]
  },
  {
   "id": "TRN-18",
@@ -14127,7 +14221,10 @@
   "when": "The client evaluates the attach.",
   "then": "The session is refused: no session state, no queued data and no request is bound to S, and the delegation, though it verifies under S's material, binds nothing because field 1 is not k2.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "NET-002"
+  ]
  },
  {
   "id": "TRN-24",
@@ -14149,7 +14246,10 @@
   "when": "C evaluates it.",
   "then": "The connection is refused; nothing is bound to S or to T.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "NET-002"
+  ]
  },
  {
   "id": "TRN-25",
@@ -14171,7 +14271,10 @@
   "when": "A receiver decodes it.",
   "then": "It is malformed: not verified, not cached, and the session or connection it arrived on is refused as one on which nothing binds the presented key.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "NET-002"
+  ]
  },
  {
   "id": "TRN-26",
@@ -14358,7 +14461,10 @@
   "when": "L1 sends payload to L2, first with endpoint-independent NATs and then with address-and-port-dependent ones.",
   "then": "With endpoint-independent NATs a connection completes on a candidate pair and the payload crosses it with neither serving node carrying the bytes; with address-and-port-dependent NATs the checks fail within the bound and the same payload is delivered through L2's serving node.",
   "oracle": "behaviour",
-  "interpretation": "Re-read 2026-09-22: design §14.1.1's priority order is RFC 8445's and binds this implementation; this entry holds the outcome, and TRV-11 holds the order."
+  "interpretation": "Re-read 2026-09-22: design §14.1.1's priority order is RFC 8445's and binds this implementation; this entry holds the outcome, and TRV-11 holds the order.",
+  "families": [
+   "NET-008"
+  ]
  },
  {
   "id": "TRV-03",
@@ -14412,7 +14518,10 @@
   "when": "L attaches to S, heartbeats, resolves and fetches through the session.",
   "then": "No STUN Binding Request leaves L's socket and S answers none; the session runs entirely on L's outward dial.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "NET-008"
+  ]
  },
  {
   "id": "TRV-05",
@@ -14498,7 +14607,10 @@
   "when": "L1 (and N1) offers the direct path to its peer from its own client, then sends application payload; then offers the peer it holds no contact for.",
   "then": "The candidates travel through the serving node as their own payload kind; the peer dials them and offers its own back; both clients' own interfaces report the peer reachable; the application payload crosses the connection with the serving node relaying nothing further; the offer to the peer held as no contact gathers and sends nothing.",
   "oracle": "behaviour",
-  "interpretation": "The candidates travel as a payload kind of the reference's own (kind 3) on whatever path exists. Whether the path may be direct is whether the client holds the peer as a contact, read from its own table (design §12.6.3) [author, 2026-10-24]. Re-read 2026-09-22: design §14.1.1's priority order is RFC 8445's and binds this implementation; this entry holds the outcome, and TRV-11 holds the order."
+  "interpretation": "The candidates travel as a payload kind of the reference's own (kind 3) on whatever path exists. Whether the path may be direct is whether the client holds the peer as a contact, read from its own table (design §12.6.3) [author, 2026-10-24]. Re-read 2026-09-22: design §14.1.1's priority order is RFC 8445's and binds this implementation; this entry holds the outcome, and TRV-11 holds the order.",
+  "families": [
+   "NET-012"
+  ]
  },
  {
   "id": "TRV-08",
@@ -14628,7 +14740,11 @@
   "when": "Each offers its traversal candidates on that interface, and afterwards A sends payload to B.",
   "then": "A dials B on the candidates B handed over and the payload takes that path; neither serving node carried it. Candidates presented as another party's are not opened from.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "NET-012",
+   "NET-016"
+  ]
  },
  {
   "id": "TRV-13",
@@ -14650,7 +14766,10 @@
   "when": "Anything arrives claiming to have come from a local interface, or a caller asks for one of those interfaces to carry to a remote peer.",
   "then": "The client refuses: nothing is treated as locally delivered that did not arrive on a local interface, and no local interface is carried remotely. The in-person candidate rests on this, so a candidate admitted this way is refused when the claim is false.",
   "oracle": "behaviour",
-  "interpretation": "The property is unenforceable against a peer (design §1.1) and is stated as a commitment; the test binds this implementation's own paths, not another's."
+  "interpretation": "The property is unenforceable against a peer (design §1.1) and is stated as a commitment; the test binds this implementation's own paths, not another's.",
+  "families": [
+   "NET-013"
+  ]
  },
  {
   "id": "CER-57",
@@ -14679,7 +14798,8 @@
   "oracle": "behaviour",
   "interpretation": "The adoption rests on the meeting, so the two are together and each holds what the checks need [author, 2026-10-14].",
   "families": [
-   "CER-031"
+   "CER-031",
+   "NET-031"
   ]
  },
  {
@@ -14940,7 +15060,10 @@
   "when": "It publishes a profile naming itself, then one naming another party, then one published no later, then one published later.",
   "then": "The first is accepted; the second is refused with the code; the third is refused; the fourth replaces the first.",
   "oracle": "behaviour",
-  "interpretation": "A profile is a statement by its subject and the node checks that, not who the subject is to the subnet."
+  "interpretation": "A profile is a statement by its subject and the node checks that, not who the subject is to the subnet.",
+  "families": [
+   "NET-029"
+  ]
  },
  {
   "id": "SES-33",
@@ -14967,7 +15090,10 @@
   "when": "A stranger requests (S, X, 0), then (S, X, 1), then (T, X, 0) for a T it holds nothing of.",
   "then": "The first returns the profile with the nonce echoed; the second and third return code 0, unknown; nothing is logged of who asked.",
   "oracle": "behaviour",
-  "interpretation": "A profile is published to be read, and a fetch is the weight of a reusable-material fetch."
+  "interpretation": "A profile is published to be read, and a fetch is the weight of a reusable-material fetch.",
+  "families": [
+   "NET-029"
+  ]
  },
  {
   "id": "PRD-14",
@@ -15107,7 +15233,11 @@
   "when": "One proposes a peering on that meeting and the other reviews it; then bodies resting on a meeting of other parties, on a record the signer does not hold, and carrying back-pointers that are not the signer's.",
   "then": "The body names the two in keyhash order with each party's locator in its own field, the reviewer signs it, both hold the finalised record and neither position changes; each malformed or misaddressed body is refused with its reason, and a party with no locator held for the other has nothing to write.",
   "oracle": "behaviour",
-  "interpretation": "A peering carries none of the subnet's authority, so nothing consults a patron [design §15.1]."
+  "interpretation": "A peering carries none of the subnet's authority, so nothing consults a patron [design §15.1].",
+  "families": [
+   "NET-031",
+   "NET-030"
+  ]
  },
  {
   "id": "REP-18",
@@ -15134,7 +15264,10 @@
   "when": "The other greets: its locator, the peering record naming the two, and a request.",
   "then": "The restored client holds the record pending the sender's material, applies it once that material is held, and from then names the sender as a peer, takes kinds 26 to 29 from it, and greets it in turn; a kind 30 not naming the sender and the recipient is dropped.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "NET-030"
+  ]
  },
  {
   "id": "DMN-28",
@@ -15215,7 +15348,8 @@
   "oracle": "behaviour",
   "interpretation": "",
   "families": [
-   "CER-002"
+   "CER-002",
+   "NET-032"
   ]
  },
  {
@@ -15242,7 +15376,8 @@
   "interpretation": "",
   "families": [
    "CER-002",
-   "CER-032"
+   "CER-032",
+   "NET-032"
   ]
  },
  {
@@ -15283,7 +15418,8 @@
   "oracle": "behaviour",
   "interpretation": "",
   "families": [
-   "CER-032"
+   "CER-032",
+   "NET-032"
   ]
  },
  {

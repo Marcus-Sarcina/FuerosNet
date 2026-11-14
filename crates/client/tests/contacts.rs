@@ -596,6 +596,7 @@ fn a_record_that_arrives_leaves_every_signer_a_contact() {
     }
 }
 
+// functional: NET-033
 /// **The number a counterparty's device reported is kept with the rest of
 /// what is held of that party** (`light-client-requirements.md` §1.5,
 /// NET-033): it travels in the contact's own encoding, so the store and

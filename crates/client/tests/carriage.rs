@@ -404,6 +404,7 @@ fn a_handover_is_checked_against_this_ceremony_and_its_own_signature() {
     assert!(matches!(refused, Abort::Unsealable), "{refused:?}");
 }
 
+// functional: NET-033
 /// **The number a device reports for itself crosses with the intent, both
 /// ways, and lands on the counterparty's contact** (NET-033;
 /// `light-client-requirements.md` §1.5; `wire-format.md` §14.3.2's ninth

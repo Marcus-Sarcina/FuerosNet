@@ -22,6 +22,8 @@ class CarriageTest {
         }
     }
 
+    // functional: NET-015
+    // functional: NET-020
     @Test
     fun a_radio_is_preferred_and_its_absence_is_named_rather_than_implied() {
         assertEquals(Carriage.Chosen.RADIO, Carriage(Pipe()).chosen)
@@ -31,6 +33,7 @@ class CarriageTest {
         assertFalse("nothing is carried over no bearer", Carriage(null).send(listOf(ByteArray(4))))
     }
 
+    // functional: NET-020
     @Test
     fun a_carriage_set_crosses_in_order_and_the_count_is_what_completes_it() {
         val pipe = Pipe()

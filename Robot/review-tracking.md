@@ -21706,3 +21706,35 @@ and said so**: GAT-031 (the application's own credential parsing lives in
 and nothing else — GAT-041's multi-frame request and response are TRN-30's
 scenario, found under the transport prefix. Figure: 575 live, 161 held,
 414 by neither; GAT 2.
+
+**The NET families linked, 2026-11-14 [author].** The transport rows
+(NET-001 to 011) are held by the TRN entries with SES-15/17, RSC-11/29,
+DEC-14/15, TRN-16 and TRV-02/04; the local-exchange rows (012 to 033) by
+the CER carriage and conversation entries, TRV-07/12/13, DEC-36, REP-17/18,
+SES-30/32/33, and the unmarked tests in `client/tests/local.rs` (the sealed
+carriage, the §14.3.2 vector, the prekey handover, the intent's number)
+and in three Kotlin test classes — `BearerTest`, `CarriageTest`,
+`OpticalExchangeTest` — for the shell's carriage assembly. The partials:
+NET-002 (a different PQ half under the same claimed identity is refused by
+TRN-17's shape check, not by a test that forges one); 005 (one request per
+stream and the frame ceiling; answering before EOF is asserted by nothing);
+009 (the SHA-256 derivation of a capability id is the implementation's,
+TRN-12 asserting only that the greased id is nobody's); 011 (an E row:
+the half-received frame; concurrent streams with one failing are not
+driven as such); 012 (candidates on the local interfaces open the path;
+that handing them over is disclosed as an IP disclosure is the shell's
+and has no test); 014 (none, below); 015 (`CarriageTest` holds the radio
+preferred and its absence named; the network fetch as last resort is
+asserted by nothing); 021 (an E row: CER-44 carries the capture key and
+CER-06 holds the sealed capture; the guided capture driven end to end over
+the local interfaces is PRT-04's live scenario and was not read here); 023
+(an E row: CER-45/46/47 and SES-30 hold every clause but the engagement
+preceding the id, which is CER-67's and listed under NET-032); 029 (the
+node side, SES-32/33; the client's publish as type 13 is exercised by the
+courier's `publish_profile_all` and asserted by no entry). **Held by
+neither, and said so**: NET-014 (a P row: which local transport the shell
+prefers is the platform's and recommended only), NET-028 (a device whose
+ceremony stopped refusing a carriage for want of a key, saying nothing —
+the carriage tests refuse a stranger's bytes as `Unsealable`, none
+abandons a ceremony and then offers it a step). Figure: 575 live, 192
+held, 383 by neither; NET 2.

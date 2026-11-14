@@ -222,6 +222,7 @@ fn an_object_the_schema_refuses_does_not_decode_here_either() {
     assert!(CandidateHandover::decode(&fixture("P-capture-key-handover")).is_err());
 }
 
+// functional: NET-025
 /// The prekey handover encodes to the canonical bytes, with and without a
 /// one-time key.
 #[test]
@@ -246,6 +247,7 @@ fn the_prekey_handover_encodes_to_the_canonical_bytes() {
     assert_ne!(dry, fx, "the fifth element is present or not");
 }
 
+// functional: NET-025
 /// What the checker refuses, each against the corpus's own negative.
 #[test]
 fn the_prekey_handover_refuses_what_it_should() {
@@ -259,6 +261,8 @@ fn the_prekey_handover_refuses_what_it_should() {
     }
 }
 
+// functional: NET-024
+// functional: NET-027
 /// The session's envelope round-trips, and refuses what it should.
 #[test]
 fn a_sealed_carriage_opens_only_under_its_own_key_and_ceremony() {
@@ -315,6 +319,7 @@ fn a_sealed_carriage_opens_only_under_its_own_key_and_ceremony() {
     );
 }
 
+// functional: NET-024
 /// Two sealings of one plaintext differ, so the nonce is doing its work.
 #[test]
 fn sealing_twice_gives_different_bytes() {
@@ -326,6 +331,7 @@ fn sealing_twice_gives_different_bytes() {
     assert_eq!(*open_carriage(&key, &cid, &b).unwrap(), plain);
 }
 
+// functional: NET-024
 /// **The §14.3.2 vector, pinned on this side of the seam** [reviewer,
 /// 2026-10-08]. `verify.py` re-derives the key and opens the carriage with
 /// primitives of its own; until this test the Rust sealing — the one
@@ -377,6 +383,7 @@ fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }
 
+// functional: NET-033
 /// **An intent carries a number or does not, and both are well formed**
 /// (`wire-format.md` §14.3.2's ninth field; NET-033) [author, 2026-11-10]:
 /// a handset without a subscription sends the eight fields it always sent,
