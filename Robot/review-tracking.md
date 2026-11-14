@@ -20978,3 +20978,60 @@ the FFI's `attach` dials in that order; test
 Consequence on this bench: the ET node's endpoint record still names
 `.8:7448` (the T6 port defect), so until GXV-2 re-enrols with
 `192.168.0.9:7431` every attach to it tries that first and waits 10 s.
+
+**2026-11-13 20:xx, after `apply`.** Provisions and agreements re-pointed to
+`.9`; both nodes restarted under `setsid`; the bench node took 4VC, ZU8
+and MRK within 4 s, the ET node MRK in 33 s. GXV's provision dial to the
+bench node at `.9:7447` completed its handshake (refused: feb8843a is
+unadmitted there — expected), so GXV's app dials this laptop; its dial to
+the ET node timed out at both addresses — the ET node was the one bound
+to `0.0.0.0`. Bound to `192.168.0.9:7431` now (`apply` writes that too);
+the node reports *"the listen address … is not one the endpoint record
+names (192.168.0.8:7448); the address has moved"* — the design's own
+detection (`dmn_25`), cleared by GXV-2 re-enrolling at `.9`. Whether the
+wildcard bind was GXV's cause is settled by its next retry.
+
+**2026-11-13 21:xx — the radio split.** With the laptop pinned at `.9`,
+power save off, and both nodes fresh: ZU8 and 4VC attached to the bench
+node **by their own retry chains**, 97 s after it came back, with no
+restart — the re-attach proven live. GXV and MRK time out to both nodes
+from a fresh start. The two that fail share the laptop's radio
+(`94:1c:56:b0:b8:f4`, 5745 MHz); the two that work are on the other
+(`…f3`, 2462 MHz) and reached through the AP's bridge. Small ICMP and a
+small UDP datagram pass on the same radio; the QUIC handshake does not —
+the same loss the capture showed two nights ago (the laptop's unicast to
+a same-radio station). Not the phones' software; the next experiment is
+the laptop on the 2.4 GHz radio, so every phone is cross-radio.
+
+**2026-11-13 22:xx — the band switch answered one question and raised
+the real one.** The laptop on the 2.4 GHz radio (`…f3`, 2462 MHz): GXV and
+MRK still time out from a fresh start; ZU8 and 4VC stay attached, and
+**ZU8 restarted attaches fresh in 1.27 s** — so the client's fresh-start
+path is sound. The constant across both experiments is the phones' radio,
+not the laptop's: the two on the AP's 5 GHz radio (the two Samsungs, with
+SIMs; their app default network is Wi-Fi, checked) cannot complete a QUIC
+handshake with the laptop whichever radio it is on; the two on 2.4 GHz
+can. Small ICMP, 1,400-byte ICMP and a small UDP datagram pass from the
+5 GHz phones; the handshake does not. The remaining instrument is a
+capture on the laptop during a GXV dial.
+
+**Remote nodes only, 2026-11-14** [author: *"Can we dispense with this and
+test using remote nodes only? … prove out the very disentanglement from
+the test bench we are doing this restructuring to achieve."* Ruled: fresh
+launches for both subnets, the old droplet destroyed, no mobile data on
+either phone]. Done here: both local `rhtnd` processes stopped by PID
+(140448 second-subnet, 140449 bench; run directories kept); `bench.conf`
+and `bench-address.sh` removed and `field-run.sh`'s bench default with
+them (committed yesterday in `72096e1`, dissolved today: the thing it
+parameterised no longer exists, which is the usual shape of a correction
+and the question should have been asked before building it); §H of the
+field test sequence re-based (R0–R2 before T5). Facts checked first:
+Docker Hub `sarcina/rhtnd:latest` = `72096e17` (built 01:05, HEAD);
+142.93.86.90:7449 answers `401` and runs `77344c60`, before `4969ba2`, so it
+would refuse learned members — destroyed rather than upgraded. **The
+radio finding is closed by removal, not diagnosed**: GXV and MRK on the
+AP's 5 GHz radio never completed a QUIC handshake with the laptop on
+either radio, ICMP and small UDP passing; the one capture taken caught no
+dial (a passive window under Doze). **What the remote run exercises
+first**: the second-identity launch (T5), which on 2026-11-12 showed done
+with no machine and was bypassed by a hand enrolment.

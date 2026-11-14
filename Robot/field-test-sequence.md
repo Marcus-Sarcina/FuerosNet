@@ -659,12 +659,40 @@ to the bench test sequence to create a second subnet"*]. What it proves:
 an identity with two addresses holds a session per address (SES-017), a
 message arrives by one and the reply goes back by it (stages 1–4 of the
 address model, `6543d51`…`d94a673`), and one handset carries two
-identities on two nodes. **MRK must be reachable first** (the laptop's
-stale neighbour entry: `sudo ip neigh flush dev wlx58d81272db96`).
+identities on two nodes.
+
+**Re-based on remote nodes, 2026-11-14** [author: *"Can we dispense with
+this and test using remote nodes only? … moving to all remote nodes would
+make for a more realistic test and prove out the very disentanglement from
+the test bench we are doing this restructuring to achieve."* Ruled: fresh
+launches for both subnets, the old droplet destroyed, the phones on Wi-Fi
+with no mobile data]. **The laptop hosts no node.** Two days of bench
+networking (a DHCP lease that moved the laptop, phones on the access
+point's 5 GHz radio unable to complete a QUIC handshake with the laptop
+on either radio) were artefacts of a node on the test bench, and were
+closed by removing the node rather than by diagnosis; `bench.conf` and
+`bench-address.sh` went with it, and `field-run.sh --addr` is back to the
+first routed address with no bench default. The laptop keeps one job,
+`adb`: screen capture, the levers, the diag files. Each subnet's node is
+launched from the Operator screen of the identity that anchors it, as a
+user would, pulling `docker.io/sarcina/rhtnd:latest`, which CI publishes
+from every commit to master that passes the gate (the tag is checked
+against `git log` before each launch). The steps become:
 
 | # | Who | Step | What to read |
 |---|---|---|---|
-| T5 | GXV as **feb8843a** | The second identity, in focus by the nameplate, with no position, launches a node from the Operator screen (the cloud flow of 2026-10-25, or `local.sh` as its stand-in). The node speaks as feb8843a; GXV attaches to it as operator, which writes feb8843a's own serving record. 703a82c2 keeps the bench node: two identities, two nodes, one handset. | GXV: `identity.attach who=feb8843a node=<new> attached=true` after a restart; the new node's `node.attached` |
+| R0 | author | The old droplet (142.93.86.90, build `77344c60`, before the admission fix) destroyed at the provider's panel; both local `rhtnd` processes stopped (their run directories kept, nothing reads them). | `curl http://142.93.86.90:7449/` no longer answers |
+| R1 | GXV as **703a82c2** | In focus by the nameplate, Operator screen, the cloud flow: the provider's token pasted, a region and size chosen, launched. The node speaks as 703a82c2 and serves the first subnet (Mirror Manse); GXV attaches as operator. | GXV: `launch.*` then `identity.attach who=703a82c2 node=<new> attached=true`; from the laptop the administration surface answers `401` with the nonce-and-proof text at `<addr>:7449` |
+| R2 | MRK, ZU8, 4VC | Each agrees to the new node by the invitation link carried by `adb` (`fueros://attach?v=1&at=<addr>:7431&patron=<703a82c2 hex>`) or the `agree_to` lever (`<703a82c2 node hex>@<addr>:7431`); the kernel-kept agreements to the laptop stay until the author forgets them, and dial with backoff meanwhile. | each: `identity.attach … node=<new> attached=true`; the node: `node.attached` for each |
+| T5 | GXV as **feb8843a** | As R1 with feb8843a in focus: a second launch, a second machine. **The run of 2026-11-12 did not reach this** (the launch showed done and no machine appeared; the second node was then enrolled by hand), so this is the first time the second-identity launch runs against a provider. | GXV: `identity.attach who=feb8843a node=<new2> attached=true`; two droplets at the panel |
+| T6, T7, then | as below, with `<host:port>` the second node's | | |
+
+The table of 2026-11-12 follows; its laptop addresses and the hand enrolment
+are superseded by the rows above.
+
+| # | Who | Step | What to read |
+|---|---|---|---|
+| T5 | GXV as **feb8843a** | The second identity, in focus by the nameplate, with no position, launches a node from the Operator screen (the cloud flow of 2026-10-25; ~~or `local.sh` as its stand-in~~ — remote only since 2026-11-14). The node speaks as feb8843a; GXV attaches to it as operator, which writes feb8843a's own serving record. 703a82c2 keeps the bench node: two identities, two nodes, one handset. | GXV: `identity.attach who=feb8843a node=<new> attached=true` after a restart; the new node's `node.attached` |
 | T6 | feb8843a ← MRK | An adoption with feb8843a as patron founds the second subnet, anchored at feb8843a. MRK now holds two addresses: Mirror Manse under 703a82c2, and this one. | the record on the new node (`node.object`); MRK's Done screen names the new subnet |
 | T7 | MRK | The invitation feb8843a's Operator screen owes MRK. Without a SIM the SMS cannot go, so the bench carries the link: `adb -s RFCRC1JDMRK shell am start -a android.intent.action.VIEW -d "fueros://attach?v=1&at=<host:port>&patron=<feb8843a hex>"`. MRK's Invite screen resolves the key from its own records (the patron's), the person agrees, and `serveFrom` attaches **while the bench node is held** — a tab, not a replacement. Restart MRK. | MRK: `pay.tab.attached` on agreeing; after the restart two `identity.attach who=31c2d23f … attached=true`, the bench node's and the new one's; `attachments()` would list both |
 | then | feb8843a → MRK, MRK → feb8843a, 703a82c2 → MRK | feb8843a's first message floods: one carry per address MRK is known at, the second subnet's over its own node. MRK receives it by the tab, so its reply goes back by the tab (`last_from`). Then 703a82c2 writes to MRK over the bench node; MRK's reply to *that* goes by the bench node. MRK's conversation list shows GXV's two identities as two people — *"The ID is a name"* [author, 2026-11-11]. | MRK: `pay.relay via="their node"` for the reply to feb8843a with nothing relayed at the bench node for it (the bench node's `pay`/`node.relay` log); the bench node carrying the reply to 703a82c2; feb8843a's and 703a82c2's arrivals on GXV |
