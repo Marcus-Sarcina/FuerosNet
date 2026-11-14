@@ -146,19 +146,12 @@ class ShellActivity : Activity() {
         }
         // the bench's live stream target, taken in the fieldtest flavour
         // alone (`FuerosApp.streamTo`); the releasable never reads it
-        if (BuildConfig.FIELD_TEST) {
-            intent.getStringExtra("diag_stream")?.let {
-                FuerosApp.streamTo(this, it, intent.getStringExtra("diag_serial"))
-            }
-        }
+        Levers.beforeStart(this, intent)
         // **the identity lever is read before the kernel starts**, since
         // the bring-up is what applies it ([Kernel.requestActive]); every
         // other lever needs a kernel that is already up
-        if (BuildConfig.FIELD_TEST) {
-            intent.getStringExtra("active_identity")?.let { Identities.requestActive(it) }
-        }
         Attachments.start(this)
-        benchLevers(intent)
+        Levers.apply(intent)
         go(Chrome.Place.Home)
     }
 
@@ -172,41 +165,7 @@ class ShellActivity : Activity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        benchLevers(intent)
-    }
-
-    /**
-     * The bench's levers on the peer exchange (design §6.3), fieldtest
-     * alone: `--es forget_contact <keyhash>` takes one contact out of the
-     * dataset and `--ez forget_contacts true` every one, `--es
-     * forget_captures <keyhash>` drops every sealed capture held of that
-     * party, `--ez contact_peers true` reaches for the peers now.
-     */
-    private fun benchLevers(intent: Intent) {
-        if (!BuildConfig.FIELD_TEST) return
-        intent.getStringExtra("forget_contact")?.let { Kernel.forgetContact(Identities.focused(), it) }
-        // **an agreement re-pointed, as a lever** [bench, 2026-11-13: the
-        // laptop's address moved and every agreement named the old one]:
-        // `<node hex>@<host:port>` for the identity in focus
-        intent.getStringExtra("agree_to")?.let { Attachments.agreeToNow(Identities.focused(), it) }
-        // **the focused identity's public material, as an event** — the
-        // bench's way to a node configuration naming a phone's identity as
-        // operator without the key-material screen (which shows it once)
-        intent.getStringExtra("export_material")?.let {
-            Diag.event(
-                "identity.material",
-                "who" to (Identities.activeIdentity() ?: "").take(8),
-                "hex" to Kernel.materialHex(Identities.focused()),
-            )
-        }
-        if (intent.getBooleanExtra("forget_contacts", false)) Kernel.forgetContacts(Identities.focused())
-        intent.getStringExtra("forget_captures")?.let { Attachments.forgetCaptures(Identities.focused(), it) }
-        if (intent.getBooleanExtra("contact_peers", false)) Attachments.contactPeersNow(Identities.focused())
-        // **which identity acts, as a lever** [bench, 2026-11-11]: the
-        // choice is a person's input and nothing the kernel owns, so the
-        // harness may give it — and measuring what a device can still do
-        // while an identity no node admits is acting needs it driven
-        // rather than tapped. Field-test only, like the rest.
+        Levers.apply(intent)
     }
 
     override fun onStart() {

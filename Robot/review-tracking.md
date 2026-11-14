@@ -21353,3 +21353,18 @@ imports. Source-pin tests re-pointed to the objects their text moved to;
 two pins were made weaker only where the visibility widened (`private
 fun` to `fun`). 380 Kotlin tests green, both flavours compile. **Asked of
 the author**: the name of what remains in `Kernel`.
+
+**Step 4 part 4d built, 2026-11-14 (gating): the levers out of the shell
+screen.** `Levers.beforeStart(context, intent)` (the diagnostic stream
+and the identity lever, read before the kernel starts) and
+`Levers.apply(intent)` (the rest, at every start and new intent), each
+lever naming the identity in focus as the bench's own choice of actor;
+`ShellActivity.benchLevers` and its two field-test branches are gone.
+Step 4 is complete as planned, with three things still open in it: the
+name of what remains in `Kernel` (the author's), `Model.instances` as
+`Owned` rows, and the shell reading a status per attachment
+(`statuses()`, deferred from step 3). Next: step 5 (the client blob split
+per relation with versions and the migration), 6 (the FFI's `Refused`
+with a kind, the callerless exports pruned, `local-interfaces.md` carrying
+the data model), 7 (the registers linked), and the schema section in
+`light-client-requirements.md` the author placed there.
