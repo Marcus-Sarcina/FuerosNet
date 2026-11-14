@@ -271,12 +271,12 @@ fn a_client_browses_its_serving_nodes_catalog_and_follows_the_continuation() {
 
     let mut c = fresh("alice");
     assert!(
-        c.browse().is_empty(),
+        c.browse_at(kh("w1")).is_empty(),
         "a client attached to nobody has nobody to ask"
     );
     c.attach(kh("w1"), &[]);
 
-    let posted = c.browse();
+    let posted = c.browse_at(kh("w1"));
     let [Msg::CatalogQuery(q)] = posted.as_slice() else {
         panic!("one query posted: {posted:?}")
     };
@@ -305,7 +305,7 @@ fn a_client_browses_its_serving_nodes_catalog_and_follows_the_continuation() {
     // stays outstanding for the honest one
     let mut c2 = fresh("alice");
     c2.attach(kh("w1"), &[]);
-    let posted = c2.browse();
+    let posted = c2.browse_at(kh("w1"));
     let [Msg::CatalogQuery(q2)] = posted.as_slice() else {
         panic!("one query")
     };

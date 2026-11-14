@@ -963,15 +963,25 @@ impl Courier {
                     // a sweep of the serving node's catalog: each reply
                     // taken by the client, which says whether to ask again
                     // (`light-client-requirements.md` §8)
-                    Msg::CatalogQuery(b) => match me.serving.catalog(me.me(), &b).await {
-                        Some(reply) => {
-                            let more = me.handle.with(move |c| c.take_catalog_reply(&reply)).await;
-                            if let Ok((_, more)) = more {
-                                out.absorb(me.carry(more).await);
+                    Msg::CatalogQuery(b) => {
+                        // the sweep names the node it reads, and the query
+                        // goes over the session held with that node
+                        let at = me.handle.with(|c| c.browsing_at()).await;
+                        let answered = match at.and_then(|n| me.serving_for(&n)) {
+                            Some(s) => s.catalog(me.me(), &b).await,
+                            None => None,
+                        };
+                        match answered {
+                            Some(reply) => {
+                                let more =
+                                    me.handle.with(move |c| c.take_catalog_reply(&reply)).await;
+                                if let Ok((_, more)) = more {
+                                    out.absorb(me.carry(more).await);
+                                }
                             }
+                            None => out.refused.push(Msg::CatalogQuery(b)),
                         }
-                        None => out.refused.push(Msg::CatalogQuery(b)),
-                    },
+                    }
                     // **a client originates and does not forward.** The
                     // records it makes are its own, and the one party that
                     // can put them into the flood is the node serving it

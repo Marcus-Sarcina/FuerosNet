@@ -5068,7 +5068,6 @@ impl Client {
     /// population prefetched as one sweep (`light-client-requirements.md`
     /// §3).  Everything returned goes to the serving node.
     pub fn attach(&mut self, serving: Keyhash, population: &[Keyhash]) -> Vec<Msg> {
-        self.payload.serving = Some(serving);
         self.note_attachment(serving);
         if let Some(id) = self.known.iter().find(|k| k.keyhash == serving).cloned() {
             self.contact(&id, crate::contacts::How::Infra, true);
@@ -5645,21 +5644,30 @@ impl Client {
         Ok(self.request_resource(pending.node, pending.resource, bytes))
     }
 
-    /// Browse the catalog of the node this client is attached to
-    /// (`wire-format.md` §6.4): the first, unfiltered query of a sweep.
+    /// Browse the catalog of `node`, one of the nodes this client holds a
+    /// session with (`wire-format.md` §6.4): the first, unfiltered query
+    /// of a sweep. **The sweep names its node** [restructure step 1,
+    /// 2026-11-14]: a client holds a session per address and there is no
+    /// "the serving node" to mean; a node not attached has nobody to ask.
     ///
     /// **A sweep, not a request**, because one reply is bounded at 111
     /// entries and names the type to ask for next. Each reply is taken by
     /// [`Client::take_catalog_reply`], which posts the continuation until
     /// the node's portion is complete or the hint repeats.
-    pub fn browse(&mut self) -> Vec<Msg> {
-        let Some(serving) = self.payload.serving else {
+    pub fn browse_at(&mut self, node: Keyhash) -> Vec<Msg> {
+        if !self.payload.attachments.contains(&node) {
             return Vec::new();
-        };
+        }
         let mut sweep = crate::catalog::Sweep::default();
         let q = sweep.query(None, self.nonce());
-        self.browsing = Some((serving, sweep));
+        self.browsing = Some((node, sweep));
         vec![Msg::CatalogQuery(q.encode())]
+    }
+
+    /// The node the sweep under way is reading, which is where its
+    /// queries go.
+    pub fn browsing_at(&self) -> Option<Keyhash> {
+        self.browsing.as_ref().map(|(n, _)| *n)
     }
 
     /// Take a `CatalogReply` from the serving node: entries are verified
@@ -6697,7 +6705,6 @@ impl Client {
     /// records of the answers names that node (`light-client-requirements.md`
     /// §4).
     pub fn reattached(&mut self, serving: Keyhash) {
-        self.payload.serving = Some(serving);
         self.note_attachment(serving);
     }
 
@@ -6900,10 +6907,9 @@ impl Client {
         }
         self.payload.signed_bundle = Some((blob, signed.to_vec()));
         self.payload.keys.published_at = Some(b.published_at);
-        Ok(self
-            .payload
-            .serving
-            .map(|_| Msg::PublishBundle(signed.to_vec())))
+        // published where a session is held; the courier carries a bundle
+        // to every node this client is attached to
+        Ok((!self.payload.attachments.is_empty()).then(|| Msg::PublishBundle(signed.to_vec())))
     }
 
     /// On the ceremony device: delegate to a transport key another device

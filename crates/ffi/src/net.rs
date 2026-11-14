@@ -531,14 +531,14 @@ impl Net {
     /// Sweep the serving node's catalog (`light-client-requirements.md`
     /// §8): the client's queries carried and each reply taken until the
     /// node's portion is complete or truncated.
-    pub(crate) fn browse(&self, handle: &Handle) -> Result<(), Refused> {
+    pub(crate) fn browse(&self, handle: &Handle, node: Keyhash) -> Result<(), Refused> {
         let courier = self.live_courier()?;
         let carried = self.rt().block_on(async move {
-            let msgs = handle.with(|c| c.browse()).await;
+            let msgs = handle.with(move |c| c.browse_at(node)).await;
             courier.carry(msgs).await
         });
         if !carried.refused.is_empty() {
-            return Err(Refused::new("the serving node answered no catalog query"));
+            return Err(Refused::new("that node answered no catalog query"));
         }
         Ok(())
     }

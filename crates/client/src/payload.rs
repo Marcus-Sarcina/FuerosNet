@@ -1344,13 +1344,12 @@ pub struct PayloadState {
     pub keys: PayloadKeys,
     /// Its sessions and prefetched bundles.
     pub sessions: Sessions,
-    /// The node it publishes its bundle to, where it has one.
-    pub serving: Option<Keyhash>,
     /// **Every node this client is attached to** — step 5 of the browser
     /// model [author, 2026-11-11]: a tab per subnet, and an attachment made
     /// before any position (a bench provision, a genesis) belongs to no
-    /// subnet yet. `serving` above stays the one the single-session FFI
-    /// holds until the net layer holds one per node.
+    /// subnet yet. There is no "the serving node" beside this set
+    /// [restructure step 1, 2026-11-14]: what a client publishes, sweeps
+    /// or asks goes to a node named by the address it serves.
     pub attachments: BTreeSet<Keyhash>,
     /// **The node serving each of this client's addresses**, by the anchor
     /// of the subnet: *"Each ID:Subnet is effectively a unique FN
@@ -1425,7 +1424,9 @@ impl PayloadState {
         emit_array_head(&mut out, 11);
         emit_bstr(&mut out, &self.keys.encode());
         emit_bstr(&mut out, &self.sessions.encode());
-        emit_opt_bstr(&mut out, self.serving.as_ref().map(|k| &k[..]));
+        // slot 2 held "the serving node" until restructure step 1
+        // [2026-11-14]; written empty so an older reader still parses
+        emit_opt_bstr(&mut out, None);
         emit_bstr(&mut out, &self.device);
         match &self.signed_bundle {
             Some((over, signed)) => {
@@ -1552,7 +1553,6 @@ impl PayloadState {
             cfg,
             keys: PayloadKeys::decode(&bytes(b, &f[0])?)?,
             sessions: Sessions::decode(&bytes(b, &f[1])?)?,
-            serving: optional(&f[2], |it| fixed::<32>(b, it))?,
             attachments,
             serving_at,
             last_from,
@@ -1575,7 +1575,6 @@ impl PayloadState {
             keys: PayloadKeys::generate(fresh, now),
             cfg,
             sessions: Sessions::default(),
-            serving: None,
             attachments: BTreeSet::new(),
             serving_at: BTreeMap::new(),
             last_from: BTreeMap::new(),

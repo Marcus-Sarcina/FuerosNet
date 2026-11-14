@@ -84,7 +84,6 @@ object Kernel {
      * identity a phone was set up with, read by [bringUp] for the one in
      * focus alone.
      */
-    private const val SERVING = "serving"
 
     /** An identity's conversations, in its own scope ([Threads]). */
     private const val THREADS = "threads"
@@ -949,7 +948,13 @@ object Kernel {
         if (loaded.isEmpty()) return "the kernel is not running"
         var why: String? = null
         for ((_, p) in loaded) {
-            call("browse", { if (why == null) why = it.reason }) { p.browse() }
+            // a sweep names the node it reads: one per node this identity
+            // holds a session with [restructure step 1, 2026-11-14]
+            val held = call("attachments", { emptyList() }) { p.attachments() }
+            if (held.isEmpty() && why == null) why = "no node is attached"
+            for (node in held) {
+                call("browse", { if (why == null) why = it.reason }) { p.browse(node) }
+            }
         }
         return why
     }
@@ -1936,7 +1941,7 @@ object Kernel {
         // identity every identity on the device would have joined a node
         // one of them agreed to at the next start: a profile joining a
         // server it never agreed to. Remembered in the focused identity's
-        // own scope instead, which is the one that agreed ([SERVING]).
+        // own scope instead, which is the one that agreed (the kernel's agreement).
         val app = context.applicationContext
         val scope = activeId?.let { id -> identities(app).firstOrNull { it.id == id }?.scope }
         // **one tab per address** [author, 2026-11-11], **kept by the kernel**
@@ -1962,28 +1967,6 @@ object Kernel {
         val addr = spec.substring(cut + 1)
         call("agreeTo", { e -> Diag.warn("agree_to", "why" to e.reason) }) { p.agreeTo(node, listOf(addr)) }
         Diag.event("agree_to", "node" to spec.take(8), "addr" to addr)
-    }
-
-    /**
-     * **The shell's own serving record, imported once** [review,
-     * 2026-11-13]: a phone from before the kernel kept the agreement holds
-     * `serving` in the identity's scope; its tabs become the kernel's and
-     * the file is forgotten. Nothing where the kernel already holds any.
-     */
-    private fun importServingRecord(p: Participant, scope: String?) {
-        val a = appContext ?: return
-        val shell = AndroidShell(a, scope)
-        val tabs = runCatching { Serving.read(shell.read(SERVING)) }.getOrNull() ?: return
-        if (tabs.isEmpty()) return
-        val held = call("agreed", { emptyList() }) { p.agreed() }
-        if (held.isEmpty()) {
-            for (t in tabs) {
-                val node = runCatching { unhex(t.node) }.getOrNull() ?: continue
-                call("agreeTo", { }) { p.agreeTo(node, listOf(t.addr)) }
-            }
-        }
-        shell.forget(SERVING)
-        Diag.event("serving.imported", "tabs" to tabs.size, "taken" to held.isEmpty())
     }
 
     fun provision(context: Context, blob: String) {
@@ -2703,7 +2686,6 @@ object Kernel {
         // one is held being a tab rather than a replacement
         run {
             val scope = activeId?.let { id -> index.firstOrNull { it.id == id }?.scope }
-            importServingRecord(p, scope)
             var missed = 0
             for (t in call("agreed", { emptyList() }) { p.agreed() }) {
                 val hex = t.serving.hex()
@@ -2747,7 +2729,7 @@ object Kernel {
      * attaches to a node it agreed to** — steps 3 and 4 of the browser
      * model [author, 2026-11-11]: a browser window out of focus keeps its
      * tabs open and its notifications arriving, and opens no tab it was
-     * never told to. The node is the identity's own record ([SERVING]),
+     * never told to. The node is the identity's own agreement, kept by the kernel,
      * written where it agreed ([serveFrom]); an identity with none —
      * one just added, or a rotation's new key before its patron — has no
      * node until it agrees to one, and is recorded detached rather than
@@ -2776,7 +2758,6 @@ object Kernel {
      * first's. Where one did not answer, [reattachLater] tries again.
      */
     private fun attachTabs(id: String, p: Participant, scope: String?, attempt: Int) {
-        if (attempt == 0) importServingRecord(p, scope)
         val tabs = call("agreed", { emptyList() }) { p.agreed() }
         if (tabs.isEmpty()) {
             Diag.event("identity.attach", "who" to id.take(8), "node" to "none")

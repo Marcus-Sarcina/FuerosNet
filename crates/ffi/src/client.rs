@@ -1250,9 +1250,10 @@ impl Participant {
 
     /// Sweep the serving node's catalog (`light-client-requirements.md`
     /// §8) and keep what it served; [`Participant::catalog`] shows it.
-    pub fn browse(&self) -> Result<(), Refused> {
+    pub fn browse(&self, node: Id) -> Result<(), Refused> {
         crate::diag::call("browse", || {
-            self.net.browse(&self.handle)?;
+            let node = keyhash(&node).ok_or_else(|| Refused::new("a node is 32 bytes"))?;
+            self.net.browse(&self.handle, node)?;
             self.save()
         })
     }

@@ -87,7 +87,7 @@ Each step is gated and installed; each removes one class of the veneer.
 | # | Step | What it removes | Proof |
 |---|---|---|---|
 | 0 | ~~The seam scenario~~ **Done 2026-11-14**: `crates/participant/tests/seam.rs` (PRT-11), over the scripted participant `rhtnp` (now with `agree`/`agreed`/`disagree`/`attachments`/`detach-from`/`invitation`/`save` and a `--store` so a restart holds what it held) and two spawned `rhtnd`, each speaking as its operator; 68 s; found two defects on its first runs (the archive loader's order, ARC-019; the driver must save as the shell does) | the bench as the only test of composition | it runs in minutes and fails for each of this week's defects when reverted |
-| 1 | `Agreed`, `Serving`, `LastFrom` as relations in the kernel (correction 3 is the first of these) | the shell's `serving` file; `serving: Option` | the scenario, plus relation tests |
+| 1 | ~~`Agreed`, `Serving`, `LastFrom` as relations in the kernel~~ **Done 2026-11-14**: `Agreed` and `LastFrom` were correction 3's; this step removed the last singleton, `PayloadState.serving` (its storage slot written empty so older blobs parse), made the catalog sweep name the node it reads (`Client::browse_at(node)`, `browsing_at()`, the courier sending over the session held with that node, the FFI `browse(node)`, the shell sweeping each node an identity is attached to), published a signed bundle wherever a session is held, and deleted the shell's `serving` file format and its one-time import (`Serving.kt`, `ServingTest.kt`). `Serving (identity, subnet) -> node` stays `serving_at` for now; deriving it from `Agreed` is step 5's, with the relations split | the shell's `serving` file; `serving: Option` | the scenario, plus relation tests |
 | 2 | **Restated 2026-11-14 [author]**: the kernel offers the shell a sealing service (encrypt/decrypt bytes, keys never leaving the kernel); the thread store stays the shell's, keyed by identity, as an append-only file of per-message ciphertext through that service; `Front.convos`/`Threads.kt` are rewritten onto it rather than moved into the kernel | conversations in the clear at rest; the history resealed whole on every change | the scenario sends, restarts, reads back; the stored file holds no plaintext; the (N+1)th message appends |
 | 3 | `Net` as a map over `Attachment`; one `watch` per attachment; status per attachment | `live`/`current`/`status` singulars; `primary: bool` | failover and re-attach per attachment in the scenario |
 | 4 | The shell model keyed by identity everywhere: `Model` rows carry `by`; the focused-identity accessors go; `Kernel` split into `Identities`, `Attachments`, `Ceremony`, `Levers` | two notions of "whose"; the god object | the pins become behavioural tests of the split objects |
@@ -98,6 +98,46 @@ Each step is gated and installed; each removes one class of the veneer.
 Estimates: 0 — 3 days; 1 — 2; 2 — 3; 3 — 2; 4 — 4; 5 — 3; 6 — 2; 7 — 1.
 About four weeks at the pace of the last two, with the bench run at steps
 0, 2, 3 and 4.
+
+## 4a. Step 2 as designed, 2026-11-14
+
+**The service** (`light-client-requirements.md` §9, APP-015). The kernel's
+storage seam already seals every blob the kernel writes under the key the
+platform's custody keeps (`SealedStore`, `rhtn_client::sealed::seal(key,
+name, bytes)` with the name bound as associated data). The service is
+that primitive offered across the FFI under a key *derived* from the
+storage key — `sha256(key ‖ "application")`, so no blob of the
+application's can be read as one of the kernel's or the reverse — as
+`Participant::seal(label, bytes) -> bytes` and `Participant::open(label,
+bytes) -> bytes | refused`, the label bound as associated data so a blob
+cannot be moved from one place to another. Where the platform declares
+itself unsealed (the terminal instrument) both pass bytes through, which
+is the one declared exception §9 already has. The key never crosses the
+seam; a shell holds only ciphertext and what it has opened.
+
+**The thread store** (the shell's, keyed by identity). One directory per
+identity scope, one file per thread: `threads/<peer hex>` holding
+records `[len][sealed][len]`, the trailing length so the file is walked
+backwards; each record is one message or one delivery change as JSON,
+sealed under the label `<by>/<peer>/<seq>`; a sealed `threads/index`
+naming each thread's peer, name, direct flag and count, rewritten when a
+thread is added or renamed and never on a message. **Lazy** [author]: a
+thread's file is opened when its conversation is opened and read
+backwards for the newest page (50 records), an earlier page read when
+the person scrolls to the top; the list screen reads the index alone, so
+nothing of a thread not opened is decrypted at start, and `Front` holds
+only the pages read and the count of what it has not. Append is the only
+write a message causes; the sent/unsent change appends too and is folded
+in on read.
+
+**Migration**: the one JSON file `threads` of the 12th is read once, its
+threads written out as files, and forgotten.
+
+**Tests**: `ThreadsTest.kt` rewritten for the record framing and the
+backward walk with a fake sealer; the Rust side's `seal`/`open` round
+trip, the label binding (a blob opened under another label is refused),
+and the derived key differing from the storage key; the seam scenario
+unchanged, since the instrument keeps no threads.
 
 ## 5. Rules the restructure must not move
 

@@ -523,7 +523,7 @@ async fn the_kernel_joins_the_direct_path_honours_the_override_and_sweeps_the_ca
     // it, and shown as values
     {
         let q = alice.clone();
-        tokio::task::spawn_blocking(move || q.browse())
+        tokio::task::spawn_blocking(move || q.browse(idv("bob")))
             .await
             .unwrap()
             .expect("swept");

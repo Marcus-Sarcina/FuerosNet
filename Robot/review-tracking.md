@@ -21200,3 +21200,20 @@ The bench never hit it because its records are minutes apart. (2) The
 kernel writes state only on `save`, which the Kotlin shell calls after
 every change and the driver did not: the driver now saves as the shell
 does. nextest: the participant binaries reserve a quarter of the slots.
+
+**Restructure step 1 done, 2026-11-14.** The last singleton "the serving
+node" in the client, `PayloadState.serving`, is gone: `attach` and
+`reattached` only note the attachment; the catalog sweep names the node
+it reads (`browse_at(node)`, `browsing_at()`; the courier sends the query
+over `serving_for(node)`; the FFI `browse(node)`; `Kernel.browse` sweeps
+every node each identity is attached to); a signed bundle taken from the
+ceremony device is published where any session is held; the storage slot
+is written empty so an older blob still parses; the conformance test of
+the failover now reads the sibling off `attachments`. The shell's own
+`serving` file format and its one-time import are deleted (`Serving.kt`,
+`ServingTest.kt`, `importServingRecord`): every bench phone imported on
+the 13th and a fresh install never had the file. `serving_at` stays as
+the per-address relation until step 5 splits the relations. Found by the
+compiler: one more read of the field than the grep counted, a multi-line
+access in `take_signed_bundle` (the lesson of the sweep rule, again: a
+grep for `payload.serving` misses `.serving` on its own line).
