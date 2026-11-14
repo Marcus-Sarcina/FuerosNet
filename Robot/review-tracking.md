@@ -21491,3 +21491,14 @@ more, a small oddity worth a look when the open is next read; GXV and
 ZU8, marked at the previous start, wrote it not at all); every `client`
 file is 42 bytes. The 4 MB-after-every-arrival write is gone from the
 phones as from the test.
+
+**The "mark written twice" is one write, logged twice** [2026-11-14,
+asked by the author]. MRK's file holds, for the one `storage.write(STATE,
+[0])` of `open()`: a `platform.storage` event from the Rust side's
+`TracedStorage` (layer `platform`, the kernel's clock, ms 1014, span
+`start`) and a `storage` event from `AndroidShell.write` (layer `shell`,
+the shell's clock, ms 2023). The reading on the 14th counted both. One
+`ffi.call start`, one `pay.restored from_parts=true`, no second open; the
+same doubling holds for every storage event and was already so for the
+relation reads above it. Not a defect; the diag's two layers each say
+what they did, by design, and a count of writes must pick one layer.
