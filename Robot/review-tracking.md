@@ -21481,3 +21481,13 @@ an `Arc`), and the restart test with arrivals asserts the old name is
 never written on a store that never held it. The seam scenario and the
 first boundary test could not see it: neither drives an arrival after a
 migration on a store that held the blob.
+
+**`6eddfc6` installed on all four, 2026-11-14 09:40, and read after
+arrivals.** Each phone: standing granted (2 events), every agreed node
+attached, zero refused sends. MRK took 11 arrivals and 4VC 6 in the first
+90 s; the only writes under the old blob's name were the 42-byte mark
+(twice on each of those two — the mark written at the open, and once
+more, a small oddity worth a look when the open is next read; GXV and
+ZU8, marked at the previous start, wrote it not at all); every `client`
+file is 42 bytes. The 4 MB-after-every-arrival write is gone from the
+phones as from the test.
