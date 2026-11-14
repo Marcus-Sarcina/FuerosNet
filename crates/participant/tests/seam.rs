@@ -84,7 +84,7 @@ fn attached_to(
     let pop: Vec<String> = sweep.iter().map(|n| hex(&kh(n))).collect();
     let said = set
         .get(who)
-        .must(&format!("attach {} {addr} {}", hex(&kh(node)), pop.join(" ")).trim_end());
+        .must(format!("attach {} {addr} {}", hex(&kh(node)), pop.join(" ")).trim_end());
     let l = line(said, "attached ");
     assert_eq!(
         field(&l, "serving="),

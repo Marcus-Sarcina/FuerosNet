@@ -40,6 +40,9 @@ pub struct Agreed {
     pub addresses: Vec<String>,
 }
 
+/// What an attach answered: the node that is serving, whether it named
+/// this client as primary or in failover in its subtree, and how much
+/// payload was queued for it there.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Attached {
     /// The node the session is with.
