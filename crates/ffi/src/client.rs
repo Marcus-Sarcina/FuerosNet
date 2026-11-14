@@ -1901,6 +1901,13 @@ impl Participant {
             if addrs.is_empty() {
                 return Err(Refused::new("a serving node needs at least one address"));
             }
+            // **the horizon's word on where the node is comes first**, the
+            // addresses given after [review, 2026-11-13]
+            let given: Vec<String> = addrs.iter().map(|a| a.to_string()).collect();
+            let order = self
+                .handle
+                .with_blocking(move |c| c.dial_order(&node, &given));
+            let addrs: Vec<SocketAddr> = order.iter().filter_map(|a| a.parse().ok()).collect();
             let a = self.net.attach(&self.handle, node, &addrs, pop)?;
             self.save()?;
             Ok(a)

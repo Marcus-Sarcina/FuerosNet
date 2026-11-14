@@ -20940,3 +20940,41 @@ taken=true`) and attached to the ET node from what the kernel holds
 31c2d23f`) after the author re-associated the dongle. GXV-2's dial to the
 same node timed out at start and its retry chain is running — the first
 live use of the focused identity's retry.
+
+**Bench, 2026-11-13 18:xx — the address moved.** The session's
+interruption at 17:10 took both nodes with it (started from the tool's
+shell; now restarted under `setsid`). Then: the laptop's dongle holds
+**192.168.0.9** since the author's re-association — a fresh DHCP lease —
+and `192.168.0.8` is held by an unknown device (`2a:fd:db:2c:c2:cc`, none
+of the four phones). Every phone dials `.8` (the provisions, and the
+agreements the kernel now keeps: `.8:7431`); the bench node's config binds
+`.8` and panics at start; the ET node listens on `0.0.0.0:7431` where
+nobody dials. The phones' retry chains ran as built — MRK's kernel
+`pay.reattach.missed` attempts 4–6, GXV's shell chain attempts 1–4 — at an
+address that was gone; and their gaps stretched from the set 30/60/120 s
+to tens of minutes with the screens off (Doze defers the timers). GXV's
+dial failures *before* the address moved (13:53, 14:13) are not
+explained by it; if they recur once the address is settled, the capture
+question stands. **Decision owed:** reserve `.8` for the dongle's MAC on
+the router (everything then works unchanged), or move the bench to a
+static `.9` and re-point every provision and agreement.
+
+**2026-11-13, the address — ruled B, parameterised** [author: *"go with B,
+but parameterize that part of the local node address so it can be checked
+and updated before each deploy"*]. `crates/tools/bench.conf` holds
+`LAPTOP_ADDR` (now `192.168.0.9`) with the ports, run directories and the
+agreements to re-point; `bench-address.sh check` refuses a deploy while
+the laptop's Wi-Fi address differs from it; `bench-address.sh apply`
+rewrites the bench node's `listen`, every phone's provision (pushed by the
+provision lever), and the second node's agreements by a new fieldtest
+lever `agree_to=<node hex>@<host:port>` (the identity in focus).
+`field-run.sh` defaults `--addr` from `bench.conf`. **And the gap the move
+exposed, closed in the kernel**: `Client::addresses_for(node)` reads the
+horizon's endpoint records (`wire-format.md` §7.6, decoded with the codec
+alone — key 1 the octets, key 3 the port, absent at the default 7431),
+`dial_order(node, agreed)` puts them before the agreement's addresses, and
+the FFI's `attach` dials in that order; test
+`a_node_is_dialled_where_its_endpoint_record_says_before_where_the_agreement_said`.
+Consequence on this bench: the ET node's endpoint record still names
+`.8:7448` (the T6 port defect), so until GXV-2 re-enrols with
+`192.168.0.9:7431` every attach to it tries that first and waits 10 s.

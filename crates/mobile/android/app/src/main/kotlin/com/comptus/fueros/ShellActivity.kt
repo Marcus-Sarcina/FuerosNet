@@ -185,6 +185,10 @@ class ShellActivity : Activity() {
     private fun benchLevers(intent: Intent) {
         if (!BuildConfig.FIELD_TEST) return
         intent.getStringExtra("forget_contact")?.let { Kernel.forgetContact(it) }
+        // **an agreement re-pointed, as a lever** [bench, 2026-11-13: the
+        // laptop's address moved and every agreement named the old one]:
+        // `<node hex>@<host:port>` for the identity in focus
+        intent.getStringExtra("agree_to")?.let { Kernel.agreeToNow(it) }
         // **the focused identity's public material, as an event** — the
         // bench's way to a node configuration naming a phone's identity as
         // operator without the key-material screen (which shows it once)

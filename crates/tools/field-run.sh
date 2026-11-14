@@ -266,6 +266,14 @@ need cargo "the daemon and instrument are built with it"
 need python3 "run.json and the pull need it"
 need awk "the merge output is split with it"
 ADB="$(find_adb)" || die "adb is not on PATH and no SDK was found under \$ANDROID_HOME, \$ANDROID_SDK_ROOT or ~/Android/Sdk"
+# **The bench's own address is a parameter** (`bench.conf`, checked by
+# `bench-address.sh check` before every deploy): a DHCP lease moved it once
+# [2026-11-13] and every provision and agreement named the old one
+if [ -z "$ADDR" ] && [ -f "$HERE/bench.conf" ]; then
+  # shellcheck disable=SC1091
+  . "$HERE/bench.conf"
+  [ -n "${LAPTOP_ADDR:-}" ] && ADDR="$LAPTOP_ADDR:${BENCH_PORT:-$DEFAULT_PORT}"
+fi
 if [ -z "$ADDR" ]; then
   need ip "or pass --addr <ip[:port]>"
   ip4="$(ip -4 route get 1.1.1.1 2> /dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") print $(i + 1)}' | head -1)"

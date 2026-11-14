@@ -1953,6 +1953,17 @@ object Kernel {
         attachTo(nodeHex, address)
     }
 
+    /** The bench's lever: `<node hex>@<host:port>` agreed to by the identity in focus. */
+    fun agreeToNow(spec: String) {
+        val p = participant ?: return
+        val cut = spec.indexOf('@')
+        if (cut <= 0) return
+        val node = runCatching { unhex(spec.substring(0, cut)) }.getOrNull() ?: return
+        val addr = spec.substring(cut + 1)
+        call("agreeTo", { e -> Diag.warn("agree_to", "why" to e.reason) }) { p.agreeTo(node, listOf(addr)) }
+        Diag.event("agree_to", "node" to spec.take(8), "addr" to addr)
+    }
+
     /**
      * **The shell's own serving record, imported once** [review,
      * 2026-11-13]: a phone from before the kernel kept the agreement holds

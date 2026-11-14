@@ -101,3 +101,45 @@ fn a_node_agreed_to_is_kept_with_its_addresses_until_withdrawn() {
     a.disagree(&kh("node-x"));
     assert_eq!(a.agreed().len(), 1);
 }
+
+/// **A node is dialled where the horizon says it is now, then where the
+/// agreement said** (review 2026-11-13): an endpoint record at a new
+/// address outranks the address an invitation named.
+#[test]
+fn a_node_is_dialled_where_its_endpoint_record_says_before_where_the_agreement_said() {
+    let mut s = setup(&["alice", "bob", "witness"]);
+    // bob adopted under alice: a binding in her horizon, which is what proves
+    // an endpoint record of his (series 1) — a node she places
+    s.adopted("bob", "alice", "witness", 1);
+    let a = s.client("alice");
+    let recs: Vec<Vec<u8>> = a.archive.records().map(|r| r.bytes.clone()).collect();
+    for r in &recs {
+        a.horizon.ingest(r, &ids());
+    }
+    a.agree_to(kh("bob"), vec!["192.168.0.8:7431".to_string()]);
+    assert_eq!(
+        a.dial_order(&kh("bob"), &["192.168.0.8:7431".to_string()]),
+        vec!["192.168.0.8:7431"]
+    );
+    let point = rhtn_transport::session::NetworkPoint::new([192, 168, 0, 9], Some(7431));
+    let rec = rhtn_node::resolution::endpoint_record(
+        &common::id("bob"),
+        std::slice::from_ref(&point),
+        rhtn_archive::tx::Seqno {
+            series: 1,
+            counter: 1,
+        },
+    );
+    assert_eq!(
+        a.horizon.distance(&kh("bob")),
+        Some(1),
+        "bob is alice's patron in her horizon"
+    );
+    a.horizon.ingest_endpoint(&rec, &ids());
+    assert_eq!(a.addresses_for(&kh("bob")), vec!["192.168.0.9:7431"]);
+    assert_eq!(
+        a.dial_order(&kh("bob"), &["192.168.0.8:7431".to_string()]),
+        vec!["192.168.0.9:7431", "192.168.0.8:7431"],
+        "the horizon's address first, the agreement's after, neither twice"
+    );
+}
