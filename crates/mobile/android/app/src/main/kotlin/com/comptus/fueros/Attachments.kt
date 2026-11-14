@@ -764,6 +764,10 @@ object Attachments {
             Kernel.appContext = app
         }
         Thread({ bringUp(AndroidShell(app)) }, "fueros-kernel").start()
+        // **the standing the platform gives a process that keeps a
+        // connection** (SES-020): asked for after the kernel is already
+        // starting and never waited on, so a refusal changes nothing here
+        KernelService.request(app)
         // the main thread's watchdog, in a build that has somewhere to say it
         if (Diag.enabled()) Stall.start()
     }

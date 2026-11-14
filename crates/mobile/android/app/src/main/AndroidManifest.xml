@@ -41,6 +41,11 @@
     <!-- A resource's standing permission to be shown notifications
          (API 33 and up; below it the declaration is enough). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- The standing a process that keeps a connection asks for
+         (light-client-requirements.md §4.1, SES-020): a foreground service
+         of the messaging type, which the platform does not time-limit. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
     <!-- **A patron sends a member the invitation to its node as a message**
          [author, 2026-11-05] (`light-client-requirements.md` §1.5): the
          address was given at the adoption and never leaves this device
@@ -82,6 +87,14 @@
         android:theme="@style/Fueros"
         android:allowBackup="false"
         android:networkSecurityConfig="@xml/network_security_config">
+
+        <!-- The client's standing on this platform (SES-020): the service
+             holds nothing itself; a refusal to start it is an outcome the
+             kernel records and runs on without. -->
+        <service
+            android:name=".KernelService"
+            android:foregroundServiceType="remoteMessaging"
+            android:exported="false" />
 
         <!-- The shell is the launcher [author, 2026-10-29]: the rail, the
              foot and the content between them, the places of the drawn

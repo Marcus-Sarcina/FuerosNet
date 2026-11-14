@@ -130,6 +130,11 @@ class ManifestTest {
             "INTERNET",
             "NFC",
             "POST_NOTIFICATIONS",
+            // the standing a process that keeps a connection asks for, and the
+            // messaging type the platform does not time-limit [author, 2026-11-14:
+            // a foreground service, with the refused state tested as well]
+            "FOREGROUND_SERVICE",
+            "FOREGROUND_SERVICE_REMOTE_MESSAGING",
             "READ_PHONE_NUMBERS",
             "SEND_SMS",
             "VIBRATE",

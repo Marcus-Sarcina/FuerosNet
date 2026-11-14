@@ -21417,3 +21417,22 @@ one match, `Leaving.kt`, is on a typed `LossReason`), so a kind would
 serve no reader; noted rather than built. The binding is regenerated.
 The gate on step 5 had failed on one unused import in a conformance test
 left by the pin change; fixed, and steps 5 to 7 gate together.
+
+**SES-020 built, 2026-11-14 (gating): the client's standing on Android.**
+`Standing.take(start)` is the seam — the platform's act handed in as a
+function, a refusal (`ForegroundServiceStartNotAllowedException`, a
+`SecurityException` for a permission withheld, an `IllegalStateException`
+for a start from the background) an outcome recorded and said as a
+`standing` event, never a failure, and not sticky. `KernelService` is the
+foreground service of the messaging type (which Android does not
+time-limit as it does data sync), holding nothing itself, its
+notification the one it costs; `Attachments.start` asks for it after the
+kernel's bring-up thread is already started and never waits on or reads
+the outcome. **Both states tested** as the author required
+(`StandingTest`: granted; refused by the platform's words and by a
+withheld permission; asked again and granted; the kernel's start unchanged
+by the outcome; the manifest's service and its two permissions, added to
+the reviewed list with the reason). The field test of the refused state is
+the bench's lock screen: an Android 15 Samsung with the service refused
+behaves as on the 13th, and with it granted holds its sessions behind the
+keyguard — to be read off the diag files when the phones are free.
