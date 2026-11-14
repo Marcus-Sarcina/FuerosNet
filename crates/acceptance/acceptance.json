@@ -56,6 +56,9 @@
     0,
     "back-pointers"
    ]
+  ],
+  "families": [
+   "ARC-001"
   ]
  },
  {
@@ -85,6 +88,10 @@
     0,
     "back-pointers"
    ]
+  ],
+  "families": [
+   "ARC-002",
+   "ARC-008"
   ]
  },
  {
@@ -146,7 +153,11 @@
   "when": "The later one skips counter values within the series, and separately names a series the observer holds nothing in.",
   "then": "The gap is ranked newer rather than reported as an error, since a verifier may have missed intervening transactions; the pair in the unheld series is incomparable rather than a failure, and is not ranked against the first. This is the comparison itself, which endpoint lines apply (§10.1.2) and which nothing applies to a departure.",
   "oracle": "behaviour",
-  "interpretation": "Tested on the comparison rather than on a transaction: §2.3's rule says when two sequences may be ranked and what newer means, and the objects that are ranked by it are endpoint records."
+  "interpretation": "Tested on the comparison rather than on a transaction: §2.3's rule says when two sequences may be ranked and what newer means, and the objects that are ranked by it are endpoint records.",
+  "families": [
+   "ARC-005",
+   "ARC-015"
+  ]
  },
  {
   "id": "ARC-06",
@@ -178,6 +189,9 @@
     0,
     "effective-time"
    ]
+  ],
+  "families": [
+   "ARC-003"
   ]
  },
  {
@@ -206,7 +220,11 @@
   "when": "The client signs its next ordinary transaction, a departure.",
   "then": "The departure's key 0 list for N contains exactly h_a and h_b, sorted ascending bytewise; a walker from the departure reaches both branches and reports no unsatisfied back-pointer; no separate merge object is emitted.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "ARC-002",
+   "ARC-005"
+  ]
  },
  {
   "id": "ARC-08",
@@ -233,7 +251,12 @@
   "when": "A requester sends ArchiveRequest {1: S, 2: S's head, 3: m, 5: nonce}, then re-requests with field 2 set to each reply's field 4 until a reply's field 3 is false.",
   "then": "Every reply's field 1 equals its request's nonce. Every record in a reply is named by the request's frontier or by a back-pointer of another record in that reply, and every back-pointer naming nothing in the reply appears in its field 4; field 4 is present iff field 3 is true. Re-requesting with field 2 set to the previous reply's field 4 continues the walk, and the union of all replies reaches genesis.",
   "oracle": "behaviour",
-  "interpretation": "Re-derived 2026-09-21 against the frontier form of wire-format.md §7.9."
+  "interpretation": "Re-derived 2026-09-21 against the frontier form of wire-format.md §7.9.",
+  "families": [
+   "ARC-009",
+   "ARC-010",
+   "ARC-016"
+  ]
  },
  {
   "id": "ARC-09",
@@ -256,7 +279,12 @@
   "when": "The holder returns a batch in which one middle record has been replaced by another record of S that the preceding record's back-pointer does not name; in a second run the batch's first record is not the requested head.",
   "then": "In the first run the requester reports the batch as failing structure verification at the first record named neither by the requested frontier nor by another record's back-pointers, and the records from that point on are not reported as verified. In the second run it fails at record one. A batch whose unreturned back-pointers are absent from field 4 fails the same way.",
   "oracle": "behaviour",
-  "interpretation": "Re-derived 2026-09-21: reachability, not order."
+  "interpretation": "Re-derived 2026-09-21: reachability, not order.",
+  "families": [
+   "ARC-008",
+   "ARC-009",
+   "ARC-016"
+  ]
  },
  {
   "id": "ARC-10",
@@ -279,7 +307,12 @@
   "when": "The requester processes each reply.",
   "then": "In both runs the requester's result marks the verified range as ending at an unfetched predecessor and does not record S's archive as beginning at the oldest returned record or as rooted at genesis; when the test continues, the requester's next request names the oldest returned record in field 2.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "ARC-008",
+   "ARC-010",
+   "ARC-011"
+  ]
  },
  {
   "id": "ARC-11",
@@ -306,7 +339,10 @@
   "when": "The client sends ArchiveRequest with field 2 absent and fetches the chain to its end.",
   "then": "The client reports the chain as internally verified, every back-pointer matching the following record, and its status is distinguishable from a frontier-verified fetch: the restored archive is not marked verified-complete and the newest record is recorded as the holder's claim.",
   "oracle": "behaviour",
-  "interpretation": "Re-derived 2026-09-21 to the frontier form."
+  "interpretation": "Re-derived 2026-09-21 to the frontier form.",
+  "families": [
+   "ARC-016"
+  ]
  },
  {
   "id": "ARC-12",
@@ -340,6 +376,9 @@
     1,
     "presented-prefix-unbroken"
    ]
+  ],
+  "families": [
+   "ARC-007"
   ]
  },
  {
@@ -374,6 +413,9 @@
     7,
     "chain-reissue-not-before-its-record"
    ]
+  ],
+  "families": [
+   "ARC-008"
   ]
  },
  {
@@ -456,7 +498,11 @@
   "when": "The user prunes the chain at r_c through the client's deliberate retention control.",
   "then": "A backward walk from S's head now stops at r_c and the chain records before it are no longer served. Every presence record and sealed capture dated before r_c is still present in the local store and returned by lookup by txid, each with the ceremony-id its capture key is derived under.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "ARC-012",
+   "ARC-013"
+  ]
  },
  {
   "id": "ARC-17",
@@ -488,7 +534,10 @@
   "when": "A holder fetches S's archive with an ArchiveRequest naming S and no head.",
   "then": "One chain is returned whose records back-point across both relationships in signing order; the records under P1 carry one series and those under P2 another, each opened at counter 0 by its adoption.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "ARC-004"
+  ]
  },
  {
   "id": "ARC-18",
@@ -514,7 +563,11 @@
   "when": "Each of the three is appended again.",
   "then": "The archive is unchanged: one head, the departure, no fork, three records, and the next back-pointer list naming the head alone. An implementation that re-inserts a held predecessor into the head set beside its successor, reporting a fork the DAG does not have, fails.",
   "oracle": "model",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "ARC-002",
+   "ARC-005"
+  ]
  },
  {
   "id": "ARC-19",
@@ -555,6 +608,10 @@
     7,
     "chain-reissue-not-before-its-record"
    ]
+  ],
+  "families": [
+   "ARC-003",
+   "ARC-014"
   ]
  },
  {
@@ -589,6 +646,10 @@
     5,
     "attestation-is-pulled"
    ]
+  ],
+  "families": [
+   "ARC-011",
+   "ARC-016"
   ]
  },
  {
@@ -618,6 +679,10 @@
     5,
     "attestation-is-pulled"
    ]
+  ],
+  "families": [
+   "ARC-009",
+   "ARC-016"
   ]
  },
  {
@@ -646,7 +711,11 @@
   "when": "The store is written to a directory and read back, and written a second time over the same directory.",
   "then": "Every map comes back as it went: records byte for byte, own-capture rows, ciphertext, late responses, unattached arrivals, and disclosure salts and values with the labels taken from their fixed order. No file in the store is written private, because none of it is secret. A second save over the same directory rewrites nothing that was written once.",
   "oracle": "behaviour",
-  "interpretation": "None of the six is secret [author, 2026-10-17]: the capture key is derived from the identity root rather than stored (design §7.5.2.6), so what a row keeps is the counterparty, the ceremony id and the finalization time, and sealed captures are ciphertext this client cannot open. Nothing ages out on load: §13.7.1 puts deletion at import, not on live data."
+  "interpretation": "None of the six is secret [author, 2026-10-17]: the capture key is derived from the identity root rather than stored (design §7.5.2.6), so what a row keeps is the counterparty, the ceremony id and the finalization time, and sealed captures are ciphertext this client cannot open. Nothing ages out on load: §13.7.1 puts deletion at import, not on live data.",
+  "families": [
+   "ARC-006",
+   "ARC-017"
+  ]
  },
  {
   "id": "ARC-23",
@@ -672,7 +741,10 @@
   "when": "They are exported under the identity's key and imported back.",
   "then": "Neither the identity root nor a captured frame appears in the blob. Everything a device loss takes away comes back identical. A second export of the same contents under the same identity is different bytes, because the salt is fresh per envelope.",
   "oracle": "behaviour",
-  "interpretation": "The KEK is derived from the identity root and never written; what the blob carries is the wrapped data key and the header needed to derive the KEK again, which is the standard envelope construction §13.7.1 names. The identity itself is not in the blob: it is what opens it."
+  "interpretation": "The KEK is derived from the identity root and never written; what the blob carries is the wrapped data key and the header needed to derive the KEK again, which is the standard envelope construction §13.7.1 names. The identity itself is not in the blob: it is what opens it.",
+  "families": [
+   "ARC-006"
+  ]
  },
  {
   "id": "ARC-24",
@@ -746,7 +818,10 @@
   "when": "It is scanned inside the window, and again a day past it.",
   "then": "Inside, nothing is discarded. Past, the capture and the seed go and the count of each is returned. The records, the disclosure sets, the archive and the identity are untouched: history is not likeness, and deleting a presence record with a retention scan would discard the evidence a later adoption and a later recovery both rest on.",
   "oracle": "behaviour",
-  "interpretation": "A capture expires on its subject's declared window, since §7.5.1 makes the window a default the subject enforces and the record carries each participant's own declaration; a holder applying its own to somebody else's likeness would substitute its policy for theirs."
+  "interpretation": "A capture expires on its subject's declared window, since §7.5.1 makes the window a default the subject enforces and the record carries each participant's own declaration; a holder applying its own to somebody else's likeness would substitute its policy for theirs.",
+  "families": [
+   "ARC-013"
+  ]
  },
  {
   "id": "ARC-27",
@@ -769,7 +844,10 @@
   "when": "Each imports it, and one imports it under the wrong secret.",
   "then": "The one inside takes everything; the one past takes the history without the likeness and is told how much was dropped rather than having it swallowed. A backup that does not open discards nothing, because nothing was opened. A client's own export reads back through its own import.",
   "oracle": "behaviour",
-  "interpretation": "What the scan discarded is returned beside the contents because a person restoring is entitled to know their backup held material their own commitment had run out on."
+  "interpretation": "What the scan discarded is returned beside the contents because a person restoring is entitled to know their backup held material their own commitment had run out on.",
+  "families": [
+   "ARC-013"
+  ]
  },
  {
   "id": "ARC-28",
@@ -821,7 +899,11 @@
   "when": "It is loaded again.",
   "then": "The chain comes back pruned: the records the prune released are not served by it, what followed the checkpoint is, and the checkpoint itself is what the chain is rooted at. The released records' files are not deleted, being retained as evidence by txid, so releasing that storage is a separate act. A record of this archive's that will not append is reported rather than dropped, since a swallowed refusal returns a short archive as though it were whole.",
   "oracle": "behaviour",
-  "interpretation": "Before this the prune was a change to memory alone: nothing stored the checkpoint, so a load admitted every released record back into the chain [2026-09-30]."
+  "interpretation": "Before this the prune was a change to memory alone: nothing stored the checkpoint, so a load admitted every released record back into the chain [2026-09-30].",
+  "families": [
+   "ARC-012",
+   "ARC-018"
+  ]
  },
  {
   "id": "CER-01",
@@ -947,7 +1029,10 @@
   "when": "The subject's client derives the identity root and then the capture key for that counterparty and ceremony, and a second client of the same identity does the same from the same two seeds.",
   "then": "The root is SHA-256 of the tag and the two seeds in that order, the two clients derive the same capture key, and the subject's store holds no per-capture secret — only the counterparty, the ceremony-id and the finalization time. A different identity's seeds yield a different key.",
   "oracle": "fixture",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "ARC-017"
+  ]
  },
  {
   "id": "CER-64",
@@ -8434,7 +8519,11 @@
   "when": "A patron-countersigned reissue for S with field 4 equal to s1 arrives, then one into an unused s3.",
   "then": "The first is rejected and H's chain is unchanged; the second extends H's chain to length three.",
   "oracle": "model",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "ARC-014",
+   "ARC-015"
+  ]
  },
  {
   "id": "REC-09",

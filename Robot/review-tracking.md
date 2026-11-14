@@ -21618,3 +21618,26 @@ for the counterparty, the ceremony-id stands as the transcript fixed it,
 and the sender's own intent is then taken. Code pin and vector pin
 re-accepted (hash lines only, 23 of 23). Figure unchanged: 575 live, 61
 held, 514 by neither.
+
+**The ARC families linked, 2026-11-14 [author].** By the entries' `then`
+clauses and the tests' assertions: ARC-001 ← ARC-01, ARC-02 (one list per
+signer, node then patron; that signature byte order is not role order is
+asserted nowhere); 002 ← ARC-03, ARC-07, ARC-18 (merges accepted and
+sorted, a predecessor held to the signer's chain; the empty, duplicate and
+over-eight lists are refused by the schema's bounds and have no chain test
+of their own); 003 ← ARC-06, ARC-19; 004 ← ARC-17 (one chain across
+bindings; that a witnessed ceremony advances the witness's archive and a
+verifier response does not are held by no clause read here); 005 ←
+ARC-05, ARC-07, ARC-18; 006 ← ARC-22, ARC-23; 007 ← ARC-12; 008 ← ARC-03,
+ARC-09, ARC-10, ARC-13; 009 ← ARC-08, ARC-09, ARC-21 (nonce, frontier,
+more flag, head verified; the age stop and the 1–256 count bound are the
+schema's); 010 ← ARC-08, ARC-10; 011 ← ARC-10, ARC-20 (the light-client
+half; the type-2 fetch of an infrastructure archive and the frame limits
+have no adaptors test); 012 ← ARC-16, ARC-29 and the refused-prune test;
+013 ← ARC-16, ARC-26, ARC-27; 014 ← ARC-19, REC-08 and the divergence
+test; 015 ← ARC-05, REC-08 (series abandoned on reissue, an unheld series
+incomparable; that endpoint state waits on a proven series is not asserted
+as such); 016 ← ARC-08, ARC-09, ARC-11, ARC-20, ARC-21; 017 ← ARC-22,
+CER-63 (positions re-derived rather than stored is asserted by neither);
+018 ← ARC-29; 019 ← its own loader test, already marked. **Held by
+neither**: none. Figure: 575 live, 78 held, 497 by neither; ARC 0.

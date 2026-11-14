@@ -803,6 +803,7 @@ fn appending_a_record_already_held_changes_nothing() {
     assert_eq!(ar.len(), 3);
 }
 
+// functional: ARC-012
 /// Pruning is anchored to the patron-countersigned reissue and to the
 /// window (design §10.1): at any other record, or inside the window, the
 /// chain is left whole.  Section 2.6 of the note asked for this by test.

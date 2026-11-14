@@ -112,6 +112,7 @@ fn a_reissue_naming_a_series_already_in_the_chain_is_rejected_and_an_unused_one_
     assert!(SeriesChain::from_records(&repeated, &ids).is_err());
 }
 
+// functional: ARC-014
 #[test]
 fn two_chains_from_one_adoption_that_diverge_are_equivocation() {
     let mut w = World::new(&["alice", "bob"]);
