@@ -21641,3 +21641,34 @@ as such); 016 ← ARC-08, ARC-09, ARC-11, ARC-20, ARC-21; 017 ← ARC-22,
 CER-63 (positions re-derived rather than stored is asserted by neither);
 018 ← ARC-29; 019 ← its own loader test, already marked. **Held by
 neither**: none. Figure: 575 live, 78 held, 497 by neither; ARC 0.
+
+**The TOP families linked, 2026-11-14 [author].** The holders are spread
+over TOP, PRP, REP, RES, REC, DEC, CER and ARC entries, 78 of them, and
+the contact tests; by the `then` clauses and the tests' assertions. The
+partials, where a clause of the row is asserted nowhere read: TOP-001
+(infra children counted toward the ten); 002 (TOP-13 holds the attach to
+the nearest infra ancestor; a third unsupported light level and promotion
+have no test); 011 (dispatch by kind and the newest delegation per keyhash;
+an unsupported kind value's frame-level refusal has no test); 017
+(reconciliation replays the same frame; reconvergence after a lost push
+is not driven as such); 024 (the equal-time tie keeping the first arrival);
+028 (TOP-14 refuses a patron in the down-line; surfacing the choice of
+direction to the person is a shell matter with no test); 034 (node and
+participant both, PRP-20 across the node's restore and TOP-40 across the
+client's; the equal-sequence retirement travelling with the addresses is
+TOP-40's alone); 036 (TOP-22, TOP-25 for the discard-whole half; reading
+and converting a state written with whole records has no client test);
+038 (TOP-46 runs at the gate ceiling and the production ceiling, the
+latter ignored, and `crates/tools/load-tests.sh` exists; that a deployment
+never runs with a reduced ceiling is a build fact asserted by nothing).
+**Two register defects fixed on the way**: the five `// acceptance:
+TOP-040`/`TOP-041` markers in `client/tests/contacts.rs` named functional
+families as acceptance entries and were silently collected as implemented
+ids; they are `// functional:` markers now. And PRP-18's `then` still said
+the node "disavows the forwarding subordinate with reason code 5", which
+code 5's withdrawal (TOP-027, PRP-27) and its own test — `CycleConfirmed {
+removed: None }`, zero frames — both contradict; restated as a removal with
+no transaction and no frame. **Held by neither, and said so**: TOP-010 (an
+O row: h_process=3 as a bound on processing, nothing to assert), TOP-021
+(the memo's schema; memos are decoded in two tests and no malformed memo
+is refused by any). Figure: 575 live, 122 held, 453 by neither; TOP 2.

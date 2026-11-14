@@ -15,7 +15,7 @@ use std::collections::BTreeMap;
 const SUBNET: [u8; 32] = [0xdb; 32];
 
 // functional: CER-029
-// acceptance: TOP-040
+// functional: TOP-040
 #[test]
 fn a_meeting_leaves_each_party_a_contact_of_the_other_with_a_locator() {
     let mut s = setup(&["alice", "bob"]);
@@ -57,7 +57,8 @@ fn a_meeting_leaves_each_party_a_contact_of_the_other_with_a_locator() {
     assert!(d.locator.is_some());
 }
 
-// acceptance: TOP-040
+// functional: TOP-042
+// functional: TOP-040
 #[test]
 fn an_introduced_stranger_is_a_contact_with_material_to_verify_by() {
     let mut s = setup(&["alice", "bob", "carol", "w1"]);
@@ -104,7 +105,7 @@ fn an_introduced_stranger_is_a_contact_with_material_to_verify_by() {
 }
 
 // functional: CER-028
-// acceptance: TOP-040
+// functional: TOP-040
 #[test]
 fn contacts_survive_a_restart_and_introductions_still_build() {
     let mut s = setup(&["alice", "bob"]);
@@ -155,7 +156,7 @@ fn placed(
     (kh(who), c)
 }
 
-// acceptance: TOP-041
+// functional: TOP-041
 #[test]
 fn pruning_removes_what_an_upstream_still_discovers_first_and_the_lonely_last() {
     let mut contacts: BTreeMap<rhtn_archive::Keyhash, Contact> = BTreeMap::new();
@@ -203,7 +204,7 @@ fn pruning_removes_what_an_upstream_still_discovers_first_and_the_lonely_last() 
     assert_eq!(r, contacts);
 }
 
-// acceptance: TOP-040
+// functional: TOP-040
 #[test]
 fn a_contact_round_trips_through_the_store_and_a_bare_locator_is_not_one() {
     let (k, c) = placed("bob", "alice", &[0x30], 1, 77, 4);
@@ -220,6 +221,8 @@ fn a_contact_round_trips_through_the_store_and_a_bare_locator_is_not_one() {
     let _ = ids();
 }
 
+// functional: TOP-040
+// functional: TOP-042
 /// **A party's own introduction is what another takes to hold it by
 /// locator** (`wire-format.md` §2.3): the bench hands a phone its nominee
 /// this way, since a nominee is offered to the counterparty's prune by
@@ -240,6 +243,7 @@ fn an_own_introduction_is_taken_by_another_and_held_with_its_locator() {
     );
 }
 
+// functional: TOP-042
 /// **Taking an introduction is the one way a party arrives without a
 /// meeting** (`wire-format.md` §2.3; design §12.3 Case 0, where the
 /// locator travels with the key out of band and no lookup occurs). The
@@ -304,6 +308,7 @@ fn an_introduction_taken_leaves_an_identity_a_contact_and_a_position() {
     assert_eq!(a.store.contacts.len(), before);
 }
 
+// functional: TOP-043
 /// **The anchor's address is looked up in the contacts** (design §12.3
 /// Case 1 step 2). The horizon is not the place for it: it holds
 /// endpoints for its own neighbourhood and refuses a record for anything
@@ -391,6 +396,7 @@ fn an_endpoint_record_gives_an_introduced_party_an_address_to_start_from() {
     assert!(a.take_endpoint(&stranger).is_err());
 }
 
+// functional: TOP-042
 /// **One code carries the introduction and its anchor's records**
 /// [author, 2026-10-13]. An introduction names an anchor by keyhash and a
 /// path, and carries neither the anchor's key material nor any address,
@@ -470,6 +476,8 @@ fn a_card_carries_an_introduction_and_the_records_of_its_anchor() {
     assert!(a.take_anchored_introduction(&crossed).is_err());
 }
 
+// functional: TOP-040
+// functional: TOP-043
 /// **A node the walk went through becomes a contact** (§7.7's descent;
 /// `light-client-requirements.md` §4.3 asks for "the infrastructure you
 /// went through to reach any of them"). Keeping them is what makes the
@@ -561,6 +569,7 @@ fn a_hop_of_the_walk_is_filed_with_the_address_it_was_heard_at() {
     );
 }
 
+// functional: TOP-040
 /// **A record arriving is what leaves a contact** — the fixture hands the
 /// envelope to each party and the kernel does the rest, which is what a
 /// client does with a record that reached it. The ceremony that produces

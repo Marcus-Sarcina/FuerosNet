@@ -649,7 +649,8 @@
   ],
   "families": [
    "ARC-011",
-   "ARC-016"
+   "ARC-016",
+   "TOP-020"
   ]
  },
  {
@@ -2212,6 +2213,9 @@
     0,
     "locator-nibble-in-range"
    ]
+  ],
+  "families": [
+   "TOP-030"
   ]
  },
  {
@@ -2249,6 +2253,9 @@
     "fanout-cap",
     "+"
    ]
+  ],
+  "families": [
+   "TOP-030"
   ]
  },
  {
@@ -4080,7 +4087,10 @@
   "when": "Each is signature-checked; the node takes the object, and the key arrives.",
   "then": "Each missing key is reported as unverifiable, naming that identity, and the same objects verify once the key is held; the flipped block is invalid. The node holds the transfer pending the former patron's key, forwards nothing, and stores and forwards it when the key arrives. An implementation that reports an embedded signer's missing key as an invalid signature fails.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-014"
+  ]
  },
  {
   "id": "DEC-27",
@@ -6502,6 +6512,9 @@
     0,
     "storage-reach"
    ]
+  ],
+  "families": [
+   "TOP-013"
   ]
  },
  {
@@ -6543,6 +6556,10 @@
     0,
     "storage-reach"
    ]
+  ],
+  "families": [
+   "TOP-012",
+   "TOP-013"
   ]
  },
  {
@@ -6565,7 +6582,11 @@
   "when": "The same object arrives again on the session from Q.",
   "then": "N's store is unchanged and no TopologyPush carrying T is observed on any session after the second arrival.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-013",
+   "TOP-015"
+  ]
  },
  {
   "id": "PRP-04",
@@ -6591,7 +6612,10 @@
   "when": "N receives the TopologyPush, and the missing KeyMaterial is later supplied through the path N uses to fetch it.",
   "then": "No TopologyPush carrying the object is observed on any session before the key arrives. After the key arrives and every signature verifies, the object is in N's store and a TopologyPush carrying it is observed on the sessions PRP-01 names.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-014"
+  ]
  },
  {
   "id": "PRP-05",
@@ -6617,7 +6641,10 @@
   "when": "N receives the TopologyPush.",
   "then": "N forwards it as PRP-01 describes. An implementation that applies the who-may-push rule to relays, forwarding only objects it is a party to, stops the flood here and fails.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-019"
+  ]
  },
  {
   "id": "PRP-06",
@@ -6643,7 +6670,10 @@
   "when": "N forwards it to S1.",
   "then": "The frame observed on the session to S1 carries an object whose bytes equal the recorded bytes exactly, and a wrapper carrying the body-kind tag and no other field.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-011"
+  ]
  },
  {
   "id": "PRP-07",
@@ -6670,7 +6700,11 @@
   "when": "A record for X at seqno 4, then an identical record at seqno 5, then a validly signed record at seqno 6 in the same series arrive in turn.",
   "then": "After the first two arrivals N's current record for X is still the seqno 5 record and no TopologyPush follows. After the third, N's current record for X is the seqno 6 record and one TopologyPush carrying it is observed on each adjacent session except the one it arrived from.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-016",
+   "TOP-034"
+  ]
  },
  {
   "id": "PRP-08",
@@ -6701,7 +6735,11 @@
   "when": "A validly signed EndpointRecord for X at seqno 5 with different contents B arrives.",
   "then": "N holds no current record for X, no TopologyPush carrying either record is observed after the conflict, and a resolution for X is observed leaving N.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-016",
+   "TOP-034"
+  ]
  },
  {
   "id": "PRP-09",
@@ -6732,7 +6770,10 @@
   "when": "A TopologyMemo whose anchor is B arrives from a subordinate.",
   "then": "No TopologyMemo is observed on N's session to P and N's memo table is unchanged.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-023"
+  ]
  },
  {
   "id": "PRP-10",
@@ -6758,7 +6799,10 @@
   "when": "Each processes the memo.",
   "then": "On N's session to P a TopologyMemo is observed whose bytes equal the received memo's. R sends no TopologyMemo on any session.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-023"
+  ]
  },
  {
   "id": "PRP-11",
@@ -6780,7 +6824,10 @@
   "when": "A memo naming N in field 1 and slot k, with field 4 at or before t, arrives from below.",
   "then": "No TopologyMemo is observed on N's session to P.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-024"
+  ]
  },
  {
   "id": "PRP-12",
@@ -6816,7 +6863,12 @@
   "when": "N receives the memo.",
   "then": "No TopologyMemo is forwarded further. N's slot k is empty afterwards, a vacancy memo for slot k goes rootward from N, and no transaction of any type is minted, stored or pushed.",
   "oracle": "model",
-  "interpretation": "Re-derived 2026-09-21: a cycle repair is a removal, not a disavowal [author, 2026-09-21]. The live test that held this entry asserts the superseded disavowal and is unmarked until the code lands."
+  "interpretation": "Re-derived 2026-09-21: a cycle repair is a removal, not a disavowal [author, 2026-09-21]. The live test that held this entry asserts the superseded disavowal and is unmarked until the code lands.",
+  "families": [
+   "TOP-026",
+   "TOP-027",
+   "TOP-028"
+  ]
  },
  {
   "id": "PRP-13",
@@ -6842,7 +6894,11 @@
   "when": "N receives the memo from S.",
   "then": "No disavowal is emitted, no archive fetch is issued, the memo is not forwarded, and N's rows are unchanged.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-026",
+   "TOP-028"
+  ]
  },
  {
   "id": "PRP-14",
@@ -6865,7 +6921,10 @@
   "when": "N adopts a subordinate and originates the corresponding memo.",
   "then": "The TopologyMemo is observed on N's session to I, and nothing is attempted toward L.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-023"
+  ]
  },
  {
   "id": "PRP-15",
@@ -6891,7 +6950,10 @@
   "when": "N reconciles.",
   "then": "The missing object arrives at N as a TopologyPush frame of the same shape as the original, N stores it, and forwards it as PRP-01 describes.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-017"
+  ]
  },
  {
   "id": "PRP-16",
@@ -6922,7 +6984,10 @@
   "when": "N receives S2's memo, and S1 then receives what N sent it.",
   "then": "N forwards the memo rootward and sends the same frame down the branch toward S1, not back toward S2. S1 reports the occupant held elsewhere, keeps its own row, and sends nothing on. A node handed the memo from above with the earlier row in its table walks it down and does not turn it round.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-029"
+  ]
  },
  {
   "id": "PRP-17",
@@ -6948,7 +7013,10 @@
   "when": "N receives both.",
   "then": "Both are forwarded rootward unchanged, no downward memo is sent, and the same memo arriving from above finds nothing to walk down. An implementation that requires the table fails.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-025"
+  ]
  },
  {
   "id": "PRP-18",
@@ -6973,9 +7041,13 @@
   ],
   "given": "Node N emptied its slot k at time t. N's own memo for slot k, with no occupant, returns from a subordinate.",
   "when": "N receives it.",
-  "then": "N confirms the cycle against its empty row and disavows the forwarding subordinate with reason code 5. A memo about a slot N never held a row for is not confirmed and nothing is sent.",
+  "then": "N confirms the cycle against its empty row; the forwarding edge is cut as a removal, no transaction is minted and no frame is sent. A memo about a slot N never held a row for is not confirmed and nothing is sent.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-027",
+   "TOP-029"
+  ]
  },
  {
   "id": "PRP-19",
@@ -7002,7 +7074,10 @@
   "when": "P's node takes the departure and then the adoption; and, on another node, the adoption and then the departure.",
   "then": "In both orders the binding is closed and no row names N: taken after the held departure, the adoption's row is written empty as of the departure. An implementation that writes the child into the slot on every adoption it applies, whatever the table settled, fails.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-024"
+  ]
  },
  {
   "id": "PRP-20",
@@ -7029,7 +7104,11 @@
   "when": "The store is loaded from disk.",
   "then": "The conflict marker persists, the store serves no endpoint record for that subject, and its replay carries neither record. An implementation whose save leaves the retired record's file in place, or whose load reads it back before the markers, fails.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-009",
+   "TOP-034"
+  ]
  },
  {
   "id": "PRP-21",
@@ -7099,6 +7178,9 @@
     2,
     "order-independent"
    ]
+  ],
+  "families": [
+   "TOP-008"
   ]
  },
  {
@@ -7132,6 +7214,9 @@
     0,
     "forward-if-stored"
    ]
+  ],
+  "families": [
+   "TOP-013"
   ]
  },
  {
@@ -7159,7 +7244,10 @@
   "when": "An endpoint record for a node inside its store reach arrives, and one for a node outside it, and the table is later rebuilt from the store alone.",
   "then": "Holding the record is what marks its publisher, so the nearest infrastructure node above a party below it moves from this node to the publisher. A record outside store reach marks nothing, because the mark follows storage and never the wire. A rebuild reaches the same set from the store, and does not lose the node's own mark.",
   "oracle": "behaviour",
-  "interpretation": "There is no unmarking: §7.6 gives a record a successor and no retraction, so a node that stopped being infrastructure leaves its records standing in every horizon that stored them."
+  "interpretation": "There is no unmarking: §7.6 gives a record a successor and no retraction, so a node that stopped being infrastructure leaves its records standing in every horizon that stored them.",
+  "families": [
+   "TOP-032"
+  ]
  },
  {
   "id": "PRP-25",
@@ -7195,6 +7283,11 @@
     "fanout-ten",
     "-"
    ]
+  ],
+  "families": [
+   "TOP-012",
+   "TOP-030",
+   "TOP-033"
   ]
  },
  {
@@ -7222,7 +7315,10 @@
   "when": "S receives it.",
   "then": "S stores D2, no longer holds D1, forwards D2 to every adjacent node except X, and forwards a second copy of D2 to nobody.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-011"
+  ]
  },
  {
   "id": "PRP-27",
@@ -7248,7 +7344,10 @@
   "when": "N acts on it.",
   "then": "N's store gains no transaction, no envelope by N is pushed to any neighbour, and no reason code appears anywhere; the slot is empty and the vacancy memo is the only thing sent.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-027"
+  ]
  },
  {
   "id": "PRP-28",
@@ -7297,7 +7396,11 @@
   "when": "The operator's client attaches, then a subordinate that adopted a third party attaches.",
   "then": "The node holds the operator's adoption after the first attach and the subordinate's adoption of the third party after the second, so the owner's horizon as the node computes it holds every member; a client holding nothing offers nothing and attaches as before; every frame offered is §10.1's push carrying one transaction.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "TOP-019",
+   "TOP-046"
+  ]
  },
  {
   "id": "PRP-30",
@@ -7332,7 +7435,10 @@
   "when": "The operator's client replays them, the record about a subject arriving before the record that would put that subject within reach; the same records arrive from a peer instead; and a record arrives whose key material is missing and arrives afterwards.",
   "then": "Every record from the node's own identity is stored whatever order it arrives in, and the subnet is in the node's horizon afterwards — so it can bind the members it serves and no longer refuses their attach. The same records from any other sender are refused as out of store exactly as before, the reach rule being untouched for gossip and unreachable by any peer, since the session proved which key sent it. A record held for a missing key is stored once the key is known, the held set is drained until a pass stores nothing, and a further settle is a no-op rather than a loop.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "TOP-046"
+  ]
  },
  {
   "id": "PRP-31",
@@ -7363,7 +7469,10 @@
   "when": "A record carrying material is read; one carrying none; one whose material does not hash to the subject it names; and the operator replays the subnet with the record about a member arriving before the record that introduces that member's patron.",
   "then": "A record carrying material yields the subject's identity, one carrying none yields nothing, and material that does not hash to the name it arrives under is refused — so a record introduces an identity under its own hash and under no other, which is what makes reading it before verification safe. The replay lands whatever its order: the material is taken as each record arrives, the held set settles afterwards because a key learned is an arrival, and the node ends holding both records with the whole subnet in its horizon and nothing left waiting. Material offered by any sender other than the node's own identity introduces nobody.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "TOP-046"
+  ]
  },
  {
   "id": "PRT-01",
@@ -8582,7 +8691,10 @@
   "when": "S answers, and the test watches S's sessions for a period afterwards.",
   "then": "The adoption and the reissue are presented to the counterparty; no TopologyPush carrying either leaves S in response.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-020"
+  ]
  },
  {
   "id": "REC-11",
@@ -8665,7 +8777,10 @@
   "when": "S's client performs the rotation and the memo for the adoption travels rootward.",
   "then": "The adoption carries no field 6, no field naming k1 anywhere, and the memo carries no prior key.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-022"
+  ]
  },
  {
   "id": "REC-14",
@@ -8742,7 +8857,10 @@
   "when": "L attaches to T in failover and collects.",
   "then": "T delivers none of the three messages, T's store holds no queued ciphertext for L, and T's AttachAck field 4 does not count S's mailbox.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-018"
+  ]
  },
  {
   "id": "REP-03",
@@ -8896,7 +9014,10 @@
   "when": "A pushes the peering record into its horizon.",
   "then": "No TopologyMemo derived from the peering is sent to P, and neither G's nor R's memo table gains an entry naming B's NetworkPoint or ASN.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-022"
+  ]
  },
  {
   "id": "REP-09",
@@ -8923,7 +9044,10 @@
   "when": "O's client enumerates cross-tree peers for I and for J.",
   "then": "I is reported with zero peers and J with one, both derived from O's own topology store, and I's zero is surfaced to the user rather than omitted.",
   "oracle": "behaviour",
-  "interpretation": "'Should tell an operator plainly' is a reference-client commitment; the test asserts only that the count is derivable and displayed, and leaves any policy discount unspecified."
+  "interpretation": "'Should tell an operator plainly' is a reference-client commitment; the test asserts only that the count is derivable and displayed, and leaves any policy discount unspecified.",
+  "families": [
+   "TOP-003"
+  ]
  },
  {
   "id": "REP-10",
@@ -8950,7 +9074,10 @@
   "when": "I adopts N.",
   "then": "The adoption completes and is stored; no step refuses or defers it for want of a peering record.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-003"
+  ]
  },
  {
   "id": "REP-11",
@@ -9032,7 +9159,10 @@
   "when": "L sends payload to M.",
   "then": "The payload is relayed through A and B; M is no contact of L's, the peering edge makes it none, and no direct connection is attempted.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-005"
+  ]
  },
  {
   "id": "REP-14",
@@ -9102,7 +9232,10 @@
   "when": "Replication runs and the test inspects N'.",
   "then": "N' holds C's adoption and presence record; N' holds no queued message for C and no record that one is waiting.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-018"
+  ]
  },
  {
   "id": "RES-01",
@@ -9204,7 +9337,10 @@
   "when": "The primitives.md 'Same-series counter jump' SignedLocator for alice, seqno [5, 100], is presented.",
   "then": "The [5, 100] locator is accepted and becomes the held locator for alice; the [5, 42] locator is no longer reported as current.",
   "oracle": "fixture",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-016"
+  ]
  },
  {
   "id": "RES-05",
@@ -9227,7 +9363,10 @@
   "when": "The conflict partner is presented and the holder is then asked to reach alice.",
   "then": "Neither locator is reported as alice's current locator, and the attempt to reach her produces a re-resolution rather than a dial to either path.",
   "oracle": "behaviour",
-  "interpretation": "'Re-resolves' is observed as the holder declining to dial either path and signalling that a fresh locator is required; the spec places the fresh locator's source in design §12.3 Case 3 or §12.4, outside this test."
+  "interpretation": "'Re-resolves' is observed as the holder declining to dial either path and signalling that a fresh locator is required; the spec places the fresh locator's source in design §12.3 Case 3 or §12.4, outside this test.",
+  "families": [
+   "TOP-016"
+  ]
  },
  {
   "id": "RES-06",
@@ -9254,7 +9393,10 @@
   "when": "A validly signed SignedLocator for alice with seqno [9, 3] and a different path is presented.",
   "then": "The [9, 3] locator is not installed as fresher and the [5, 100] locator is not marked stale; the holder reports that it cannot determine which is current.",
   "oracle": "behaviour",
-  "interpretation": "The spec says the reader 'has learned nothing'; the test reads this as the held locator left unchanged, the newcomer not installed, and the reader signalling indeterminacy rather than choosing."
+  "interpretation": "The spec says the reader 'has learned nothing'; the test reads this as the held locator left unchanged, the newcomer not installed, and the reader signalling indeterminacy rather than choosing.",
+  "families": [
+   "TOP-034"
+  ]
  },
  {
   "id": "RES-07",
@@ -9469,7 +9611,10 @@
   "when": "S receives a ResolveRequest whose path passes through index i beneath S.",
   "then": "The reply has field 2 = 1 with failure code 0 or 1; no Referral naming C or C's new position is returned, and S's child table no longer lists C.",
   "oracle": "behaviour",
-  "interpretation": "The spec requires failure rather than referral and names codes 0 and 1 as the stale-locator outcomes; which of the two S returns is the test's reading, and either is accepted."
+  "interpretation": "The spec requires failure rather than referral and names codes 0 and 1 as the stale-locator outcomes; which of the two S returns is the test's reading, and either is accepted.",
+  "families": [
+   "TOP-007"
+  ]
  },
  {
   "id": "RES-15",
@@ -11799,7 +11944,10 @@
   "when": "O verifies an adoption of N under P whose field 8 names that record.",
   "then": "O's table answers: N's patrons include P; P's subordinates are {C, N}; C's siblings include N and N's siblings include C.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-004"
+  ]
  },
  {
   "id": "TOP-02",
@@ -11827,7 +11975,10 @@
   "when": "O verifies the second adoption, with no departure from P1 signed.",
   "then": "O's table answers N's patrons = {P1, P2}; N remains among P1's subordinates; the second adoption is accepted rather than rejected as a duplicate binding, and it does not replace the first.",
   "oracle": "model",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-001"
+  ]
  },
  {
   "id": "TOP-03",
@@ -11895,6 +12046,9 @@
     2,
     "departed-becomes-root"
    ]
+  ],
+  "families": [
+   "TOP-003"
   ]
  },
  {
@@ -12097,6 +12251,9 @@
     5,
     "formation-is-genesis-rooted"
    ]
+  ],
+  "families": [
+   "TOP-003"
   ]
  },
  {
@@ -12153,7 +12310,11 @@
   "when": "B dials its serving node and attaches.",
   "then": "B's dial goes to I, not to A; I accepts and its AttachAck field 1 is 0, primary; I's table lists B among its attached light clients by path, beneath A.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-002",
+   "TOP-006"
+  ]
  },
  {
   "id": "TOP-14",
@@ -12176,7 +12337,10 @@
   "when": "N's client is asked to adopt under M2, and separately to adopt under X, ceremony evidence being supplied in both cases.",
   "then": "The proposal to adopt under M2 is refused by the local check, which reports that M2 lies below N, and no adoption is signed. The proposal to adopt under X is not refused by the check, and an adoption of N under X is signed.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-028"
+  ]
  },
  {
   "id": "TOP-15",
@@ -12296,6 +12460,9 @@
     2,
     "order-independent"
    ]
+  ],
+  "families": [
+   "TOP-015"
   ]
  },
  {
@@ -12327,7 +12494,10 @@
   "when": "The table applies each under required evaluation and under deferred evaluation.",
   "then": "The forged record is refused under both: a failing record is never evidence. The unverifiable record is refused under required evaluation, naming the missing key, and leaves the binding's evidence unevaluated under deferred evaluation; with every key held it satisfies. An implementation that marks fetched evidence satisfied on its type, txid and parties alone fails.",
   "oracle": "model",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-014"
+  ]
  },
  {
   "id": "TOP-20",
@@ -12361,6 +12531,9 @@
     2,
     "reissue-advances-relationship"
    ]
+  ],
+  "families": [
+   "TOP-015"
   ]
  },
  {
@@ -12388,7 +12561,12 @@
   "when": "The client is asked where each node it holds a record for sits, and how far away each is, with its serving node unreachable. The copy is then pruned.",
   "then": "Every node within a two-edge walk is placed from the client's own state and its distance equals the number of adoption or sibling edges to it; a node beyond the walk has no distance, and a party in no record at all has neither a place nor a distance. A prune then drops every party the horizon does not hold, and a second prune has nothing left to do.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-004",
+   "TOP-005",
+   "TOP-006"
+  ]
  },
  {
   "id": "TOP-22",
@@ -12415,7 +12593,12 @@
   "when": "It wakes with that copy, then wakes with one that is damaged, one claiming more records than it holds, and none at all.",
   "then": "The first folds in only the records above the copy's watermark; each of the others replays every record held; and all four leave the same table and the same locators.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-008",
+   "TOP-009",
+   "TOP-036"
+  ]
  },
  {
   "id": "TOP-23",
@@ -12442,7 +12625,10 @@
   "when": "Its serving node propagates a later record placing that node somewhere else, and then a record ending a binding the client holds.",
   "then": "The client answers with the later locator and not the earlier, the ended binding is gone from its table, and nothing the client held before is preferred to what was propagated.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-007"
+  ]
  },
  {
   "id": "TOP-24",
@@ -12469,7 +12655,11 @@
   "when": "The node sends topology pushes on stream 0, interleaved with a memo, a push whose body kind is not a transaction, and a frame that is not a push at all.",
   "then": "Every transaction carried in a topology push is in the client's horizon and placed; none of the other three is; and the client's reader is still running afterwards.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-006",
+   "TOP-012"
+  ]
  },
  {
   "id": "TOP-25",
@@ -12496,7 +12686,11 @@
   "when": "One of those records is replaced by a different one, and the party wakes with the copy.",
   "then": "The copy is discarded and the whole set replayed, and the resulting view is what the records held actually say. A watermark that counted records rather than naming them would be satisfied by the substitution, since the count and the last record are unchanged.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-009",
+   "TOP-036"
+  ]
  },
  {
   "id": "TOP-26",
@@ -12523,7 +12717,11 @@
   "when": "The party's place is read, the copy is pruned, and the whole record set is then replayed.",
   "then": "The party is not placed at any point after the relationship ended, and the replayed view answers exactly as the incremental one did. The records that placed it are still held, so a bound applied only at pruning time would be undone by the replay.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-007",
+   "TOP-008"
+  ]
  },
  {
   "id": "TOP-27",
@@ -12550,7 +12748,10 @@
   "when": "It is asked where that party is, in each subnet and in one it was not placed in, and its derived copy is materialised and woken from.",
   "then": "Both places are held and each says what it is relative to; a subnet it was not placed in has none. Each line carries its own series. The party is one party for everything counted by party: listed once among what can be resolved. Both places come back out of the materialised copy.",
   "oracle": "behaviour",
-  "interpretation": "A path in one subnet says nothing about a path in another, so a copy holding one of two would hold an answer it could not qualify. The stored row already carried the party and the anchor separately, so keying by both puts two rows where there was one and leaves what a row says alone."
+  "interpretation": "A path in one subnet says nothing about a path in another, so a copy holding one of two would hold an answer it could not qualify. The stored row already carried the party and the anchor separately, so keying by both puts two rows where there was one and leaves what a row says alone.",
+  "families": [
+   "TOP-001"
+  ]
  },
  {
   "id": "TOP-28",
@@ -12577,7 +12778,12 @@
   "when": "Endpoint records arrive for a party in its horizon, for the same party on a later and an earlier counter, and for a party three edges out; and a party then leaves and the copy is pruned.",
   "then": "Holding a record is what says its publisher is infrastructure, and it comes with where that party answers. A later counter in the same line replaces; an earlier one is not news. A record for a party the client cannot place is refused, because an address for one is an address it has no use for. A prune takes the addresses with the places.",
   "oracle": "behaviour",
-  "interpretation": "Nothing else carries an infra node's address to a client: a light client's endpoints arrive when it attaches and are nobody else's to hold, which is why §7.6's record is the whole of the evidence."
+  "interpretation": "Nothing else carries an infra node's address to a client: a light client's endpoints arrive when it attaches and are nobody else's to hold, which is why §7.6's record is the whole of the evidence.",
+  "families": [
+   "TOP-012",
+   "TOP-016",
+   "TOP-032"
+  ]
  },
  {
   "id": "TOP-29",
@@ -12729,6 +12935,10 @@
     2,
     "departed-becomes-root"
    ]
+  ],
+  "families": [
+   "TOP-005",
+   "TOP-007"
   ]
  },
  {
@@ -12766,6 +12976,10 @@
     1,
     "fanout-ten"
    ]
+  ],
+  "families": [
+   "TOP-001",
+   "TOP-030"
   ]
  },
  {
@@ -12798,6 +13012,11 @@
     1,
     "fanout-ten"
    ]
+  ],
+  "families": [
+   "TOP-001",
+   "TOP-030",
+   "TOP-033"
   ]
  },
  {
@@ -12832,6 +13051,10 @@
     2,
     "departed-address-moves"
    ]
+  ],
+  "families": [
+   "TOP-008",
+   "TOP-031"
   ]
  },
  {
@@ -12861,6 +13084,9 @@
     2,
     "departed-address-moves"
    ]
+  ],
+  "families": [
+   "TOP-031"
   ]
  },
  {
@@ -12894,6 +13120,10 @@
     0,
     "endpoint-line-current"
    ]
+  ],
+  "families": [
+   "TOP-016",
+   "TOP-034"
   ]
  },
  {
@@ -12923,6 +13153,10 @@
     0,
     "endpoint-line-current"
    ]
+  ],
+  "families": [
+   "TOP-009",
+   "TOP-034"
   ]
  },
  {
@@ -12977,7 +13211,11 @@
   "when": "S evaluates it.",
   "then": "S neither accepts nor rejects it: it is held, not stored and not forwarded, and it enters storage when G's delegation naming k arrives and verifies.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-014",
+   "TOP-033"
+  ]
  },
  {
   "id": "TOP-43",
@@ -13058,7 +13296,13 @@
   "when": "P is stopped and started again, and a party attaches to it and reconciles.",
   "then": "What P wrote of the foreign acts is their identifiers alone: neither body nor the evidence they cited survives, and an upgrade removes what an earlier version wrote under those names. The identifiers still suppress a second forwarding wave. P replays the endpoint line byte for byte and no foreign act, and its derived view still accounts for what it accepted; a view that cannot is discarded and leaves nothing to fold.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-009",
+   "TOP-015",
+   "TOP-018",
+   "TOP-035"
+  ]
  },
  {
   "id": "TOP-46",
@@ -13090,7 +13334,11 @@
   "when": "The adoption the first disavowal was held for arrives.",
   "then": "What the holder keeps for items awaiting a prerequisite did not grow past the ceiling under either flood. Under the reissue flood the disavowal, though the oldest held item, was kept and a reissue went instead, so it ends the binding as the adoption arrives. Under the disavowal flood, with nothing reconstructible left to let go, the first disavowal, the oldest of its kind, went to make room and the adoption stands in the holder's view; with one fewer flooding record it is still held.",
   "oracle": "behaviour",
-  "interpretation": "The ceiling is the implementation's (design §21.1); the order is ruled [author, 2026-10-02]: reconstructible items, which gossip or a later locator distribution rebuilds, go first, and trust-reducing items outlast them, oldest first among themselves."
+  "interpretation": "The ceiling is the implementation's (design §21.1); the order is ruled [author, 2026-10-02]: reconstructible items, which gossip or a later locator distribution rebuilds, go first, and trust-reducing items outlast them, oldest first among themselves.",
+  "families": [
+   "TOP-037",
+   "TOP-038"
+  ]
  },
  {
   "id": "TOP-47",
@@ -13118,7 +13366,10 @@
   "when": "The client is asked, from its own state alone and with no request sent, which node serves W, which serves Q, and which serves a party it holds no position for.",
   "then": "W's answer names Q, the nearest ancestor holding an endpoint record, and not B. Q's answer names Q itself, the empty-residual case of §7.7.3. With Q's record absent the answer names B, which sits at the empty path and is an ancestor of everyone in the subnet. A party placed with no addressable ancestor yields a position to resolve rather than an address, and a party the client cannot place yields neither. No request of any kind is sent in any case.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "TOP-039"
+  ]
  },
  {
   "id": "TRN-01",
@@ -14475,7 +14726,10 @@
   "when": "It is decoded, with and without field 4, at one nibble and at two.",
   "then": "With a 32-byte txid in field 4 it decodes and the subnet is read back; at two or more nibbles without it the decoder refuses it as malformed; at one nibble without it — a root's first adoption — it decodes, as does a self-anchored locator with an empty path and no field 4.",
   "oracle": "behaviour",
-  "interpretation": "The subnet is named by the locator and read by nobody who routes [author, 2026-10-15]."
+  "interpretation": "The subnet is named by the locator and read by nobody who routes [author, 2026-10-15].",
+  "families": [
+   "TOP-044"
+  ]
  },
  {
   "id": "TOP-49",
@@ -14502,7 +14756,10 @@
   "when": "R adopts the other, and the adopted party later adopts a third.",
   "then": "The first adoption's locator carries no subnet and its txid becomes R's scope id; R's own locator carries it from then on; the second adoption's locator carries it; the third party's position is keyed by it; and the adopted party's own scope id, latent, is the second adoption's txid.",
   "oracle": "behaviour",
-  "interpretation": "One rule for a formed subnet and for a node that became a root some other way [author, 2026-10-15]."
+  "interpretation": "One rule for a formed subnet and for a node that became a root some other way [author, 2026-10-15].",
+  "families": [
+   "TOP-045"
+  ]
  },
  {
   "id": "TOP-50",
@@ -14529,7 +14786,10 @@
   "when": "It folds its positions from its archive.",
   "then": "It holds a position per subnet id, reports both, answers position_in by subnet id, and a departure from one leaves the other untouched.",
   "oracle": "behaviour",
-  "interpretation": "The protocol names subnets and models nothing across them [author, 2026-10-15]."
+  "interpretation": "The protocol names subnets and models nothing across them [author, 2026-10-15].",
+  "families": [
+   "TOP-044"
+  ]
  },
  {
   "id": "SES-32",
@@ -14693,7 +14953,11 @@
   "when": "B adopts A with A's scope in field 10, and A later departs B.",
   "then": "While adopted, A holds one position, in B's subnet, and lists its own scope no more; A refuses to sign a body naming a scope it does not root; after the departure A roots its scope again at the self-anchor, keyed by the same id.",
   "oracle": "behaviour",
-  "interpretation": "A party rooting a scope chooses whether to bring it, and a party rooting none has nothing to choose [author, 2026-10-15]."
+  "interpretation": "A party rooting a scope chooses whether to bring it, and a party rooting none has nothing to choose [author, 2026-10-15].",
+  "families": [
+   "TOP-031",
+   "TOP-045"
+  ]
  },
  {
   "id": "REP-17",
@@ -16214,7 +16478,10 @@
   "when": "It publishes an endpoint record on the line it holds in that subnet, and the record reaches its own copy as it reaches everyone's.",
   "then": "It is an infra node in that subnet and in no other, which rooting the subnet and holding subordinates there are separately and simultaneously false of it. The record names a node and its addresses and no subnet, so what ties one to a subnet is the series it is signed on; the instance runs under a delegation of this identity rather than a key of its own, so the record is this key's.",
   "oracle": "behaviour",
-  "interpretation": "The third of the three standings a crown is drawn from. Each comes off a different local record — the subnet's anchoring adoption, this key's endpoint record on that subnet's line, and the adoptions it granted there — and the precedence between them, only the highest being drawn, belongs to the client that draws."
+  "interpretation": "The third of the three standings a crown is drawn from. Each comes off a different local record — the subnet's anchoring adoption, this key's endpoint record on that subnet's line, and the adoptions it granted there — and the precedence between them, only the highest being drawn, belongs to the client that draws.",
+  "families": [
+   "TOP-032"
+  ]
  },
  {
   "id": "DMN-42",
