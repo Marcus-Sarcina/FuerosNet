@@ -10,6 +10,7 @@ use common::harness::*;
 use common::*;
 use rhtn_client::payload::{PayloadConfig, PayloadState};
 
+// functional: SES-017
 /// **A message's arrival decides where the next one goes**, and a first
 /// message goes everywhere the peer is known.
 #[test]
@@ -55,6 +56,7 @@ fn the_address_state_round_trips_and_the_older_form_still_reads() {
     assert_eq!(bytes[0], 0x8b, "eleven fields");
 }
 
+// functional: SES-017
 /// **An identity in two subnets publishes its profile for both** (review
 /// 2026-11-13: `subnet()` answered with the first, so the second went
 /// nameless).
@@ -78,6 +80,7 @@ fn an_identity_in_two_subnets_publishes_its_profile_for_each() {
     );
 }
 
+// functional: SES-017
 /// **The nodes agreed to are the kernel's to keep** (review 2026-11-13):
 /// agreed, withdrawn, listed with their addresses.
 #[test]

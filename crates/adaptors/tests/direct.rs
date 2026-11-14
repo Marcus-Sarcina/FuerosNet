@@ -1046,6 +1046,7 @@ async fn nothing_else_is_taken_as_local_and_no_local_carriage_travels_the_networ
     assert_eq!(counting.relayed(), 0, "none of this went through the node");
 }
 
+// functional: SES-017
 /// **A payload goes over the tab serving the address the last message
 /// came by** (design §12.9; SES-017): carol holds a session with bob's
 /// node and a tab to alice's; w1 has an address in both subnets. Before

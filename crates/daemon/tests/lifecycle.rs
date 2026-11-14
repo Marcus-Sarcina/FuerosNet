@@ -886,6 +886,7 @@ async fn a_derived_view_belonging_to_another_identity_is_discarded() {
     let _ = std::fs::remove_dir_all(&l.dir);
 }
 
+// functional: SES-018
 /// **A member a record introduces is pinned when it arrives, and again
 /// from the store at start** (`infra-client-requirements.md` §1; SES-018):
 /// carol is in no peers file, so the node holds nothing of her until the

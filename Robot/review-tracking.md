@@ -21517,3 +21517,21 @@ before it was handed to the node as its own material. Nothing crossed
 between the two nodes. The tab route stays unexercised on this bench: the
 phones share a LAN and the direct path wins both replies, as SES-017's
 proof in the seam scenario covers it in process.
+
+**The SES families linked, 2026-11-14 [author: "Link the SES families to
+their tests"].** Each by reading the family against the entry's own
+`then`, not its title: SES-001 ← SES-26 (two devices, two sessions by the
+key each presented); 002 ← SES-02; 003 ← SES-01 (the interval fixed in the
+Ack — its range rejects are held by no entry); 004 ← SES-28; 007 and 015 ←
+SES-09 (the persisted list, dialled without waiting three intervals);
+008 ← SES-03; 009 ← SES-04 and SES-05; 010 ← SES-07 and SES-31; 011 ←
+SES-06 and SES-08; 012 ← SES-11; 013 ← SES-10; 016 ← SES-31; 017 ← PRT-11
+and markers on three `addresses.rs` tests and the `direct.rs` tab test;
+018 ← a marker on the lifecycle test that pins a member its record
+introduces; 019 ← PRT-11 (the restart's re-attach; the backoff chain after
+a loss has no test of its own); 020 ← `StandingTest`. **Held by neither,
+and said so**: SES-005 (a sibling's full key material omitted only where
+it was supplied before), SES-006 (every Ack or update replaces the cached
+list whole, an absent list clears it), SES-014 (request-only sessions to
+resource hosts without attaching — the RSC entries may hold it; not
+claimed until read). Figure: 575 live, 24 held, 551 by neither; SES 3.

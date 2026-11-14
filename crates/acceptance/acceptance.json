@@ -10545,7 +10545,10 @@
   "when": "C dials N and sends Attach with field 1 equal to its own keyhash.",
   "then": "N answers with AttachAck whose field 1 (mode) is 0 and whose field 3 is I.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "SES-003"
+  ]
  },
  {
   "id": "SES-02",
@@ -10572,7 +10575,10 @@
   "when": "C dials N and sends Attach.",
   "then": "N does not close the connection with application close code 1; it answers with AttachAck whose field 1 (mode) is 0.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "SES-002"
+  ]
  },
  {
   "id": "SES-03",
@@ -10598,7 +10604,10 @@
   "when": "Three intervals of I seconds elapse with no other traffic.",
   "then": "Each side's first Heartbeat carries counter 0 and is sent no earlier than I seconds after AttachAck; each side's next two carry counters 1 and 2, one per interval.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "SES-008"
+  ]
  },
  {
   "id": "SES-04",
@@ -10624,7 +10633,10 @@
   "when": "The harness drops N's Heartbeat with counter 1 and delivers counters 2, 3, 4 and onward on time, for at least six intervals.",
   "then": "C stays in the session on N: it opens no connection to any sibling and continues sending its own Heartbeats to N throughout.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "SES-009"
+  ]
  },
  {
   "id": "SES-05",
@@ -10646,7 +10658,10 @@
   "when": "Three full intervals elapse with only malformed frames arriving from C.",
   "then": "N does not close the session on receiving a malformed frame; after three full intervals N's inspectable reachability state for C reads unreachable, not before.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "SES-009"
+  ]
  },
  {
   "id": "SES-06",
@@ -10673,7 +10688,10 @@
   "when": "Three full intervals elapse in which N sends payload but no Heartbeat.",
   "then": "C dials S and receives an AttachAck from S with field 1 (mode) equal to 1.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "SES-011"
+  ]
  },
  {
   "id": "SES-07",
@@ -10699,7 +10717,10 @@
   "when": "C's process is suspended for longer than three intervals and then resumed.",
   "then": "On resuming, C dials S before another full interval elapses, and receives an AttachAck from S with field 1 equal to 1.",
   "oracle": "behaviour",
-  "interpretation": "'Has missed three on waking' is read as failover beginning on waking; the one-interval bound is the test's, since wire-format.md §8.2 leaves timeout and backoff to local policy."
+  "interpretation": "'Has missed three on waking' is read as failover beginning on waking; the one-interval bound is the test's, since wire-format.md §8.2 leaves timeout and backoff to local policy.",
+  "families": [
+   "SES-010"
+  ]
  },
  {
   "id": "SES-08",
@@ -10726,7 +10747,10 @@
   "when": "N stops sending Heartbeats and all other frames for three full intervals.",
   "then": "C dials S; S answers with AttachAck whose field 1 (mode) is 1.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "SES-011"
+  ]
  },
  {
   "id": "SES-09",
@@ -10758,7 +10782,11 @@
   "when": "C starts and performs a fresh attach.",
   "then": "C dials S without first waiting three heartbeat intervals, and S accepts: it does not close with application close code 1 and returns AttachAck with field 1 equal to 1.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "SES-007",
+   "SES-015"
+  ]
  },
  {
   "id": "SES-10",
@@ -10784,7 +10812,10 @@
   "when": "C submits a subnet-scoped transaction that requires its patron's countersignature on the degraded session, and also sends ordinary payload.",
   "then": "No transaction countersigned by S comes into existence, at S or at C; the payload is carried.",
   "oracle": "model",
-  "interpretation": "How a countersignature request travels on a session and how its non-performance is signalled are not encoded; the test observes only the absence of a countersignature by S."
+  "interpretation": "How a countersignature request travels on a session and how its non-performance is signalled are not encoded; the test observes only the absence of a countersignature by S.",
+  "families": [
+   "SES-013"
+  ]
  },
  {
   "id": "SES-11",
@@ -10811,7 +10842,10 @@
   "when": "N becomes reachable again and stays reachable for at least six intervals while the degraded session continues.",
   "then": "C opens no connection to N during that time and keeps exchanging Heartbeats with S.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "SES-012"
+  ]
  },
  {
   "id": "SES-12",
@@ -11027,7 +11061,10 @@
   "when": "Both attach to serving node N with field 1 = T.",
   "then": "N holds two sessions for T, one per presented key, refuses neither, and binds each device's later publication, deposit and wake registration to the session it arrived on.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "SES-001"
+  ]
  },
  {
   "id": "SES-27",
@@ -11076,7 +11113,10 @@
   "when": "The client decodes the ack.",
   "then": "The ack is discarded and the attach does not complete on it, the same answer the SiblingUpdate path gives for the same list. A list of distinct keyhashes none of which is the client's is accepted, and a list repeating a keyhash is discarded.",
   "oracle": "behaviour",
-  "interpretation": "The check needs the receiver's own keyhash to make. A decoder given no keyhash can only enforce distinctness, which is half the rule [2026-09-30]."
+  "interpretation": "The check needs the receiver's own keyhash to make. A decoder given no keyhash can only enforce distinctness, which is half the rule [2026-09-30].",
+  "families": [
+   "SES-004"
+  ]
  },
  {
   "id": "SES-29",
@@ -11152,7 +11192,11 @@
   "when": "The loop is scheduled again and the deadline has already elapsed.",
   "then": "The loop reads what the stream holds before it believes the clock, finds a fresh heartbeat, and declares nothing: no PeerUnreachable is logged and the peer stays Reachable. A peer that sends frames refreshing nothing cannot defer the verdict indefinitely, and a peer that has genuinely stopped is still declared within one interval of the loop waking (SES-07).",
   "oracle": "behaviour",
-  "interpretation": "Two bounds make this safe rather than a deferral: a past deadline is floored a scheduler turn ahead so the transport can surface what arrived, and frames that refresh liveness nothing are counted so a flooding peer buys only a handful. Both figures are the reference client's."
+  "interpretation": "Two bounds make this safe rather than a deferral: a past deadline is floored a scheduler turn ahead so the transport can surface what arrived, and frames that refresh liveness nothing are counted so a flooding peer buys only a handful. Both figures are the reference client's.",
+  "families": [
+   "SES-010",
+   "SES-016"
+  ]
  },
  {
   "id": "SUB-01",
