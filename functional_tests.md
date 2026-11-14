@@ -161,6 +161,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | ARC-016 | C | The subject serves archive requests for its own archive over the peer-to-peer channel; no infrastructure node serves it on a subject's behalf, and a request naming another subject is answered empty. The fetcher verifies the structure itself and order is no part of it: every returned record is named either by the requested frontier or by a back-pointer of another record in the batch, every back-pointer naming nothing in the batch comes back as the continuation frontier, and every signature is checked before anything is kept. Where no frontier was requested — the restore case — there is no head to match, and the chain verifies internally while its newestness stays the holder's claim. An attestation delivery carrying no nonce the fetcher issued is not taken. | L §2; W §7.9; D §15 |
 | ARC-017 | C | A participant's own store persists beside its archive with the lifetimes its contents have: records, sealed captures and own-capture rows written once, and material that grows against a record rewritten. **The store holds no secret at all** — a capture key is derived from the identity when wanted (D §7.5.2.6) — so what it keeps for a capture is the counterparty, the ceremony-id and the finalization time, no file in it is written private, and ciphertext the holder cannot open needs no special care. Positions are re-derived from the archive rather than stored, so a restored archive reaches the same answer. | D §§13.7.1, 7.5.2, 7.5.2.6; L §2 |
 | ARC-018 | C | Store the pruning checkpoint with the archive, so a prune survives a restart: a reloaded archive is rooted at the checkpoint, does not serve the records the prune released, and still serves what followed it. The released records' files are retained as evidence by txid, so releasing that storage is a separate act. A record of the archive's own that will not append on load is reported, not dropped — a swallowed refusal returns a short archive as though it were whole. | D §10.1 |
+| ARC-019 | C | **An archive loads from its records in whatever order they were kept** [2026-11-14]. A record is appended once every back-pointer it carries for the loading key is held; the stored order, or an order by effective time and then txid, is no order of the chain (two records of one second sort equal by time), so the loader appends what it can and comes back for the rest until nothing more appends. Test: a presence record and the adoption on it load in either order, the adoption the head; a record whose predecessor is absent is refused naming the record and why; a client restarted on state kept in the wrong order holds every record. One loader for the archive on disk, a client's restored state and a backup installed. | D §10.1; L §9 |
 
 ## 3.2 Infrastructure topology, propagation, addressing and currency
 
@@ -1047,14 +1048,14 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **573 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **574 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
 | ENC | 13 |
 | SIG | 13 |
 | TX | 30 |
-| ARC | 18 |
+| ARC | 19 |
 | TOP | 46 |
 | RES | 16 |
 | CUR | 12 |

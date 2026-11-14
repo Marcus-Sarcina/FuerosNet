@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 const USAGE: &str = "\
-usage: rhtnp [--log <file>] <identity> [<peers>]
+usage: rhtnp [--log <file>] [--store <dir>] <identity> [<peers>]
 
   <identity>  the two seeds an identity is derived from, owner-readable
               only, as `rhtn keys mint` writes one
@@ -34,6 +34,17 @@ fn main() -> ExitCode {
         }
         None => None,
     };
+    let store = match args.iter().position(|a| a == "--store") {
+        Some(i) if i + 1 < args.len() => {
+            args.remove(i);
+            Some(PathBuf::from(args.remove(i)))
+        }
+        Some(_) => {
+            eprintln!("{USAGE}{HELP}");
+            return ExitCode::from(2);
+        }
+        None => None,
+    };
     let (identity, peers) = match args.as_slice() {
         [i] => (
             PathBuf::from(i),
@@ -49,7 +60,12 @@ fn main() -> ExitCode {
         }
     };
     let peers = peers.exists().then_some(peers);
-    let instrument = match Instrument::start(&identity, peers.as_deref(), log.as_deref()) {
+    let instrument = match Instrument::start(
+        &identity,
+        peers.as_deref(),
+        log.as_deref(),
+        store.as_deref(),
+    ) {
         Ok(i) => i,
         Err(e) => {
             eprintln!("rhtnp: {e}");

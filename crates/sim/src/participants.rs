@@ -114,8 +114,29 @@ impl Participants {
             .map(|p| format!("{}\n", hex(&test_identity(p).public.key_material())))
             .collect();
         std::fs::write(dir.join("peers"), list).expect("the peers file");
+        self.spawn(name, dir)
+    }
 
+    /// Start the process again over the directory it had: the identity,
+    /// the peers and the kernel's store are what the first run left, so
+    /// what it held is what it holds — the restart leg of a scenario.
+    pub fn restart(&mut self, name: &str) -> &mut Party {
+        let i = self
+            .parties
+            .iter()
+            .position(|p| p.name == name)
+            .unwrap_or_else(|| panic!("no participant {name} to restart"));
+        let party = self.parties.remove(i);
+        let dir = party.dir.clone();
+        drop(party);
+        self.spawn(name, dir)
+    }
+
+    fn spawn(&mut self, name: &str, dir: PathBuf) -> &mut Party {
+        let identity = dir.join("identity.key");
         let mut child = Command::new(&self.exe)
+            .arg("--store")
+            .arg(dir.join("store"))
             .arg(&identity)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

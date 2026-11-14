@@ -4182,18 +4182,15 @@ impl Client {
         // the last fallible step is behind the first replacement, so a
         // refusal leaves this client exactly as it was
         let kh = self.public.keyhash;
-        let mut archive = Archive::new(kh);
-        let mut parsed: Vec<Record> = recs
+        let parsed: Vec<Record> = recs
             .iter()
             .map(|r| Record::parse(r))
             .collect::<Result<_, _>>()
             .map_err(|e| format!("record: {e}"))?;
-        parsed.sort_by_key(|r| (r.effective, r.txid));
-        let mut records = 0;
-        for rec in parsed {
-            archive.append(rec).map_err(|e| format!("record: {e}"))?;
-            records += 1;
-        }
+        // in chain order, whatever order they were kept in: the archive's
+        // one loader (`rhtn_archive::chain::Archive::from_records`)
+        let archive = Archive::from_records(kh, parsed).map_err(|e| format!("record: {e}"))?;
+        let records = archive.len();
         let mut horizon = Horizon::new(kh);
         for h in held {
             match h {
@@ -4246,17 +4243,14 @@ impl Client {
             Some(_) => return Err("this backup belongs to another identity".into()),
             None => return Err("this backup names no owner".into()),
         }
-        let mut parsed: Vec<Record> = contents
+        let parsed: Vec<Record> = contents
             .records
             .iter()
             .map(|r| Record::parse(r))
             .collect::<Result<_, _>>()
             .map_err(|e| format!("record: {e}"))?;
-        parsed.sort_by_key(|r| (r.effective, r.txid));
-        let mut archive = Archive::new(self.public.keyhash);
-        for rec in parsed {
-            archive.append(rec).map_err(|e| format!("record: {e}"))?;
-        }
+        let archive = Archive::from_records(self.public.keyhash, parsed)
+            .map_err(|e| format!("record: {e}"))?;
         let n = archive.len();
         self.archive = archive;
         // taken out rather than moved out: the contents wipe their seeds

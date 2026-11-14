@@ -21171,3 +21171,32 @@ light-client §9 bullet, APP-015 (573 families, APP 15); plan step 2
 restated. **And step 0 stays a Rust driver** until the live and automated
 cycles diverge significantly. All five restructure decisions are now
 answered; the plan can start on the author's go.
+
+**Restructure step 0 done, 2026-11-14: the seam scenario.** Not a new
+harness: `crates/participant` already had the shell-shaped driver (`rhtnp`,
+a kernel per process driven by lines on stdin) and `rhtn_sim::daemons` the
+spawned `rhtnd`; the scenario is `crates/participant/tests/seam.rs`
+(PRT-11): nodes `gxv` and `gxv2` each speaking as its operator,
+participants gxv, gxv2, mrk, two witnesses; ceremony and adoption twice;
+gxv and gxv2 each agree and attach to their own node as the Operator
+screen does; mrk attaches to gxv's node, takes the invitation link
+(`invitation` placed against its own records: `node=<gxv2>`), agrees and
+attaches to gxv2's node while holding gxv's; `attachments` lists both;
+four messages cross, delivery proving the route (gxv2 holds a session
+with its own node only; gxv's node speaks as gxv); `save`; restart;
+`agreed` holds both; both re-attached; two more messages. 68 s. Added to
+`rhtnp`: `agree`, `agreed`, `disagree`, `attachments`, `detach-from`,
+`invitation`, `save`, and `--store <dir>` (file-backed `Storage`);
+`Participants::restart`; the live test's helpers moved to
+`tests/common/mod.rs`. **Two defects found on its first runs**: (1) the
+restarted participant refused its own state — `record: back-pointer names
+a record not held` — because `Client::restore` and `install` sorted the
+stored records by (effective, txid) and appended once, while
+`Archive::load` already retried to a fixed point; a presence and the
+adoption on it made within one second sort by txid, which is no order of
+the chain. Now one loader, `Archive::from_records`, under all three
+(ARC-019, 574 families; `an_archive_loads_its_records_in_chain_order…`).
+The bench never hit it because its records are minutes apart. (2) The
+kernel writes state only on `save`, which the Kotlin shell calls after
+every change and the driver did not: the driver now saves as the shell
+does. nextest: the participant binaries reserve a quarter of the slots.

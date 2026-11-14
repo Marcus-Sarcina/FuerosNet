@@ -17,3 +17,10 @@ threads-required = 8
 [[profile.default.overrides]]
 filter = 'package(rhtn-daemon) and (binary(administration) or binary(delegated) or binary(federation) or binary(fieldtest) or binary(scenarios) or binary(lifecycle))'
 threads-required = 4
+
+# **The participant scenarios spawn real processes too** — the seam
+# scenario two `rhtnd` and five `rhtnp`, with two ceremonies measured
+# against windows — so each reserves a quarter of the slots [2026-11-14].
+[[profile.default.overrides]]
+filter = 'package(rhtn-participant) and (binary(seam) or binary(live))'
+threads-required = 4

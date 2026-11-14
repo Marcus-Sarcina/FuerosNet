@@ -76,6 +76,7 @@ impl Instrument {
         identity: &Path,
         peers: Option<&Path>,
         log: Option<&Path>,
+        store: Option<&Path>,
     ) -> Result<Instrument, String> {
         let seeds = read_identity(identity)?;
         // **this participant's own key is in the lookup, and not because
@@ -97,7 +98,10 @@ impl Instrument {
         if let Some(p) = peers {
             known.extend(read_peers(p)?);
         }
-        let shell = Arc::new(Terminal::default());
+        let shell = Arc::new(match store {
+            Some(dir) => Terminal::in_dir(dir),
+            None => Terminal::default(),
+        });
         // the eighth object, diagnostics: the file `--log` named, in a
         // field-test build, and nothing otherwise
         // (Robot/field-test-diagnostics.md, section 4)
@@ -178,6 +182,69 @@ impl Instrument {
             )]),
 
             ["attached"] => Ok(vec![format!("attached {}", self.client.attached())]),
+            // **the agreements and the tabs, as the shell drives them**
+            // (`light-client-requirements.md` §4.1): an agreement is kept
+            // by the kernel, and an attach to a second node while one is
+            // held is a tab beside it
+            ["agree", node, addresses] => {
+                let addrs: Vec<String> = addresses.split(',').map(str::to_string).collect();
+                self.client
+                    .agree_to(id(node)?, addrs)
+                    .map_err(|e| e.reason().to_string())?;
+                Ok(vec![format!("agreed {node} at={addresses}")])
+            }
+            ["agreed"] => Ok(self
+                .client
+                .agreed()
+                .iter()
+                .map(|a| {
+                    format!(
+                        "agreed {} at={}",
+                        hex(&a.serving),
+                        if a.addresses.is_empty() {
+                            "-".into()
+                        } else {
+                            a.addresses.join(",")
+                        }
+                    )
+                })
+                .collect()),
+            ["disagree", node] => {
+                self.client
+                    .disagree(id(node)?)
+                    .map_err(|e| e.reason().to_string())?;
+                Ok(vec![format!("disagreed {node}")])
+            }
+            // **what the shell does after every change**: the kernel writes
+            // its state when told, and a restart reads what was written
+            ["save"] => {
+                self.client.save().map_err(|e| e.reason().to_string())?;
+                Ok(vec!["saved".into()])
+            }
+            ["attachments"] => Ok(vec![format!(
+                "attachments {}",
+                joined(&self.client.attachments())
+            )]),
+            ["detach-from", node] => {
+                self.client
+                    .detach_from(id(node)?)
+                    .map_err(|e| e.reason().to_string())?;
+                Ok(vec![format!("detached {node}")])
+            }
+            ["invitation", text] => match self.client.invitation(text.to_string()) {
+                None => Err(format!("`{text}` is not an invitation")),
+                Some(i) => Ok(vec![format!(
+                    "invited at={} node={} choose={} why={}",
+                    i.at,
+                    i.node.unwrap_or_else(|| "-".into()),
+                    if i.choose.is_empty() {
+                        "-".into()
+                    } else {
+                        i.choose.join(",")
+                    },
+                    if i.why.is_empty() { "-".into() } else { i.why }
+                )]),
+            },
 
             ["attach", node, addresses, population @ ..] => {
                 let node = id(node)?;
@@ -881,6 +948,14 @@ contact <material>        hold a party as a contact by its key material
 attach <node> <addr>[,<addr>] [<party>...]
                           attach to a serving node, sweeping the parties named
 attached                  whether a session is held
+agree <node> <addr>[,<addr>]
+                          agree to a node at the addresses given; the kernel keeps it
+agreed                    the nodes agreed to and their addresses
+save                      write the kernel's state, as a shell does after every change
+disagree <node>           withdraw an agreement
+attachments               every node a session is held with: the primary and the tabs
+detach-from <node>        close the session with one node
+invitation <text>         read an invitation link and place it against this client's records
 maintain                  rotate, replenish and ask for what is due
 send <to> <kind> <hex>    payload, over the direct path or through the node
 wake <url> <key> <signer> [<at>]

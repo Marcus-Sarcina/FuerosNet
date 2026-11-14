@@ -915,3 +915,33 @@ fn a_prune_survives_a_restart_and_the_chain_comes_back_pruned() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// **An archive loads from its records in any order** (design §10.1): a
+/// successor stored before its predecessor is held once the predecessor
+/// is, and a record whose predecessor is nowhere is refused by name. Two
+/// records of one second sort equal by time and then by txid, which is
+/// no order of the chain; a client restarted on such a pair refused its
+/// own state until the loader was this one [2026-11-14].
+// functional: ARC-019
+#[test]
+fn an_archive_loads_its_records_in_chain_order_whatever_order_they_were_kept_in() {
+    use rhtn_archive::chain::Archive;
+    let mut w = World::new(&["alice", "bob"]);
+    let f = w.meet("alice", "bob");
+    let adoption = w.adopt("bob", "alice", f.txid, 5);
+    let bob = w.kh("bob");
+    for order in [
+        vec![f.clone(), adoption.clone()],
+        vec![adoption.clone(), f.clone()],
+    ] {
+        let a = Archive::from_records(bob, order).expect("both held, in either order");
+        assert_eq!(a.len(), 2);
+        assert_eq!(a.heads(), vec![adoption.txid], "the adoption is the head");
+    }
+    let why = Archive::from_records(bob, vec![adoption.clone()]).unwrap_err();
+    assert!(
+        why.contains("1 of this archive's records would not append")
+            && why.contains("back-pointer names a record not held"),
+        "{why}"
+    );
+}

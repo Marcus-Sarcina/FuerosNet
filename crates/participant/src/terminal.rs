@@ -30,10 +30,24 @@ pub struct Terminal {
     /// Raised as they occur, drained after each command, so a transcript
     /// stays in the order a reader expects.
     said: Mutex<Vec<String>>,
-    /// The client's state for this process alone: an instrument keeps
-    /// nothing between runs, and a script that wants continuity starts
-    /// the same process again.
+    /// The client's state for this process alone, where no store was
+    /// named: gone with the process.
     kept: Mutex<std::collections::BTreeMap<String, Vec<u8>>>,
+    /// Where what the kernel persists is written, one file a name, so a
+    /// participant started again over the same directory holds what it
+    /// held — the restart leg of a scenario [2026-11-14].
+    store: Option<std::path::PathBuf>,
+}
+
+impl Terminal {
+    /// A terminal whose kernel state is written under `dir`.
+    pub fn in_dir(dir: &std::path::Path) -> Terminal {
+        std::fs::create_dir_all(dir).expect("the store directory");
+        Terminal {
+            store: Some(dir.to_path_buf()),
+            ..Default::default()
+        }
+    }
 }
 
 // **Unsealed by declaration** (`light-client-requirements.md` §9): this
@@ -54,11 +68,19 @@ impl rhtn_ffi::device::Custody for Terminal {
 
 impl Storage for Terminal {
     fn read(&self, name: String) -> Option<Vec<u8>> {
-        self.kept.lock().unwrap().get(&name).cloned()
+        match &self.store {
+            Some(dir) => std::fs::read(dir.join(&name)).ok(),
+            None => self.kept.lock().unwrap().get(&name).cloned(),
+        }
     }
     fn write(&self, name: String, bytes: Vec<u8>) -> bool {
-        self.kept.lock().unwrap().insert(name, bytes);
-        true
+        match &self.store {
+            Some(dir) => std::fs::write(dir.join(&name), &bytes).is_ok(),
+            None => {
+                self.kept.lock().unwrap().insert(name, bytes);
+                true
+            }
+        }
     }
 }
 

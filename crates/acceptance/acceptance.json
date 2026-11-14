@@ -7416,6 +7416,33 @@
   "interpretation": ""
  },
  {
+  "id": "PRT-11",
+  "area": "participant",
+  "gap": "participant",
+  "title": "Two subnets on two nodes, an invitation taken as a tab, and a restart: the seam scenario",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "light-client-requirements.md §4.1",
+   "design §14.2.4.1"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §4.1",
+    "text": "Each address is tried on its own."
+   },
+   {
+    "where": "design §14.2.4.1",
+    "text": "Leaf → patron | The full construction, the same as any leaf."
+   }
+  ],
+  "given": "Two daemons, each started under the identity that launched it (gxv, gxv2); participants gxv, gxv2, mrk and two witnesses; gxv adopts mrk on the record of their meeting and serves from its node; gxv2 adopts mrk and serves from its own.",
+  "when": "mrk takes an invitation naming gxv2's node and attaches there while holding gxv's; messages go both ways on each node; mrk saves, restarts, and attaches each node it agreed to.",
+  "then": "mrk holds a session per node; gxv2's message arrives at mrk and mrk's reply reaches gxv2 through the node it came by; gxv's message arrives and mrk's reply reaches the person gxv although gxv's node speaks as gxv; after the restart both agreements are held, both sessions are held again, and messages cross on each node.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
   "id": "QUE-01",
   "area": "queue",
   "gap": "queue",

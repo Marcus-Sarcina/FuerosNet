@@ -265,7 +265,7 @@ impl Archive {
     /// A file that does not parse, or that this key did not sign, is not
     /// this archive's and is left alone.
     pub fn load(dir: &std::path::Path, key: Keyhash) -> std::io::Result<Archive> {
-        let mut a = Archive::new(key);
+        let a = Archive::new(key);
         let root = dir.join("archive");
         let Ok(rd) = std::fs::read_dir(&root) else {
             return Ok(a);
@@ -287,24 +287,28 @@ impl Archive {
                 records.push(rec);
             }
         }
+        let mut a = Archive::from_records(key, records).map_err(std::io::Error::other)?;
+        if let Some(at) = stored_checkpoint
+            && a.records.contains_key(&at)
+        {
+            a.prune_at(&at);
+        }
+        Ok(a)
+    }
+
+    /// An archive built from this key's records in whatever order they
+    /// come. A record is appended once every back-pointer it carries for
+    /// this key is held, so a successor that comes before its predecessor
+    /// is held all the same: two records of one second sort equal by time
+    /// and then by txid, which is no order of the chain, and a client
+    /// restarted on such a pair refused its own state until this was one
+    /// loader rather than three [2026-11-14, found by the seam scenario].
+    /// Refused where some record would never append, naming the first and
+    /// why.
+    pub fn from_records(key: Keyhash, mut records: Vec<Record>) -> Result<Archive, String> {
+        let mut a = Archive::new(key);
         records.sort_by_key(|r| (r.effective, r.txid));
-        // **A record of this archive's that will not append is reported,
-        // not dropped** [2026-09-30]. A file that does not parse or that
-        // this key did not sign is somebody else's and was skipped above;
-        // one that got this far is ours, and swallowing its refusal
-        // returned a short archive as though it were whole.
-        //
-        // **Append to a fixpoint, because the sort is not a topology**
-        // [2026-10-01]. Records are ordered by `(effective, txid)`, and
-        // `append` allows equal effective times (§3.3 forbids only an
-        // earlier one), so two same-second records can sort with a
-        // successor ahead of the predecessor its back-pointer names — its
-        // append then fails for a record that IS held, just not yet. A
-        // single pass would report that honest archive as refused; instead
-        // we re-pass while any refusal cleared on the last pass, and only
-        // what still will not append after a pass that made no progress is
-        // genuinely refused.
-        let mut pending: Vec<Record> = records;
+        let mut pending = records;
         let mut refused: Vec<(Txid, String)> = Vec::new();
         loop {
             let before = pending.len();
@@ -320,30 +324,17 @@ impl Archive {
                     }
                 }
             }
-            // stop when a pass made no progress: either everything
-            // appended, or what is left could not append this pass and so
-            // never will, its predecessor not being among the records held
             if again.is_empty() || again.len() == before {
                 break;
             }
             pending = again;
         }
-        // the prune is re-applied, so the chain comes back as it was left
-        // rather than as it was before the prune.  The window was checked
-        // when the prune was made; re-checking it here would refuse to
-        // restore a state the archive is already in.
-        if let Some(at) = stored_checkpoint
-            && a.records.contains_key(&at)
-        {
-            a.prune_at(&at);
-        }
         if let Some((txid, why)) = refused.first() {
-            return Err(std::io::Error::other(format!(
-                "{} of this archive's records would not append, the first \
-                 {} because its {why}",
+            return Err(format!(
+                "{} of this archive's records would not append, the first {} because its {why}",
                 refused.len(),
                 hex(txid)
-            )));
+            ));
         }
         Ok(a)
     }
