@@ -1526,6 +1526,19 @@ on the wire.
   rest. Sealed state that fails to open refuses the start — beginning fresh
   over unreadable state would mint new material and silently lose every
   message queued for the old.
+- **And seals for the application what the application keeps** [author,
+  2026-11-14]. The kernel offers the application, and nothing else, a
+  service that encrypts and decrypts bytes it is handed under keys that
+  never leave the kernel, so the application defines its own files and
+  conventions and they are sealed at rest all the same. The service is
+  general; the application's conversation store is the first use of it,
+  and its shape is the one to follow: each message's ciphertext appended
+  to a file as it accumulates rather than the history sealed and unsealed
+  whole on every change. What is in memory need not be sealed. The
+  reference client reads that file lazily: a thread is decrypted only when
+  it is opened, and only its most recent messages unless the person scrolls
+  further back, which keeps the least cleartext in memory and spares the
+  decryption of every history at start.
 - **A resource's ask crosses outward as a question, and its answer is the
   kernel's** (§8.1). The kernel reads the ask and hands up what was asked,
   in whose words; the application shows it, and hands in the capture the

@@ -692,6 +692,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | APP-012 | C | Wipe key material rather than leaving it in freed memory: root keys, chain keys, message keys and prekey seeds, including the copies a ratchet makes of its own state while deciding whether a message opens. Not observable to a peer and not enforceable against one; stated because no expert review of this implementation is coming. | L §3; D §14.2.4.3 |
 | APP-013 | C | The application holds one kernel per identity per storage location. A platform lifecycle event that recreates a screen neither starts a second kernel against that state nor loses what the first holds: the kernel outlives the screen, a screen that has gone receives nothing, and a screen that replaces it is given the state so far. Two kernels over one storage location would each overwrite what the other kept, so this is a correctness rule and not only a resource one. | L §9; D §14.1.0 |
 | APP-014 | C | **Bring another device of the same identity to the whole dataset whenever the two are in contact, unasked.** A device that can see another is behind does not wait and does not prompt the person: it hands over the archive — design §10.3's merge where the two have forked, a plain append where one is simply short — and with it the view kept beside the archive (contacts, held locators, fetched profiles, the client's portion of the resource catalogue) and the sealed captures, which cross as ciphertext. The carriage is the archive fetch any reader uses (`wire-format.md` §7.9) or the local interface where the two are side by side (`wire-format.md` §14.3.3); **no new object and no new permission arises**, the subject being the reader of its own archive. **The identity seed does not cross**: a new signing device holds the identity because its holder put the seed there (OPS-019), and a delegated device holding a transport credential acquires none (APP-010). **No capture seed crosses either, because none is kept**: the device that holds the identity derives a capture key for any ceremony whose record it holds (D §7.5.2.6). Test: a device offline across several transactions holds all of them after one contact; a fork merges rather than overwriting; a replicated capture whose key the subject has not released does not open on the receiving device; a device given the dataset gains no ability to sign as the identity, and none to release a capture key either. | D §§23.3, 10.3, 7.5.2.6; L §§2, 4.2; W §§7.9, 14.3.3 |
+| APP-015 | C | **The kernel seals the application's own files** [author, 2026-11-14]: a service offered to the application alone that encrypts and decrypts bytes under keys that never leave the kernel, so the application keeps files of its own shape sealed at rest. The conversation store uses it per message, appending each message's ciphertext to a file rather than resealing the history. Test: bytes sealed through the service are unreadable in the stored file and read back equal; a conversation of N messages is stored as N appended ciphertexts, the (N+1)th appended without the first N rewritten; opening a thread decrypts its most recent messages only, and an earlier page only when asked for, so that nothing of a thread not opened is decrypted at start; the keys are not reachable from the application's side of the seam; memory need not be sealed and the test does not demand it. | L §9 |
 
 ### Human authorization, privacy choices and warnings
 
@@ -1046,7 +1047,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **572 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **573 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -1069,7 +1070,7 @@ This specification contains **572 numbered requirement/test families** across **
 | CAT | 26 |
 | GAT | 41 |
 | PKG | 18 |
-| APP | 14 |
+| APP | 15 |
 | UX | 31 |
 | OPS | 27 |
 | TOOL | 7 |

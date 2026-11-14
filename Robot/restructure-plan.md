@@ -88,7 +88,7 @@ Each step is gated and installed; each removes one class of the veneer.
 |---|---|---|---|
 | 0 | **The seam scenario**: two in-process daemons, two `Participant`s, a shell-shaped driver; T5–T7's shape as a test — adoption, enrol, invite, attach as a tab, message both ways, restart | the bench as the only test of composition | it runs in minutes and fails for each of this week's defects when reverted |
 | 1 | `Agreed`, `Serving`, `LastFrom` as relations in the kernel (correction 3 is the first of these) | the shell's `serving` file; `serving: Option` | the scenario, plus relation tests |
-| 2 | `Thread`/`Message` in the kernel; the FFI exposes queries by identity; `Front.convos`/`Threads.kt` go | conversations outside the model, in the clear | the scenario sends, restarts, reads back |
+| 2 | **Restated 2026-11-14 [author]**: the kernel offers the shell a sealing service (encrypt/decrypt bytes, keys never leaving the kernel); the thread store stays the shell's, keyed by identity, as an append-only file of per-message ciphertext through that service; `Front.convos`/`Threads.kt` are rewritten onto it rather than moved into the kernel | conversations in the clear at rest; the history resealed whole on every change | the scenario sends, restarts, reads back; the stored file holds no plaintext; the (N+1)th message appends |
 | 3 | `Net` as a map over `Attachment`; one `watch` per attachment; status per attachment | `live`/`current`/`status` singulars; `primary: bool` | failover and re-attach per attachment in the scenario |
 | 4 | The shell model keyed by identity everywhere: `Model` rows carry `by`; the focused-identity accessors go; `Kernel` split into `Identities`, `Attachments`, `Ceremony`, `Levers` | two notions of "whose"; the god object | the pins become behavioural tests of the split objects |
 | 5 | The client blob split per relation with versions, with the migration | the 2.6 MB whole-state write; versioning by array length | a vector per relation, pinned |
@@ -113,12 +113,40 @@ About four weeks at the pace of the last two, with the bench run at steps
 
 ## 6. Decisions owed to the author
 
-1. Where the schema lives (a §9 section, or a root document).
-2. Whether the model carries a `Person` at all — the design's party is the
-   identity; "a user can have many devices" is a fact about a person the
-   protocol never sees. Assumed: no `Person`; `Holding` carries it.
-3. Conversations: sealed with the rest, or a stated exception (review §4).
-4. Whether verifier, nominee and introduced parties are offered as
-   contacts to write to (review §7.2); assumed met-in-person only.
-5. Whether step 0 may use the fieldtest build's levers as the driver, or a
-   shell-shaped driver is written for it.
+1. ~~Where the schema lives~~ **Ruled 2026-11-14 [author]: in
+   `light-client-requirements.md`** — *"these are internal Light Client
+   schemas, not wire objects, so they belong in the Light Client design."*
+2. ~~Whether the model carries a `Person`~~ **Ruled 2026-11-14 [author]:
+   no.** *"The whole of a light client is presumed to be a person (the
+   device owner), but is not manipulated as an object anywhere in the
+   system."* Outside formal models: "a Light Client (presumably a single
+   user)" or "a User (all identities active on a light client)", the
+   alternative as a parenthetical where confusion is possible; "the user"
+   is fine for UI behaviour and inputs. Recorded in
+   `Robot/authoring-conventions.md`.
+3. ~~Conversations: sealed with the rest, or a stated exception~~ **Ruled
+   2026-11-14 [author]: neither — a general sealing service** (light-client
+   §9, APP-015; step 2 restated above). Was:
+   **Open until then** — asked again with the context: the kernel
+   seals everything it persists under the Keystore key; the shell keeps
+   conversations in plaintext files beside it. Either the thread store
+   goes through the kernel (sealed, which step 2 does anyway) or
+   light-client §9 states what the shell may keep in the clear.
+4. ~~Whether verifier, nominee and introduced parties are offered as
+   contacts to write to~~ **Ruled 2026-11-14 [author]**: not listed on the
+   main DM screen unless a thread is active; they stay in contacts; a
+   search by name to start a DM may come later.
+5. ~~Whether step 0 may use the fieldtest build's levers as the driver~~
+   **Restated 2026-11-14**, the author did not recognise the question:
+   step 0 is an in-process test of T5–T7's shape (two daemons, two
+   participants, adoption, enrol, invite, tab, message both ways,
+   restart). Something has to play the shell — press the buttons the
+   author pressed on the bench. The choice is between a small Rust driver
+   written for the test that calls the kernel the way the shell does, and
+   reusing the fieldtest levers (the `am start --es` hooks) by running the
+   real shell under the Android unit-test JVM. Assumed meanwhile: the
+   Rust driver, since the levers need the Android runtime and the test is
+   meant to run in the gate in minutes. **Ruled 2026-11-14 [author]: the
+   Rust driver, "unless and until we start running into significant
+   impedance between the test cycle as it runs in the live tests and its
+   behavior in the automated tests."**

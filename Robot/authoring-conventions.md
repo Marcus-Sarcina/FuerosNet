@@ -370,3 +370,14 @@ A count from either is reportable in the form the rule above asks for:
 occasion is not — one such regex undercounted the Rust tree by half, and
 the first Kotlin counter over-counted by a factor of four, both by
 mistaking a local for something a reader reaches.
+
+
+## The person behind a light client [author, 2026-11-14]
+
+A light client is presumed to be a person, the device owner, and that
+person is never an object anywhere in the system: no document models a
+`Person`, no row carries one. Outside formal models write **"a Light
+Client (presumably a single user)"** or **"a User (all identities active on
+a light client)"**, whichever fits, with the other construction in a
+parenthetical where there is a risk of confusion. **"The user"** on its
+own is fine when discussing UI behaviour or inputs.

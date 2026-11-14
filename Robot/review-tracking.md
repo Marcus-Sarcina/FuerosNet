@@ -21153,3 +21153,21 @@ within an identity it is still a singleton "the serving node" beside the
 tabs (`attachments`, `serving_at`); the restructure plan replaces it with
 sessions as rows keyed by (identity, address, node) and is not begun —
 its five decisions are still owed.
+
+**Restructure decisions, 2026-11-14 [author]**: 1 schema in
+`light-client-requirements.md`; 2 no `Person`, with the wording convention
+now in `Robot/authoring-conventions.md`; 4 verifiers/nominees/introduced
+stay in contacts, off the DM list unless a thread is active, a name search
+later. 3 (conversations sealed or a stated exception) answered only by
+implication and asked again; 5 restated in plain words and asked again
+(`Robot/restructure-plan.md` §6).
+
+**Ruled 2026-11-14 [author]: local persistence gets a general solution** —
+the kernel exposes to the shell alone a service that encrypts and
+decrypts arbitrary bytes with keys that stay in the kernel; the shell
+defines its own files; DMs as per-message ciphertext appended to a file,
+never the history resealed whole; memory need not be sealed. Documents:
+light-client §9 bullet, APP-015 (573 families, APP 15); plan step 2
+restated. **And step 0 stays a Rust driver** until the live and automated
+cycles diverge significantly. All five restructure decisions are now
+answered; the plan can start on the author's go.
