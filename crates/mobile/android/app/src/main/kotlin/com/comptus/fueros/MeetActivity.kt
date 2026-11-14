@@ -95,7 +95,7 @@ class MeetActivity : Activity() {
         if (turner != null) return
         val r = object : Runnable {
             override fun run() {
-                val m = Kernel.meet()
+                val m = Ceremony.meet()
                 val live = m != null && m.step() == Meet.Step.OPTICAL && m.exchange === x
                 if (!live) {
                     turner = null
@@ -219,19 +219,19 @@ class MeetActivity : Activity() {
     override fun onStart() {
         super.onStart()
         Consent.host(this)
-        Kernel.meet()?.bind(sink) ?: redraw()
+        Ceremony.meet()?.bind(sink) ?: redraw()
     }
 
     override fun onStop() {
         Consent.release(this)
-        Kernel.meet()?.unbind(sink)
+        Ceremony.meet()?.unbind(sink)
         // **leaving before anything began is changing one's mind**: a
         // meeting still at the choice or the brief has nothing in the
         // kernel yet, and keeping it would hand the same choice back to
         // the next opening of this screen [author, 2026-10-11]
         if (isFinishing) {
-            Kernel.meet()?.let { m ->
-                if (m.step() == Meet.Step.INTENT || m.step() == Meet.Step.BRIEF) Kernel.stopMeet("dismissed")
+            Ceremony.meet()?.let { m ->
+                if (m.step() == Meet.Step.INTENT || m.step() == Meet.Step.BRIEF) Ceremony.stopMeet("dismissed")
             }
         }
         // the camera goes back the moment this screen stops: holding one
@@ -251,7 +251,7 @@ class MeetActivity : Activity() {
         trackView = null
         previewHost.visibility = android.view.View.GONE
         optical = false
-        val m = Kernel.meet()
+        val m = Ceremony.meet()
         if (m == null) {
             entry()
             return
@@ -479,14 +479,14 @@ class MeetActivity : Activity() {
      */
     private fun changeMind() {
         button("Start over — choose again") {
-            Kernel.stopMeet("dismissed")
+            Ceremony.stopMeet("dismissed")
             redraw()
         }
     }
 
     private fun start(kind: Meet.Kind, role: Meet.Role) {
         Kernel.declareNumber(by, ownNumber())
-        Kernel.startMeet(by, kind, role)?.bind(sink) ?: para("could not begin: the kernel is not running")
+        Ceremony.startMeet(by, kind, role)?.bind(sink) ?: para("could not begin: the kernel is not running")
         redraw()
     }
 
@@ -528,7 +528,7 @@ class MeetActivity : Activity() {
         when (m.role) {
             Meet.Role.INITIATOR -> {
                 para("Hold this up for ${m.counterpartyName} to scan with their REAR camera. It carries who you are and what kind of meeting this is.")
-                val code = Kernel.bootstrap(by)
+                val code = Ceremony.bootstrap(by)
                 if (code == null) {
                     para("This code is not ready yet.")
                 } else {
@@ -550,7 +550,7 @@ class MeetActivity : Activity() {
                         // a read that lands after the step moved on is not
                         // this screen's any more
                         if (m.step() != Meet.Step.INTENT) return@runOnUiThread
-                        val read = Kernel.takeBootstrap(bytes)
+                        val read = Ceremony.takeBootstrap(bytes)
                         if (read == null) m.crossBootstrap() else m.stop(read)
                     }
                 }
@@ -733,7 +733,7 @@ class MeetActivity : Activity() {
         // a camera that fails after it was asked for stops the meeting with
         // the reason; a redraw while a read is running does not reopen it
         val onFailed: (String) -> Unit = { why ->
-            runOnUiThread { Kernel.meet()?.stop(why) ?: redraw() }
+            runOnUiThread { Ceremony.meet()?.stop(why) ?: redraw() }
         }
         cam.readOne(facing, surface, which, onFailed, continuous, found = found)?.let { why -> para(why) }
     }
@@ -817,10 +817,10 @@ class MeetActivity : Activity() {
         // the object in parts (`OpticalExchange`): the exchange outlives
         // the redraws, and a new one opens for the transcript once the
         // contribution is taken
-        val transcript = Kernel.opticalTaken()
+        val transcript = Ceremony.opticalTaken()
         val which = if (transcript) OpticalExchange.TRANSCRIPT else OpticalExchange.CONTRIBUTION
         val x = m.exchange?.takeIf { it.which == which } ?: run {
-            val code = Kernel.optical(by) ?: return m.stop("the kernel would not give the code to show")
+            val code = Ceremony.optical(by) ?: return m.stop("the kernel would not give the code to show")
             OpticalExchange(which, code).also { m.exchange = it }
         }
         val name = if (transcript) "transcript" else "contribution"
@@ -843,7 +843,7 @@ class MeetActivity : Activity() {
         if (theirs > 0 && lastModules > 0) {
             camera?.trackingOf(theirs, lastModules) { bits, under ->
                 runOnUiThread {
-                    val m2 = Kernel.meet() ?: return@runOnUiThread
+                    val m2 = Ceremony.meet() ?: return@runOnUiThread
                     if (m2.step() != Meet.Step.OPTICAL || m2.exchange !== x) return@runOnUiThread
                     // rows under this side's own code, reflected, are this
                     // side's own holdings and say nothing about theirs
@@ -901,11 +901,11 @@ class MeetActivity : Activity() {
         // from — the counts once both are known, then each inbound part as
         // it lands and each outbound part their display acknowledges.
         // Never the content: a part is half of what keys the session
-        Kernel.opticalTrace(by, x.drainTrace())
+        Ceremony.opticalTrace(by, x.drainTrace())
         Diag.event("optical.exchange", "which" to name, "showing" to x.showing(), "received" to x.received(), "theirs" to x.theirCount(), "they_hold" to x.theirReceived())
         if (x.done() && m.handOff(x)) {
             camera?.close()
-            val why = Kernel.takeOptical(by, x.theirs() ?: return)
+            val why = Ceremony.takeOptical(by, x.theirs() ?: return)
             if (why != null) { m.stop(why); return }
         }
         redraw()
@@ -933,7 +933,7 @@ class MeetActivity : Activity() {
             // the capture key crosses and the hold is turned here; the
             // window itself opens from the kernel's drain as the keep lands,
             // and the conversation with it
-            Kernel.runWindow(m)
+            Ceremony.runWindow(m)
         }
         para("state: capture ${if (m.isCaptureSealed()) "sealed" else "running"}; window ${if (m.windowOpen()) "open" else "not yet open"}")
         verification(m)
@@ -1118,9 +1118,9 @@ class MeetActivity : Activity() {
         // and is a cycle in the topology, caught by the down-line check of
         // design §6.2.5 rather than by anything on this screen.
         witnessed(m)
-        adoption(m, Kernel.adoption())
-        peering(m, Kernel.peering())
-        button("Done") { Kernel.stopMeet("done"); finish() }
+        adoption(m, Ceremony.adoption())
+        peering(m, Ceremony.peering())
+        button("Done") { Ceremony.stopMeet("done"); finish() }
     }
 
     /**
@@ -1275,7 +1275,7 @@ class MeetActivity : Activity() {
 
     private fun stopped(m: Meet) {
         para("Stopped: ${m.stopReason()}")
-        button("Back") { Kernel.stopMeet("dismissed"); finish() }
+        button("Back") { Ceremony.stopMeet("dismissed"); finish() }
     }
 
     // ---- view helpers --------------------------------------------------

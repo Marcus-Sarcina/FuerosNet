@@ -129,7 +129,7 @@ class AndroidShell(
     // Accept (D1.5, where every decision is front-loaded): a meeting whose
     // brief the person accepted answers the kernel yes without asking twice
     override fun ask(question: String): Boolean {
-        if (Kernel.meet()?.briefAcknowledged() == true) return true
+        if (Ceremony.meet()?.briefAcknowledged() == true) return true
         return Consent.ask(question)
     }
 
@@ -139,7 +139,7 @@ class AndroidShell(
     // because a notice nobody was looking at is still evidence
     override fun told(notice: Told) {
         Timber.i("notice: %s", notice::class.simpleName)
-        Kernel.told(notice)
+        Ceremony.told(notice)
     }
 
     // **The kernel seals what it persists; this shell keeps the key**

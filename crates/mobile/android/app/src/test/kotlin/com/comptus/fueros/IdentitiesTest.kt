@@ -194,7 +194,7 @@ class IdentitiesTest {
      */
     @Test
     fun the_camera_goes_back_at_the_seal_and_stop_is_only_the_backstop() {
-        val kernel = source("Kernel.kt")
+        val kernel = source("Ceremony.kt")
         val seal = kernel.indexOf("private fun trySeal(")
         assertTrue("trySeal is not there to read", seal > 0)
         val afterSeal = kernel.substring(seal, seal + 1200)
@@ -392,10 +392,15 @@ class IdentitiesTest {
             "the loop does not read which identity is in focus each turn",
             loopSource.contains("val focused = id == activeId"),
         )
+        // **a meeting is driven by the loop of the identity it is held as**
+        // [restructure step 4, 2026-11-14], whichever identity is in focus:
+        // the ceremony reads the meeting's own identity, never the focus
+        val ceremony = source("Ceremony.kt")
         assertTrue(
-            "the tick drives the meeting for a loop that is not the focused identity's",
-            loopSource.contains("val tick = if (focused) meet else null") &&
-                loopSource.contains("turnHeartbeat(diag, tick)"),
+            "the tick drives a meeting another identity holds, or reads the focus",
+            ceremony.contains("val tick = meet?.takeIf { it.by == id }") &&
+                ceremony.contains("turnHeartbeat(diag, tick)") &&
+                !ceremony.contains("activeId"),
         )
         assertFalse(
             "the turn clock is still a field of the kernel rather than the loop's own",
@@ -470,7 +475,7 @@ class IdentitiesTest {
         assertEquals(
             "it runs at the end of a meeting and at every start",
             2,
-            Regex("""^\s+concludeRotation\(\)""", RegexOption.MULTILINE).findAll(kernel).count(),
+            Regex("""^\s+(Kernel\.)?concludeRotation\(\)""", RegexOption.MULTILINE).findAll(kernel + source("Ceremony.kt")).count(),
         )
         assertTrue(
             "the departure is not the prior key's own act",

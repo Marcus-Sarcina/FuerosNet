@@ -21314,3 +21314,21 @@ screen with no way in, noted for the author). `Kernel.focused()` remains
 in the chrome (`ShellActivity`), the first run, the notification-opened
 resource screen (no identity in a notification's intent yet) and the
 model's instances refresh (until `instances` is `Owned`).
+
+**Step 4 part 4a built, 2026-11-14 (gating): the ceremony out of the
+kernel.** `Ceremony.kt`: the meeting and everything it carries (40
+functions, 20 fields, the turn diagnostics, the two generic refusal
+helpers), the kernel's loop handing it a meeting's events by `took(id, p,
+e)` and its clock by `tick(id, p, diag)`. **One rule changed on the way,
+deliberately**: the loop drove "the meeting, if this identity is in
+focus"; a meeting now carries its identity, so it is driven by that
+identity's loop whichever is in focus (`meet?.takeIf { it.by == id }`), a
+frame of a meeting another identity holds is said and not acted on, and
+the ceremony reads the focus nowhere (`IdentitiesTest` pins it). The
+extraction script learned two things worth keeping: a Kotlin declaration
+ends where every bracket opened since has closed and the next line does
+not continue it (a blank-line heuristic cut two expression bodies short),
+and a name moved by name takes every same-named declaration (`clear(dir)`
+went with `clear()` and came back). The bench-provisioned peer
+(`peer`, `peerKey`, `peerName`, `nominees`) stays the kernel's, read by
+both. 380 Kotlin tests green, both flavours compile.
