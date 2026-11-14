@@ -24,6 +24,7 @@ fn last32(b: &[u8]) -> [u8; 32] {
     b[b.len() - 32..].try_into().unwrap()
 }
 
+// functional: CER-017
 // acceptance: DEC-36
 #[test]
 fn the_conversation_objects_encode_to_the_canonical_bytes_and_read_back() {

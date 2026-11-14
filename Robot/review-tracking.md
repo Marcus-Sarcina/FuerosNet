@@ -21560,3 +21560,40 @@ and the recovered contact; 019 ← the three restored-client peering tests;
 fanout — no test), PAY-011 (an owed pin, not a behaviour), PAY-013 (a
 targeted prekey fetch going to the subject's node — the harness assumes it,
 nothing asserts it). Figure: 575 live, 37 held, 538 by neither; PAY 3.
+
+**The CER families linked, 2026-11-14 [author].** By the entries' `then`
+clauses and the tests' own assertions: CER-001 ← CER-17 (the standing
+half; the intentional-participation half is the ceremony's shape and is
+held by no single clause); 002 ← CER-67, CER-68, CER-21, CER-50 and the
+every-nominee-declines test (the pool's composition, the branch-spread
+draw, the availability probe and the eight are asserted nowhere); 003 ←
+CER-20, CER-46; 004 ← CER-17, CER-22 and the far-clock witness test; 005 ←
+CER-05, CER-44; 009 ← CER-50, CER-47, CER-51 and the two adaptors
+witnessless tests (the 24-hour bound has no test); 010 ← CER-19; 011, 012,
+013 ← CER-27 (its cases: a hash that is not the subject's and a
+self-introduction; the bare locator and the signature under another key
+are not exercised); 014 ← the criterion and attempt tests against the
+vectors; 015, 016 ← the tiers-and-fill test, CER-15, CER-28; 017 ← the
+fixture decode asserting one introduction per proposal (the alternation
+and the one-per-turn discipline have no test); 020 ← the split-carriage
+test (no ceiling on the bundle; explicit truncation untested); 022 ←
+CER-48, CER-45; 023 ← CER-48; 024 ← CER-49, CER-44; 025 ← CER-50, CER-51;
+026 ← CER-52; 027 ← CER-55, which is manual and so counts for nothing; 028
+← the restart test that rebuilds introductions and CER-27's greater-counter
+reading (the sender's composition from the most recent locator held is not
+asserted as such); 029 ← the contact test that keeps the intent's locator
+(refusing an intent whose locator is not the sender's own, or does not
+verify, has no test and no code path found: `own_locator` is built, never
+checked on receipt); 031 ← CER-57 to CER-62; 032 ← CER-68, CER-70, CER-46,
+CER-45 (the request before the capture and the overlap of capture and
+queries with the window are asserted by none of them). **Held by neither,
+and said so**: CER-007 (latency treatment; nothing in the code reads a
+latency), CER-008 (coarse geohash only in the signed record; the utility
+validates a geohash, no test asserts the record carries nothing finer),
+CER-018 (the fishing procedure, a P row with no fishing test), CER-019
+(showing the selected verifiers, bases and coverage before signing; no
+coverage surface exists), CER-021 (the subject's retention check of a
+response copy; the retention is declared and never compared), CER-027
+(manual until the second shell), CER-030 (a verifier queried from the
+introduction's material alone; the query test knows its verifier by
+attachment). Figure: 575 live, 61 held, 514 by neither; CER 7.

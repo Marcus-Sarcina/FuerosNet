@@ -14,6 +14,7 @@ use std::collections::BTreeMap;
 /// The subnet the fixtures' positions are in (`wire-format.md` §2.3 field 4).
 const SUBNET: [u8; 32] = [0xdb; 32];
 
+// functional: CER-029
 // acceptance: TOP-040
 #[test]
 fn a_meeting_leaves_each_party_a_contact_of_the_other_with_a_locator() {
@@ -102,6 +103,7 @@ fn an_introduced_stranger_is_a_contact_with_material_to_verify_by() {
     );
 }
 
+// functional: CER-028
 // acceptance: TOP-040
 #[test]
 fn contacts_survive_a_restart_and_introductions_still_build() {

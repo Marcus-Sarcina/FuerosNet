@@ -10,6 +10,7 @@ use rhtn_archive::tx::{Locator, Seqno};
 use rhtn_client::selection::*;
 use std::collections::BTreeSet;
 
+// functional: CER-014
 #[test]
 fn the_criterion_matches_the_vectors() {
     for (n, c, want) in [
@@ -110,6 +111,8 @@ fn n_counts_introductions_once_by_subject_and_the_pool_excludes_the_counterparty
     assert_eq!((stranger.n, stranger.refused), (1, 0));
 }
 
+// functional: CER-015
+// functional: CER-016
 #[test]
 fn selection_runs_by_the_selectors_own_tiers_and_marks_the_fill() {
     let pool = Pool {
@@ -150,6 +153,7 @@ fn selection_runs_by_the_selectors_own_tiers_and_marks_the_fill() {
     );
 }
 
+// functional: CER-014
 /// **How many are asked**: the criterion's ceiling, and at least one
 /// wherever one is offered [author, 2026-10-30].
 #[test]

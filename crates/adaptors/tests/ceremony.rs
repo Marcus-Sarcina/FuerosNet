@@ -249,6 +249,8 @@ async fn the_records_disclosable_fields_are_all_present_and_withheld_by_default(
     assert_eq!(p.withheld.len(), 6);
 }
 
+// functional: CER-002
+// functional: CER-009
 /// **Every nominee declining is not a refusal to meet**: two parties at
 /// their genesis still form a record, the witnessless shape (design
 /// §13.2), signed by the two alone.  Each nominee here has a clock an
@@ -655,6 +657,8 @@ async fn what_the_record_will_contain_is_disclosed_at_capture_and_to_nobody_else
     }
 }
 
+// functional: CER-004
+// functional: CER-009
 /// **A nominee whose clock is far from the claimed start declines**
 /// (`light-client-requirements.md` §1.2), the other side's attests, and
 /// the record carries the one that did; the party whose nominee is absent

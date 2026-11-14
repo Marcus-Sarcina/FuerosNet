@@ -113,6 +113,7 @@ fn the_intent_and_its_continuation_encode_to_the_canonical_bytes() {
     assert_eq!(read.encode(), fx);
 }
 
+// functional: CER-020
 // acceptance: DEC-36
 #[test]
 fn a_bundle_past_one_carriage_is_split_and_put_back_together() {

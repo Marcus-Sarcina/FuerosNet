@@ -1027,7 +1027,10 @@
   "when": "Both compute the pre-commitment.",
   "then": "Both produce the same 32 bytes, equal to SHA-256 of the tag followed by the contributions ordered by ascending participant keyhash, and changing either contribution changes the value.",
   "oracle": "fixture",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CER-005"
+  ]
  },
  {
   "id": "CER-06",
@@ -1300,7 +1303,10 @@
   "when": "B attempts to open and compare.",
   "then": "B's signed response carries `inconclusive` with basis 0 and the query's template version, and never `no-match`.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CER-016"
+  ]
  },
  {
   "id": "CER-16",
@@ -1389,7 +1395,11 @@
   "when": "The ceremony runs and its queries are answered.",
   "then": "Queries are issued and answered, and the hook records no prompt to any operator for querying, witnessing or answering; the verifier's operator receives no notification.",
   "oracle": "behaviour",
-  "interpretation": "design §19.6 owes a witness or a verifier no warning [author, 2026-09-17]: neither is a person acting, and a per-query notice would convey who is meeting whom. The reference client tells the verifier's operator nothing; this test reads 'no notification' as no prompt and no notice of any kind."
+  "interpretation": "design §19.6 owes a witness or a verifier no warning [author, 2026-09-17]: neither is a person acting, and a per-query notice would convey who is meeting whom. The reference client tells the verifier's operator nothing; this test reads 'no notification' as no prompt and no notice of any kind.",
+  "families": [
+   "CER-001",
+   "CER-004"
+  ]
  },
  {
   "id": "CER-18",
@@ -1479,7 +1489,10 @@
   "when": "A's client is asked to sign the proposed body.",
   "then": "No envelope signature by A is produced for that body; a body that includes B's response is signed.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CER-010"
+  ]
  },
  {
   "id": "CER-20",
@@ -1501,7 +1514,10 @@
   "when": "A's client is asked to sign.",
   "then": "No envelope signature by A is produced; the same body with W3 attributed to the counterparty is signed.",
   "oracle": "model",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CER-003"
+  ]
  },
  {
   "id": "CER-21",
@@ -1527,7 +1543,10 @@
   "when": "Each reaches review.",
   "then": "The first shows the person, before signing, that no witness of their own remains; the second shows nothing special. Neither is blocked: the imbalance is visible, not mandatory.",
   "oracle": "behaviour",
-  "interpretation": "The form of the notice is not specified; the test asserts that one is raised before signing."
+  "interpretation": "The form of the notice is not specified; the test asserts that one is raised before signing.",
+  "families": [
+   "CER-002"
+  ]
  },
  {
   "id": "CER-22",
@@ -1549,7 +1568,10 @@
   "when": "W's client is asked to sign.",
   "then": "No witness signature by W is produced; the same ceremony with started_at within T is signed.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CER-004"
+  ]
  },
  {
   "id": "CER-23",
@@ -1678,7 +1700,13 @@
   "when": "The selector computes n.",
   "then": "n is 3, and the required response count follows from 3.",
   "oracle": "fixture",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CER-011",
+   "CER-012",
+   "CER-013",
+   "CER-028"
+  ]
  },
  {
   "id": "CER-28",
@@ -1700,7 +1728,10 @@
   "when": "B processes the query.",
   "then": "B's signed response carries `unavailable` and no comparison is run.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CER-016"
+  ]
  },
  {
   "id": "CER-29",
@@ -2225,7 +2256,11 @@
   "when": "The opening runs: each shows its contribution, each reads the other's, each shows the ceremony-id it computed, and the bearer then carries the intent, the candidates and the capture key.",
   "then": "Every object crosses the client boundary as opaque bytes and nothing above it parses one. The ceremony-ids agree and that is what fixes the id. A QR naming a party this ceremony is not with is refused; a ceremony-id that is not this device's is refused; an intent echoing a contribution the screen did not show is refused; an anchored message from the third party's ceremony is refused in each anchored kind; and bytes that are no §14.3 object are refused as malformed. The checks are made where the ceremony's state is, which is the only place that holds what they check against.",
   "oracle": "behaviour",
-  "interpretation": "The anchor authenticates nobody (§14.3.1): every value is public, so these catch a bearer contradicting the screens and never one quoting them. What stands in their place is §14.1's property, and it is physical."
+  "interpretation": "The anchor authenticates nobody (§14.3.1): every value is public, so these catch a bearer contradicting the screens and never one quoting them. What stands in their place is §14.1's property, and it is physical.",
+  "families": [
+   "CER-005",
+   "CER-024"
+  ]
  },
  {
   "id": "CER-45",
@@ -2249,7 +2284,11 @@
   "when": "The initiator and the responder each open the conversation, put their queries, hand over what they gathered, and the initiator proposes.",
   "then": "Every message rides the payload path as its kind, 9 to 18, to the counterparty and to every witness either nominated, the consent request to the subject alone; the proposer's body reaches every signer and every signer's entries return; the finalised record reaches every signer and each holds the same one.",
   "oracle": "behaviour",
-  "interpretation": "The in-process harness remains for tests that move messages by hand; this is the path a device runs."
+  "interpretation": "The in-process harness remains for tests that move messages by hand; this is the path a device runs.",
+  "families": [
+   "CER-032",
+   "CER-022"
+  ]
  },
  {
   "id": "CER-46",
@@ -2276,7 +2315,11 @@
   "when": "The conversation opens.",
   "then": "The witness request and this signer's back-pointers go before the first consent request, so each witness holds the ceremony before anything else of it arrives; a witness's answer names nobody, and the proposer lists it under the side whose nominee list carries that witness.",
   "oracle": "behaviour",
-  "interpretation": "A witness that receives a kind before the request cannot attribute it; the ordering is what makes the rest of the sequence evidence to it."
+  "interpretation": "A witness that receives a kind before the request cannot attribute it; the ordering is what makes the rest of the sequence evidence to it.",
+  "families": [
+   "CER-032",
+   "CER-003"
+  ]
  },
  {
   "id": "CER-47",
@@ -2303,7 +2346,10 @@
   "when": "The third identity sends a kind 9 to 18 to a participant; the far-clock nominee declines and is later sent the proposed body.",
   "then": "The participant drops the stranger's message as application payload and the ceremony is unchanged; the nominee that declined answers with its refusal and takes nothing further, and the finalised record does not name it.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "CER-009"
+  ]
  },
  {
   "id": "CER-48",
@@ -2330,7 +2376,11 @@
   "when": "Each takes the counterparty's intent.",
   "then": "The intent is refused as an anchor refusal naming the initiator claim, no ceremony-id is fixed, and the window does not open; the ceremony in the ordinary direction, and in the swapped direction with the other party beginning, finalizes.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "CER-022",
+   "CER-023"
+  ]
  },
  {
   "id": "CER-49",
@@ -2357,7 +2407,10 @@
   "when": "Each reads the other's first QR, then the ceremony runs to a record.",
   "then": "Each pins the other's key material from the QR, the counterparty is fixed from it, the record finalizes and verifies under the pinned keys, and a second first-QR naming a third party is refused.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "CER-024"
+  ]
  },
  {
   "id": "CER-50",
@@ -2384,7 +2437,12 @@
   "when": "Each runs the ceremony to the proposal.",
   "then": "The first meeting finalizes as a formation record signed by the two alone, with no witness array, no response array and the genesis value as each participant's back-pointer; the second finalizes as a normal record signed by the two alone, its witness field absent, the absence permanently readable in the signed body.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "CER-002",
+   "CER-009",
+   "CER-025"
+  ]
  },
  {
   "id": "CER-51",
@@ -2408,7 +2466,11 @@
   "when": "They run the ceremony: the local exchanges, then the conversation, whose every leg is the counterparty's since no witness and no verifier is in it.",
   "then": "Both hold the same record, byte for byte, and nothing was asked of any node. No step returns a message for a courier to carry, and a step that needed one would have refused for want of a serving node.",
   "oracle": "behaviour",
-  "interpretation": "This is the escape design §13.2 rests on, so the test's value is in what is absent: there is no serving node in it at all. A witnessed ceremony is the contrasting case and legitimately reaches each witness through that witness's own locator and upstream node."
+  "interpretation": "This is the escape design §13.2 rests on, so the test's value is in what is absent: there is no serving node in it at all. A witnessed ceremony is the contrasting case and legitimately reaches each witness through that witness's own locator and upstream node.",
+  "families": [
+   "CER-009",
+   "CER-025"
+  ]
  },
  {
   "id": "CER-52",
@@ -2431,7 +2493,10 @@
   "when": "The proposer asks the witness to sign before four minutes have passed since the witness received the request, and again past four minutes; and separately, a participant claims an elapsed time longer than the witness has observed.",
   "then": "The early request yields no reply at all: the witness withholds its signature until its clock has matured, and the proposer, waiting on an unanswered signer, is answered when the window passes and the witness signs the body it held; the claim of a longer elapsed time neither shortens nor lengthens the wait, the witness's own receipt being what starts it; and a window configured to zero is the check off. No reader of the record can distinguish a witness that waited from one that did not, so nothing is asserted of the record itself.",
   "oracle": "behaviour",
-  "interpretation": "The four-minute wall clock this row was deferred for is not needed: the harness clock is the witness's own clock, and moving it is precisely what the witness is waiting on. A releasable build carries the design's four minutes; the field-test flavour relaxes it to thirty seconds [author, 2026-10-21], which is what CER-026 anticipates."
+  "interpretation": "The four-minute wall clock this row was deferred for is not needed: the harness clock is the witness's own clock, and moving it is precisely what the witness is waiting on. A releasable build carries the design's four minutes; the field-test flavour relaxes it to thirty seconds [author, 2026-10-21], which is what CER-026 anticipates.",
+  "families": [
+   "CER-026"
+  ]
  },
  {
   "id": "CER-53",
@@ -2526,7 +2591,10 @@
   "then": "Both assemble the other's contribution byte for byte, which they can do only by sharing the reference shell's framing: the parts, their header and the rows of what is held. Stated provisionally; restated, compatible with both, when the iOS shell exists.",
   "oracle": "behaviour",
   "deferred": "the iOS shell, against which the final requirement is written",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "CER-027"
+  ]
  },
  {
   "id": "CUR-01",
@@ -14146,7 +14214,10 @@
   "when": "P proposes an adoption of N one hop below P's own position, in a series N has never occupied, at counter zero, carrying N's own next back-pointers and a timestamp between the meeting and N's clock.",
   "then": "N signs it; P assembles the record and both take it; N's position in P's anchor is one hop below P's, at that series and counter zero.",
   "oracle": "behaviour",
-  "interpretation": "The adoption rests on the meeting, so the two are together and each holds what the checks need [author, 2026-10-14]."
+  "interpretation": "The adoption rests on the meeting, so the two are together and each holds what the checks need [author, 2026-10-14].",
+  "families": [
+   "CER-031"
+  ]
  },
  {
   "id": "CER-58",
@@ -14172,7 +14243,10 @@
   "when": "A body naming somebody else as the node, or resting on the other record, or on a txid N does not hold, is shown to N.",
   "then": "N refuses each with its reason and signs nothing; the presence record and the meeting are untouched.",
   "oracle": "behaviour",
-  "interpretation": "A device that signed what was sent to it would be adopted by anybody able to reach it."
+  "interpretation": "A device that signed what was sent to it would be adopted by anybody able to reach it.",
+  "families": [
+   "CER-031"
+  ]
  },
  {
   "id": "CER-59",
@@ -14195,7 +14269,10 @@
   "when": "A body adopting N into another anchor, or two hops below P's position, or at a path whose upper nibbles are not P's own, is shown to N.",
   "then": "N refuses it with the reason, naming the anchor P's position is in.",
   "oracle": "behaviour",
-  "interpretation": "The patron's claim about where it sits is signed and came from the patron, so the check needs nothing else."
+  "interpretation": "The patron's claim about where it sits is signed and came from the patron, so the check needs nothing else.",
+  "families": [
+   "CER-031"
+  ]
  },
  {
   "id": "CER-60",
@@ -14223,7 +14300,10 @@
   "when": "A second patron proposes an adoption of N in series 1, and then in series 2.",
   "then": "N refuses the first, naming the series, and signs the second; a patron is told which series N can enter before it proposes.",
   "oracle": "behaviour",
-  "interpretation": "A patron holds no record of the series its subordinate has occupied, so the subordinate says [author, 2026-10-14]."
+  "interpretation": "A patron holds no record of the series its subordinate has occupied, so the subordinate says [author, 2026-10-14].",
+  "families": [
+   "CER-031"
+  ]
  },
  {
   "id": "CER-61",
@@ -14250,7 +14330,10 @@
   "when": "A body carrying the genesis value as N's list, or a timestamp before the meeting, or one far ahead of N's clock, is shown to N.",
   "then": "N refuses each with its reason.",
   "oracle": "behaviour",
-  "interpretation": "A signature over somebody else's back-pointers commits this key to a position in the DAG it is not at, and §3.1 says getting that wrong is silent."
+  "interpretation": "A signature over somebody else's back-pointers commits this key to a position in the DAG it is not at, and §3.1 says getting that wrong is silent.",
+  "families": [
+   "CER-031"
+  ]
  },
  {
   "id": "CER-62",
@@ -14273,7 +14356,10 @@
   "when": "A patron proposes an adoption carrying a recovery block, or a transfer statement, to the party being adopted as an ordinary body to review.",
   "then": "It is refused with the reason; the recovery adoption's own path, where the subject assembled the block itself, is unaffected.",
   "oracle": "behaviour",
-  "interpretation": "The subject of a recovery holds what makes it, so a block it did not assemble is one it has no grounds to sign [author, 2026-10-14]."
+  "interpretation": "The subject of a recovery holds what makes it, so a block it did not assemble is one it has no grounds to sign [author, 2026-10-14].",
+  "families": [
+   "CER-031"
+  ]
  },
  {
   "id": "TOP-48",
@@ -14651,7 +14737,10 @@
   "when": "The intent goes out and the optical exchange runs.",
   "then": "Each nominee receives the engagement with its handle before the counterparty has accepted anything; the exchange's shape follows as kind-21 events — both block counts, then each index as it lands or is acknowledged, one event per message, never batched; and the confirmation event carries the ceremony-id the later request repeats.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "CER-002"
+  ]
  },
  {
   "id": "CER-68",
@@ -14674,7 +14763,11 @@
   "when": "The sets cross by locator and each party answers with its keep.",
   "then": "Each keep names at most min(3, offered) of the counterparty's set and nothing outside it; every kept nominee of a side receives that side's request, field 5 closing its engagement, and every dismissed one its standdown; no witness receives a set or a keep; and the window opens with the request.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "CER-002",
+   "CER-032"
+  ]
  },
  {
   "id": "CER-69",
@@ -14712,7 +14805,10 @@
   "when": "Each request arrives.",
   "then": "Both are declined: a request from nowhere binds nothing the witness watched, and a disagreeing ceremony-id means the sequence it observed is not the ceremony it is being asked to sign. A request agreeing on both is answered as always.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "CER-032"
+  ]
  },
  {
   "id": "CER-71",
