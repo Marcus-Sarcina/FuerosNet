@@ -110,6 +110,9 @@ fn an_instrument_reports_what_it_was_told_the_hardware_did_and_nothing_more() {
     assert!(p.tell("attach 00 1.2.3.4:1")[0].contains("and an identity is 32"));
 }
 
+// functional: OPS-008
+// functional: OPS-019
+// functional: TOOL-002
 #[test]
 fn a_participant_reads_its_identity_and_never_mints_one() {
     let mut set = Participants::new(env!("CARGO_BIN_EXE_rhtnp"), "identity");
@@ -242,6 +245,8 @@ fn a_newly_minted_root_adopts_on_the_record_it_just_made() {
     assert!(set.get("bob").must(&format!("where {t_a}"))[0].starts_with("position "));
 }
 
+// functional: TX-030
+// functional: TOOL-004
 /// **Leaving is the subordinate's own act** (`light-client-requirements.md`
 /// §4.2, design §6.2): bob is adopted under alice and then departs, with
 /// nothing proposed to alice and no refusal she can give. Afterwards bob

@@ -41,6 +41,30 @@ fn parse_frame(raw: &[u8]) -> Result<frame::Frame, Error> {
     }
 }
 
+// functional: SCH-002
+// functional: SCH-003
+// functional: SCH-004
+// functional: SCH-005
+// functional: SCH-006
+// functional: SCH-007
+// functional: SCH-008
+// functional: SCH-009
+// functional: SCH-010
+// functional: SCH-012
+// functional: SCH-013
+// functional: SCH-014
+// functional: SCH-015
+// functional: SCH-016
+// functional: SCH-017
+// functional: SCH-018
+// functional: SCH-019
+// functional: SCH-020
+// functional: SCH-021
+// functional: SCH-022
+// functional: SCH-023
+// functional: SCH-024
+// functional: SCH-025
+// functional: SCH-026
 // functional: ENC-001
 // functional: ENC-003
 // functional: ENC-006

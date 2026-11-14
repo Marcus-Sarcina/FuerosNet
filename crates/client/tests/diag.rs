@@ -157,6 +157,7 @@ fn in_order(names: &[String], expected: &[&str]) {
     }
 }
 
+// functional: OPS-014
 // acceptance: none; a test facility's own test (Robot/field-test-diagnostics.md, section 6)
 #[test]
 fn no_secret_of_a_whole_ceremony_appears_in_any_event_and_the_timeline_is_complete() {

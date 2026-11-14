@@ -204,6 +204,7 @@ async fn a_probe_resolves_fetches_an_archive_and_queries_a_catalog_over_a_real_s
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+// functional: TOOL-003
 #[test]
 fn the_command_line_refuses_what_it_will_not_send() {
     // the ask is one of three, and a prekey fetch is not among them

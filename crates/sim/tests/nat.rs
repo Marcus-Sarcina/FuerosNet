@@ -115,6 +115,8 @@ async fn punch(mapping: Mapping, filtering: Filtering) -> bool {
     matches!(a, Ok(Ok(_))) || matches!(b, Ok(Ok(_)))
 }
 
+// functional: INT-016
+// functional: TOOL-006
 #[tokio::test]
 async fn hole_punching_succeeds_through_endpoint_independent_nats() {
     assert!(
@@ -123,6 +125,8 @@ async fn hole_punching_succeeds_through_endpoint_independent_nats() {
     );
 }
 
+// functional: INT-016
+// functional: TOOL-006
 #[tokio::test]
 async fn hole_punching_fails_through_address_and_port_dependent_nats() {
     assert!(

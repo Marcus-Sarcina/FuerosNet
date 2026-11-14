@@ -9,6 +9,7 @@ fn s(x: &str) -> String {
     x.to_string()
 }
 
+// functional: OPS-014
 // functional: POL-022
 // functional: POL-016
 #[test]

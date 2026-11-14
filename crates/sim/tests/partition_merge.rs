@@ -185,6 +185,8 @@ fn seed(m: &mut Mesh, s: &mut Signers) -> Vec<Record> {
 
 // The milestone exit criterion rather than a catalogue entry: the two
 // safety invariants and the convergence property, over the running code.
+// functional: INT-008
+// functional: TOOL-006
 #[test]
 fn views_converge_after_a_partition_heals() {
     let mut s = Signers::new();
@@ -249,6 +251,7 @@ fn views_converge_after_a_partition_heals() {
     }
 }
 
+// functional: TOOL-006
 #[test]
 fn a_partition_that_never_heals_does_not_claim_convergence() {
     let mut s = Signers::new();
@@ -275,6 +278,7 @@ fn a_partition_that_never_heals_does_not_claim_convergence() {
     );
 }
 
+// functional: TOOL-006
 #[test]
 fn gossip_copies_and_never_creates() {
     let mut s = Signers::new();

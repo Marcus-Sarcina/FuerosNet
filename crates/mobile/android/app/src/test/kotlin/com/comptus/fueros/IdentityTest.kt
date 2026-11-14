@@ -24,6 +24,7 @@ class IdentityTest {
         return null
     }
 
+    // functional: OPS-019
     @Test
     fun the_words_read_back_to_the_bytes_they_came_from() {
         val entropy = ByteArray(32) { (it * 37 + 11).toByte() }
@@ -58,6 +59,7 @@ class IdentityTest {
         assertEquals(2048, list.size)
     }
 
+    // functional: OPS-019
     @Test
     fun the_seeds_are_sixty_four_bytes_and_deterministic() {
         val master = ByteArray(32) { it.toByte() }

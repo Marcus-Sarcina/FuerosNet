@@ -268,6 +268,7 @@ fn status(response: &str) -> u16 {
         .unwrap_or(0)
 }
 
+// functional: OPS-020
 /// **The exchange a provisioning page performs**, end to end: the instance
 /// mints a key nobody gave it, proves it holds the token, and serves once
 /// the run signed over that key is handed back.
@@ -713,6 +714,7 @@ fn a_node_enrolled_with_no_subtree_claimed_serves_and_serves_again_after_a_resta
     again.stop();
 }
 
+// functional: OPS-012
 /// **The management acts** (OPS-012, and §8.1 as it actually reads): a
 /// standing policy changed from the page, and a stop that takes the path a
 /// signal takes. Neither composes a frame, replays traffic, makes a
@@ -801,6 +803,7 @@ fn a_standing_policy_is_changed_from_the_page_and_a_stop_is_the_signal_s_path() 
     let _ = std::fs::remove_dir_all(&l.dir);
 }
 
+// functional: OPS-012
 /// **A grant is made, narrowed, withdrawn and taken from the page**, which
 /// is OPS-012's "explicit management acts" over an operator's predicates
 /// in `infra-client-requirements.md` §10.3's vocabulary.
@@ -1140,6 +1143,8 @@ fn an_envelope_is_delivered_from_the_surface_and_the_plane_is_readable() {
     let _ = std::fs::remove_dir_all(&l.dir);
 }
 
+// functional: OPS-011
+// functional: UX-021
 /// **The fetch states the subtree this instance counts, and the page says
 /// a re-signed entry is owed where its entry claims another number**
 /// (`infra-client-requirements.md` §4.4; [author, 2026-10-26]). The size

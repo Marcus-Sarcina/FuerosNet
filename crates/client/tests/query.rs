@@ -56,6 +56,7 @@ fn the_worked_query_and_its_frame_decode_and_the_consent_verifies() {
     ));
 }
 
+// functional: SCH-011
 // functional: VER-009
 // functional: VER-017
 #[test]

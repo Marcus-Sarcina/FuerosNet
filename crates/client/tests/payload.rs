@@ -1056,6 +1056,7 @@ fn a_device_holding_no_seed_publishes_what_the_ceremony_device_signed_and_receiv
     assert!(delivered);
 }
 
+// functional: OPS-001
 /// A restart with an established session: what the device wrote is what
 /// it starts from, the ratchet continues in both directions, and a blob
 /// that does not open leaves the client as it was.

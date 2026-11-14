@@ -574,6 +574,7 @@ fn r07_client_archive_fetch_must_continue_when_more_is_true() {
     );
 }
 
+// functional: INT-008
 #[test]
 fn r07_client_archive_fetch_must_keep_every_valid_merge_branch() {
     let (mut asker, mut subject) = connected_clients();
@@ -648,6 +649,7 @@ fn r07_client_archive_fetch_must_keep_every_valid_merge_branch() {
     );
 }
 
+// functional: OPS-004
 #[test]
 fn r02_backup_install_must_not_accept_another_identitys_blob() {
     use rhtn_client::backup::{self, Contents, Wrap};

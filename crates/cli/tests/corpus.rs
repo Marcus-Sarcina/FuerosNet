@@ -99,6 +99,7 @@ fn a_refusal_is_output_and_not_a_crash() {
     assert!(ok && out.contains("trailing"), "{out}");
 }
 
+// functional: TOOL-002
 #[test]
 fn the_test_identities_the_vectors_name_are_reproduced() {
     let (ok, out, _) = run(&["keys", "test", "alice"], "");

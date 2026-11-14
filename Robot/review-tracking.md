@@ -21918,3 +21918,36 @@ bounded by vouching paths; no test), POL-015 (decay as policy over
 standing; MET-05 reports the decay policy's growth and nothing tests
 inactivity). Figure: 575 live, 445 held, 130 by neither; APP 3, MAIL 3,
 PKG 2, POL 2.
+
+**Fourth group — OPS, SCH, INT, TOOL — linked, 2026-11-14; every prefix
+now done.** OPS by the DMN, PRT, ARC backup, PRP-30/31, SUB-11, TOP-45,
+PAY-18/19, QUE-22, SES-16, RSC-51/52 entries and eleven unmarked tests
+(the client restarting on its storage, the participant that never mints,
+four administration-surface tests, the conduct tally, the diagnostics
+secret sweep, two conformance tests, two Kotlin identity tests); SCH by the
+corpus test — marked with the twenty-four schema families whose positive
+and negative vectors it runs — with DEC-20/21/22/23/32/36/37, CER-35/54,
+RES-18, TRN-06, PRP-06, RSC-29, ARC-07 and the query decode test; INT, all
+E rows, by the entries that are each scenario's pieces (PRT-01/05/07, the
+QUE, SES, TRV, RSC, MET, ARC and TOP entries named per row) plus the
+partition-merge, NAT and merge-branch tests; TOOL by DMN-05/06/09, PRT-01/02
+and the CLI's refusal and identity tests. The partials: OPS-002 (the blob
+carries no identity material and a fresh salt; the HKDF label of the
+wrapping key is not asserted); OPS-007 (an O row: ARC-11 and PRD-09 for the
+restored-on-trust half; APP-014's device hand-over is unheld); OPS-013
+(PRD-06's exposure statement; the full disclosure list has no test);
+OPS-015 (an O row: REP-16 and the peer-blob tests; challenge and restore
+have no profile); SCH-001 (ordering and the path; the raw-byte ordering of
+every primitive is asserted for back-pointers alone); SCH-027 (PAY-07's
+batch request; no `PrekeyBatchReply` vector exists in the corpus); INT-015
+(registration, replacement and lapse; the doorbell is SUB-14, unimplemented);
+INT-019 (the tenure boundary has no test, as GAT-009 said); every INT row
+is held by its pieces and by no single end-to-end run except where PRT-04/07
+or the sim drives one. **Held by neither, and said so**: TOOL-005 (the
+instrument declaring its ephemeral limit in a result; a doc comment in
+`ffi/tests/boundary.rs` says it and no output asserts it), TOOL-007 (that
+acceptance results map to ids and stubs count for nothing is `check.py`'s
+own rule, which holds the register and is held by no test). Figure: 575
+live, 528 held, 47 by neither — APP 3, CAP 2, CER 7, ENC 1, GAT 2, MAIL 3,
+NET 2, PAY 3, PKG 2, POL 2, RES 3, SES 3, SIG 3, TOOL 2, TOP 2, TX 1, UX 1,
+VAL 5, each named in its group's note above.

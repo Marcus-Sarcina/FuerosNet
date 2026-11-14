@@ -58,6 +58,8 @@ async fn c01_archive_probe_must_reject_a_disconnected_batch() {
     assert!(bad.is_err(),"wire section 7.9: requester must verify internal chain links, even when no head was requested; got {bad:?}");
 }
 
+// functional: OPS-019
+// functional: TOOL-002
 #[test]
 fn cli_minted_identity_is_readable_by_daemon_and_survives_a_refused_overwrite() {
     let dir=std::env::temp_dir().join(format!("rhtn-review-mint-{}",std::process::id()));

@@ -231,7 +231,9 @@
   "interpretation": null,
   "families": [
    "ARC-002",
-   "ARC-005"
+   "ARC-005",
+   "SCH-001",
+   "INT-008"
   ]
  },
  {
@@ -319,7 +321,9 @@
   "families": [
    "ARC-008",
    "ARC-010",
-   "ARC-011"
+   "ARC-011",
+   "INT-002",
+   "INT-008"
   ]
  },
  {
@@ -351,7 +355,8 @@
   "families": [
    "ARC-016",
    "REC-010",
-   "SIG-013"
+   "SIG-013",
+   "OPS-007"
   ]
  },
  {
@@ -737,7 +742,8 @@
   "interpretation": "None of the six is secret [author, 2026-10-17]: the capture key is derived from the identity root rather than stored (design §7.5.2.6), so what a row keeps is the counterparty, the ceremony id and the finalization time, and sealed captures are ciphertext this client cannot open. Nothing ages out on load: §13.7.1 puts deletion at import, not on live data.",
   "families": [
    "ARC-006",
-   "ARC-017"
+   "ARC-017",
+   "OPS-001"
   ]
  },
  {
@@ -767,7 +773,9 @@
   "interpretation": "The KEK is derived from the identity root and never written; what the blob carries is the wrapped data key and the header needed to derive the KEK again, which is the standard envelope construction §13.7.1 names. The identity itself is not in the blob: it is what opens it.",
   "families": [
    "ARC-006",
-   "REC-010"
+   "REC-010",
+   "OPS-002",
+   "INT-022"
   ]
  },
  {
@@ -791,7 +799,12 @@
   "when": "It is opened under another identity's key, with an empty key, with an altered header, with an altered payload, and truncated at four lengths.",
   "then": "Another identity's key and an altered header fail at the unwrap; an altered payload authenticates the key and fails the body, so the two steps are distinguishable and a person can be told which went wrong. Every truncation opens nothing. Nothing is returned from a backup that did not authenticate whole.",
   "oracle": "behaviour",
-  "interpretation": "The header is the wrap's external_aad, so altering a salt is an authentication failure rather than a different derivation; a partial import is how a restore replaces an intact identity with half of an old one."
+  "interpretation": "The header is the wrap's external_aad, so altering a salt is an authentication failure rather than a different derivation; a partial import is how a restore replaces an intact identity with half of an old one.",
+  "families": [
+   "OPS-002",
+   "OPS-004",
+   "INT-022"
+  ]
  },
  {
   "id": "ARC-25",
@@ -814,7 +827,10 @@
   "when": "Readers meet a wrap method they do not implement, the retired passphrase method, and a format version they do not know.",
   "then": "An unimplemented wrap method, the retired method 0 and a later format version are each named rather than guessed at.",
   "oracle": "behaviour",
-  "interpretation": "§13.7.1 has the identity now, a hardware token later and split shares later still, none of which changes the format; method 0 was the passphrase and its number is not reused."
+  "interpretation": "§13.7.1 has the identity now, a hardware token later and split shares later still, none of which changes the format; method 0 was the passphrase and its number is not reused.",
+  "families": [
+   "OPS-003"
+  ]
  },
  {
   "id": "ARC-26",
@@ -846,7 +862,10 @@
   "families": [
    "ARC-013",
    "CAP-007",
-   "VAL-003"
+   "VAL-003",
+   "OPS-005",
+   "OPS-018",
+   "INT-022"
   ]
  },
  {
@@ -873,7 +892,11 @@
   "interpretation": "What the scan discarded is returned beside the contents because a person restoring is entitled to know their backup held material their own commitment had run out on.",
   "families": [
    "ARC-013",
-   "CAP-007"
+   "CAP-007",
+   "OPS-004",
+   "OPS-005",
+   "OPS-018",
+   "INT-022"
   ]
  },
  {
@@ -1510,7 +1533,8 @@
   "oracle": "behaviour",
   "interpretation": "Whether the subject's client also refuses to countersign a differing second profile is stated as a capability rather than a rule, so only the verifier side is asserted. The scope is the subject and not the ceremony [author, 2026-10-13]: a ceremony has two subjects and either participant may select the same verifier.",
   "families": [
-   "VER-005"
+   "VER-005",
+   "INT-003"
   ]
  },
  {
@@ -1539,7 +1563,8 @@
   "oracle": "behaviour",
   "interpretation": "Concurrent pre-commitments probing one subject are the leakage the rule is for; successive ceremonies are untouched, each paying a full ceremony for its one probe [author, 2026-10-13]. An identical profile under another pre-commitment is still a second probe and is refused.",
   "families": [
-   "VER-005"
+   "VER-005",
+   "INT-003"
   ]
  },
  {
@@ -1679,7 +1704,8 @@
   "families": [
    "CER-010",
    "TX-022",
-   "VER-015"
+   "VER-015",
+   "INT-002"
   ]
  },
  {
@@ -2169,7 +2195,8 @@
   "families": [
    "CAP-009",
    "CAP-010",
-   "CAP-011"
+   "CAP-011",
+   "SCH-009"
   ]
  },
  {
@@ -2845,7 +2872,8 @@
   "interpretation": null,
   "families": [
    "NET-016",
-   "NET-025"
+   "NET-025",
+   "SCH-024"
   ]
  },
  {
@@ -2964,7 +2992,8 @@
   "interpretation": null,
   "families": [
    "CUR-002",
-   "CUR-008"
+   "CUR-008",
+   "INT-006"
   ]
  },
  {
@@ -4194,7 +4223,8 @@
   ],
   "families": [
    "TX-001",
-   "TX-005"
+   "TX-005",
+   "SCH-004"
   ]
  },
  {
@@ -4240,7 +4270,8 @@
   "families": [
    "TX-019",
    "TX-020",
-   "TX-021"
+   "TX-021",
+   "SCH-007"
   ]
  },
  {
@@ -4289,7 +4320,9 @@
    "TX-013",
    "TX-015",
    "TX-018",
-   "SIG-008"
+   "SIG-008",
+   "SCH-003",
+   "SCH-006"
   ]
  },
  {
@@ -4333,7 +4366,8 @@
    ]
   ],
   "families": [
-   "ENC-009"
+   "ENC-009",
+   "SCH-001"
   ]
  },
  {
@@ -4637,7 +4671,8 @@
   "families": [
    "TX-007",
    "TX-009",
-   "ENC-008"
+   "ENC-008",
+   "SCH-005"
   ]
  },
  {
@@ -4811,7 +4846,10 @@
   "interpretation": "",
   "families": [
    "NET-017",
-   "NET-019"
+   "NET-019",
+   "SCH-023",
+   "SCH-024",
+   "SCH-025"
   ]
  },
  {
@@ -4839,7 +4877,11 @@
   "when": "The daemon is started, then started again with the identity file absent, and again with it readable beyond its owner.",
   "then": "The first serves a real session at the address it reports. The other two refuse, naming what they could not read, and exit non-zero. No identity is generated in any case.",
   "oracle": "behaviour",
-  "interpretation": "A node that mints a key when its file is missing serves under an identity nobody has adopted, and its operator is not told. The identity file holds the two seeds an identity is derived from; no document fixes that format, so it is the reference's."
+  "interpretation": "A node that mints a key when its file is missing serves under an identity nobody has adopted, and its operator is not told. The identity file holds the two seeds an identity is derived from; no document fixes that format, so it is the reference's.",
+  "families": [
+   "OPS-008",
+   "OPS-019"
+  ]
  },
  {
   "id": "DMN-02",
@@ -4866,7 +4908,11 @@
   "when": "It is restarted and that client attaches, and then it is stopped, restarted and the client attaches again.",
   "then": "The material is delivered once, on the first attach. The store then holds nothing for that client and the second attach delivers nothing.",
   "oracle": "behaviour",
-  "interpretation": "A node serving before it has loaded its one-time pools reissues a key it already served, and one serving before it has loaded its topology store replays a forwarding wave, so both are read before the transport accepts a session."
+  "interpretation": "A node serving before it has loaded its one-time pools reissues a key it already served, and one serving before it has loaded its topology store replays a forwarding wave, so both are read before the transport accepts a session.",
+  "families": [
+   "OPS-009",
+   "INT-013"
+  ]
  },
  {
   "id": "DMN-03",
@@ -4893,7 +4939,10 @@
   "when": "It is stopped and started again from those bytes.",
   "then": "The adoption verifies without the peers file naming this node, the table holds the binding, and the child occupies the slot it did before. Resubmitting the record is a duplicate and changes nothing.",
   "oracle": "behaviour",
-  "interpretation": "The store is the seen-set and not the view: the table, the slots and this node's own position are derived from the records it holds. A node that has been adopted takes the position its patron countersigned rather than assuming it is a root."
+  "interpretation": "The store is the seen-set and not the view: the table, the slots and this node's own position are derived from the records it holds. A node that has been adopted takes the position its patron countersigned rather than assuming it is a root.",
+  "families": [
+   "OPS-009"
+  ]
  },
  {
   "id": "DMN-04",
@@ -4950,7 +4999,8 @@
   "interpretation": "The tool decodes with the parser a node uses and no other: a second, laxer decoder written for convenience would disagree with the first invisibly.",
   "families": [
    "SIG-012",
-   "SIG-013"
+   "SIG-013",
+   "TOOL-001"
   ]
  },
  {
@@ -4975,7 +5025,12 @@
   "when": "The tool resolves the subordinate, fetches the node's archive and queries its catalog, and then is asked to send something else.",
   "then": "Each of the three is answered and printed, the archive naming the records it holds. Anything outside the read-only class is refused by the tool before it dials.",
   "oracle": "behaviour",
-  "interpretation": "A prekey fetch consumes a one-time key and a resource request has an application effect whatever the method inside, so neither is reachable from a command whose purpose is to look."
+  "interpretation": "A prekey fetch consumes a one-time key and a resource request has an application effect whatever the method inside, so neither is reachable from a command whose purpose is to look.",
+  "families": [
+   "OPS-011",
+   "TOOL-001",
+   "TOOL-003"
+  ]
  },
  {
   "id": "DMN-07",
@@ -5033,7 +5088,10 @@
   "when": "It is stopped and started again from those bytes.",
   "then": "Its next back-pointer names the record it signed rather than genesis, so the next record it signs extends the chain it published. Its own locator carries the series the reissue entered, not the one it left.",
   "oracle": "behaviour",
-  "interpretation": "A key's own archive is not its topology store and is not derived from one [author, 2026-09-13]: the store is a seen-set the horizon bounds, and the archive is the key's own signed history from its first transaction, which nothing prunes. They are persisted apart."
+  "interpretation": "A key's own archive is not its topology store and is not derived from one [author, 2026-09-13]: the store is a seen-set the horizon bounds, and the archive is the key's own signed history from its first transaction, which nothing prunes. They are persisted apart.",
+  "families": [
+   "OPS-009"
+  ]
  },
  {
   "id": "DMN-09",
@@ -5059,7 +5117,10 @@
   "when": "The requester takes each reply.",
   "then": "The connected batch is reported with its records, and says that newestness is the holder's claim because no frontier was requested. The disconnected batch is refused, naming the record whose back-pointers do not reach the one that follows it.",
   "oracle": "behaviour",
-  "interpretation": "Re-derived 2026-09-21: the probe verifies reachability from the requested frontier, not a head-first sequence."
+  "interpretation": "Re-derived 2026-09-21: the probe verifies reachability from the requested frontier, not a head-first sequence.",
+  "families": [
+   "TOOL-003"
+  ]
  },
  {
   "id": "DMN-10",
@@ -5203,7 +5264,10 @@
   "when": "It serves a one-time key to a requester and then writes its state back, twice.",
   "then": "Both saves succeed, and the archive, the topology store and the derived view are all on disk afterwards. Ordinary issuance is not a condition that can stop a node persisting.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "OPS-010"
+  ]
  },
  {
   "id": "DMN-15",
@@ -5411,7 +5475,8 @@
   "interpretation": null,
   "families": [
    "GAT-011",
-   "PKG-002"
+   "PKG-002",
+   "OPS-012"
   ]
  },
  {
@@ -5435,7 +5500,10 @@
   "when": "It states no interval, states one inside the bound, states zero, and states one outside the bound.",
   "then": "Absent, a default applies; a stated interval inside the bound is taken; zero turns the replay off rather than being refused; one outside the bound is refused with the range named and the line it was written on. A string where a count belongs is refused as a type error.",
   "oracle": "behaviour",
-  "interpretation": "§10.1.3 asks for the periodic replay and states no interval, because what it costs and what it is worth are facts about one deployment; the default is a default and not a rule any document states."
+  "interpretation": "§10.1.3 asks for the periodic replay and states no interval, because what it costs and what it is worth are facts about one deployment; the default is a default and not a rule any document states.",
+  "families": [
+   "OPS-017"
+  ]
  },
  {
   "id": "DMN-23",
@@ -5717,7 +5785,8 @@
   "interpretation": "The form of the reported bound is not specified; the test asserts a finite cut-equal bound for the reference and growth for the decay policy.",
   "families": [
    "POL-009",
-   "POL-018"
+   "POL-018",
+   "INT-023"
   ]
  },
  {
@@ -5742,7 +5811,8 @@
   "oracle": "model",
   "interpretation": null,
   "families": [
-   "POL-005"
+   "POL-005",
+   "INT-023"
   ]
  },
  {
@@ -5773,7 +5843,8 @@
   "interpretation": null,
   "families": [
    "POL-009",
-   "POL-010"
+   "POL-010",
+   "INT-023"
   ]
  },
  {
@@ -5999,7 +6070,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "MAIL-003"
+   "MAIL-003",
+   "INT-013"
   ]
  },
  {
@@ -6151,7 +6223,8 @@
   "interpretation": null,
   "families": [
    "MAIL-005",
-   "MAIL-023"
+   "MAIL-023",
+   "SCH-027"
   ]
  },
  {
@@ -6476,7 +6549,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "MAIL-006"
+   "MAIL-006",
+   "OPS-014"
   ]
  },
  {
@@ -6506,7 +6580,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "MAIL-002"
+   "MAIL-002",
+   "OPS-010"
   ]
  },
  {
@@ -6852,7 +6927,8 @@
    "GAT-008",
    "UX-009",
    "UX-010",
-   "CAT-020"
+   "CAT-020",
+   "OPS-013"
   ]
  },
  {
@@ -6886,7 +6962,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "UX-008"
+   "UX-008",
+   "OPS-006"
   ]
  },
  {
@@ -6924,7 +7001,10 @@
   "when": "A reviewer restores from a holder.",
   "then": "The interface states that the restored history is complete only as far as the holder claims and was not verified complete.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "OPS-007"
+  ]
  },
  {
   "id": "PRD-10",
@@ -6946,7 +7026,10 @@
   "when": "A person uses the client across several sessions, then makes a backup, then deletes it.",
   "then": "The prompt appears until the backup exists, is absent while it exists, and returns after deletion, with no count or memory of having prompted.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "OPS-006"
+  ]
  },
  {
   "id": "PRD-11",
@@ -7212,7 +7295,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "TOP-011"
+   "TOP-011",
+   "SCH-021"
   ]
  },
  {
@@ -7407,7 +7491,8 @@
   "families": [
    "TOP-026",
    "TOP-027",
-   "TOP-028"
+   "TOP-028",
+   "INT-010"
   ]
  },
  {
@@ -7437,7 +7522,8 @@
   "interpretation": null,
   "families": [
    "TOP-026",
-   "TOP-028"
+   "TOP-028",
+   "INT-010"
   ]
  },
  {
@@ -7492,7 +7578,9 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "TOP-017"
+   "TOP-017",
+   "OPS-017",
+   "INT-009"
   ]
  },
  {
@@ -7892,7 +7980,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "TOP-027"
+   "TOP-027",
+   "INT-010"
   ]
  },
  {
@@ -7945,7 +8034,8 @@
   "interpretation": "",
   "families": [
    "TOP-019",
-   "TOP-046"
+   "TOP-046",
+   "OPS-017"
   ]
  },
  {
@@ -7983,7 +8073,8 @@
   "oracle": "behaviour",
   "interpretation": "",
   "families": [
-   "TOP-046"
+   "TOP-046",
+   "OPS-026"
   ]
  },
  {
@@ -8019,7 +8110,8 @@
   "families": [
    "TOP-046",
    "UX-025",
-   "SIG-002"
+   "SIG-002",
+   "OPS-027"
   ]
  },
  {
@@ -8049,7 +8141,9 @@
   "oracle": "behaviour",
   "interpretation": "The order of the three attaches is the protocol's: a bundle must be published before it can be swept, and a recipient attributes an initial message only under a binding it already holds.",
   "families": [
-   "PAY-012"
+   "PAY-012",
+   "INT-001",
+   "TOOL-004"
   ]
  },
  {
@@ -8074,7 +8168,8 @@
   "oracle": "behaviour",
   "interpretation": "A declaration is evidence about a scenario rather than about hardware, which is the whole difference between an instrument and a client, and is why this claims none of the product entries.",
   "families": [
-   "APP-004"
+   "APP-004",
+   "TOOL-004"
   ]
  },
  {
@@ -8129,7 +8224,10 @@
   "when": "Two of them meet in a ceremony, and the one that has never been adopted proposes an adoption of the other on that record, in its own subnet.",
   "then": "The patron's position is the self-anchor and it sits in nobody else's subnet, which is the whole of what it needs to be one. Both sign the same body, both take the record, and both name it the same. Taking it is what tells the subordinate where it now sits: it is in the patron's subnet and still in its own, with nothing configured on either side and nothing granted.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "INT-001"
+  ]
  },
  {
   "id": "PRT-06",
@@ -8188,7 +8286,10 @@
   "when": "C selects A's verifiers from the bundle A handed over, and the query, the consent, the grant and the response cross the process boundaries, the request reaching B before its grant.",
   "then": "C is obliged to seek exactly one verifier and the one candidate is B, marked selected at C's discretion; C's own empty bundle obliges A to seek nobody. A's consent yields the one grant. B answers nothing while the grant is missing, then answers with a copy addressed to A. C takes the response under B's signature, the record is proposed over it and finalized by both participants and both witnesses, and B signs nothing.",
   "oracle": "behaviour",
-  "interpretation": "The reference engine compares byte-equal hashes and recognises nobody (design §22.2 leaves the engine open), so the match observed attests the grant's key release and the carried legs, not recognition. Carriage between processes is the instrument's, as PRT-04 reads it."
+  "interpretation": "The reference engine compares byte-equal hashes and recognises nobody (design §22.2 leaves the engine open), so the match observed attests the grant's key release and the carried legs, not recognition. Carriage between processes is the instrument's, as PRT-04 reads it.",
+  "families": [
+   "INT-002"
+  ]
  },
  {
   "id": "PRT-08",
@@ -8216,7 +8317,10 @@
   "when": "The client mints the enrolment token, composes the instance's configuration and the once-run script, launches the machine, reads its public address once it is active, and the provider refuses a credential it does not know.",
   "then": "The configuration carries the token and listens on the node's and the surface's ports; the script installs the engine, writes the configuration and the operator's public material, hands the state directory to the image's uid and runs the image from the registry named, and carries no seed. The launch posts the region, the size, the machine image and the script under the credential, reads the machine's id back, and the standing reads the public IPv4 once the status is active. A refusal arrives with the provider's status and its own words.",
   "oracle": "behaviour",
-  "interpretation": "What local.sh does on one machine, done at a provider over a transport the platform supplies; the enrolment that follows is the one PRT-04's by-hand path already exercises, the token and the address having come from here rather than been typed."
+  "interpretation": "What local.sh does on one machine, done at a provider over a transport the platform supplies; the enrolment that follows is the one PRT-04's by-hand path already exercises, the token and the address having come from here rather than been typed.",
+  "families": [
+   "OPS-020"
+  ]
  },
  {
   "id": "PRT-09",
@@ -8242,7 +8346,10 @@
   "when": "The client derives the key and composes the script the machine runs once, with and without a key; and the same identity is built again from the same seeds, as a device restored from the phrase builds it.",
   "then": "The script installs the public line as root's authorized_keys at 0600 with the directory at 0700, and a launch with no key writes no such file; the private half is the OpenSSH container `ssh -i` reads, with the right magic, one key and no cipher; the identity built again derives the same key, another identity derives another, the post-quantum seed does not enter it, and the key is not the identity's own.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "OPS-023"
+  ]
  },
  {
   "id": "PRT-10",
@@ -8269,7 +8376,10 @@
   "when": "The client derives both keys and the launch installs them, and the client hands its instance the runner's key with a request.",
   "then": "The two keys differ and each returns with the identity; the operator's own entry carries no forced command, and the runner's names the one program with every ssh door shut, so a key captured from an instance runs that program's vocabulary and opens no shell; the runner refuses shell punctuation, a flag where an image belongs, a name reaching beyond the packages it made, and any verb it does not know; and the launch carries the program itself, every line of it inside its own block.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "OPS-024"
+  ]
  },
  {
   "id": "PRT-11",
@@ -8404,7 +8514,8 @@
   "interpretation": null,
   "families": [
    "VAL-003",
-   "MAIL-014"
+   "MAIL-014",
+   "INT-013"
   ]
  },
  {
@@ -8496,7 +8607,8 @@
   "oracle": "behaviour",
   "interpretation": "The sender-facing refusal has no wire encoding; the test checks only that X receives a refusal for that message that differs from the acceptance the earlier k received.",
   "families": [
-   "MAIL-013"
+   "MAIL-013",
+   "INT-014"
   ]
  },
  {
@@ -8586,7 +8698,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "MAIL-013"
+   "MAIL-013",
+   "INT-014"
   ]
  },
  {
@@ -8683,7 +8796,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "MAIL-016"
+   "MAIL-016",
+   "INT-011"
   ]
  },
  {
@@ -8836,7 +8950,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "MAIL-015"
+   "MAIL-015",
+   "INT-013"
   ]
  },
  {
@@ -8866,7 +8981,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "MAIL-017"
+   "MAIL-017",
+   "INT-006"
   ]
  },
  {
@@ -8927,7 +9043,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "MAIL-011"
+   "MAIL-011",
+   "INT-014"
   ]
  },
  {
@@ -8980,7 +9097,8 @@
   "interpretation": "",
   "families": [
    "MAIL-010",
-   "MAIL-015"
+   "MAIL-015",
+   "OPS-010"
   ]
  },
  {
@@ -9310,6 +9428,9 @@
     2,
     "reissue-advances-relationship"
    ]
+  ],
+  "families": [
+   "INT-005"
   ]
  },
  {
@@ -9405,7 +9526,8 @@
   "oracle": "behaviour",
   "interpretation": "Which patron an observer trusts is policy; the test fixes it and asserts that exactly one continuation results.",
   "families": [
-   "REC-007"
+   "REC-007",
+   "INT-007"
   ]
  },
  {
@@ -9580,7 +9702,8 @@
   "oracle": "behaviour",
   "interpretation": "'No archive presentation or re-verification' is observed as the absence of an archive-fetch request and of a presence-ceremony requirement; the spec names no other observable.",
   "families": [
-   "TX-006"
+   "TX-006",
+   "INT-004"
   ]
  },
  {
@@ -9915,7 +10038,9 @@
   "interpretation": null,
   "families": [
    "TOP-018",
-   "MAIL-016"
+   "MAIL-016",
+   "OPS-015",
+   "INT-009"
   ]
  },
  {
@@ -10429,7 +10554,8 @@
   "interpretation": null,
   "families": [
    "RES-012",
-   "RES-013"
+   "RES-013",
+   "INT-005"
   ]
  },
  {
@@ -10461,7 +10587,8 @@
   "families": [
    "RES-012",
    "SIG-012",
-   "SIG-013"
+   "SIG-013",
+   "SCH-016"
   ]
  },
  {
@@ -10700,7 +10827,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "CAT-014"
+   "CAT-014",
+   "INT-017"
   ]
  },
  {
@@ -10820,7 +10948,8 @@
   "families": [
    "GAT-019",
    "NET-005",
-   "NET-007"
+   "NET-007",
+   "INT-024"
   ]
  },
  {
@@ -10858,7 +10987,8 @@
    "GAT-005",
    "GAT-020",
    "GAT-021",
-   "GAT-022"
+   "GAT-022",
+   "INT-018"
   ]
  },
  {
@@ -10890,7 +11020,8 @@
   "families": [
    "GAT-001",
    "GAT-021",
-   "GAT-026"
+   "GAT-026",
+   "INT-018"
   ]
  },
  {
@@ -10965,7 +11096,8 @@
    "GAT-024",
    "GAT-025",
    "GAT-029",
-   "GAT-030"
+   "GAT-030",
+   "INT-020"
   ]
  },
  {
@@ -11000,7 +11132,8 @@
   "families": [
    "GAT-022",
    "GAT-027",
-   "GAT-028"
+   "GAT-028",
+   "INT-020"
   ]
  },
  {
@@ -11025,7 +11158,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "GAT-023"
+   "GAT-023",
+   "INT-020"
   ]
  },
  {
@@ -11062,7 +11196,8 @@
    "GAT-013",
    "GAT-014",
    "GAT-025",
-   "PKG-013"
+   "PKG-013",
+   "INT-019"
   ]
  },
  {
@@ -11130,7 +11265,8 @@
   "families": [
    "GAT-003",
    "GAT-004",
-   "GAT-021"
+   "GAT-021",
+   "INT-018"
   ]
  },
  {
@@ -11220,7 +11356,8 @@
   "families": [
    "UX-011",
    "CAT-015",
-   "CAT-017"
+   "CAT-017",
+   "INT-017"
   ]
  },
  {
@@ -11401,7 +11538,8 @@
   "families": [
    "GAT-021",
    "GAT-026",
-   "NET-006"
+   "NET-006",
+   "SCH-022"
   ]
  },
  {
@@ -11434,7 +11572,8 @@
    "PKG-001",
    "PKG-003",
    "PKG-004",
-   "PKG-014"
+   "PKG-014",
+   "INT-021"
   ]
  },
  {
@@ -11494,7 +11633,8 @@
   "interpretation": "What one request may spend is an operator's number. No document fixes a figure, and the reference's defaults are a starting point rather than a rule.",
   "families": [
    "PKG-005",
-   "PKG-006"
+   "PKG-006",
+   "INT-021"
   ]
  },
  {
@@ -11623,7 +11763,8 @@
    "GAT-009",
    "GAT-012",
    "GAT-037",
-   "CAT-002"
+   "CAT-002",
+   "INT-019"
   ]
  },
  {
@@ -11706,7 +11847,8 @@
    "UX-011",
    "UX-018",
    "CAT-007",
-   "CAT-016"
+   "CAT-016",
+   "INT-017"
   ]
  },
  {
@@ -11735,7 +11877,8 @@
    "GAT-009",
    "GAT-013",
    "GAT-025",
-   "GAT-037"
+   "GAT-037",
+   "INT-019"
   ]
  },
  {
@@ -11985,7 +12128,8 @@
   "oracle": "behaviour",
   "interpretation": "'Has missed three on waking' is read as failover beginning on waking; the one-interval bound is the test's, since wire-format.md §8.2 leaves timeout and backoff to local policy.",
   "families": [
-   "SES-010"
+   "SES-010",
+   "INT-011"
   ]
  },
  {
@@ -12015,7 +12159,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "SES-011"
+   "SES-011",
+   "INT-011"
   ]
  },
  {
@@ -12051,7 +12196,8 @@
   "interpretation": null,
   "families": [
    "SES-007",
-   "SES-015"
+   "SES-015",
+   "INT-011"
   ]
  },
  {
@@ -12138,7 +12284,10 @@
   "when": "C's session on S ends (C closes it) and C performs a fresh attach.",
   "then": "C's first dial is to N, and N answers with AttachAck whose field 1 (mode) is 0.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "INT-012"
+  ]
  },
  {
   "id": "SES-13",
@@ -12226,7 +12375,8 @@
   "oracle": "model",
   "interpretation": null,
   "families": [
-   "NET-007"
+   "NET-007",
+   "INT-024"
   ]
  },
  {
@@ -12254,7 +12404,10 @@
   "when": "The session has run for a heartbeat interval; each side's event log is read; a client attaches to the second node.",
   "then": "The first node reports the session live and the client reachable, and both sides' logs are empty: the reachability state is kept and nothing of what passed. The second node's log and its client's each record the attach. An implementation whose sessions append every frame sent and every delivery to a store no configuration turns off fails.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "OPS-014"
+  ]
  },
  {
   "id": "SES-17",
@@ -12651,7 +12804,8 @@
   "families": [
    "MAIL-018",
    "MAIL-019",
-   "APP-007"
+   "APP-007",
+   "INT-015"
   ]
  },
  {
@@ -12738,7 +12892,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "MAIL-019"
+   "MAIL-019",
+   "INT-015"
   ]
  },
  {
@@ -12787,7 +12942,10 @@
   "when": "The service is loaded, its counters expired, and its state saved.",
   "then": "The prohibited file is removed and stays removed across a save and a second load; the operator's own file is untouched. Nothing writes the log back, because the window lives in memory.",
   "oracle": "behaviour",
-  "interpretation": "The section forbids the record; issuance stopped writing it, and an upgrade that left the old one in place kept exactly what it forbids. One named file, removed once, with the failure visible."
+  "interpretation": "The section forbids the record; issuance stopped writing it, and an upgrade that left the old one in place kept exactly what it forbids. One named file, removed once, with the failure visible.",
+  "families": [
+   "OPS-016"
+  ]
  },
  {
   "id": "SUB-12",
@@ -13030,7 +13188,8 @@
   ],
   "families": [
    "TOP-003",
-   "TX-008"
+   "TX-008",
+   "INT-009"
   ]
  },
  {
@@ -13252,7 +13411,8 @@
    ]
   ],
   "families": [
-   "TOP-003"
+   "TOP-003",
+   "INT-001"
   ]
  },
  {
@@ -13341,7 +13501,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "TOP-028"
+   "TOP-028",
+   "INT-010"
   ]
  },
  {
@@ -13367,7 +13528,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "REC-005"
+   "REC-005",
+   "INT-006"
   ]
  },
  {
@@ -13392,7 +13554,8 @@
   "oracle": "behaviour",
   "interpretation": "Independence from arrival order follows from resolving by patron trust rather than by arrival; no sentence states it.",
   "families": [
-   "REC-007"
+   "REC-007",
+   "INT-007"
   ]
  },
  {
@@ -13475,7 +13638,8 @@
   ],
   "families": [
    "TOP-015",
-   "TX-012"
+   "TX-012",
+   "INT-004"
   ]
  },
  {
@@ -13766,7 +13930,8 @@
   "oracle": "behaviour",
   "interpretation": "A path in one subnet says nothing about a path in another, so a copy holding one of two would hold an answer it could not qualify. The stored row already carried the party and the anchor separately, so keying by both puts two rows where there was one and leaves what a row says alone.",
   "families": [
-   "TOP-001"
+   "TOP-001",
+   "INT-005"
   ]
  },
  {
@@ -14337,7 +14502,8 @@
    "TOP-009",
    "TOP-015",
    "TOP-018",
-   "TOP-035"
+   "TOP-035",
+   "OPS-016"
   ]
  },
  {
@@ -14587,7 +14753,8 @@
   "oracle": "fixture",
   "interpretation": null,
   "families": [
-   "NET-003"
+   "NET-003",
+   "SCH-020"
   ]
  },
  {
@@ -14837,7 +15004,10 @@
   "when": "C dials S's first endpoint, completes the handshake, sends Attach, and receives a CONNECTION_CLOSE with application close code 1.",
   "then": "Within the test's observation window C makes no connection attempt to S's second endpoint and dials no cached sibling; the attach attempt ends as refused.",
   "oracle": "fixture",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "INT-012"
+  ]
  },
  {
   "id": "TRN-15",
@@ -14900,7 +15070,8 @@
   "oracle": "model",
   "interpretation": "Handshake completion is read as completion of the handshake of the connection that carried the early data, as the compliant Tamarin theory states it; the wire says only 'until handshake completion', and a completed handshake on A is taken not to admit B's replay.",
   "families": [
-   "NET-007"
+   "NET-007",
+   "INT-024"
   ]
  },
  {
@@ -15332,7 +15503,8 @@
   "oracle": "behaviour",
   "interpretation": "Re-read 2026-09-22: design §14.1.1's priority order is RFC 8445's and binds this implementation; this entry holds the outcome, and TRV-11 holds the order.",
   "families": [
-   "NET-008"
+   "NET-008",
+   "INT-016"
   ]
  },
  {
@@ -15417,7 +15589,10 @@
   "when": "L1 sends L2 payload.",
   "then": "L1 sends no STUN request, exchanges no candidates and dials no address of L2's; the payload goes by the relay.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "INT-016"
+  ]
  },
  {
   "id": "TRV-06",
@@ -15481,7 +15656,8 @@
   "oracle": "behaviour",
   "interpretation": "The candidates travel as a payload kind of the reference's own (kind 3) on whatever path exists. Whether the path may be direct is whether the client holds the peer as a contact, read from its own table (design §12.6.3) [author, 2026-10-24]. Re-read 2026-09-22: design §14.1.1's priority order is RFC 8445's and binds this implementation; this entry holds the outcome, and TRV-11 holds the order.",
   "families": [
-   "NET-012"
+   "NET-012",
+   "INT-016"
   ]
  },
  {
@@ -16214,7 +16390,10 @@
   "when": "Each is checked as its kind.",
   "then": "Every positive passes and every negative is refused: the request requires its handle, a trace event carries exactly its own fields, a set holds at most eight, a keep at most three with no name twice.",
   "oracle": "fixture",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "SCH-026"
+  ]
  },
  {
   "id": "CER-67",
@@ -16618,7 +16797,8 @@
    "GAT-027",
    "GAT-029",
    "GAT-030",
-   "PKG-015"
+   "PKG-015",
+   "INT-020"
   ]
  },
  {
@@ -16834,7 +17014,8 @@
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
-   "PKG-009"
+   "PKG-009",
+   "OPS-021"
   ]
  },
  {
@@ -16862,7 +17043,10 @@
   "when": "The patron is removed from the configuration, and the rounds then run.",
   "then": "Both are stopped and both are shown to the operator with the reason; nothing is handed over under the withdrawn relationship afterwards; the instance is told its relationships again before anything else reaches it; and an exchange already composed under the old configuration is not committed against the new one.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "OPS-021"
+  ]
  },
  {
   "id": "DMN-29",
@@ -16890,7 +17074,8 @@
   "oracle": "behaviour",
   "interpretation": "The node's own transport key is the identity's classical member, which is what lets a test configure both nodes before either starts.",
   "families": [
-   "PKG-015"
+   "PKG-015",
+   "OPS-022"
   ]
  },
  {
@@ -16913,7 +17098,10 @@
   "when": "B's instance emits a receipt addressed to its patron, and the same is tried again with the wrong key written for A.",
   "then": "The receipt crosses to A over TLS, is admitted there and is held for the patron, the bookkeeping and the relationship check being applied once at the receiving node; with the wrong key written it stays pending with the refusal said, and where no location is written it stays pending and readable from the surface. The instances see nothing of the carriage.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "OPS-022"
+  ]
  },
  {
   "id": "DMN-31",
@@ -16939,7 +17127,10 @@
   "when": "The node is stopped without warning and started again, and the withdrawn record's older live copy is then offered.",
   "then": "The admitted envelope is offered again in the order it was admitted, with its attempts; the watermarks come back, so the older live copy is refused across the restart as within a run; custody of an envelope ends when the instance answers 2xx and of an emission when the far side has it, and not before.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "OPS-022"
+  ]
  },
  {
   "id": "DMN-32",
@@ -16965,7 +17156,11 @@
   "when": "The surface is read, and read again on a node configured to federate with no store for what it takes.",
   "then": "The plane is legible per instance: the relationships, what is held and whether it stands, what waits, what is pending elsewhere, any conflict, and what was stopped with its reason. A node keeping no custody says so in the fetch, on the page, and at startup.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "OPS-011",
+   "OPS-021"
+  ]
  },
  {
   "id": "DMN-33",
@@ -17017,7 +17212,10 @@
   "when": "The configuration is reloaded: one instance is rebound to another backend under relationships that did not change, and the other is no longer hosted here.",
   "then": "The rebound instance is told its relationships again before anything else reaches it; the plane of the one no longer hosted is gone and nothing is pushed to it; and what the node reports it hosts is what its configuration now names.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "families": [
+   "OPS-021"
+  ]
  },
  {
   "id": "DMN-35",
@@ -17071,7 +17269,10 @@
   "when": "Acts arrive on the loopback and from another address of the same machine, with no proof, with a proof over the act, with that proof a second time, with a proof over another body and under another token; and the client replaces the token and the instance is restarted.",
   "then": "An act on the loopback is taken as before; one from elsewhere without a proof is refused, with a proof is taken, and with the same nonce again is refused; a proof over another body or under another token is refused; the enrolment fetch stays open, being the bootstrap and disclosing a public half; the replacement is set only under the token in force, is written where the next start reads it at 0600, spends the old token, and is still in force after a restart.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "OPS-020"
+  ]
  },
  {
   "id": "DMN-37",
@@ -17097,7 +17298,10 @@
   "when": "It is asked for an act; and with a host address that is not a loopback one; and with a request carrying a word a shell would read; and the key is examined on disk while the act is in flight and after it returns.",
   "then": "The request is the runner's vocabulary joined by single spaces and nothing else; a host address that is not loopback is refused where the operator wrote it, the key never being sent there; a word carrying shell punctuation, an empty word or no verb at all is refused before any session; the key is written at 0600 for the act alone and is overwritten and removed when it returns; a node naming no host shell refuses an install naming the configuration key that is missing.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "OPS-024"
+  ]
  },
  {
   "id": "DMN-38",
@@ -17123,7 +17327,10 @@
   "when": "Packages are installed, installed again over themselves, and removed, and the file and the record are read back.",
   "then": "Every line the operator wrote survives each install and each removal; the generated half is below one sentinel that says it is generated and will be rewritten, there being exactly one sentinel however many acts have been made; each generated entry is a hosting entry the node's own reader parses, naming the relayed manifest's path and the loopback address; the record reads back as it was written; a package's name on the host is derived from its resource, fits what the host's program takes and differs for a different resource; a package is told where to listen and which resource it is and nothing else.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "OPS-025"
+  ]
  },
  {
   "id": "DMN-39",
@@ -17153,7 +17360,10 @@
   "when": "An install act arrives carrying the resource, the owner, the authority, the image, the port, the package's manifest and the key; with a manifest the node will not admit; with a host that refuses to start it; with no key, a key that is not one, no manifest, a malformed authority, image or port, the surface's own port, and a port another package already listens on; then a removal, and a removal of a package the node did not install.",
   "then": "The host is asked for the image before anything is written and for the package afterwards, and for nothing else; the manifest is written where the node reads it, the entry generated, the node's configuration re-read and the package bound and listed; a second install of the same resource replaces it rather than adding one; a manifest the node refuses and a host that will not start it each leave the record, the generated entries and the relayed manifest as they were, with nothing started and the reason said; no grant is written and the answer says nobody may reach it yet; each malformed field, the missing key and the missing manifest are refused with what was wanted named; the surface's own port and a port already taken are refused; a removal stops the package, drops the entry, re-reads, and says that the grants, the block, the log and the jobs were kept; a package the node did not install is refused as the operator's to remove by hand.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "OPS-025"
+  ]
  },
  {
   "id": "DMN-40",
@@ -17225,7 +17435,10 @@
   "when": "The configuration is read by that reader; and the copy the launch script carries is lifted back out of the script and read the same way.",
   "then": "It reads without error — a key one side writes and the other does not know is a machine that comes up with no node on it, and the configuration is strict by design; it describes an instance and not a node holding a seed, naming the operator's material, a transport key and a delegations directory and no identity; it names a hosting file and a state directory, so the instance can host a package at all; and it names the administration surface with a replaceable token and a loopback host shell, so an install can be asked for and the machine can be reached for it. The script's copy reads identically, the block's indentation being part of the pairing.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": "",
+  "families": [
+   "OPS-020"
+  ]
  },
  {
   "id": "TOP-52",
