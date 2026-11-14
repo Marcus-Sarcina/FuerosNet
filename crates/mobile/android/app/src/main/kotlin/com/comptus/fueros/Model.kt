@@ -47,7 +47,6 @@ object Model {
 
     /** The meetings this device took part in, newest first: outcomes, not the ceremony's state. */
     @Volatile var meetings: List<Identities.Owned<Meeting>> = emptyList(); private set
-    @Volatile var connection: Connection = Connection.Detached; private set
 
     /** The aliases held, by keyhash in hex, which is how a screen names a party. */
     @Volatile var aliases: Map<String, String> = emptyMap(); private set
@@ -79,7 +78,7 @@ object Model {
             }
             if (Noun.SUBNETS in nouns || Noun.PROFILES in nouns) subnets = Kernel.subnetsHeld()
             if (Noun.LINES in nouns) lines = Kernel.linesHeld()
-            if (Noun.INSTANCES in nouns) instances = Kernel.instances()
+            if (Noun.INSTANCES in nouns) instances = Kernel.instances(Kernel.focused())
             if (Noun.RESOURCES in nouns) resources = Kernel.resourcesHeld()
             if (Noun.MEETINGS in nouns) meetings = Kernel.meetingsHeld()
             Diag.event("model.refreshed", "nouns" to nouns.joinToString(",") { it.name.lowercase() })
@@ -91,10 +90,6 @@ object Model {
     fun refreshAll() = refresh(Noun.entries.toSet())
 
     /** The connection as the kernel last reported it. */
-    fun connection(c: Connection) {
-        connection = c
-        tell(setOf(Noun.CONNECTION))
-    }
 
     /** Each identity's connection, by id — a browser window's own status
      *  where [connection] is the focused window's [author, 2026-11-11]. */

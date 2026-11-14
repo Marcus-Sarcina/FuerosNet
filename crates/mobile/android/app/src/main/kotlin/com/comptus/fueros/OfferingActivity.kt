@@ -47,12 +47,23 @@ import android.widget.TextView
  * ([ActActivity], [Acts]): this screen's work is to fill it in.
  */
 class OfferingActivity : Activity() {
+    /**
+     * **The identity this screen acts for**, named by whoever opened it
+     * [restructure step 4, 2026-11-14]: never read from the focus here,
+     * so a screen opened for one identity cannot act for another.
+     */
+    private lateinit var by: String
 
     private lateinit var narration: TextView
     private lateinit var answer: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        by = intent.getStringExtra("by") ?: run {
+            Diag.warn("offering.opened", "why" to "no identity named")
+            finish()
+            return
+        }
         val g = Screen.gutter(this)
 
         narration = TextView(this).apply {
@@ -104,7 +115,7 @@ class OfferingActivity : Activity() {
                     this.text = "Read it"
                     setOnClickListener {
                         startActivity(
-                            Intent(this@OfferingActivity, OfferingActivity::class.java)
+                            Intent(this@OfferingActivity, OfferingActivity::class.java).putExtra("by", by)
                                 .putExtra("offering", pasted.text.toString().trim()),
                         )
                         finish()
@@ -199,7 +210,7 @@ class OfferingActivity : Activity() {
 
     /** The instances this client was told about ([OperatorActivity]). */
     private fun instances(): List<String> =
-        getSharedPreferences("operator", Context.MODE_PRIVATE)
+        getSharedPreferences("operator-$by", Context.MODE_PRIVATE)
             .getString("instances", "")
             .orEmpty()
             .lineSequence()
@@ -229,7 +240,7 @@ class OfferingActivity : Activity() {
             answer.text = "name one of your instances"
             return
         }
-        val owner = Kernel.keyhash()
+        val owner = Kernel.keyhash(by)
         if (owner == null) {
             answer.text = "this device holds no identity, so there is no owner to install under"
             return
@@ -250,7 +261,7 @@ class OfferingActivity : Activity() {
             "manifest" to o.manifest,
         ).joinToString("&") { (k, v) -> "$k=${Provision.escape(v)}" }
         startActivity(
-            Intent(this, ActActivity::class.java)
+            Intent(this, ActActivity::class.java).putExtra("by", by)
                 .putExtra("at", at)
                 .putExtra("act", "install")
                 .putExtra("query", query),

@@ -21273,3 +21273,44 @@ payload. Seam scenario + its new leg 66.5 s; live 9; boundary 13;
 conformance 26; sim kernel 2; adaptors direct/submissions/conversation/
 verifier/teaching/query green. `statuses()` waits for step 4, which reads
 it from the shell.
+
+**Restructure step 4, parts 1 and 2 built, 2026-11-14 (gating).** The
+shell's hidden focus was one getter, `participant = loaded[activeId]`,
+read at 57 sites in 55 `Kernel` functions. Now: every such public function
+takes `by: String` first (52 of them, `enrol` and `renew` included) and
+reads `loaded[by]`; `Meet` carries `by` from `startMeet(by, …)` and the
+meeting-bound private functions (`carryIntent`, `runWindow`, `turnOf`,
+the courier object) read `loaded[m.by]`; `bringUp` and `chooseActive` read
+`activeId` by name, the shell's focus at start and at a switch being the
+person's own input; `Kernel.focused()` names that focus at a call, and
+every screen passes it explicitly until part 3 gives each screen its
+identity by intent (the conversation and resource screens already have
+theirs). `Model.connection` (the one status slot) is gone; the catalog
+screen reads `connections[focused]`. **Part 2** [author]: the Operator
+screen's instances, tokens and invitations live in `operator-<identity>`
+rather than one device-wide file, the screen's `by` the identity in focus
+when it opened. **What the old file held stays unowned**: nothing says
+which identity launched which instance, so the bench phones' Operator
+screens show no instances until an identity enrols or launches again
+(the nodes themselves are unaffected; the hand-enrol fields take the
+address and token). Tests: the meetings in `MeetTest`/`DiagTest` are
+given an identity; three source pins updated; `ModelTest` reads
+`connections[id]`; 380 Kotlin tests green, both flavours compile.
+
+**Step 4 part 3 built, 2026-11-14 (with parts 1–2, gating together).**
+Nine screens are given their identity by the intent that opened them
+(`by`, refused with `<screen>.opened why="no identity named"` as the
+conversation screen does), every intent that opens one carries it (the
+chrome's six with `Kernel.focused()`, the operator's three, the
+offering's two, the catalog's two, the node page's one, the rotation's
+one), the three readers of the operator store (`NodePageActivity`,
+`OfferingActivity`, `ActActivity`) read `operator-<by>` — part 2 alone had
+left them on the old device-wide file, which would have lost every token
+lookup — and `Launch.userData` names the operator. `InviteActivity` and
+`RotationActivity` fall back to the focus: a tapped link opens the first
+with no screen of ours behind it, and nothing opens the second
+(`RotationActivity::class.java` appears nowhere but a doc comment — a
+screen with no way in, noted for the author). `Kernel.focused()` remains
+in the chrome (`ShellActivity`), the first run, the notification-opened
+resource screen (no identity in a notification's intent yet) and the
+model's instances refresh (until `instances` is `Owned`).

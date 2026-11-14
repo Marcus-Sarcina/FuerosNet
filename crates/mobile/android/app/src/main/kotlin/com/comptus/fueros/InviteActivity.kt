@@ -50,6 +50,8 @@ import android.widget.TextView
  * that becomes detached comes back without being asked again.
  */
 class InviteActivity : Activity() {
+    /** The identity this screen acts for: the one named by whoever opened it, else the one in focus — a link tapped, or a screen nothing opens yet. */
+    private val by: String by lazy { intent.getStringExtra("by") ?: Kernel.focused() }
 
     private companion object {
         /** How long to wait for the kernel a deep link did not start. */
@@ -98,12 +100,12 @@ class InviteActivity : Activity() {
         // the bring-up runs on its own thread, so this waits for it rather
         // than reading once and calling the absence a bad link
         Thread({
-            var read = Kernel.invitation(link)
+            var read = Kernel.invitation(by, link)
             var waited = 0
             while (read == null && waited < KERNEL_WAIT_MS) {
                 Thread.sleep(STEP_MS.toLong())
                 waited += STEP_MS
-                read = Kernel.invitation(link)
+                read = Kernel.invitation(by, link)
             }
             val r = read
             runOnUiThread {
@@ -153,7 +155,7 @@ class InviteActivity : Activity() {
                     setOnClickListener {
                         isEnabled = false
                         narration.text = "${narration.text}\nattaching to ${read.at}…"
-                        Kernel.serveFrom(this@InviteActivity, node, read.at)
+                        Kernel.serveFrom(by, this@InviteActivity, node, read.at)
                     }
                 },
             )

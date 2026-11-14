@@ -69,28 +69,35 @@ class OperatorActivity : Activity() {
      * **that** instance's key, and the proof is checked against it on
      * every exchange (§8.2).
      */
+    /**
+     * **The identity this screen acts for**, named by whoever opened it
+     * [restructure step 4, 2026-11-14]: never read from the focus here,
+     * so a screen opened for one identity cannot act for another.
+     */
+    private lateinit var by: String
+
     private fun tokenFor(at: String): String? =
-        getSharedPreferences("operator", MODE_PRIVATE).getString("token:$at", null)
+        getSharedPreferences("operator-$by", MODE_PRIVATE).getString("token:$at", null)
 
     /** The node address a member was last invited to, where they have
      *  been: what keeps a redrawing of this screen from texting them
      *  again.  Keyed by the member and never by their address, which is
      *  the one thing here that names a person outside this network. */
     private fun invitedTo(who: String): String? =
-        getSharedPreferences("operator", MODE_PRIVATE).getString("invited:$who", null)
+        getSharedPreferences("operator-$by", MODE_PRIVATE).getString("invited:$who", null)
 
     private fun rememberInvited(who: String, at: String) {
-        getSharedPreferences("operator", MODE_PRIVATE).edit()
+        getSharedPreferences("operator-$by", MODE_PRIVATE).edit()
             .putString("invited:$who", at).apply()
     }
 
     private fun rememberToken(at: String, token: String) {
-        getSharedPreferences("operator", MODE_PRIVATE).edit()
+        getSharedPreferences("operator-$by", MODE_PRIVATE).edit()
             .putString("token:$at", token).apply()
     }
 
     private fun instances(): List<Instance> =
-        getSharedPreferences("operator", MODE_PRIVATE)
+        getSharedPreferences("operator-$by", MODE_PRIVATE)
             .getString("instances", "")!!
             .lines()
             .filter { it.isNotBlank() }
@@ -109,14 +116,14 @@ class OperatorActivity : Activity() {
 
     private fun remember(i: Instance) {
         val kept = instances().filter { it.at != i.at } + i
-        getSharedPreferences("operator", MODE_PRIVATE).edit()
+        getSharedPreferences("operator-$by", MODE_PRIVATE).edit()
             .putString("instances", kept.joinToString("\n") { line(it) })
             .apply()
     }
 
     private fun forget(at: String) {
         val kept = instances().filter { it.at != at }
-        getSharedPreferences("operator", MODE_PRIVATE).edit()
+        getSharedPreferences("operator-$by", MODE_PRIVATE).edit()
             .putString("instances", kept.joinToString("\n") { line(it) })
             .apply()
     }
@@ -155,7 +162,7 @@ class OperatorActivity : Activity() {
      * turning each into a tap.
      */
     private fun sendInvitations(at: String) {
-        val owed = Kernel.invitations(at).filter { invitedTo(it.who) != at }
+        val owed = Kernel.invitations(by, at).filter { invitedTo(it.who) != at }
         if (owed.isEmpty()) return
         if (checkSelfPermission(android.Manifest.permission.SEND_SMS) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -255,7 +262,7 @@ class OperatorActivity : Activity() {
                     text = "Open its administration page"
                     setOnClickListener {
                         startActivity(
-                            Intent(this@OperatorActivity, NodePageActivity::class.java)
+                            Intent(this@OperatorActivity, NodePageActivity::class.java).putExtra("by", by)
                                 .putExtra("at", i.at),
                         )
                     }
@@ -277,7 +284,7 @@ class OperatorActivity : Activity() {
                             isEnabled = true
                         } else {
                             Thread {
-                                val said = Kernel.renew(i.at, token, 45, i.subnet)
+                                val said = Kernel.renew(by, i.at, token, 45, i.subnet)
                                 runOnUiThread {
                                     narration.text = said.joinToString("\n")
                                     isEnabled = true
@@ -315,7 +322,7 @@ class OperatorActivity : Activity() {
      * before it appears rather than after.
      */
     private fun showControlKey() {
-        val line = Kernel.hostControlPublicKey()
+        val line = Kernel.hostControlPublicKey(by)
         if (line == null) {
             narration.text = "this device holds no seed, so it derives no key"
             return
@@ -337,7 +344,7 @@ class OperatorActivity : Activity() {
     }
 
     private fun showPrivateKey() {
-        val key = Kernel.hostControlPrivateKey()
+        val key = Kernel.hostControlPrivateKey(by)
         if (key == null) {
             narration.text = "this device holds no seed, so it derives no key"
             return
@@ -387,6 +394,11 @@ class OperatorActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        by = intent.getStringExtra("by") ?: run {
+            Diag.warn("operator.opened", "why" to "no identity named")
+            finish()
+            return
+        }
 
         val at = field("the instance's surface — host:port", "10.0.2.2:7449")
         val token = field("its enrolment token — 64 hex digits")
@@ -417,7 +429,7 @@ class OperatorActivity : Activity() {
         offering = Button(this).apply {
             text = "Install a package from an offering"
             setOnClickListener {
-                startActivity(Intent(this@OperatorActivity, OfferingActivity::class.java))
+                startActivity(Intent(this@OperatorActivity, OfferingActivity::class.java).putExtra("by", by))
             }
         }
         open = Button(this).apply {
@@ -426,7 +438,7 @@ class OperatorActivity : Activity() {
             setOnClickListener {
                 pageAt?.let {
                     startActivity(
-                        Intent(this@OperatorActivity, NodePageActivity::class.java)
+                        Intent(this@OperatorActivity, NodePageActivity::class.java).putExtra("by", by)
                             .putExtra("at", it),
                     )
                 }
@@ -434,7 +446,7 @@ class OperatorActivity : Activity() {
         }
         // **which subnet the instance serves** [author, 2026-10-15]: one
         // it holds a position in, chosen here; where it holds one, that one
-        val scopes = Kernel.subnets().map(Meet.Scope::of)
+        val scopes = Kernel.subnets(by).map(Meet.Scope::of)
         chosen = scopes.singleOrNull()
         val choice = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -497,7 +509,7 @@ class OperatorActivity : Activity() {
                 // host that may not answer, and a screen that froze while
                 // waiting would tell its operator nothing
                 Thread {
-                    val said = Kernel.enrol(
+                    val said = Kernel.enrol(by, 
                         ask.at,
                         ask.token,
                         ask.credentials,
@@ -670,7 +682,7 @@ class OperatorActivity : Activity() {
         // (PRD-11; `light-client-requirements.md` §6): the ordering speaks
         // to this operator's own redundancy rather than the network's, it
         // hides none and it scores none
-        val all = Launch.providers().sortedBy { Kernel.crowded(it.asn).first }
+        val all = Launch.providers().sortedBy { Kernel.crowded(by, it.asn).first }
         var provider = all.first()
         // **and the ordering says what it is** (PRD-11), in the author's
         // own words rather than this screen's: what the table holds is
@@ -681,7 +693,7 @@ class OperatorActivity : Activity() {
             setTextColor(Palette.now.sub)
             text = Disclosure.words(Disclosure.Topic.PROVISIONING).joinToString("\n\n")
         }
-        val heldFor = { p: Launch.Provider -> Kernel.providerCredentials()[p.name.lowercase()] ?: "" }
+        val heldFor = { p: Launch.Provider -> Kernel.providerCredentials(by)[p.name.lowercase()] ?: "" }
         val credential = field("${provider.name} API token", heldFor(provider), secret = true)
         // the token is the operator's own, made at the provider's page:
         // open it, and say the steps there
@@ -769,7 +781,7 @@ class OperatorActivity : Activity() {
             about.text = Sizing.note() + "\n\n" + Sizing.whyBehind()
         }
         fun describe() {
-            val (count, crowded) = Kernel.crowded(provider.asn)
+            val (count, crowded) = Kernel.crowded(by, provider.asn)
             about.text = "${provider.name} (AS${provider.asn}): " +
                 (if (crowded) "$count of the parties in your horizon already run there — crowded, and still yours to choose. " else "nobody in your horizon runs there. ") +
                 "That speaks to your own redundancy, not the network's."
@@ -782,7 +794,7 @@ class OperatorActivity : Activity() {
                 this@OperatorActivity,
                 android.R.layout.simple_spinner_dropdown_item,
                 all.map { p ->
-                    val (count, crowded) = Kernel.crowded(p.asn)
+                    val (count, crowded) = Kernel.crowded(by, p.asn)
                     "${p.name} (AS${p.asn})" + if (crowded) "  — $count in your horizon" else ""
                 },
             )
@@ -839,7 +851,7 @@ class OperatorActivity : Activity() {
                         // 2026-11-06]: the provider chooser above orders
                         // by ASN, and this orders that provider's own
                         // places, the pair being what disperses
-                        crowding = Kernel.crowdedZones(provider.asn, allRegions.map { it.slug })
+                        crowding = Kernel.crowdedZones(by, provider.asn, allRegions.map { it.slug })
                         // **the two pickers constrain each other**
                         // (`Robot/future-features.md` entry 2): both lists
                         // already knew how they intersect — a size carries
@@ -890,7 +902,7 @@ class OperatorActivity : Activity() {
                             }
                         // the credential is kept once it has worked, and
                         // travels in the backup from here
-                        Kernel.holdProviderCredential(provider.name.lowercase(), cred)?.let { narration.text = it }
+                        Kernel.holdProviderCredential(by, provider.name.lowercase(), cred)?.let { narration.text = it }
                             ?: run { narration.text = "${regionRows.size} regions, ${sizeRows.size} sizes" }
                     }
                 }.start()
@@ -906,12 +918,12 @@ class OperatorActivity : Activity() {
                     narration.text = "fetch the regions and sizes first, and pick one of each"
                     return@setOnClickListener
                 }
-                val scopes = Kernel.subnets().map(Meet.Scope::of)
+                val scopes = Kernel.subnets(by).map(Meet.Scope::of)
                 if (scopes.size > 1 && chosen == null) {
                     narration.text = "choose which subnet the instance serves first"
                     return@setOnClickListener
                 }
-                val material = Kernel.materialHex() ?: run { narration.text = "the kernel is not running"; return@setOnClickListener }
+                val material = Kernel.materialHex(by) ?: run { narration.text = "the kernel is not running"; return@setOnClickListener }
                 isEnabled = false
                 val plan = Launch.Plan(region.slug, size.slug, registry = registry.text.toString().trim(), tag = tag.text.toString().trim())
                 val minted = Launch.token()
@@ -921,7 +933,7 @@ class OperatorActivity : Activity() {
                 Thread {
                     val said = mutableListOf<String>()
                     fun show() = runOnUiThread { narration.text = said.joinToString("\n") }
-                    val launched = provider.launch(cred, plan, "rhtn-${minted.take(8)}", Launch.userData(material, minted, plan.registry, plan.tag))
+                    val launched = provider.launch(cred, plan, "rhtn-${minted.take(8)}", Launch.userData(by, material, minted, plan.registry, plan.tag))
                     val id = launched.getOrElse {
                         said += "launch refused: ${it.message}"; show(); runOnUiThread { isEnabled = true }; return@Thread
                     }.id
@@ -981,7 +993,7 @@ class OperatorActivity : Activity() {
                     // endpoint record and the anchor entry, which is what
                     // the next operator's ordering reads
                     // (`light-client-requirements.md` §6)
-                    said += Kernel.enrol(
+                    said += Kernel.enrol(by, 
                         surface, minted, creds, "$ip:${Launch.QUIC_PORT}", subnet,
                         provider.asn, region.slug,
                     )
@@ -1005,8 +1017,8 @@ class OperatorActivity : Activity() {
                             // is this device's own, because an operator's
                             // node speaks as its operator; the address is
                             // the machine it just launched.
-                            Kernel.keyhash()?.let { me ->
-                                Kernel.serveFrom(this@OperatorActivity, me, "$ip:${Launch.QUIC_PORT}")
+                            Kernel.keyhash(by)?.let { me ->
+                                Kernel.serveFrom(by, this@OperatorActivity, me, "$ip:${Launch.QUIC_PORT}")
                             }
                             atField.setText(surface)
                             tokenField.setText(minted)
@@ -1048,7 +1060,7 @@ class OperatorActivity : Activity() {
      */
     private fun destroy(i: Instance) {
         val provider = Launch.providers().firstOrNull { it.name.lowercase() == i.provider } ?: return
-        val cred = Kernel.providerCredentials()[i.provider] ?: run {
+        val cred = Kernel.providerCredentials(by)[i.provider] ?: run {
             narration.text = "no ${provider.name} credential is held; paste it above first"
             return
         }
@@ -1084,7 +1096,7 @@ class OperatorActivity : Activity() {
      */
     private fun assertHorizon(at: String, token: String, narration: TextView) {
         Thread {
-            val rows = Kernel.horizonRows()
+            val rows = Kernel.horizonRows(by)
             if (rows.isEmpty()) {
                 return@Thread
             }

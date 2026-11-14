@@ -38,6 +38,12 @@ import android.widget.TextView
  *    node's own page — so they are **text in a field and never an act**.
  */
 class ActActivity : Activity() {
+    /**
+     * **The identity this screen acts for**, named by whoever opened it
+     * [restructure step 4, 2026-11-14]: never read from the focus here,
+     * so a screen opened for one identity cannot act for another.
+     */
+    private lateinit var by: String
 
     private lateinit var narration: TextView
     private lateinit var answer: TextView
@@ -49,10 +55,15 @@ class ActActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        by = intent.getStringExtra("by") ?: run {
+            Diag.warn("act.opened", "why" to "no identity named")
+            finish()
+            return
+        }
         at = intent.getStringExtra("at") ?: ""
         val name = intent.getStringExtra("act") ?: ""
         val query = intent.getStringExtra("query")
-        token = getSharedPreferences("operator", Context.MODE_PRIVATE)
+        token = getSharedPreferences("operator-$by", Context.MODE_PRIVATE)
             .getString("token:$at", null) ?: ""
 
         narration = TextView(this).apply {
@@ -288,7 +299,7 @@ class ActActivity : Activity() {
             // the kernel holds the seed, and nothing of the key is written
             // down here or there
             if (a.brings == Acts.Brings.HOST_KEY) {
-                val key = Kernel.hostRunnerPrivateKey()
+                val key = Kernel.hostRunnerPrivateKey(by)
                 if (key == null) {
                     runOnUiThread {
                         answer.text = "this device could not derive the key for that machine; " +

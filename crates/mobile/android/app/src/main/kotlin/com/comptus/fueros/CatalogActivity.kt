@@ -28,6 +28,12 @@ import android.widget.TextView
  * the resource's own business and not this client's.
  */
 class CatalogActivity : Activity() {
+    /**
+     * **The identity this screen acts for**, named by whoever opened it
+     * [restructure step 4, 2026-11-14]: never read from the focus here,
+     * so a screen opened for one identity cannot act for another.
+     */
+    private lateinit var by: String
 
     private lateinit var roll: TextView
     private lateinit var narration: TextView
@@ -35,6 +41,11 @@ class CatalogActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        by = intent.getStringExtra("by") ?: run {
+            Diag.warn("catalog.opened", "why" to "no identity named")
+            finish()
+            return
+        }
 
         roll = TextView(this).apply {
             textSize = 14f
@@ -93,11 +104,11 @@ class CatalogActivity : Activity() {
                     // node, that node is the host to ask. Told about out
                     // of band is how a resource without an entry arrives.
                     val typed = which.text.toString().trim().lowercase()
-                    val serving = (Model.connection as? uniffi.rhtn_model.Connection.Attached)
+                    val serving = (Model.connections[by] as? uniffi.rhtn_model.Connection.Attached)
                         ?.serving?.hex()
                     if (typed.length == 64 && typed.all { it in "0123456789abcdef" } && serving != null) {
                         startActivity(
-                            android.content.Intent(this@CatalogActivity, ResourceActivity::class.java)
+                            android.content.Intent(this@CatalogActivity, ResourceActivity::class.java).putExtra("by", by)
                                 .putExtra("node", serving)
                                 .putExtra("resource", typed)
                                 .putExtra("name", "A resource with no entry")
@@ -111,7 +122,7 @@ class CatalogActivity : Activity() {
                     return@setOnClickListener
                 }
                 startActivity(
-                    android.content.Intent(this@CatalogActivity, ResourceActivity::class.java)
+                    android.content.Intent(this@CatalogActivity, ResourceActivity::class.java).putExtra("by", by)
                         .putExtra("node", entry.row.node)
                         .putExtra("resource", entry.row.resource)
                         .putExtra("name", entry.row.instance)

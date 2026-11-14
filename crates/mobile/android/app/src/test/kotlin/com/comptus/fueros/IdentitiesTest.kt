@@ -296,7 +296,7 @@ class IdentitiesTest {
         // recreation mid-add reads as a wipe
         assertTrue(
             "the choice is offered before the name step, which a recreation would undo",
-            first.indexOf("Kernel.defaultAlias() == null -> name()") <
+            first.indexOf("Kernel.defaultAlias(Kernel.focused()) == null -> name()") <
                 first.indexOf("intent.getBooleanExtra(ADDING, false) -> choice()"),
         )
         // **and a phrase owed outranks both** [bench, 2026-11-10]: the
@@ -509,7 +509,7 @@ class IdentitiesTest {
         )
         // **instances are the exception**, every act on one being an
         // operator action: read from the identity that acts, no holder
-        assertTrue("instances are not the active identity's", model.contains("Kernel.instances()"))
+        assertTrue("instances are not the active identity's", model.contains("Kernel.instances(Kernel.focused())"))
         assertFalse("instances should carry no holder", model.contains("Kernel.instancesHeld()"))
 
         // acting inside a subnet goes through the row's holder

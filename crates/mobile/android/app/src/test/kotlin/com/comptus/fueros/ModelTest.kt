@@ -26,9 +26,9 @@ class ModelTest {
             assertEquals(listOf(setOf(Noun.SUBNETS, Noun.PROFILES)), synchronized(told) { told.toList() })
             assertTrue("no kernel, no subnets", Model.subnets.isEmpty())
 
-            Model.connection(Connection.Detached)
+            Model.connectionOf("the identity under test", Connection.Detached)
             assertEquals(setOf(Noun.CONNECTION), synchronized(told) { told.last() })
-            assertEquals(Connection.Detached, Model.connection)
+            assertEquals(Connection.Detached, Model.connections["the identity under test"])
 
             val before = synchronized(told) { told.size }
             Model.refresh(emptySet())

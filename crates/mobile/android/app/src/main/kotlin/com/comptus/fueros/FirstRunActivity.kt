@@ -79,9 +79,9 @@ class FirstRunActivity : Activity() {
         // reached the name would come back as the choice of new or
         // restored and read as a wipe.
         when {
-            owedPhrase != null -> shown(Kernel.materialHex(), owedPhrase)
+            owedPhrase != null -> shown(Kernel.materialHex(Kernel.focused()), owedPhrase)
             !Kernel.hasIdentity(this) -> choice()
-            intent.getBooleanExtra(NAME_ONLY, false) || Kernel.defaultAlias() == null -> name()
+            intent.getBooleanExtra(NAME_ONLY, false) || Kernel.defaultAlias(Kernel.focused()) == null -> name()
             // **the picker already asked which way**, so neither door is
             // offered a second time
             intent.getBooleanExtra(GENERATE, false) -> create()
@@ -203,7 +203,7 @@ class FirstRunActivity : Activity() {
     private fun waitForMaterial(): String? {
         val until = System.currentTimeMillis() + 30_000
         while (System.currentTimeMillis() < until) {
-            Kernel.materialHex()?.let { return it }
+            Kernel.materialHex(Kernel.focused())?.let { return it }
             Thread.sleep(200)
         }
         return null
@@ -411,7 +411,7 @@ class FirstRunActivity : Activity() {
         // — unlike the phrase, which is not stored and genuinely cannot
         // come back. A person who lost the first screen is not asked to
         // wipe the device to see their own public identity.
-        Kernel.materialHex()?.let {
+        Kernel.materialHex(Kernel.focused())?.let {
             heading("Public key material")
             para("What a node is told about you. The bench reads it from here.")
             mono(it)

@@ -46,6 +46,8 @@ package com.comptus.fueros
  * kernel answers them in its event loop, off any screen.
  */
 class Meet(
+    /** The identity this meeting is held as [restructure step 4, 2026-11-14]. */
+    val by: String,
     /** Who is being met, as the codes say it and not before: the responder
      *  learns it from the bootstrap, the initiator from the first optical
      *  code (`wire-format.md` §14.3.1; design §12.3). Null until then. */

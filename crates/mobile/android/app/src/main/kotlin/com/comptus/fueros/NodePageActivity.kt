@@ -46,12 +46,23 @@ import android.widget.TextView
  * page reaches on *this device*.
  */
 class NodePageActivity : Activity() {
+    /**
+     * **The identity this screen acts for**, named by whoever opened it
+     * [restructure step 4, 2026-11-14]: never read from the focus here,
+     * so a screen opened for one identity cannot act for another.
+     */
+    private lateinit var by: String
 
     private var at: String = ""
     private var token: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        by = intent.getStringExtra("by") ?: run {
+            Diag.warn("nodepage.opened", "why" to "no identity named")
+            finish()
+            return
+        }
         val at = intent.getStringExtra("at")
         if (at.isNullOrBlank()) {
             setContentView(
@@ -67,7 +78,7 @@ class NodePageActivity : Activity() {
         // **the token, for the proof every read carries**: the page is
         // this instance's own state, so reading it is an act like any
         // other and proves itself the same way (§8.2)
-        this.token = getSharedPreferences("operator", MODE_PRIVATE)
+        this.token = getSharedPreferences("operator-$by", MODE_PRIVATE)
             .getString("token:$at", null) ?: ""
 
         val bar = TextView(this).apply {
@@ -128,7 +139,7 @@ class NodePageActivity : Activity() {
                         android.content.Intent(
                             this@NodePageActivity,
                             ActActivity::class.java,
-                        )
+                        ).putExtra("by", by)
                             .putExtra("at", at)
                             .putExtra("act", name)
                             .putExtra("query", query),

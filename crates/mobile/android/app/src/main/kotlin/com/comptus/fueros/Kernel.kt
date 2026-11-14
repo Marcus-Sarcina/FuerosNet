@@ -58,13 +58,15 @@ object Kernel {
     @Volatile private var activeId: String? = null
 
     /**
-     * **The identity that acts.** Every use of this in the shell means
-     * the active one, which is what a meeting and an operator action
-     * take; viewing and acting inside a subnet are every identity's at
-     * once and read [loaded] instead.
+     * **The identity in focus, named at a call** [restructure step 4,
+     * 2026-11-14]: the person's choice of which identity acts, a UI
+     * input and nothing the kernel reasons from. Every function that acts
+     * for an identity takes it as its first argument; a screen that acts
+     * for the focused one passes this, and a screen given its identity
+     * passes that. Empty where the device holds none, which every
+     * function answers as it answered a missing focus.
      */
-    private val participant: Participant?
-        get() = activeId?.let { loaded[it] }
+    fun focused(): String = activeId ?: ""
     @Volatile private var peer: ByteArray? = null
     @Volatile private var peerKey: String? = null
     private var peerName: String = "peer"
@@ -185,6 +187,7 @@ object Kernel {
      * @param zone that provider's own name for the place, beside the ASN
      */
     fun enrol(
+        by: String,
         at: String,
         tokenHex: String,
         credentials: Int,
@@ -201,7 +204,7 @@ object Kernel {
         asn: Long? = null,
         zone: String? = null,
     ): List<String> {
-        val p = participant ?: return listOf("the kernel is not running")
+        val p = loaded[by] ?: return listOf("the kernel is not running")
         val said = mutableListOf<String>()
         val token = runCatching { Provision.unhex(tokenHex.trim()) }.getOrElse {
             return listOf("the token is 64 lower-case hex digits")
@@ -272,6 +275,7 @@ object Kernel {
      * credential alone.
      */
     fun renew(
+        by: String,
         at: String,
         tokenHex: String,
         credentials: Int,
@@ -281,7 +285,7 @@ object Kernel {
          *  supersedes nothing (`wire-format.md` §2.3). */
         subnet: String? = null,
     ): List<String> {
-        val p = participant ?: return listOf("the kernel is not running")
+        val p = loaded[by] ?: return listOf("the kernel is not running")
         val token = runCatching { Provision.unhex(tokenHex.trim()) }.getOrElse {
             return listOf("the token is 64 lower-case hex digits")
         }
@@ -356,8 +360,8 @@ object Kernel {
      *
      * One line saying what was taken, or why not.
      */
-    fun takeIntake(bytes: ByteArray): String {
-        val p = participant ?: return "the kernel is not running"
+    fun takeIntake(by: String, bytes: ByteArray): String {
+        val p = loaded[by] ?: return "the kernel is not running"
         var why = ""
         val took = call<uniffi.rhtn_ffi.Intake?>("takeIntake", { why = it.reason; null }) {
             p.takeIntake(bytes)
@@ -375,8 +379,8 @@ object Kernel {
      * locator and where that anchor answers, and a client that cannot say
      * either has nothing another party could act on.
      */
-    fun ownCard(): ByteArray? {
-        val p = participant ?: return null
+    fun ownCard(by: String): ByteArray? {
+        val p = loaded[by] ?: return null
         return call<ByteArray?>("ownCard", { null }) { p.ownCard() }
     }
 
@@ -407,8 +411,8 @@ object Kernel {
      * codes turn out to name (`wire-format.md` §14.3). A ceremony already
      * live is returned as-is.
      */
-    fun startMeet(kind: Meet.Kind, role: Meet.Role): Meet? {
-        val p = participant ?: return null
+    fun startMeet(by: String, kind: Meet.Kind, role: Meet.Role): Meet? {
+        val p = loaded[by] ?: return null
         val retention = call("retention_years", { 2UL }) { p.retentionYears() }
         synchronized(lock) {
             // a meeting still under way is the one to return to; one that
@@ -424,7 +428,7 @@ object Kernel {
             // (`wire-format.md` §14.3.1), the provision's peer being the
             // payload demo's and no part of a ceremony
             resetWindow()
-            meet = Meet(kind = kind, role = role, retentionYears = retention.toLong()).also { m ->
+            meet = Meet(by = by, kind = kind, role = role, retentionYears = retention.toLong()).also { m ->
                 // the kernel's ceremony ends with the screen's: a Stop from
                 // any live step abandons it, so nothing of the conversation
                 // is answered after the person has left it
@@ -477,7 +481,7 @@ object Kernel {
      * fixes, and reports what it reached.
      */
     private fun engageNominees(p: Participant, m: Meet) {
-        val c = courier(p)
+        val c = courier(m.by, p)
         for (attempt in 0 until Engagement.TRIES) {
             if (m.step() == Meet.Step.STOPPED) return
             c.engage()?.let { why ->
@@ -548,8 +552,8 @@ object Kernel {
      * nothing happens while an opposition is unresolved: the question is
      * the two people's and the screen is asking it.
      */
-    fun adoptionBegins() {
-        val p = participant ?: return
+    fun adoptionBegins(by: String) {
+        val p = loaded[by] ?: return
         val m = meet ?: return
         val txid = m.recordTxid() ?: return
         val them = m.counterpartyKey ?: return
@@ -592,8 +596,8 @@ object Kernel {
         // phone while its rail said GXV]: the subnet's own name for it,
         // else the default, else the keyhash's first characters
         val label = m.labelForCounterparty(
-            subnets().firstNotNullOfOrNull { it.ownAlias?.takeIf { a -> a.isNotBlank() } }
-                ?: defaultAlias()
+            subnets(by).firstNotNullOfOrNull { it.ownAlias?.takeIf { a -> a.isNotBlank() } }
+                ?: defaultAlias(by)
                 ?: hex(p.me()).take(8),
         )
         Thread { if (settled != null) a.settle(settled, label) else a.begin() }.start()
@@ -667,8 +671,8 @@ object Kernel {
      * alternatives**: a meeting can carry either, both or neither, and
      * nothing here consults the adoption's state.
      */
-    fun peeringBegins() {
-        val p = participant ?: return
+    fun peeringBegins(by: String) {
+        val p = loaded[by] ?: return
         val m = meet ?: return
         if (!m.peeringAsked()) return
         val txid = m.recordTxid() ?: return
@@ -745,9 +749,9 @@ object Kernel {
      * the kernel to check and nothing for it to encode. The shell's own
      * framing, versioned so a later one can differ.
      */
-    fun bootstrap(): ByteArray? {
+    fun bootstrap(by: String): ByteArray? {
         val m = meet ?: return null
-        val me = participant?.me() ?: return null
+        val me = loaded[by]?.me() ?: return null
         val kind = when (m.adopt) {
             Meet.Adopt.NONE -> 0
             Meet.Adopt.THEM_UNDER_ME -> 1
@@ -757,16 +761,16 @@ object Kernel {
         // there, as its claim: the scope chosen as patron, or the subnet
         // this device acts in otherwise, so a regular meeting carries a
         // name too (`light-client-requirements.md` §7)
-        val scope = m.scope() ?: subnets().firstOrNull { it.id.hex() == subnet() }?.let { Meet.Scope.of(it) }
+        val scope = m.scope() ?: subnets(by).firstOrNull { it.id.hex() == subnet(by) }?.let { Meet.Scope.of(it) }
         // **and the name, so it is visible from the scan** [author,
         // 2026-10-29]: the one published there, else the default
-        val alias = scope?.ownAlias?.takeIf { it.isNotBlank() } ?: defaultAlias()
+        val alias = scope?.ownAlias?.takeIf { it.isNotBlank() } ?: defaultAlias(by)
         return Bootstrap.encode(me, kind, m.kind.peering, scope, alias)
     }
 
     /** The alias a contact published, where one has reached this device. */
-    fun aliasOf(keyHex: String): String? {
-        val p = participant ?: return null
+    fun aliasOf(by: String, keyHex: String): String? {
+        val p = loaded[by] ?: return null
         return aliases(p)[keyHex]
     }
 
@@ -777,7 +781,7 @@ object Kernel {
      * the party at all.
      */
     fun aliasOfHeld(by: String, keyHex: String): String? =
-        loaded[by]?.let { aliases(it)[keyHex] } ?: aliasOf(keyHex)
+        loaded[by]?.let { aliases(it)[keyHex] } ?: aliasOf(by, keyHex)
 
     /**
      * **Fetch what every located contact published** (`wire-format.md`
@@ -785,8 +789,8 @@ object Kernel {
      * and shown by [People]. Whatever does not answer leaves the keyhash
      * standing.
      */
-    fun requestProfiles() {
-        val p = participant ?: return
+    fun requestProfiles(by: String) {
+        val p = loaded[by] ?: return
         call("requestProfiles", { }) { p.requestProfiles() }
     }
 
@@ -890,8 +894,8 @@ object Kernel {
      * composes the one request and sends it to the resource that asked.
      * What comes back is that resource's next answer.
      */
-    fun answerUtility(id: ULong, outcome: uniffi.rhtn_ffi.UtilityOutcome): Answered? {
-        val p = participant ?: return null
+    fun answerUtility(by: String, id: ULong, outcome: uniffi.rhtn_ffi.UtilityOutcome): Answered? {
+        val p = loaded[by] ?: return null
         return call("answerUtility", { null }) { answered(p.answerUtility(id, outcome)) }
     }
 
@@ -901,8 +905,8 @@ object Kernel {
      * the signing seed, so a device restored from the phrase derives the
      * same one and the operator's shell comes back with their identity.
      */
-    fun hostControlPublicKey(): String? {
-        val p = participant ?: return null
+    fun hostControlPublicKey(by: String): String? {
+        val p = loaded[by] ?: return null
         return call("hostControlPublicKey", { null }) { p.hostControlPublicKey() }
     }
 
@@ -912,8 +916,8 @@ object Kernel {
      * to the person, never written by this shell, and derived again
      * wherever the identity is.
      */
-    fun hostControlPrivateKey(): String? {
-        val p = participant ?: return null
+    fun hostControlPrivateKey(by: String): String? {
+        val p = loaded[by] ?: return null
         return call("hostControlPrivateKey", { null }) { p.hostControlPrivateKey() }
     }
 
@@ -923,8 +927,8 @@ object Kernel {
      * else, so installing a resource is an act through this client rather
      * than a shell on the machine.
      */
-    fun hostRunnerAuthorizedLine(): String? {
-        val p = participant ?: return null
+    fun hostRunnerAuthorizedLine(by: String): String? {
+        val p = loaded[by] ?: return null
         return call("hostRunnerAuthorizedLine", { null }) { p.hostRunnerAuthorizedLine() }
     }
 
@@ -933,8 +937,8 @@ object Kernel {
      * instance with a request and is kept there no longer than the act.
      * Never the operator's own key, which opens a shell.
      */
-    fun hostRunnerPrivateKey(): String? {
-        val p = participant ?: return null
+    fun hostRunnerPrivateKey(by: String): String? {
+        val p = loaded[by] ?: return null
         return call("hostRunnerPrivateKey", { null }) { p.hostRunnerPrivateKey() }
     }
 
@@ -1005,8 +1009,8 @@ object Kernel {
      * owned by (`infra-client-requirements.md` §9.4): the owner whose
      * horizon §11's membership gate is evaluated against.
      */
-    fun keyhash(): String? {
-        val p = participant ?: return null
+    fun keyhash(by: String): String? {
+        val p = loaded[by] ?: return null
         return call("me", { null }) { hex(p.me()) }
     }
 
@@ -1018,12 +1022,12 @@ object Kernel {
     fun mintResource(): String? =
         runCatching { uniffi.rhtn_ffi.freshResourceKeyhash() }.getOrNull()
 
-    fun ownAlias(): Pair<String?, String> {
-        val p = participant ?: return null to ""
+    fun ownAlias(by: String): Pair<String?, String> {
+        val p = loaded[by] ?: return null to ""
         val me = call("me", { "" }) { hex(p.me()) }
         // a subnet's own name for this person first, then the default the
         // foot carries [author, 2026-10-27]
-        val named = subnets().firstNotNullOfOrNull { it.ownAlias?.takeIf { a -> a.isNotBlank() } }
+        val named = subnets(by).firstNotNullOfOrNull { it.ownAlias?.takeIf { a -> a.isNotBlank() } }
             ?: call("defaultAlias", { null }) { p.defaultAlias() }
         return named to me
     }
@@ -1032,8 +1036,8 @@ object Kernel {
 
 
     /** The subnet this device acts in, hex, where it is in one. */
-    fun subnet(): String? {
-        val p = participant ?: return null
+    fun subnet(by: String): String? {
+        val p = loaded[by] ?: return null
         return call("subnet", { null }) { p.subnet()?.let { hex(it) } }
     }
 
@@ -1079,8 +1083,8 @@ object Kernel {
      * **The kernel decides which**, because only it knows whether it has
      * read the other side's contribution yet.
      */
-    fun optical(): ByteArray? {
-        val p = participant ?: return null
+    fun optical(by: String): ByteArray? {
+        val p = loaded[by] ?: return null
         return call(if (opticalTaken) "transcriptConfirm" else "opticalContribution", { null }) {
             if (opticalTaken) p.transcriptConfirm() else p.opticalContribution()
         }
@@ -1103,9 +1107,9 @@ object Kernel {
      * trace buys is the arrival pattern on the clocks of the nominees it
      * does reach, and the exchange itself is unaffected.
      */
-    fun opticalTrace(events: List<OpticalExchange.Event>) {
+    fun opticalTrace(by: String, events: List<OpticalExchange.Event>) {
         if (events.isEmpty()) return
-        val p = participant ?: return
+        val p = loaded[by] ?: return
         val m = meet ?: return
         // **off the thread that drives the exchange, always** [bench,
         // 2026-10-24]: each event is a relayed request to the nominee's
@@ -1116,7 +1120,7 @@ object Kernel {
         // which is what the witness attests from
         traceWork.execute {
             for (e in events) {
-                courier(p).trace(e)?.let { why ->
+                courier(by, p).trace(e)?.let { why ->
                     Diag.warn("optical.trace", "why" to why)
                     // said once a meeting, not once an event: a nodeless run
                     // said it 130 times (2026-10-24)
@@ -1135,8 +1139,8 @@ object Kernel {
             Thread(r, "fueros-trace").apply { isDaemon = true }
         }
 
-    fun takeOptical(bytes: ByteArray): String? {
-        val p = participant ?: return "the kernel is not running"
+    fun takeOptical(by: String, bytes: ByteArray): String? {
+        val p = loaded[by] ?: return "the kernel is not running"
         val m = meet ?: return "no meeting is open here"
         if (!opticalTaken) {
             return call("takeOptical", { it.reason }) {
@@ -1240,7 +1244,7 @@ object Kernel {
         Diag.event("meet.turn", "state" to s)
     }
 
-    private fun courier(p: Participant): Meet.Courier = object : Meet.Courier {
+    private fun courier(by: String, p: Participant): Meet.Courier = object : Meet.Courier {
         // each step's leg to the counterparty is a carriage for the
         // bearer, drained right after the step whether it went or was
         // refused: a refused propose that is `Waiting` has sent nothing,
@@ -1263,7 +1267,7 @@ object Kernel {
          *  to be named before a profile exists, and the inviter's again. */
         override fun hello(): String? {
             val them = meet?.counterpartyKey ?: return "no counterparty yet"
-            val name = defaultAlias() ?: return null
+            val name = defaultAlias(by) ?: return null
             return call("send", { it.reason }) {
                 p.send(unhex(them), Adoption.KIND, Adoption.Frame.hello(name))
                 null
@@ -1321,7 +1325,7 @@ object Kernel {
                     m.note("no records, so wire-format §5.2 obliges none.")
                 }
             }
-            m.converse(courier(p))
+            m.converse(courier(m.by, p))
         }.start()
     }
 
@@ -1337,13 +1341,13 @@ object Kernel {
 
     /** The kernel's move of the conversation, as the flow switches on it:
      *  the three it acts on, and the rest. */
-    private fun turnOf(c: Conversation): Meet.Turn = when (c) {
+    private fun turnOf(m: Meet, c: Conversation): Meet.Turn = when (c) {
         is Conversation.Finalized -> {
             // nothing more is met over this bearer: stop offering, so a
             // later scanner in the room does not find this phone first
             ble?.quiet()
             // who the record says witnessed it, from the signed body
-            val named: List<List<ByteArray>> = participant?.recordWitnesses(c.txid) ?: listOf()
+            val named: List<List<ByteArray>> = loaded[m.by]?.recordWitnesses(c.txid) ?: listOf()
             val witnesses: List<String> = named.mapNotNull { pair: List<ByteArray> ->
                 pair.firstOrNull()?.let { key: ByteArray -> hex(key) }
             }
@@ -1458,7 +1462,7 @@ object Kernel {
      * the party that showed it offers, the party that read it seeks.
      */
     private fun carryIntent(m: Meet, ceremony: ByteArray) {
-        val p = participant ?: return
+        val p = loaded[m.by] ?: return
         val radio = BleBearer(appContext ?: return)
         // ONE inbound handler for the whole conversation. Each phase is
         // apart in the carriage (`Carriage.Phase`), so a packet arriving
@@ -1621,7 +1625,7 @@ object Kernel {
      */
     private fun drainBearer(p: Participant, m: Meet) {
         drainBearerLocked(p, m)
-        if (carriedPending.getAndSet(false)) m.poll(courier(p))
+        if (carriedPending.getAndSet(false)) m.poll(courier(m.by, p))
     }
 
     /** Whether [drainBearerLocked] took a conversation carriage that the
@@ -1655,7 +1659,7 @@ object Kernel {
         // open, while the capture runs beside them (items 5 and 6). Refused
         // with `Waiting` while the counterparty's prune has not answered,
         // and asked again on the next turn of this drain
-        if (m.step() == Meet.Step.WINDOW && m.openWindow(courier(p)) &&
+        if (m.step() == Meet.Step.WINDOW && m.openWindow(courier(m.by, p)) &&
             conversationStarted.compareAndSet(false, true)
         ) {
             startConversation(p, m)
@@ -1756,7 +1760,7 @@ object Kernel {
      * lands last.
      */
     fun runWindow(m: Meet) {
-        val p = participant ?: return
+        val p = loaded[m.by] ?: return
         // the handover carries my key in clear: once the bearer has
         // had it, this shell keeps no copy, the packets it was cut
         // into included (design §7.5.2)
@@ -1866,7 +1870,7 @@ object Kernel {
             // [AndroidShell.capture] already does and retries: releasing
             // early is therefore recoverable, where holding on is not.
             shell?.endCapture()
-            m.poll(courier(p))
+            m.poll(courier(m.by, p))
         }
     }
 
@@ -1934,7 +1938,7 @@ object Kernel {
      * from the invitation it agreed to. There is nothing here a person
      * could usefully type.
      */
-    fun serveFrom(context: Context, nodeHex: String, address: String) {
+    fun serveFrom(by: String, context: Context, nodeHex: String, address: String) {
         // **the node an identity agrees to is that identity's** — step 4
         // of the browser model [author, 2026-11-11]. Written into the
         // device's provision before this, so that with an attach per
@@ -1946,7 +1950,7 @@ object Kernel {
         val scope = activeId?.let { id -> identities(app).firstOrNull { it.id == id }?.scope }
         // **one tab per address** [author, 2026-11-11], **kept by the kernel**
         // [review, 2026-11-13: the one store of what an identity agreed to]
-        val p = participant ?: run { front.note("· no kernel yet"); return }
+        val p = loaded[by] ?: run { front.note("· no kernel yet"); return }
         val node = Attach.node(nodeHex)?.let { runCatching { unhex(it) }.getOrNull() }
         if (node == null) {
             front.note("· not a node: ${nodeHex.take(8)}…")
@@ -1955,12 +1959,12 @@ object Kernel {
         call("agreeTo", { e -> front.note("· the node could not be remembered: ${e.reason}") }) {
             p.agreeTo(node, listOf(address))
         }
-        attachTo(nodeHex, address)
+        attachTo(by, nodeHex, address)
     }
 
     /** The bench's lever: `<node hex>@<host:port>` agreed to by the identity in focus. */
-    fun agreeToNow(spec: String) {
-        val p = participant ?: return
+    fun agreeToNow(by: String, spec: String) {
+        val p = loaded[by] ?: return
         val cut = spec.indexOf('@')
         if (cut <= 0) return
         val node = runCatching { unhex(spec.substring(0, cut)) }.getOrNull() ?: return
@@ -2087,8 +2091,8 @@ object Kernel {
      * at the clock's next tick. Each runs off the caller's thread and says
      * what it did on the home screen's notes.
      */
-    fun forgetContact(hexKey: String) {
-        val p = participant ?: run { front.note("· no kernel yet"); return }
+    fun forgetContact(by: String, hexKey: String) {
+        val p = loaded[by] ?: run { front.note("· no kernel yet"); return }
         val who = runCatching { unhex(hexKey) }.getOrNull() ?: run { front.note("· not a key: $hexKey"); return }
         Thread({
             call("forget_contact", { e -> front.note("· forget refused: ${e.reason}") }) {
@@ -2099,8 +2103,8 @@ object Kernel {
     }
 
     /** Every contact out, for the same watch; how many went is noted. */
-    fun forgetContacts() {
-        val p = participant ?: run { front.note("· no kernel yet"); return }
+    fun forgetContacts(by: String) {
+        val p = loaded[by] ?: run { front.note("· no kernel yet"); return }
         Thread({
             call("forget_contacts", { e -> front.note("· forget refused: ${e.reason}") }) {
                 val n = p.forgetContacts()
@@ -2115,17 +2119,17 @@ object Kernel {
      * the backup carries under the identity. Read and written whole; the
      * kernel keeps the bytes and reads none of them.
      */
-    fun providerCredentials(): Map<String, String> {
-        val p = participant ?: return emptyMap()
+    fun providerCredentials(by: String): Map<String, String> {
+        val p = loaded[by] ?: return emptyMap()
         val bytes = call("provider_credentials", { null }) { p.providerCredentials() } ?: return emptyMap()
         return runCatching {
             Json.obj(Json.parse(String(bytes))).mapNotNull { (k, v) -> Json.string(v)?.let { k to it } }.toMap()
         }.getOrDefault(emptyMap())
     }
 
-    fun holdProviderCredential(provider: String, credential: String): String? {
-        val p = participant ?: return "the kernel is not running"
-        val all = providerCredentials().toMutableMap()
+    fun holdProviderCredential(by: String, provider: String, credential: String): String? {
+        val p = loaded[by] ?: return "the kernel is not running"
+        val all = providerCredentials(by).toMutableMap()
         if (credential.isBlank()) all.remove(provider) else all[provider] = credential
         val doc = "{" + all.entries.joinToString(",") { (k, v) -> "${Json.quote(k)}:${Json.quote(v)}" } + "}"
         return call("hold_provider_credentials", { e -> e.reason }) {
@@ -2136,8 +2140,8 @@ object Kernel {
 
     /** How crowded a provider already is inside this operator's own
      *  horizon (PRD-11): the count, and whether it is marked. */
-    fun crowded(asn: Long): Pair<Int, Boolean> {
-        val p = participant ?: return 0 to false
+    fun crowded(by: String, asn: Long): Pair<Int, Boolean> {
+        val p = loaded[by] ?: return 0 to false
         val rows = call("providers_by_concentration", { emptyList() }) {
             p.providersByConcentration(listOf(asn.toULong()))
         }
@@ -2150,8 +2154,8 @@ object Kernel {
      *  ASN alone remediates the provider, and by ASN and zone together
      *  also what attaches to a place (design §3.4). One call for the whole
      *  list, a region picker holding a dozen of them. */
-    fun crowdedZones(asn: Long, zones: List<String>): Map<String, Pair<Int, Boolean>> {
-        val p = participant ?: return emptyMap()
+    fun crowdedZones(by: String, asn: Long, zones: List<String>): Map<String, Pair<Int, Boolean>> {
+        val p = loaded[by] ?: return emptyMap()
         if (zones.isEmpty()) return emptyMap()
         val rows = call("zones_by_concentration", { emptyList() }) {
             p.zonesByConcentration(asn.toULong(), zones)
@@ -2161,7 +2165,7 @@ object Kernel {
 
     /** This device's public key material, hex: what an instance is told
      *  to speak as. */
-    fun materialHex(): String? = participant?.material()?.joinToString("") { "%02x".format(it) }
+    fun materialHex(by: String): String? = loaded[by]?.material()?.joinToString("") { "%02x".format(it) }
 
     // ---- the device's own attach ---------------------------------------
 
@@ -2182,8 +2186,8 @@ object Kernel {
      *
      * Off the caller's thread: an attach dials, publishes and sweeps.
      */
-    fun attachTo(nodeHex: String, address: String) {
-        val p = participant ?: run { front.note("· no kernel yet"); return }
+    fun attachTo(by: String, nodeHex: String, address: String) {
+        val p = loaded[by] ?: run { front.note("· no kernel yet"); return }
         val node = Attach.node(nodeHex)?.let { runCatching { unhex(it) }.getOrNull() }
         val at = Attach.address(address)
         if (node == null || at == null) {
@@ -2218,8 +2222,8 @@ object Kernel {
      * from now rather than after three missed intervals. Everything else
      * is kept.
      */
-    fun detachNow() {
-        val p = participant ?: run { front.note("· no kernel yet"); return }
+    fun detachNow(by: String) {
+        val p = loaded[by] ?: run { front.note("· no kernel yet"); return }
         Thread({
             call("detach", { e -> front.note("· detach refused: ${e.reason}") }) {
                 p.detach()
@@ -2248,7 +2252,7 @@ object Kernel {
         }
 
     /** The aliases held, by keyhash in hex: what a screen names a party by. */
-    fun aliases(): Map<String, String> = participant?.let { aliases(it) } ?: emptyMap()
+    fun aliases(by: String): Map<String, String> = loaded[by]?.let { aliases(it) } ?: emptyMap()
 
     // ---- the nouns, as the model holds them --------------------------
     //
@@ -2257,21 +2261,21 @@ object Kernel {
     // keyhashes, the wire's enums — and a screen's pure part decides what
     // to show of it. Nothing here shortens, words or renames.
 
-    fun contacts(): List<Contact> {
-        val p = participant ?: return emptyList()
+    fun contacts(by: String): List<Contact> {
+        val p = loaded[by] ?: return emptyList()
         return call("contacts", { emptyList() }) { p.contacts() }
     }
 
-    fun subnets(): List<Subnet> {
-        val p = participant ?: return emptyList()
+    fun subnets(by: String): List<Subnet> {
+        val p = loaded[by] ?: return emptyList()
         return call("subnets", { emptyList() }) { p.subnets() }
     }
 
     /** **An invitation read and its key placed** against what this device
      *  holds (`rhtn_client::invitation`); null where it is not one this
      *  build reads, and [invitationSay] gives the words for that. */
-    fun invitation(text: String): uniffi.rhtn_ffi.Invited? {
-        val p = participant ?: return null
+    fun invitation(by: String, text: String): uniffi.rhtn_ffi.Invited? {
+        val p = loaded[by] ?: return null
         return call("invitation", { null }) { p.invitation(text) }
     }
 
@@ -2283,8 +2287,8 @@ object Kernel {
      *  it operates (`rhtn_client::model::HorizonRow`): open bindings whose
      *  member's key material this device holds, each already in the form
      *  the administration surface reads. */
-    fun horizonRows(): List<uniffi.rhtn_ffi.HorizonRow> {
-        val p = participant ?: return emptyList()
+    fun horizonRows(by: String): List<uniffi.rhtn_ffi.HorizonRow> {
+        val p = loaded[by] ?: return emptyList()
         return call("horizonRows", { emptyList() }) { p.horizonRows() }
     }
 
@@ -2300,14 +2304,14 @@ object Kernel {
      * come to the same call with null, and the meeting runs unchanged
      * (`light-client-requirements.md` §1.5).
      */
-    fun declareNumber(number: String?) {
-        val p = participant ?: return
+    fun declareNumber(by: String, number: String?) {
+        val p = loaded[by] ?: return
         call("declareNumber", { }) { p.declareNumber(number) }
     }
 
     /** The number held for a party, where their device reported one. */
-    fun numberHeld(who: String): String? {
-        val p = participant ?: return null
+    fun numberHeld(by: String, who: String): String? {
+        val p = loaded[by] ?: return null
         if (!who.isHash32()) return null
         return call("numberHeld", { null }) { p.number(who.unhex()) }
     }
@@ -2317,8 +2321,8 @@ object Kernel {
      * where to send each and the link to send. Reading is also what drops
      * an address past its subject's window.
      */
-    fun invitations(at: String): List<uniffi.rhtn_ffi.Invite> {
-        val p = participant ?: return emptyList()
+    fun invitations(by: String, at: String): List<uniffi.rhtn_ffi.Invite> {
+        val p = loaded[by] ?: return emptyList()
         return call("invitations", { emptyList() }) { p.invitations(at) }
     }
 
@@ -2331,38 +2335,38 @@ object Kernel {
      * The identity is **not** in it: that is the one thing a backup must
      * not carry, and the seed phrase is how it comes back.
      */
-    fun exportBackup(): ByteArray? {
-        val p = participant ?: return null
+    fun exportBackup(by: String): ByteArray? {
+        val p = loaded[by] ?: return null
         return call("exportBackup", { null }) { p.exportBackup() }
     }
 
     /** The subnets this device roots and could bring under a patron. */
-    fun subnetsRooted(): List<Subnet> {
-        val p = participant ?: return emptyList()
+    fun subnetsRooted(by: String): List<Subnet> {
+        val p = loaded[by] ?: return emptyList()
         return call("subnetsRooted", { emptyList() }) { p.subnetsRooted() }
     }
 
     /** The patron lines this key holds, newest series and all. */
-    fun lines(): List<Line> {
-        val p = participant ?: return emptyList()
+    fun lines(by: String): List<Line> {
+        val p = loaded[by] ?: return emptyList()
         return call("lines", { emptyList() }) { p.lines() }
     }
 
     /** The meetings this device took part in, newest first, as outcomes. */
-    fun meetings(): List<Meeting> {
-        val p = participant ?: return emptyList()
+    fun meetings(by: String): List<Meeting> {
+        val p = loaded[by] ?: return emptyList()
         return call("meetings", { emptyList() }) { p.meetings() }
     }
 
     /** The infra nodes whose endpoint records this device holds. */
-    fun instances(): List<Instance> {
-        val p = participant ?: return emptyList()
+    fun instances(by: String): List<Instance> {
+        val p = loaded[by] ?: return emptyList()
         return call("instances", { emptyList() }) { p.instances() }
     }
 
     /** What the catalog holds, with each node's portion marked. */
-    fun resources(): List<Resource> {
-        val p = participant ?: return emptyList()
+    fun resources(by: String): List<Resource> {
+        val p = loaded[by] ?: return emptyList()
         return call("resources", { emptyList() }) { p.resources() }
     }
 
@@ -2372,8 +2376,8 @@ object Kernel {
      * patron this key holds no relationship with reads differently from
      * a kernel that has not come up.
      */
-    fun costOfLeaving(patronHex: String): Pair<Cost?, String> {
-        val p = participant ?: return null to "the kernel is not up yet"
+    fun costOfLeaving(by: String, patronHex: String): Pair<Cost?, String> {
+        val p = loaded[by] ?: return null to "the kernel is not up yet"
         val who = runCatching { unhex(patronHex) }.getOrNull()
             ?: return null to "not a key: ${patronHex.take(16)}…"
         return call("cost_of_leaving", { e -> front.note("· cost refused: ${e.reason}"); null to e.reason }) {
@@ -2391,8 +2395,8 @@ object Kernel {
      *
      * Blocking, and the caller runs it off the drawing thread.
      */
-    fun departFrom(patronHex: String): String {
-        val p = participant ?: return "no kernel yet"
+    fun departFrom(by: String, patronHex: String): String {
+        val p = loaded[by] ?: return "no kernel yet"
         val who = runCatching { unhex(patronHex) }.getOrNull() ?: return "not a key: $patronHex"
         return call("depart", { e -> "refused: ${e.reason}" }) {
             val t = p.depart(who, null)
@@ -2401,8 +2405,8 @@ object Kernel {
         }
     }
 
-    fun forgetCaptures(hexKey: String) {
-        val p = participant ?: run { front.note("· no kernel yet"); return }
+    fun forgetCaptures(by: String, hexKey: String) {
+        val p = loaded[by] ?: run { front.note("· no kernel yet"); return }
         val who = runCatching { unhex(hexKey) }.getOrNull() ?: run { front.note("· not a key: $hexKey"); return }
         Thread({
             call("forget_captures", { e -> front.note("· forget refused: ${e.reason}") }) {
@@ -2412,8 +2416,8 @@ object Kernel {
         }, "fueros-forget").start()
     }
 
-    fun contactPeersNow() {
-        val p = participant ?: run { front.note("· no kernel yet"); return }
+    fun contactPeersNow(by: String) {
+        val p = loaded[by] ?: run { front.note("· no kernel yet"); return }
         Thread({
             call("contact_peers", { e -> front.note("· contact refused: ${e.reason}") }) {
                 val round = p.contactPeers()
@@ -2592,7 +2596,7 @@ object Kernel {
         // process that died between the adoption and the departure left
         // the mark behind ([concludeRotation])
         concludeRotation()
-        val p = participant ?: run {
+        val p = activeId?.let { loaded[it] } ?: run {
             front.setStatus("no identity on this device came up")
             return
         }
@@ -2954,10 +2958,7 @@ object Kernel {
                     // the one status slot is the focused identity's, as a
                     // browser's status bar is the focused window's
                     Model.connectionOf(id, e.v1)
-                    if (focused) {
-                        show(p, e.v1)
-                        Model.connection(e.v1)
-                    }
+                    if (focused) show(p, e.v1)
                 }
                 // **the nouns the kernel changed**: the shell's copy is
                 // refreshed for exactly those, and the screens watching
@@ -2986,7 +2987,7 @@ object Kernel {
                 // somebody else's, which the notice line carries
                 is Event.Conversed -> {
                     val m = if (focused) meet else null
-                    if (m != null) m.conversed(e.what, turnOf(e.step)) else front.note("· ${e.what}")
+                    if (m != null) m.conversed(e.what, turnOf(m, e.step)) else front.note("· ${e.what}")
                     // a step taken on a message from a witness can owe the
                     // counterparty one: the last signature in, the record out
                     if (m != null) sendCarriages(p)
@@ -3022,15 +3023,15 @@ object Kernel {
                 // the last look, or the patience run out. Polling every
                 // turn had the proposer asking the kernel 28 times in 3 s
                 // on the bench [client review, 2026-10-11].
-                if (m.pollDue()) m.poll(courier(p))
+                if (m.pollDue()) m.poll(courier(id, p))
                 // **the record is what an adoption rests on**, so D7
                 // begins where the ceremony ends; begun once, and nothing
                 // where the meeting carried none
                 if (t == Meet.Step.DONE) {
-                    adoptionBegins()
+                    adoptionBegins(id)
                     // and the peering the invitation's checkbox asked for,
                     // which is independent of the adoption
-                    peeringBegins()
+                    peeringBegins(id)
                     // **and the departure a concluded rotation owes**
                     // [author, 2026-11-07]: the old key leaves the subnet
                     // that rotated once the new one is adopted into its
@@ -3373,7 +3374,7 @@ object Kernel {
         activeId = id
         AndroidShell(context.applicationContext).seal(Identities.ACTIVE, id.toByteArray())
         Diag.event("identity.active", "who" to id.take(8))
-        participant?.let { show(it, Connection.Detached) }
+        activeId?.let { loaded[it] }?.let { show(it, Connection.Detached) }
         Model.refreshAll()
         return true
     }
@@ -3394,10 +3395,10 @@ object Kernel {
      */
     fun restoreBackup(blob: ByteArray): Result<uniffi.rhtn_ffi.Restored> {
         val until = System.currentTimeMillis() + 30_000
-        var p = participant
+        var p = activeId?.let { loaded[it] }
         while (p == null && System.currentTimeMillis() < until) {
             Thread.sleep(200)
-            p = participant
+            p = activeId?.let { loaded[it] }
         }
         val held = p ?: return Result.failure(IllegalStateException("the kernel did not start"))
         return runCatching { held.restoreBackup(blob) }
@@ -3560,8 +3561,8 @@ object Kernel {
     }
 
     /** The default name the kernel holds, or null. */
-    fun defaultAlias(): String? {
-        val p = participant ?: return null
+    fun defaultAlias(by: String): String? {
+        val p = loaded[by] ?: return null
         return call("defaultAlias", { null }) { p.defaultAlias() }
     }
 
@@ -3574,10 +3575,10 @@ object Kernel {
      */
     fun setDefaultAlias(name: String): String? {
         val until = System.currentTimeMillis() + 30_000
-        var p = participant
+        var p = activeId?.let { loaded[it] }
         while (p == null && System.currentTimeMillis() < until) {
             Thread.sleep(200)
-            p = participant
+            p = activeId?.let { loaded[it] }
         }
         if (p == null) return "the kernel did not come up"
         return call("setDefaultAlias", { it.reason }) { p.setDefaultAlias(name); null }
@@ -3589,8 +3590,8 @@ object Kernel {
      * convention, which nothing enforces. Asked for where an adoption
      * forms one [author, 2026-10-29]. The refusal's words, or null.
      */
-    fun publishSubnetAlias(subnetHex: String, alias: String): String? {
-        val p = participant ?: return "the kernel is not up"
+    fun publishSubnetAlias(by: String, subnetHex: String, alias: String): String? {
+        val p = loaded[by] ?: return "the kernel is not up"
         return call("publishProfile", { it.reason }) { p.publishProfile(unhex(subnetHex), 1u, alias, null, null); null }
     }
 }

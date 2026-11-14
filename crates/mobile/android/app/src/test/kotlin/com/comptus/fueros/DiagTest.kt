@@ -100,7 +100,7 @@ class DiagTest {
 
     @Test
     fun the_meet_flows_transitions_notes_and_stop_are_events() {
-        val m = Meet("aa", "carol", Meet.Kind())
+        val m = Meet("the identity under test", "aa", "carol", Meet.Kind())
         m.crossBootstrap()
         m.accept()
         m.note("their contribution is in: 0123456789abcdef0123")
@@ -118,7 +118,7 @@ class DiagTest {
 
     @Test
     fun the_responders_bootstrap_is_read_by_the_camera() {
-        Meet("aa", "carol", Meet.Kind(), Meet.Role.RESPONDER).crossBootstrap()
+        Meet("the identity under test", "aa", "carol", Meet.Kind(), Meet.Role.RESPONDER).crossBootstrap()
         assertTrue(lines.single().contains("\"trigger\":\"camera\""))
     }
 

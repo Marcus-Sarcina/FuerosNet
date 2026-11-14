@@ -71,6 +71,8 @@ import android.widget.TextView
  * is owed its own care rather than a button here.
  */
 class RotationActivity : Activity() {
+    /** The identity this screen acts for: the one named by whoever opened it, else the one in focus — a link tapped, or a screen nothing opens yet. */
+    private val by: String by lazy { intent.getStringExtra("by") ?: Kernel.focused() }
 
     private lateinit var body: LinearLayout
 
@@ -90,7 +92,7 @@ class RotationActivity : Activity() {
     private fun draw() {
         body.removeAllViews()
         heading("Changing your key")
-        val lines = Kernel.lines()
+        val lines = Kernel.lines(by)
         if (lines.isEmpty()) {
             para(
                 "This key stands under no patron, so there is nothing to carry across " +
@@ -108,10 +110,10 @@ class RotationActivity : Activity() {
         // **each line, named**, because the author's sentences name the
         // parties and a warning about "your subnets" names nobody
         for (line in lines) {
-            val patron = Rotation.name(line.patron.hex(), Kernel.aliasOf(line.patron.hex()))
+            val patron = Rotation.name(line.patron.hex(), Kernel.aliasOf(by, line.patron.hex()))
             val subnet = Rotation.name(
                 line.anchor.hex(),
-                Kernel.subnets().firstOrNull { it.id.hex() == line.anchor.hex() }?.alias,
+                Kernel.subnets(by).firstOrNull { it.id.hex() == line.anchor.hex() }?.alias,
             )
             heading("$subnet, under $patron")
             for (said in Disclosure.words(Disclosure.Topic.UNLINKED_PATH, patron = patron, subnet = subnet)) {
@@ -139,7 +141,7 @@ class RotationActivity : Activity() {
                 "than anything this screen can do alone.",
         )
         button("Meet the patron") {
-            startActivity(Intent(this, MeetActivity::class.java))
+            startActivity(Intent(this, MeetActivity::class.java).putExtra("by", by))
         }
         sub(
             "Carrying your standing across needs the old key present to sign with, " +

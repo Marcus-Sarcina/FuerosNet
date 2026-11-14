@@ -42,6 +42,12 @@ import android.widget.FrameLayout
  * protocol.
  */
 class MeetActivity : Activity() {
+    /**
+     * **The identity this screen acts for**, named by whoever opened it
+     * [restructure step 4, 2026-11-14]: never read from the focus here,
+     * so a screen opened for one identity cannot act for another.
+     */
+    private lateinit var by: String
 
     private lateinit var body: LinearLayout
     private lateinit var scroll: ScrollView
@@ -143,6 +149,11 @@ class MeetActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        by = intent.getStringExtra("by") ?: run {
+            Diag.warn("meet.opened", "why" to "no identity named")
+            finish()
+            return
+        }
         body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         scroll = ScrollView(this).apply {
             addView(body)
@@ -266,7 +277,7 @@ class MeetActivity : Activity() {
         // initiator between the choice of transaction and the invitation,
         // for the party that read it between the scan and the acceptance
         val choice = if (m.step() == Meet.Step.INTENT || m.step() == Meet.Step.BRIEF) {
-            m.pendingChoice(Kernel.subnets().map(Meet.Scope::of), Kernel.subnetsRooted().map(Meet.Scope::of))
+            m.pendingChoice(Kernel.subnets(by).map(Meet.Scope::of), Kernel.subnetsRooted(by).map(Meet.Scope::of))
         } else {
             null
         }
@@ -474,8 +485,8 @@ class MeetActivity : Activity() {
     }
 
     private fun start(kind: Meet.Kind, role: Meet.Role) {
-        Kernel.declareNumber(ownNumber())
-        Kernel.startMeet(kind, role)?.bind(sink) ?: para("could not begin: the kernel is not running")
+        Kernel.declareNumber(by, ownNumber())
+        Kernel.startMeet(by, kind, role)?.bind(sink) ?: para("could not begin: the kernel is not running")
         redraw()
     }
 
@@ -517,7 +528,7 @@ class MeetActivity : Activity() {
         when (m.role) {
             Meet.Role.INITIATOR -> {
                 para("Hold this up for ${m.counterpartyName} to scan with their REAR camera. It carries who you are and what kind of meeting this is.")
-                val code = Kernel.bootstrap()
+                val code = Kernel.bootstrap(by)
                 if (code == null) {
                     para("This code is not ready yet.")
                 } else {
@@ -743,14 +754,14 @@ class MeetActivity : Activity() {
             Meet.Choice.ADOPT_INTO -> {
                 heading("Adopt into which scope?")
                 para("${m.counterpartyName} will sit one hop below you. Which of your subnets do they join?")
-                (Kernel.subnets().map(Meet.Scope::of) + Meet.Scope.OWN).forEach { s ->
+                (Kernel.subnets(by).map(Meet.Scope::of) + Meet.Scope.OWN).forEach { s ->
                     button(s.label()) { m.chooseScope(s) }
                 }
             }
             Meet.Choice.SUBMIT_AS -> {
                 heading("Submit as which scope?")
                 para("${m.counterpartyName} will be your patron. Do you bring a scope you root with you — everyone in it coming to sit in their subnet — or join as an individual, your scopes standing as they are?")
-                Kernel.subnetsRooted().map(Meet.Scope::of).forEach { s ->
+                Kernel.subnetsRooted(by).map(Meet.Scope::of).forEach { s ->
                     button("Bring ${s.label()}") { m.chooseCarrying(s) }
                 }
                 button("Join as an individual") { m.chooseCarrying(Meet.Scope.INDIVIDUAL) }
@@ -809,7 +820,7 @@ class MeetActivity : Activity() {
         val transcript = Kernel.opticalTaken()
         val which = if (transcript) OpticalExchange.TRANSCRIPT else OpticalExchange.CONTRIBUTION
         val x = m.exchange?.takeIf { it.which == which } ?: run {
-            val code = Kernel.optical() ?: return m.stop("the kernel would not give the code to show")
+            val code = Kernel.optical(by) ?: return m.stop("the kernel would not give the code to show")
             OpticalExchange(which, code).also { m.exchange = it }
         }
         val name = if (transcript) "transcript" else "contribution"
@@ -890,11 +901,11 @@ class MeetActivity : Activity() {
         // from — the counts once both are known, then each inbound part as
         // it lands and each outbound part their display acknowledges.
         // Never the content: a part is half of what keys the session
-        Kernel.opticalTrace(x.drainTrace())
+        Kernel.opticalTrace(by, x.drainTrace())
         Diag.event("optical.exchange", "which" to name, "showing" to x.showing(), "received" to x.received(), "theirs" to x.theirCount(), "they_hold" to x.theirReceived())
         if (x.done() && m.handOff(x)) {
             camera?.close()
-            val why = Kernel.takeOptical(x.theirs() ?: return)
+            val why = Kernel.takeOptical(by, x.theirs() ?: return)
             if (why != null) { m.stop(why); return }
         }
         redraw()
@@ -1251,7 +1262,7 @@ class MeetActivity : Activity() {
             }
             Diag.event("meet.subnet_name", "state" to "publishing", "bytes" to typed.toByteArray().size)
             Thread({
-                val why = Kernel.publishSubnetAlias(txid, typed)
+                val why = Kernel.publishSubnetAlias(by, txid, typed)
                 runOnUiThread {
                     if (isFinishing) return@runOnUiThread
                     if (why == null) subnetNamed = typed

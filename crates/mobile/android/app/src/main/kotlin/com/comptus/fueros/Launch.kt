@@ -111,12 +111,13 @@ object Launch {
      *  Given none, the machine takes no key and the only shell is the
      *  provider's console. */
     fun userData(
+        by: String,
         operatorMaterialHex: String,
         token: String,
         registry: String = REGISTRY_DEFAULT,
         tag: String = TAG_DEFAULT,
-        sshPublicLine: String? = Kernel.hostControlPublicKey(),
-        runnerRestrictedLine: String? = Kernel.hostRunnerAuthorizedLine(),
+        sshPublicLine: String? = Kernel.hostControlPublicKey(by),
+        runnerRestrictedLine: String? = Kernel.hostRunnerAuthorizedLine(by),
     ): String = launchUserData(
         operatorMaterialHex,
         token,

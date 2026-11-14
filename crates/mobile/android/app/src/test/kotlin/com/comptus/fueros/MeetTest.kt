@@ -18,7 +18,7 @@ class MeetTest {
         adopt: Meet.Adopt = Meet.Adopt.NONE,
         backup: Boolean = false,
         role: Meet.Role = Meet.Role.INITIATOR,
-    ) = Meet("aa", "carol", Meet.Kind(adopt, backup), role)
+    ) = Meet("the identity under test", "aa", "carol", Meet.Kind(adopt, backup), role)
 
     @Test
     fun the_flow_begins_at_intent() {
@@ -105,7 +105,7 @@ class MeetTest {
      *  key's first characters until then [author, 2026-10-29]. */
     @Test
     fun the_counterparty_is_named_by_what_they_call_themselves_once_heard() {
-        val m = Meet(null, null, Meet.Kind(), Meet.Role.RESPONDER)
+        val m = Meet("the identity under test", null, null, Meet.Kind(), Meet.Role.RESPONDER)
         assertEquals("the other person", m.counterpartyName)
         m.counterparty("cd".repeat(32))
         assertEquals("cdcdcdcd", m.counterpartyName)
@@ -114,7 +114,7 @@ class MeetTest {
         m.heard("Dana")
         assertEquals("Dana", m.counterpartyName)
         // a name given at construction — the bench's — is not displaced
-        val given = Meet("aa", "carol", Meet.Kind(), Meet.Role.INITIATOR)
+        val given = Meet("the identity under test", "aa", "carol", Meet.Kind(), Meet.Role.INITIATOR)
         given.heard("Dana")
         assertEquals("carol", given.counterpartyName)
     }
@@ -257,19 +257,19 @@ class FakeCourier(var progress: Meet.Progress? = null) : Meet.Courier {
 class MeetConversationTest {
 
     private fun atVerifiers(role: Meet.Role = Meet.Role.INITIATOR): Meet =
-        Meet("aa", "carol", Meet.Kind(), role).apply {
+        Meet("the identity under test", "aa", "carol", Meet.Kind(), role).apply {
             crossBootstrap(); accept(); intentSent(); intentReceived(); captureSealed()
         }
 
     /** A meeting with its codes crossing, which is where the optical
      *  deadline applies. */
     private fun atOptical(): Meet =
-        Meet("aa", "carol", Meet.Kind()).apply { crossBootstrap(); accept() }
+        Meet("the identity under test", "aa", "carol", Meet.Kind()).apply { crossBootstrap(); accept() }
 
     @Test
     fun the_conversation_opens_once_on_the_verifiers_step_and_not_before() {
         val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 2))
-        val early = Meet("aa", "carol", Meet.Kind())
+        val early = Meet("the identity under test", "aa", "carol", Meet.Kind())
         early.converse(c)
         assertTrue("nothing before the verifiers", c.calls.isEmpty())
         val m = atVerifiers()
@@ -365,7 +365,7 @@ class MeetConversationTest {
      */
     @Test
     fun the_flow_is_due_on_an_arrival_or_the_patience_and_not_on_the_turn() {
-        val m = Meet("aa", "carol", Meet.Kind(), Meet.Role.INITIATOR, patienceMs = 1_000).apply {
+        val m = Meet("the identity under test", "aa", "carol", Meet.Kind(), Meet.Role.INITIATOR, patienceMs = 1_000).apply {
             crossBootstrap(); accept(); intentSent(); intentReceived(); captureSealed()
         }
         m.selected(listOf(Meet.Chosen("v1", Meet.Basis.MET)))
@@ -386,7 +386,7 @@ class MeetConversationTest {
         assertTrue("the patience ran out", m.pollDue(11_601))
 
         // a message of the conversation is an arrival too
-        val n = Meet("bb", "carol", Meet.Kind(), Meet.Role.RESPONDER).apply {
+        val n = Meet("the identity under test", "bb", "carol", Meet.Kind(), Meet.Role.RESPONDER).apply {
             crossBootstrap(); accept(); intentSent(); intentReceived(); captureSealed()
         }
         val c2 = FakeCourier(Meet.Progress(proposer = false, queriesOutstanding = 0, handed = true))
@@ -568,7 +568,7 @@ class MeetConversationTest {
      *  afresh. */
     @Test
     fun an_exchange_hands_off_to_the_kernel_once() {
-        val m = Meet(kind = Meet.Kind())
+        val m = Meet(by = "the identity under test", kind = Meet.Kind())
         val a = OpticalExchange(0, ByteArray(40) { it.toByte() }, chunk = 20)
         assertTrue(m.handOff(a))
         assertFalse("the second path sees it done too, and does nothing", m.handOff(a))
@@ -591,7 +591,7 @@ class MeetConversationTest {
         m.openWindow(hc)
         assertEquals("and once only", 1, hc.hellos)
         assertFalse("the conversation has its own clock", m.stepStale(System.currentTimeMillis() + Meet.STALE_MS * 2))
-        val c = Meet(kind = Meet.Kind())
+        val c = Meet(by = "the identity under test", kind = Meet.Kind())
         assertFalse(c.stepStale(System.currentTimeMillis() + Meet.STALE_MS * 2))
     }
 
@@ -676,7 +676,7 @@ class MeetConversationTest {
 
     @Test
     fun the_patience_runs_out_and_the_initiator_proposes_with_queries_unanswered() {
-        val m = Meet("aa", "carol", Meet.Kind(), Meet.Role.INITIATOR, patienceMs = 1_000).apply {
+        val m = Meet("the identity under test", "aa", "carol", Meet.Kind(), Meet.Role.INITIATOR, patienceMs = 1_000).apply {
             crossBootstrap(); accept(); intentSent(); intentReceived(); captureSealed()
         }
         m.selected(listOf(Meet.Chosen("v1", Meet.Basis.MET), Meet.Chosen("v2", Meet.Basis.MET)))
@@ -707,7 +707,7 @@ class MeetConversationTest {
         m.converse(c, nowMs = 0)
         m.poll(c, nowMs = 5_000)
         assertEquals(0, c.count("gathered"))
-        assertNull("nothing to go on without before the flow is open", Meet("aa", "carol", Meet.Kind()).patienceLeftMs(0))
+        assertNull("nothing to go on without before the flow is open", Meet("the identity under test", "aa", "carol", Meet.Kind()).patienceLeftMs(0))
         m.goOn()
         assertEquals(0L, m.patienceLeftMs(5_000))
         m.poll(c, nowMs = 5_001)
@@ -738,15 +738,15 @@ class MeetConversationTest {
 
     @Test
     fun the_brief_states_the_retention_this_device_declares() {
-        val m = Meet("aa", "carol", Meet.Kind(), retentionYears = 3).apply { crossBootstrap() }
+        val m = Meet("the identity under test", "aa", "carol", Meet.Kind(), retentionYears = 3).apply { crossBootstrap() }
         assertTrue(m.brief().any { it.text.contains("this phone declares, 3 years,") })
-        val one = Meet("aa", "carol", Meet.Kind(), retentionYears = 1).apply { crossBootstrap() }
+        val one = Meet("the identity under test", "aa", "carol", Meet.Kind(), retentionYears = 1).apply { crossBootstrap() }
         assertTrue(one.brief().any { it.text.contains("this phone declares, 1 year,") })
     }
 
     @Test
     fun the_codes_name_the_counterparty_and_a_second_name_is_refused() {
-        val m = Meet(kind = Meet.Kind())
+        val m = Meet(by = "the identity under test", kind = Meet.Kind())
         assertNull(m.counterpartyKey)
         assertEquals("the other person", m.counterpartyName)
         assertNull("the first code names them", m.counterparty("ab12cd34ef"))
@@ -757,12 +757,12 @@ class MeetConversationTest {
         assertTrue(refused != null && refused.contains("someone else's"))
         assertEquals("ab12cd34ef", m.counterpartyKey)
         // a name given beforehand stays the name
-        assertEquals("carol", Meet("aa", "carol", Meet.Kind()).counterpartyName)
+        assertEquals("carol", Meet("the identity under test", "aa", "carol", Meet.Kind()).counterpartyName)
     }
 
     @Test
     fun accepting_the_brief_begins_the_ceremony_once_and_the_first_code_waits_for_it() {
-        val m = Meet(kind = Meet.Kind()).apply { crossBootstrap() }
+        val m = Meet(by = "the identity under test", kind = Meet.Kind()).apply { crossBootstrap() }
         var begun = 0
         m.onAccepted = { begun++ }
         assertFalse(m.begun())
@@ -776,14 +776,14 @@ class MeetConversationTest {
 
     @Test
     fun the_optical_step_ends_only_when_both_intents_have_crossed() {
-        val m = Meet(kind = Meet.Kind()).apply { crossBootstrap(); accept() }
+        val m = Meet(by = "the identity under test", kind = Meet.Kind()).apply { crossBootstrap(); accept() }
         assertEquals(Meet.Step.OPTICAL, m.step())
         m.intentReceived()
         assertEquals("theirs alone is not enough", Meet.Step.OPTICAL, m.step())
         m.intentSent()
         assertEquals(Meet.Step.WINDOW, m.step())
         // and the other order
-        val n = Meet(kind = Meet.Kind()).apply { crossBootstrap(); accept() }
+        val n = Meet(by = "the identity under test", kind = Meet.Kind()).apply { crossBootstrap(); accept() }
         n.intentSent()
         assertEquals(Meet.Step.OPTICAL, n.step())
         n.intentReceived()
@@ -818,7 +818,7 @@ class MeetConversationTest {
      */
     @Test
     fun the_turn_state_says_where_the_flow_is_and_whether_a_poll_is_due() {
-        val m = Meet("aa", "carol", Meet.Kind(), openRetryMs = 1L).apply {
+        val m = Meet("the identity under test", "aa", "carol", Meet.Kind(), openRetryMs = 1L).apply {
             crossBootstrap(); accept(); intentSent(); intentReceived()
             captureSealed()
         }
@@ -862,7 +862,7 @@ class MeetConversationTest {
      */
     @Test
     fun a_carriage_taken_from_the_bearer_makes_the_poll_due() {
-        val m = Meet("aa", "carol", Meet.Kind(), openRetryMs = 1L).apply {
+        val m = Meet("the identity under test", "aa", "carol", Meet.Kind(), openRetryMs = 1L).apply {
             crossBootstrap(); accept(); intentSent(); intentReceived()
             captureSealed()
         }
@@ -892,7 +892,7 @@ class MeetConversationTest {
      */
     @Test
     fun a_conversation_waiting_on_nothing_still_becomes_due_and_goes_stale() {
-        val m = Meet("aa", "carol", Meet.Kind(), openRetryMs = 1L).apply {
+        val m = Meet("the identity under test", "aa", "carol", Meet.Kind(), openRetryMs = 1L).apply {
             crossBootstrap(); accept(); intentSent(); intentReceived()
             captureSealed()
         }
@@ -933,7 +933,7 @@ class MeetConversationTest {
      */
     @Test
     fun a_waiting_at_the_conversations_own_open_is_retried_not_stopped_on() {
-        val m = Meet("aa", "carol", Meet.Kind(), openRetryMs = 1L).apply {
+        val m = Meet("the identity under test", "aa", "carol", Meet.Kind(), openRetryMs = 1L).apply {
             crossBootstrap(); accept(); intentSent(); intentReceived()
             captureSealed()
         }
@@ -971,7 +971,7 @@ class MeetConversationTest {
      *  not for a kernel that has said no. */
     @Test
     fun a_refusal_that_is_not_waiting_still_stops_the_conversation_at_once() {
-        val m = Meet("aa", "carol", Meet.Kind(), openRetryMs = 1L).apply {
+        val m = Meet("the identity under test", "aa", "carol", Meet.Kind(), openRetryMs = 1L).apply {
             crossBootstrap(); accept(); intentSent(); intentReceived()
             captureSealed()
         }
@@ -987,7 +987,7 @@ class MeetConversationTest {
 
     @Test
     fun the_window_opens_with_the_request_and_is_retried_while_the_prune_answers() {
-        val m = Meet("aa", "carol", Meet.Kind()).apply {
+        val m = Meet("the identity under test", "aa", "carol", Meet.Kind()).apply {
             crossBootstrap(); accept(); intentSent(); intentReceived()
         }
         assertEquals("the capture is the window's", Meet.Step.WINDOW, m.step())
@@ -1017,7 +1017,7 @@ class MeetConversationTest {
      *  conversation without it. */
     @Test
     fun a_refused_window_stops_the_meeting_with_the_kernels_reason() {
-        val m = Meet("aa", "carol", Meet.Kind()).apply {
+        val m = Meet("the identity under test", "aa", "carol", Meet.Kind()).apply {
             crossBootstrap(); accept(); intentSent(); intentReceived()
         }
         val c = FakeCourier()
@@ -1070,7 +1070,7 @@ class MeetRowsTest {
         adopt: Meet.Adopt = Meet.Adopt.NONE,
         backup: Boolean = false,
         role: Meet.Role = Meet.Role.INITIATOR,
-    ) = Meet("aa", "carol", Meet.Kind(adopt, backup), role)
+    ) = Meet("the identity under test", "aa", "carol", Meet.Kind(adopt, backup), role)
 
     private fun rows(items: List<Meet.Item>) = items.map { it.row }.distinct().sorted()
 
@@ -1227,7 +1227,7 @@ class MeetRowsTest {
     // acceptance: PRD-15
     @Test
     fun the_patron_chooses_a_subnet_and_the_brief_states_the_choice() {
-        val m = Meet("aa", "carol", Meet.Kind(Meet.Adopt.THEM_UNDER_ME), Meet.Role.INITIATOR)
+        val m = Meet("the identity under test", "aa", "carol", Meet.Kind(Meet.Adopt.THEM_UNDER_ME), Meet.Role.INITIATOR)
         m.counterparty("bb")
         var text = m.brief().joinToString(" ") { it.text }
         assertTrue("asks for the choice: $text", text.contains("asked before you accept"))
@@ -1240,7 +1240,7 @@ class MeetRowsTest {
         m.chooseScope(Meet.Scope.OWN)
         assertEquals("a new subnet under your own key", m.subnetLabel())
         // and a kind chosen at D1a with its scope needs no choosing
-        val chosen = Meet("aa", "carol", Meet.Kind(Meet.Adopt.THEM_UNDER_ME, scope = Meet.Scope.OWN), Meet.Role.INITIATOR)
+        val chosen = Meet("the identity under test", "aa", "carol", Meet.Kind(Meet.Adopt.THEM_UNDER_ME, scope = Meet.Scope.OWN), Meet.Role.INITIATOR)
         assertEquals(Meet.Scope.OWN, chosen.scope())
     }
 
@@ -1255,12 +1255,12 @@ class MeetRowsTest {
         val a = Meet.Scope("ab".repeat(32), "Bowling League", null)
         val b = Meet.Scope("cd".repeat(32), null, "Alice")
         // the initiator as patron, before its invitation
-        val patron = Meet("aa", "carol", Meet.Kind(Meet.Adopt.THEM_UNDER_ME), Meet.Role.INITIATOR)
+        val patron = Meet("the identity under test", "aa", "carol", Meet.Kind(Meet.Adopt.THEM_UNDER_ME), Meet.Role.INITIATOR)
         assertEquals(Meet.Choice.ADOPT_INTO, patron.pendingChoice(listOf(a), emptyList()))
         patron.chooseScope(a)
         assertNull(patron.pendingChoice(listOf(a), emptyList()))
         // a patron in no subnet roots a new one, unasked
-        val lone = Meet("aa", "carol", Meet.Kind(Meet.Adopt.THEM_UNDER_ME), Meet.Role.INITIATOR)
+        val lone = Meet("the identity under test", "aa", "carol", Meet.Kind(Meet.Adopt.THEM_UNDER_ME), Meet.Role.INITIATOR)
         assertNull(lone.pendingChoice(emptyList(), emptyList()))
         assertEquals(Meet.Scope.OWN, lone.scope())
         // the responder as subordinate, after the scan and before the brief

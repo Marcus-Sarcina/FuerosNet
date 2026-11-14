@@ -184,11 +184,11 @@ class ShellActivity : Activity() {
      */
     private fun benchLevers(intent: Intent) {
         if (!BuildConfig.FIELD_TEST) return
-        intent.getStringExtra("forget_contact")?.let { Kernel.forgetContact(it) }
+        intent.getStringExtra("forget_contact")?.let { Kernel.forgetContact(Kernel.focused(), it) }
         // **an agreement re-pointed, as a lever** [bench, 2026-11-13: the
         // laptop's address moved and every agreement named the old one]:
         // `<node hex>@<host:port>` for the identity in focus
-        intent.getStringExtra("agree_to")?.let { Kernel.agreeToNow(it) }
+        intent.getStringExtra("agree_to")?.let { Kernel.agreeToNow(Kernel.focused(), it) }
         // **the focused identity's public material, as an event** — the
         // bench's way to a node configuration naming a phone's identity as
         // operator without the key-material screen (which shows it once)
@@ -196,12 +196,12 @@ class ShellActivity : Activity() {
             Diag.event(
                 "identity.material",
                 "who" to (Kernel.activeIdentity() ?: "").take(8),
-                "hex" to Kernel.materialHex(),
+                "hex" to Kernel.materialHex(Kernel.focused()),
             )
         }
-        if (intent.getBooleanExtra("forget_contacts", false)) Kernel.forgetContacts()
-        intent.getStringExtra("forget_captures")?.let { Kernel.forgetCaptures(it) }
-        if (intent.getBooleanExtra("contact_peers", false)) Kernel.contactPeersNow()
+        if (intent.getBooleanExtra("forget_contacts", false)) Kernel.forgetContacts(Kernel.focused())
+        intent.getStringExtra("forget_captures")?.let { Kernel.forgetCaptures(Kernel.focused(), it) }
+        if (intent.getBooleanExtra("contact_peers", false)) Kernel.contactPeersNow(Kernel.focused())
         // **which identity acts, as a lever** [bench, 2026-11-11]: the
         // choice is a person's input and nothing the kernel owns, so the
         // harness may give it — and measuring what a device can still do
@@ -219,7 +219,7 @@ class ShellActivity : Activity() {
         // (`light-client-requirements.md` §4.3): this is the screen that
         // shows names, so it is where the asking belongs; what comes back
         // reaches the rail through the model
-        Thread({ Kernel.requestProfiles() }, "fueros-profiles").start()
+        Thread({ Kernel.requestProfiles(Kernel.focused()) }, "fueros-profiles").start()
     }
 
     /**
@@ -235,8 +235,8 @@ class ShellActivity : Activity() {
         colours = Kernel.identityColours(this)
         drawRail(rows)
         Thread({
-            val mine = Kernel.ownAlias()
-            val unnamed = mine.second.isNotEmpty() && Kernel.defaultAlias() == null
+            val mine = Kernel.ownAlias(Kernel.focused())
+            val unnamed = mine.second.isNotEmpty() && Kernel.defaultAlias(Kernel.focused()) == null
             runOnUiThread {
                 if (isFinishing) return@runOnUiThread
                 if (unnamed) {
@@ -331,7 +331,7 @@ class ShellActivity : Activity() {
             startActivity(Intent(this, ConversationsActivity::class.java))
         }
         is Chrome.Rung.Meet -> orb(rung, "◎") {
-            startActivity(Intent(this, MeetActivity::class.java))
+            startActivity(Intent(this, MeetActivity::class.java).putExtra("by", Kernel.focused()))
         }
         is Chrome.Rung.Subnet -> orb(rung, Chrome.mark(rung.alias, rung.id)) {
             go(Chrome.Place.Subnet(rung.id))
@@ -623,7 +623,7 @@ class ShellActivity : Activity() {
         // counting the lines of every identity would silence the prompt on
         // a device holding two identities with one patron each — the case
         // it exists for
-        if (!Chrome.suggestingSecondPatron(Kernel.lines().size)) return null
+        if (!Chrome.suggestingSecondPatron(Kernel.lines(Kernel.focused()).size)) return null
         val said = Disclosure.words(Disclosure.Topic.SECOND_PATRON)
         if (said.isEmpty()) return null
         return TextView(this).apply {
@@ -668,7 +668,7 @@ class ShellActivity : Activity() {
             Button(this).apply {
                 text = "Make a backup"
                 setOnClickListener {
-                    startActivity(Intent(this@ShellActivity, BackupActivity::class.java))
+                    startActivity(Intent(this@ShellActivity, BackupActivity::class.java).putExtra("by", Kernel.focused()))
                 }
             },
         )
@@ -702,7 +702,7 @@ class ShellActivity : Activity() {
                         "Resources",
                         "the catalog as swept from your serving node — which of them " +
                             "belong to this subnet is not a question it can answer yet",
-                    ) { startActivity(Intent(this, CatalogActivity::class.java)) },
+                    ) { startActivity(Intent(this, CatalogActivity::class.java).putExtra("by", Kernel.focused())) },
                 )
             }
             is Chrome.Place.Direct -> {
@@ -720,12 +720,12 @@ class ShellActivity : Activity() {
                 connection = line
                 column.addView(
                     row("Serving node", null, line) {
-                        startActivity(Intent(this, AttachActivity::class.java))
+                        startActivity(Intent(this, AttachActivity::class.java).putExtra("by", Kernel.focused()))
                     },
                 )
                 column.addView(
                     row("Instances you run", "enrol one, launch one at a provider, its pages, its run") {
-                        startActivity(Intent(this, OperatorActivity::class.java))
+                        startActivity(Intent(this, OperatorActivity::class.java).putExtra("by", Kernel.focused()))
                     },
                 )
                 column.addView(
@@ -746,14 +746,14 @@ class ShellActivity : Activity() {
                     row(
                         "Authority — who you are under, and what leaving costs",
                         "every line this key holds, not this subnet's alone; tap one for the cost of ending it",
-                    ) { startActivity(Intent(this, LeavingActivity::class.java)) },
+                    ) { startActivity(Intent(this, LeavingActivity::class.java).putExtra("by", Kernel.focused())) },
                 )
                 column.addView(owed(Shell.downline(s)))
                 if (s?.root == true) column.addView(nameSubnet(where.id, scope?.alias))
                 if (s?.operator == true) {
                     column.addView(
                         row("Your instance here", "its administration pages, through the operator's own section") {
-                            startActivity(Intent(this, OperatorActivity::class.java))
+                            startActivity(Intent(this, OperatorActivity::class.java).putExtra("by", Kernel.focused()))
                         },
                     )
                 }
@@ -866,7 +866,7 @@ class ShellActivity : Activity() {
                     Identity.aliasRefusal(typed)?.let { said.text = it; return@setOnClickListener }
                     said.text = "publishing…"
                     Thread({
-                        val why = Kernel.publishSubnetAlias(id, typed)
+                        val why = Kernel.publishSubnetAlias(Kernel.focused(), id, typed)
                         runOnUiThread {
                             if (isFinishing) return@runOnUiThread
                             said.text = why?.let { "not published: $it" } ?: "Named $typed; published to your node."

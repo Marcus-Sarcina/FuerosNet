@@ -30,6 +30,12 @@ import android.widget.TextView
  * file, not a memory.
  */
 class BackupActivity : Activity() {
+    /**
+     * **The identity this screen acts for**, named by whoever opened it
+     * [restructure step 4, 2026-11-14]: never read from the focus here,
+     * so a screen opened for one identity cannot act for another.
+     */
+    private lateinit var by: String
 
     private companion object {
         /** The one request code this screen writes under. */
@@ -45,6 +51,11 @@ class BackupActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        by = intent.getStringExtra("by") ?: run {
+            Diag.warn("backup.opened", "why" to "no identity named")
+            finish()
+            return
+        }
         val g = Screen.gutter(this)
         narration = TextView(this).apply {
             textSize = 15f
@@ -146,7 +157,7 @@ class BackupActivity : Activity() {
         // **the blob is asked for only once there is somewhere to put it**:
         // exporting and then finding no destination would leave the whole
         // archive in this process's memory for no reason
-        val blob = Kernel.exportBackup()
+        val blob = Kernel.exportBackup(by)
         if (blob == null) {
             narration.text = "This device's kernel did not answer, so nothing was written."
             return

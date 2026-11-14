@@ -32,6 +32,12 @@ import android.widget.TextView
  * visible.
  */
 class AttachActivity : Activity() {
+    /**
+     * **The identity this screen acts for**, named by whoever opened it
+     * [restructure step 4, 2026-11-14]: never read from the focus here,
+     * so a screen opened for one identity cannot act for another.
+     */
+    private lateinit var by: String
 
     private lateinit var statusLine: TextView
     private lateinit var known: TextView
@@ -47,6 +53,11 @@ class AttachActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        by = intent.getStringExtra("by") ?: run {
+            Diag.warn("attach.opened", "why" to "no identity named")
+            finish()
+            return
+        }
 
         statusLine = mono("…")
         known = mono("")
@@ -56,7 +67,7 @@ class AttachActivity : Activity() {
 
         val detach = Button(this).apply {
             text = "Detach"
-            setOnClickListener { Kernel.detachNow() }
+            setOnClickListener { Kernel.detachNow(by) }
         }
         val buttons = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -89,7 +100,7 @@ class AttachActivity : Activity() {
         // in `nextEvent` for its poll interval, and this screen must not
         // wait on that where the person is looking
         Thread({
-            val roll = Attach.roll(Kernel.instances())
+            val roll = Attach.roll(Kernel.instances(by))
             runOnUiThread { known.text = roll }
         }, "fueros-nodes").start()
     }
@@ -148,7 +159,7 @@ class AttachActivity : Activity() {
      */
     private fun drawMine() {
         mine.removeAllViews()
-        val me = Kernel.keyhash()
+        val me = Kernel.keyhash(by)
         val rows = ownInstances()
         if (me == null || rows.isEmpty()) {
             return
@@ -166,7 +177,7 @@ class AttachActivity : Activity() {
                     text = "Serve from $label"
                     setOnClickListener {
                         said.text = "attaching to $addr…"
-                        Kernel.serveFrom(this@AttachActivity, me, addr)
+                        Kernel.serveFrom(by, this@AttachActivity, me, addr)
                     }
                 },
             )
@@ -179,7 +190,7 @@ class AttachActivity : Activity() {
      * surface this device talks to it over.
      */
     private fun ownInstances(): List<Pair<String, String>> =
-        getSharedPreferences("operator", MODE_PRIVATE)
+        getSharedPreferences("operator-$by", MODE_PRIVATE)
             .getString("instances", "")!!
             .lines()
             .filter { it.isNotBlank() }

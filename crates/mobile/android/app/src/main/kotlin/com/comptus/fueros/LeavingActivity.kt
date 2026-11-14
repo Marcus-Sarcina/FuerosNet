@@ -35,6 +35,13 @@ import android.widget.TextView
  * Reached from a subnet's options, under the upline it shows.
  */
 class LeavingActivity : Activity() {
+    /**
+     * **The identity this screen was opened for**, named by whoever
+     * opened it [restructure step 4, 2026-11-14]: whose names are shown,
+     * and who acts where a line's own holder is not recorded. The act
+     * itself goes through the line's holder ([by]).
+     */
+    private lateinit var shown: String
 
     private lateinit var roll: TextView
     private lateinit var warning: TextView
@@ -50,6 +57,11 @@ class LeavingActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        shown = intent.getStringExtra("by") ?: run {
+            Diag.warn("leaving.opened", "why" to "no identity named")
+            finish()
+            return
+        }
 
         roll = mono("…")
         warning = body("")
@@ -100,7 +112,7 @@ class LeavingActivity : Activity() {
             // every identity are shown and each is left **by the identity
             // that holds it** rather than by whichever one acts
             val held = Kernel.linesHeld()
-            val known = Kernel.aliases()
+            val known = Kernel.aliases(shown)
             runOnUiThread {
                 names = known
                 if (isFinishing) return@runOnUiThread
@@ -140,7 +152,7 @@ class LeavingActivity : Activity() {
         leave.visibility = android.view.View.GONE
         said.text = ""
         Thread({
-            val (c, why) = Kernel.costOfLeaving(patron.first)
+            val (c, why) = Kernel.costOfLeaving(by ?: shown, patron.first)
             runOnUiThread {
                 if (isFinishing || chosen != patron) return@runOnUiThread
                 if (c == null) {
@@ -182,7 +194,7 @@ class LeavingActivity : Activity() {
             // somewhere this screen did not record
             val holder = by
             val out = if (holder == null) {
-                Kernel.departFrom(patron.first)
+                Kernel.departFrom(shown, patron.first)
             } else {
                 Kernel.departAs(holder, patron.first)
             }
