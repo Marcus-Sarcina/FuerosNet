@@ -9041,16 +9041,23 @@ own two phones**: it is the ordinary condition of everyone in §3.3's tier. *(Th
 primary device, a head-check before signing, published per-device key bindings —
 are superseded; Appendix B.1.)*
 
-**Two devices of one identity replicate on contact, and neither waits to be
-asked** [author, 2026-10-16]. Which device holds what is settled above; what
-remained was how a person understands an archive spread over several of them,
-and the answer is that mostly they should not have to. **A device that knows
-another is behind is in contact with it**, which is the whole of the
-opportunity: it brings that device to the latest dataset then and there —
-§10.3's merge where the two have forked, a plain append where one is simply
-short — over the same archive fetch any reader uses (`wire-format.md` §7.9,
-and `wire-format.md` §14.3.3's interface where the two are side by side). Nothing is a new
-object and nothing is a new permission: the subject is reading its own
+**Two devices of one identity replicate on contact** [author, 2026-10-16],
+**and contact means the local interface** [author, 2026-11-15]. Which device
+holds what is settled above; what remained was how a person understands an
+archive spread over several of them, and the answer is that mostly they
+should not have to: a device that knows another is behind brings it to the
+latest dataset — §10.3's merge where the two have forked, a plain append
+where one is simply short — across `wire-format.md` §14.3.3's interface,
+where the two are side by side on one LAN or on the ceremony's encrypted
+link, and each holder acknowledges the hand-over on their own device. **Never
+over the network, and never because a device presented a credential.** §10.2
+makes the archive a second factor precisely because a key thief holds the
+key and not the device; a carriage that sent the dataset to any device the
+identity key had delegated to would hand the thief the branch §10.3 says
+they cannot have, and the contacts and sealed captures with it. The local
+carriage closes that path with the property §14.1 already rests on,
+physical presence, and the acknowledgement is the one a ceremony already
+asks of a person. No new permission arises: the subject is reading its own
 archive.
 
 **The latest dataset is the whole of it** [author, 2026-10-16]: the archive, the

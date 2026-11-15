@@ -18139,28 +18139,34 @@
   "id": "ARC-30",
   "area": "archive",
   "gap": "archive",
-  "title": "Bring another device of the identity to the whole dataset on contact: merge where forked, append where short, ciphertext as it is, no seed",
+  "title": "Bring another device of the identity to the whole dataset across the local interface on both holders' acknowledgement: merge where forked, append where short, ciphertext as it is, no seed",
   "milestone": "after-5",
   "kind": "positive",
   "spec": [
    "design §23.3",
+   "design §10.2",
    "design §10.3",
    "design §7.5.2.6",
-   "light-client-requirements.md §4.2"
+   "light-client-requirements.md §4.2",
+   "wire-format.md §14.3.3"
   ],
   "rule": [
    {
     "where": "design §23.3",
-    "text": "A device that knows another is behind is in contact with it"
+    "text": "a device that knows another is behind brings it to the latest dataset"
+   },
+   {
+    "where": "design §23.3",
+    "text": "Never over the network, and never because a device presented a credential"
    },
    {
     "where": "light-client-requirements.md §4.2",
-    "text": "it hands over what the other lacks"
+    "text": "hands over what the other lacks"
    }
   ],
-  "given": "A ceremony device that met three parties, one in person, while a device of the same identity holding no seed was away; and two seed-holding devices that each signed a record from one shared head while apart.",
-  "when": "Each device that is behind is handed the other's dataset, and the merged archive takes its next record.",
-  "then": "The away device holds every record and the whole store, the sealed capture as the ciphertext it is, with nobody asked. The two forked devices each hold both heads, having each been sent the one record they lacked; the next record carries both back-pointers and leaves one head, and the device that did not sign it is brought level by a plain append. The dataset carries no seed: the device given it signs nothing, writes no backup, releases no capture key, and the replicated capture does not open there. A dataset naming another identity is refused, and taking the same one twice changes nothing.",
+  "given": "A ceremony device that met three parties, one in person, while a device of the same identity holding no seed was away; and two seed-holding devices that each signed a record from one shared head while apart. Each pair exchanges dataset contributions as a ceremony's optical step does.",
+  "when": "Each device that is behind is handed the other's sealed dataset after both holders are asked, and the merged archive takes its next record.",
+  "then": "Both holders are asked once per hand-over and nothing moves on a no, on either side. The away device holds every record and the whole store, the sealed capture as the ciphertext it is. The two forked devices each hold both heads, having each been sent the one record they lacked; the next record carries both back-pointers and leaves one head, and the device that did not sign it is brought level by a plain append. The dataset carries no seed: the device given it signs nothing, writes no backup, releases no capture key, and the replicated capture does not open there. A contribution naming another identity is refused, a carriage with no pairing or with the other contribution unread is refused, a tampered carriage is refused, and taking the same one twice changes nothing. No operation on the payload or request paths takes a dataset.",
   "oracle": "behaviour",
   "interpretation": null,
   "families": [

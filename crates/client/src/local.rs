@@ -81,6 +81,89 @@ impl OpticalContribution {
     }
 }
 
+/// What one device of an identity shows another for a dataset hand-over
+/// (§14.3.3): the identity both hold, this device's contribution to the
+/// pairing key, and its archive heads, so the other sends what these do not
+/// reach.
+#[derive(Clone, PartialEq, Eq)]
+pub struct DatasetContribution {
+    /// The identity's key material in full (§2.2).
+    pub material: Vec<u8>,
+    /// Its keyhash, computed from the material on decode.
+    pub device: Keyhash,
+    /// The 16 bytes this device contributes to the pairing key.
+    pub contribution: [u8; 16],
+    /// This device's archive heads.
+    pub heads: Vec<crate::Txid>,
+}
+
+impl std::fmt::Debug for DatasetContribution {
+    /// The contribution is half of the pairing key, and is not printed.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DatasetContribution")
+            .field("material", &self.material.len())
+            .field("device", &self.device)
+            .field("contribution", &"<redacted>")
+            .field("heads", &self.heads.len())
+            .finish()
+    }
+}
+
+impl DatasetContribution {
+    /// The bytes of this `DatasetContribution`, as §14.3.3 composes them.
+    pub fn encode(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        emit_array_head(&mut out, 4);
+        emit_uint(&mut out, 1);
+        out.extend_from_slice(&self.material);
+        emit_bstr(&mut out, &self.contribution);
+        emit_array_head(&mut out, self.heads.len());
+        for h in &self.heads {
+            emit_bstr(&mut out, h);
+        }
+        out
+    }
+
+    /// Read a `DatasetContribution` from `b`; an error naming what did not
+    /// read.
+    pub fn decode(b: &[u8]) -> Result<Self, String> {
+        let item = parse_all(b).map_err(|e| format!("DatasetContribution: {}", e.0))?;
+        let Item::Array(f) = &item else {
+            return Err("DatasetContribution: not an array".into());
+        };
+        let [v, _, c, hs] = f.as_slice() else {
+            return Err("DatasetContribution: not four fields".into());
+        };
+        if !matches!(v, Item::Uint(1)) {
+            return Err("DatasetContribution: not version 1".into());
+        }
+        let ranges = array_item_ranges(b, 0).ok_or("DatasetContribution: item ranges")?;
+        let material = b[ranges[1].clone()].to_vec();
+        let device = rhtn_crypto::Identity::from_key_material(&material)
+            .ok_or("the key material does not read as an identity")?
+            .keyhash;
+        let contribution = fixed16(b, c)?;
+        let Item::Array(heads) = hs else {
+            return Err("DatasetContribution: heads are not an array".into());
+        };
+        let heads = heads
+            .iter()
+            .map(|h| match h {
+                Item::Bytes(r) if r.len() == 32 => b[r.clone()]
+                    .try_into()
+                    .map_err(|_| "DatasetContribution: a head".to_string()),
+                _ => Err("DatasetContribution: a head is not 32 bytes".into()),
+            })
+            .collect::<Result<Vec<crate::Txid>, String>>()?;
+        Ok(DatasetContribution {
+            material,
+            device,
+            contribution,
+            heads,
+        })
+    }
+}
+
 /// The second QR, once both contributions are in (§14.3.2): the ceremony-id
 /// this device computed, for the other to check against its own.
 #[derive(Debug, Clone, PartialEq, Eq)]

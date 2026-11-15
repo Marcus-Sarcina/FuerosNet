@@ -888,16 +888,21 @@ nothing below reaches across them.
 
 ### 4.2 What you keep of your horizon, and what you hand your own other devices
 
-- **Bring another device of your own identity up to date whenever you are in
-  contact with it** [author, 2026-10-16]. A device that can see another is
-  behind is in contact with it, so it does not wait to be asked and it does not
-  ask the person: it hands over what the other lacks — design §10.3's merge
-  where the two have forked, a plain append where one is simply short — over
-  the archive fetch any reader uses (`wire-format.md` §7.9), or across the
-  local interface where the two are side by side (`wire-format.md` §14.3.3).
-  **The subject is reading its own archive**, so no new permission and no new
-  object arises. What remains for a screen is the residual alone: what one
-  device signed while the other was away (design §23.3).
+- **Bring another device of your own identity up to date when the two are
+  side by side** [author, 2026-10-16; the carriage ruled 2026-11-15]. A
+  device that can see another is behind hands over what the other lacks —
+  design §10.3's merge where the two have forked, a plain append where one is
+  simply short — **across the local interface alone** (`wire-format.md`
+  §14.3.3): the same LAN or the ceremony's encrypted link, the two devices
+  exchanging contributions as a ceremony's do, and the holder acknowledging
+  the hand-over on each device before anything moves. **Refuse a dataset
+  that arrives any other way**, over the payload path or a request stream
+  included, and offer none to a device that presents a delegation and
+  nothing else: design §10.2 makes the archive a second factor, and a thief
+  of the key must not be able to fetch what the key alone was never meant to
+  reach. **The subject is reading its own archive**, so no new permission
+  arises. What remains for a screen is the residual alone: what one device
+  signed while the other was away (design §23.3).
 
 - **Hand over everything you hold of it, not the archive alone** [author,
   2026-10-16]. The other device is brought to your whole state: the archive,

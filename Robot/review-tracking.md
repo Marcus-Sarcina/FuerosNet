@@ -22093,3 +22093,37 @@ the dataset: `catalog::View` is a cache nothing persists, re-swept at
 attach; said in the output.
 
 Figure: 575 live, 536 held, 39 by neither; implemented 570 of 576.
+
+**The carriage of the dataset, ruled and built, 2026-11-15 [author].**
+The author's concern: a network carriage for the dataset lets a thief of
+the signing key fetch what design §10.2 makes a second factor, since a
+delegation minted under the stolen key would be a device of the identity
+claiming to be behind. His ruling: the hand-over runs only quasi-tethered
+— same LAN or the ceremony's encrypted link — with active acknowledgement
+by the person on both devices. **A misattribution corrected on the way**:
+the "unasked / does not wait to be asked / does not ask the person"
+clauses in design §23.3, L §4.2 and APP-014 were my elaboration of the
+2026-10-16 ruling (which was O-015's: *what* crosses, "the whole of it")
+and carried his bracket; commit `524fa5c` of 2026-10-18 introduced them.
+Removed as such, not as a reversal.
+
+Documents: design §23.3 (contact means the local interface; never over the
+network, never for a credential; §10.2's reason), L §4.2 (the local
+interface alone, both holders acknowledging, refuse a dataset arriving any
+other way), wire §14.3.3 (`DatasetContribution` and `DatasetHandover`, the
+pairing id `rhtn/1:dataset-id` and key `rhtn/1:dataset-session` in the
+ceremony-id's and session key's constructions, contributions ordered by
+their bytes since the two devices share a keyhash; §14.2 gained the row),
+APP-014 restated with the negative clauses, NET-019 names the new objects.
+Pins re-accepted; vectors changed in hash lines only.
+
+Kernel: `dataset_contribution` / `take_dataset_contribution` (the pairing,
+either order, another identity's refused `NotMine`), `dataset_carriage` /
+`take_dataset_carriage` (the person asked on each side before anything is
+composed or opened, `Declined` otherwise; sealed with `local::seal_carriage`
+under the pairing key and id; `Unsealable` on tamper). `dataset_for` and
+`take_dataset` are `pub(crate)`: no path from the payload or request layers
+reaches them. ARC-30 restated; `devices.rs` holds four tests (the codec,
+the away desktop with both holders asked and every refusal, the decline on
+either side, the fork). **Not done**: the FFI facade and the Android screen
+for the pairing; the catalogue portion (not persisted, not carried; asked).

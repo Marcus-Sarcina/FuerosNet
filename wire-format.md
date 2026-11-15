@@ -5469,6 +5469,7 @@ design already depends on.
 | Traversal candidates | Two participants' devices | design §12.6.3 [author, 2026-09-25] | `CandidateHandover` (§14.3.2), carrying the `Candidate` structure this document now defines; the same candidates travel the end-to-end payload path when a direct connection is set up remotely (design §12.6.3, §14.1.1) |
 | The capture-key handover — the key each participant derived for the captures the other holds of them, handed across at capture time | Two participants' devices | design §7.5.2, design §7.5.2.6 | `CaptureKeyHandover` (§14.3.2): the 32-byte key design §7.5.2.6 derives, anchored to the ceremony-id like the proximity outcomes and the candidates [author, 2026-10-02] |
 | A delegated device's payload material, and the ceremony device's signature over it | Two devices of one identity | design §23.3, §7.8 | `DeviceIntroduction` then `DeviceCredential` (§14.3.3): §7.8's bundle unsigned and then signed, beside §8.2's delegations |
+| **The dataset one device of an identity hands another** — the records the other lacks, the view and the sealed captures, on both holders' acknowledgement | Two devices of one identity | design §23.3, design §10.2 [author, 2026-11-15] | `DatasetContribution` then `DatasetHandover` (§14.3.3): the contributions as §14.3.2's optical step, the dataset sealed under the key they derive |
 | **The participants' own legs of the conversation** — kinds 9 to 19 of §7.10.1, each one addressed to the co-present counterparty, the arranging of an adoption among them, and the prune's two legs, kinds 22 and 23, which no witness sees [author, 2026-10-19] | Two participants' devices | §7.10.1, design §7.1 [author, 2026-10-05] | The kind-tagged plaintext §7.10.1 defines, **unchanged**, sealed under the local session (§14.3.2) and carried by the same bearer. A witness's or verifier's leg of the same kind travels the end-to-end payload path instead; the leg is chosen by who the recipient is |
 | **The post-quantum prekey handover** — the sender's signed bundle and one one-time key, so a co-present pair can open an end-to-end channel afterwards without a node | Two participants' devices | §7.8, design §14.2.4.3 [author, 2026-10-05] | `PrekeyHandover` (§14.3.4), anchored to the ceremony-id and sealed under the local session like every other carriage |
 
@@ -5812,10 +5813,10 @@ shell's choice of radio cannot weaken it.
 
 #### 14.3.3 The handover between one identity's devices
 
-The last row of §14.2 is not between two people: a device that holds no seed
-is introduced to the one that does (design §23.3), across the same class of
-interface and under the same property (§14.1). Two messages, and every
-signature that comes back is the identity's:
+Two rows of §14.2 are not between two people. **First, a device that holds
+no seed is introduced to the one that does** (design §23.3), across the same
+class of interface and under the same property (§14.1). Two messages, and
+every signature that comes back is the identity's:
 
 ```
 DeviceIntroduction = [         ; the new device offers what it minted
@@ -5860,6 +5861,51 @@ identity and names the key it delegates to (§8.2), the bundle verifies under
 the identity and names the device whose material it covers under the
 signature (§7.8, field 5) — so the artifacts say exactly what the identity
 signed, and the exposure is bounded by the windows it signed for.
+
+**Second, one device of an identity brings another to the whole dataset**
+(design §23.3; `light-client-requirements.md` §4.2), **across this interface
+and no other** [author, 2026-11-15]. Design §10.2 makes the archive a second
+factor because a key thief holds the key and not the device, so no network
+path and no credential may fetch it: the two devices exchange contributions
+as §14.3.2's optical step does, each holder acknowledges on their own
+device, and the dataset crosses sealed under the key the contributions
+derive.
+
+```
+DatasetContribution = [        ; each device shows one, screen to camera
+  uint,                        ; version, 1
+  KeyMaterial,                 ; §2.2: the identity both devices hold. A
+                               ;   contribution naming any other identity
+                               ;   is refused
+  bstr .size 16,               ; this device's contribution to the pairing
+                               ;   key, drawn fresh per hand-over
+  [ * txid ]                   ; this device's archive heads, so the other
+                               ;   sends what these do not reach and
+                               ;   nothing they do
+]
+
+DatasetHandover = bstr         ; the dataset, sealed as §14.3.4's carriages
+                               ;   are, under the key the two contributions
+                               ;   derive — `rhtn/1:dataset-session` in the
+                               ;   construction of §14.3.2's session key —
+                               ;   with the pairing id — `rhtn/1:dataset-id`
+                               ;   in the construction of the ceremony-id —
+                               ;   as the associated data. Both order the two
+                               ;   contributions by their bytes, the two
+                               ;   devices sharing one keyhash. Inside: the
+                               ;   records the receiver's heads do not reach,
+                               ;   and the whole of the view and the sealed
+                               ;   captures, in the client's own encoding
+                               ;   (design §23.3); no seed and no credential
+```
+
+**What binds it is the same as above and no more**: the two devices share
+no prior value, so the integrity of the pairing is §14.1's property, and a
+contribution read off a screen that was not the other device's would pair a
+device with a stranger — which the acknowledgement on both devices is the
+person's chance to notice. What the sealing buys is that a LAN is wider than
+a table: a third device on the same network reads nothing. Nothing crosses
+until both contributions are in and both holders have said yes.
 
 #### 14.3.4 The prekey handover
 

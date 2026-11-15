@@ -26,6 +26,41 @@ pub const CAPTURE_TAG: &[u8] = b"rhtn/1:capture";
 /// §14.3.2).  Distinct from [`CEREMONY_TAG`] over the same two
 /// contributions: see this module's header.
 pub const SESSION_TAG: &[u8] = b"rhtn/1:ceremony-session";
+/// The ASCII tag the pairing id of two devices of one identity hashes
+/// first (`wire-format.md` §14.3.3).
+pub const DATASET_TAG: &[u8] = b"rhtn/1:dataset-id";
+/// The ASCII tag the pairing key hashes first (`wire-format.md` §14.3.3).
+pub const DATASET_SESSION_TAG: &[u8] = b"rhtn/1:dataset-session";
+
+/// The two contributions of a dataset pairing in ascending byte order: the
+/// two devices share a keyhash, so the participant order the ceremony uses
+/// would put them differently on each side.
+fn ordered<'a>(a: &'a [u8; 16], b: &'a [u8; 16]) -> (&'a [u8; 16], &'a [u8; 16]) {
+    if a <= b { (a, b) } else { (b, a) }
+}
+
+/// The pairing id two devices of one identity derive for a dataset
+/// hand-over (`wire-format.md` §14.3.3): the ceremony-id's construction
+/// under its own tag, the contributions ordered by their bytes.
+pub fn dataset_id(a: &[u8; 16], b: &[u8; 16]) -> [u8; 32] {
+    let (first, second) = ordered(a, b);
+    let mut pre = Vec::with_capacity(DATASET_TAG.len() + 32);
+    pre.extend_from_slice(DATASET_TAG);
+    pre.extend_from_slice(first);
+    pre.extend_from_slice(second);
+    sha256(&pre)
+}
+
+/// The pairing key (`wire-format.md` §14.3.3): the session key's
+/// construction under its own tag, over the same ordering.
+pub fn dataset_key(a: &[u8; 16], b: &[u8; 16]) -> Zeroizing<[u8; 32]> {
+    let (first, second) = ordered(a, b);
+    let mut pre = Zeroizing::new(Vec::with_capacity(DATASET_SESSION_TAG.len() + 32));
+    pre.extend_from_slice(DATASET_SESSION_TAG);
+    pre.extend_from_slice(first);
+    pre.extend_from_slice(second);
+    Zeroizing::new(sha256(&pre))
+}
 
 /// The ceremony pre-commitment (design §7.5.2.6): SHA-256 of the tag
 /// followed by the two participants' 16-byte contributions in ascending

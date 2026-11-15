@@ -798,6 +798,35 @@ pub struct Client {
     /// handle: the opening it is watching before any request arrives
     /// [author, 2026-10-19].  Bounded as `witnessing` is.
     pub(crate) engaged: BTreeMap<[u8; 32], crate::sequence::Engaged>,
+    /// The pairing with another device of this identity for a dataset
+    /// hand-over (`wire-format.md` §14.3.3), while one is under way.
+    pairing: Option<Pairing>,
+}
+
+/// Two devices of one identity paired for a dataset hand-over
+/// (`wire-format.md` §14.3.3): this device's contribution as shown, and the
+/// other's with its heads as read.  The contributions are half a key each
+/// and are wiped when the pairing ends.
+struct Pairing {
+    mine: [u8; 16],
+    theirs: Option<([u8; 16], Vec<Txid>)>,
+}
+
+/// A pairing with both contributions in: what the carriage is sealed under,
+/// what binds it, and the other device's heads.
+struct Paired {
+    key: Zeroizing<[u8; 32]>,
+    id: [u8; 32],
+    heads: Vec<Txid>,
+}
+
+impl Drop for Pairing {
+    fn drop(&mut self) {
+        zeroize::Zeroize::zeroize(&mut self.mine);
+        if let Some((t, _)) = &mut self.theirs {
+            zeroize::Zeroize::zeroize(t);
+        }
+    }
 }
 
 /// What arrived on the end-to-end channel, delivered where it belongs
@@ -1016,6 +1045,7 @@ impl Client {
             active: None,
             witnessing: BTreeMap::new(),
             engaged: BTreeMap::new(),
+            pairing: None,
         }
     }
 
@@ -4546,6 +4576,124 @@ impl Client {
         out
     }
 
+    /// **This device's half of a dataset pairing** (`wire-format.md`
+    /// §14.3.3), to show the other device of this identity: a fresh
+    /// contribution and this archive's heads.  Showing a new one ends any
+    /// pairing before it.  **The carriage is the local interface alone**
+    /// (design §23.3): the dataset is design §10.2's second factor, so no
+    /// network path and no credential fetches it, and the two operations
+    /// that move it run only behind a pairing and the person's yes.
+    pub fn dataset_contribution(&mut self) -> Vec<u8> {
+        let mut c = [0u8; 16];
+        self.device.random.fill(&mut c);
+        let heads = self.archive.heads();
+        let bytes = crate::local::DatasetContribution {
+            material: self.public.key_material(),
+            device: self.keyhash(),
+            contribution: c,
+            heads: heads.clone(),
+        }
+        .encode();
+        self.pairing = Some(Pairing {
+            mine: c,
+            theirs: None,
+        });
+        tracing::info!(
+            target: "cer",
+            which = "dataset-contribution",
+            bytes = bytes.len(),
+            heads = heads.len(),
+            "cer.optical.shown"
+        );
+        bytes
+    }
+
+    /// **The other device's half, read off its screen.**  It must name
+    /// this identity: a contribution from any other is refused as not mine,
+    /// the dataset being for a device of this identity and nobody else.
+    /// Either device may show first; a device that has not shown its own
+    /// draws it now.  What comes back is the other device's heads, which is
+    /// what the hand-over is measured against.
+    pub fn take_dataset_contribution(&mut self, bytes: &[u8]) -> Result<Vec<Txid>, Abort> {
+        let read = crate::local::DatasetContribution::decode(bytes).map_err(Abort::Malformed)?;
+        if read.device != self.keyhash() {
+            return Err(abort(
+                "take_dataset_contribution",
+                Abort::NotMine("a device of another identity"),
+            ));
+        }
+        if self.pairing.is_none() {
+            let mut c = [0u8; 16];
+            self.device.random.fill(&mut c);
+            self.pairing = Some(Pairing {
+                mine: c,
+                theirs: None,
+            });
+        }
+        let p = self.pairing.as_mut().expect("drawn above");
+        p.theirs = Some((read.contribution, read.heads.clone()));
+        tracing::info!(
+            target: "cer",
+            which = "dataset-contribution",
+            bytes = bytes.len(),
+            heads = read.heads.len(),
+            "cer.optical.read"
+        );
+        Ok(read.heads)
+    }
+
+    /// The pairing key and id, once both contributions are in, with the
+    /// other device's heads: `NotActive` with no pairing under way,
+    /// `NoCeremonyId` with this side's contribution shown and the other's
+    /// not yet read.
+    fn pairing_keys(&self) -> Result<Paired, Abort> {
+        let p = self.pairing.as_ref().ok_or(Abort::NotActive)?;
+        let (theirs, heads) = p.theirs.as_ref().ok_or(Abort::NoCeremonyId)?;
+        Ok(Paired {
+            key: crate::keys::dataset_key(&p.mine, theirs),
+            id: crate::keys::dataset_id(&p.mine, theirs),
+            heads: heads.clone(),
+        })
+    }
+
+    /// **The dataset for the paired device, sealed, once its holder says
+    /// yes** (design §23.3; `wire-format.md` §14.3.3): what the other's
+    /// heads do not reach and the whole of the view, under the pairing key.
+    /// The person's no is the refusal, and nothing is composed before it.
+    pub fn dataset_carriage(&mut self) -> Result<Vec<u8>, Abort> {
+        let Paired { key, id, heads } = self.pairing_keys()?;
+        if !self
+            .device
+            .operator
+            .ask("Hand everything this device holds of your identity to the device beside it?")
+        {
+            return Err(abort("dataset_carriage", Abort::Declined));
+        }
+        let plain = Zeroizing::new(self.dataset_for(&heads));
+        tracing::info!(target: "cer", direction = "sent", bytes = plain.len(), "cer.dataset");
+        Ok(crate::local::seal_carriage(&key, &id, &plain))
+    }
+
+    /// **The paired device's dataset, opened and taken once its holder says
+    /// yes.**  Asked before anything is opened; unsealable under this
+    /// pairing is refused as such; what opens is taken as a peer's blob is,
+    /// with the sealed captures and held blobs besides.
+    pub fn take_dataset_carriage(&mut self, sealed: &[u8]) -> Result<Reconciled, Abort> {
+        let Paired { key, id, .. } = self.pairing_keys()?;
+        if !self
+            .device
+            .operator
+            .ask("Take everything the device beside you holds of your identity into this one?")
+        {
+            return Err(abort("take_dataset_carriage", Abort::Declined));
+        }
+        let plain = crate::local::open_carriage(&key, &id, sealed)
+            .ok_or_else(|| abort("take_dataset_carriage", Abort::Unsealable))?;
+        tracing::info!(target: "cer", direction = "received", bytes = plain.len(), "cer.dataset");
+        self.take_dataset(&plain)
+            .map_err(|e| abort("take_dataset_carriage", Abort::Malformed(e)))
+    }
+
     /// **Everything this device holds of the identity, for another device
     /// of it that is behind** (design §23.3; `light-client-requirements.md`
     /// §4.2): the records the other's heads do not reach, and the whole of
@@ -4566,7 +4714,7 @@ impl Client {
     /// heads; a record reachable from them in this archive is one it has,
     /// and is left out.  Heads this archive does not hold constrain
     /// nothing, and the other side drops what it already holds.
-    pub fn dataset_for(&self, their_heads: &[Txid]) -> Vec<u8> {
+    pub(crate) fn dataset_for(&self, their_heads: &[Txid]) -> Vec<u8> {
         use rhtn_codec::encode::*;
         let me = self.keyhash();
         let mut reached: BTreeSet<Txid> = BTreeSet::new();
@@ -4621,7 +4769,7 @@ impl Client {
     /// inserted where absent.  **Nothing is asked of the person and nothing
     /// of a seed**: a device holding none takes it as readily, and signs no
     /// more afterwards than before.
-    pub fn take_dataset(&mut self, bytes: &[u8]) -> Result<Reconciled, String> {
+    pub(crate) fn take_dataset(&mut self, bytes: &[u8]) -> Result<Reconciled, String> {
         use rhtn_codec::cbor::{Item, parse_all};
         let item = parse_all(bytes).map_err(|_| "not a dataset".to_string())?;
         let Item::Array(f) = &item else {
