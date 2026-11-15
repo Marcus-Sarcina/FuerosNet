@@ -302,6 +302,11 @@ pub fn resource_acts(view: &crate::operator::ResourceView, installed: bool) -> V
                 "that clause's parameter, where it takes one",
                 Kind::Text { max: 64 },
             ),
+            p(
+                "until",
+                "when it lapses, in seconds since the epoch; empty for never",
+                Kind::Text { max: 20 },
+            ),
         ],
     )];
     // **narrowing and withdrawing exist only where there is something to

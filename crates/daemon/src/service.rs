@@ -1029,6 +1029,21 @@ impl Service {
         view.prekeys.take_exhausted()
     }
 
+    /// **§10.2's periodic pass over the role table**: where a grant's expiry
+    /// has passed since the last pass, the grants are re-expanded, so the
+    /// rows a lapsed grant wrote go and the sessions they carried end
+    /// (§10.5), with no message having arrived
+    /// (`resource-requirements.md` §7.1.2). Run on the tick. What was
+    /// written and dropped, where a pass ran at all.
+    pub fn lapse_grants(&self) -> Option<(usize, usize)> {
+        let mut view = self.node.view.lock().unwrap();
+        let now = view.now();
+        if !view.resources.lapsed(now) {
+            return None;
+        }
+        Some(view.expand_grants())
+    }
+
     /// **One pass of the directive plane** (`rhtn_node::federation`):
     /// each hosted instance told its relationships where it has not been,
     /// handed what waits for it, asked for what it emits, and what it
@@ -1158,6 +1173,12 @@ impl Service {
                     let ran = self.run_jobs();
                     if ran > 0 {
                         tracing::info!(target: "daemon", step = "jobs", ran, "daemon.lifecycle");
+                    }
+                    // a grant whose expiry passed since the last tick
+                    // (`infra-client-requirements.md` §10.2's periodic
+                    // pass): its rows go now, nothing having arrived
+                    if let Some((granted, dropped)) = self.lapse_grants() {
+                        tracing::info!(target: "daemon", step = "grants_lapsed", granted, dropped, "daemon.lifecycle");
                     }
                     // the store is written on the tick as well as on the
                     // way out, so a kill that never reaches the handler

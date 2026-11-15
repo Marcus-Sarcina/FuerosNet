@@ -567,7 +567,7 @@ fn a_resource_that_holds_its_own_port_is_reached_over_a_socket() {
     // the owner is in its own horizon, so one party is enough to serve
     let owner = [1u8; 32];
     let table = Table::with_me(owner);
-    g.refresh(&table, &Standing::unknown());
+    g.refresh(&table, &Standing::unknown(), 0);
     let request = rhtn_archive::catalog::ResourceRequest {
         resource,
         message: b"GET /things HTTP/1.1\r\nhost: anything\r\nrhtn-roles: admin\r\n\r\n".to_vec(),
@@ -726,32 +726,41 @@ fn every_clause_survives_being_written_and_read_back() {
         Grant {
             roles: roles(&["reader", "writer"]),
             clauses: vec![Clause::Clients],
+            until: None,
         },
         Grant {
             roles: roles(&["writer"]),
             clauses: vec![Clause::Grandclients],
+            until: None,
         },
         Grant {
             roles: roles(&["reader"]),
             clauses: vec![Clause::AtDistance { edges: 2 }],
+            until: None,
         },
         Grant {
             roles: roles(&["reader"]),
             clauses: vec![Clause::MostTrusted { n: 10 }],
+            until: None,
         },
         Grant {
             roles: roles(&["reader"]),
             clauses: vec![Clause::TopFraction { percent: 20 }],
+            until: None,
         },
         Grant {
             roles: roles(&["reader"]),
             clauses: vec![Clause::JoinedBefore {
                 when: 1_690_000_000,
             }],
+            until: None,
         },
         Grant {
             roles: roles(&["reader"]),
             clauses: vec![Clause::Named { who: [7u8; 32] }],
+            // and an expiry, which is the one attribute a grant carries
+            // beside its roles and clauses
+            until: Some(1_800_000_000),
         },
         // and a conjunction, which is §7.1's one compound affordance
         Grant {
@@ -760,6 +769,7 @@ fn every_clause_survives_being_written_and_read_back() {
                 Clause::AtDistance { edges: 1 },
                 Clause::MostTrusted { n: 3 },
             ],
+            until: None,
         },
     ];
     rhtn_daemon::grants::write_for(&dir, &resource, &grants).expect("written");
@@ -1000,7 +1010,7 @@ fn a_directive_crosses_between_two_hosted_instances_and_a_member_cannot_speak_on
     // the refusal here is the gateway's own
     let owner = [1u8; 32];
     let table = Table::with_me(owner);
-    g.refresh(&table, &Standing::unknown());
+    g.refresh(&table, &Standing::unknown(), 0);
     let request = rhtn_archive::catalog::ResourceRequest {
         resource: sub_k,
         message: b"GET /.rhtn/outbox HTTP/1.1\r\nhost: x\r\n\r\n".to_vec(),
@@ -1062,7 +1072,7 @@ fn a_package_answering_with_something_that_is_not_a_response_is_unavailable() {
     let resource = g.bound()[0];
     let owner = [1u8; 32];
     let table = Table::with_me(owner);
-    g.refresh(&table, &Standing::unknown());
+    g.refresh(&table, &Standing::unknown(), 0);
     let request = rhtn_archive::catalog::ResourceRequest {
         resource,
         message: b"GET /things HTTP/1.1\r\nhost: anything\r\n\r\n".to_vec(),
@@ -1096,7 +1106,7 @@ fn a_package_answering_with_something_that_is_not_a_response_is_unavailable() {
         Some(&d2.0.join("state")),
     )
     .expect("the package binds");
-    g2.refresh(&table, &Standing::unknown());
+    g2.refresh(&table, &Standing::unknown(), 0);
     let ok = g2.serve(&owner, &table, &owner, &request);
     assert_eq!(
         ok.status, 0,

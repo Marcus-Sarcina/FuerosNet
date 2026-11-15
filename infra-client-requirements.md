@@ -1262,7 +1262,9 @@ Affordances the UI must offer:
 - Nodes at a given relative tier
 - Nodes above a trust rank
 - Nodes joined before a date
-- **Named individuals**, inside the membership gate
+- **Named individuals**, inside the membership gate; and on any grant, an expiry or
+  none, after which its rows go on the periodic pass (§10.2) with no message
+  having arrived (`resource-requirements.md` §7.1.2)
 
 **Trust thresholds are expressed as rank or percentile, never raw score.** A raw
 threshold is denominated in units meaningful only within one metric family, so

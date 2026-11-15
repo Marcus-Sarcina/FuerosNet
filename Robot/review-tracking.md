@@ -22006,3 +22006,38 @@ and SIG-005 says fourteen. Reported, not edited.
 Figure: 575 live, 534 held, 41 by neither — APP 3, CAP 2, CER 7, ENC 1,
 GAT 2, MAIL 3, NET 1, PAY 3, PKG 2, POL 1, RES 3, SES 3, TOOL 2, TOP 2,
 UX 1, VAL 5.
+
+**GAT-010's expiry built, and an independent ML-DSA known answer,
+2026-11-14 [author].** The expiry is the grant's, not a clause's: `Grant`
+carries `until: Option<u64>` by the node's clock, `admits` takes `now` and
+a grant at or past its expiry admits nobody, so the next expansion drops
+the rows it wrote and §10.5 ends their sessions as for any row change.
+The pass is `Gateway::lapsed(now)`, which says once whether any grant's
+expiry fell in (last look, now], and `Service::lapse_grants` asks it on
+the daemon's minute tick and re-expands when it says so — §10.2's fourth
+moment, which until now had no predicate whose value moved with the clock.
+The act `grant` takes `until` (empty for never) and refuses one already
+past at the act; the hosting file's `[[grant]]` takes `until = N` and
+round-trips it; the grant prints "… until N" on the page. The row's other
+half, a departed named member losing access, was already RSC-38's.
+`infra-client-requirements.md` §10.3's named-individuals bullet now says a
+grant may carry an expiry, citing §10.2 and `resource-requirements.md`
+§7.1.2; pin re-accepted. Acceptance RSC-67 (families GAT-010), held by the
+node test `a_grant_with_an_expiry_lapses_on_the_pass_and_a_permanent_one_stands`,
+the daemon's grant-act test (past refused, ahead shown and written) and
+the hosting round trip (one grant of the nine now carries an expiry).
+Placement was mine to choose and is stated here: the documents speak of
+individual grants with an expiry (R §7.1.2) and of time-dependent
+predicates (I §10.2); an attribute of the grant serves both readings and
+adds no sixth class to §7.2.1's taxonomy.
+
+**ML-DSA-65 known answers**: a 116 KB subset of Wycheproof's
+`mldsa_65_sign_seed_test.json` and `mldsa_65_verify_test.json` (C2SP,
+Apache-2.0, fetched 2026-11-14) at `crates/crypto/tests/data/wycheproof-mldsa65.json`,
+case ids as published: five signing cases under two seeds (the public key
+each seed expands to, and the deterministic signature), nine verifying
+cases (valid, two wrong lengths, two modified, a non-canonical hint
+encoding, a many-steps valid, an infinity-norm violation, a 1951-byte
+key). Cases with a context string were left out, the profile signing under
+the empty context only. `primitives.rs` runs them against `sign_pq`,
+`verify_pq` and the seed expansion.

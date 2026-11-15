@@ -127,6 +127,9 @@ pub struct Gateway {
     /// principal, minted per (member, resource).
     sessions: BTreeMap<(Keyhash, Keyhash), [u8; 16]>,
     minted: u64,
+    /// When the expiry pass last looked ([`Gateway::lapsed`]), so a grant's
+    /// expiry is acted on once, on the first pass at or after it.
+    passed: u64,
     /// Handoffs attempted per resource, for a test to count.
     pub attempts: BTreeMap<Keyhash, u64>,
 }
@@ -204,6 +207,7 @@ impl Gateway {
         grant: &Grant,
         table: &Table,
         standing: &Standing,
+        now: u64,
     ) -> usize {
         let Some(b) = self.bindings.get(resource) else {
             return 0;
@@ -211,7 +215,7 @@ impl Gateway {
         table
             .horizon(&b.owner, 2)
             .iter()
-            .filter(|m| grant.admits(&b.owner, m, table, standing))
+            .filter(|m| grant.admits(&b.owner, m, table, standing, now))
             .count()
     }
 
@@ -369,13 +373,31 @@ impl Gateway {
     /// one has theirs removed. A member with a row of their own that the
     /// operator set is left alone — the standing grant is a floor under
     /// the table, not a thing that overwrites it.
-    pub fn refresh(&mut self, table: &Table, standing: &Standing) -> (usize, usize) {
-        let (granted, dropped) = self.rescore(table, standing);
+    pub fn refresh(&mut self, table: &Table, standing: &Standing, now: u64) -> (usize, usize) {
+        let (granted, dropped) = self.rescore(table, standing, now);
         tracing::debug!(target: "node", granted, dropped, "node.resource.refreshed");
         (granted, dropped)
     }
 
-    fn rescore(&mut self, table: &Table, standing: &Standing) -> (usize, usize) {
+    /// **Whether a grant's expiry has passed since this was last asked**:
+    /// the clock's own moment among `infra-client-requirements.md` §10.2's
+    /// four, "periodically for time-dependent predicates, whose values move
+    /// with time alone". The caller refreshes when this says so, and the
+    /// rows a lapsed grant wrote go on time with no message having arrived
+    /// (`resource-requirements.md` §7.1.2). Asked once per tick rather than
+    /// re-expanding every tick; the first ask reads from the beginning, so
+    /// a grant already past its expiry when the node starts is dropped on
+    /// the first tick.
+    pub fn lapsed(&mut self, now: u64) -> bool {
+        let since = self.passed;
+        self.passed = now;
+        self.grants
+            .values()
+            .flatten()
+            .any(|g| g.until.is_some_and(|t| since < t && t <= now))
+    }
+
+    fn rescore(&mut self, table: &Table, standing: &Standing, now: u64) -> (usize, usize) {
         let (mut granted, mut dropped) = (0, 0);
         let written: Vec<(Keyhash, Vec<Grant>)> =
             self.grants.iter().map(|(k, g)| (*k, g.clone())).collect();
@@ -397,7 +419,7 @@ impl Gateway {
                 // ([`crate::grant::Grant`])
                 let matched: Vec<&Grant> = grants
                     .iter()
-                    .filter(|g| g.admits(&owner, &m, table, standing))
+                    .filter(|g| g.admits(&owner, &m, table, standing, now))
                     .collect();
                 if matched.is_empty() {
                     // **a predicate that stopped matching is §10.5's own

@@ -17908,6 +17908,37 @@
   ]
  },
  {
+  "id": "RSC-67",
+  "area": "resources",
+  "gap": "resources",
+  "title": "A grant with an expiry lapses on the periodic pass, nothing having arrived",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "infra-client-requirements.md §10.2",
+   "infra-client-requirements.md §10.3",
+   "resource-requirements.md §7.1.2"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §10.2",
+    "text": "periodically for time-dependent predicates, whose values move with time alone"
+   },
+   {
+    "where": "resource-requirements.md §7.1.2",
+    "text": "expiry should\nstay optional since some named grants are permanent by intent"
+   }
+  ],
+  "given": "A resource with two named grants: one carrying an expiry, one permanent. Both members hold rows after an expansion before the expiry.",
+  "when": "The node's clock reaches the expiry and the tick's pass asks whether anything lapsed; and the clock moves on past it.",
+  "then": "The pass says so exactly once, the re-expansion drops the expiring grant's row and leaves the permanent grant's row standing, no message having arrived. A later pass with nothing newly lapsed says nothing. An operator writing an expiry already past is refused at the act; one ahead reads back on the page beside the grant and is written to the node's grants file, and a grant with an expiry survives the hosting file round trip.",
+  "oracle": "behaviour",
+  "interpretation": null,
+  "families": [
+   "GAT-010"
+  ]
+ },
+ {
   "id": "TOP-54",
   "area": "topology",
   "gap": "topology",

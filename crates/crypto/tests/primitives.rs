@@ -242,3 +242,104 @@ fn the_sign1_structure_is_rfc_9052s_encoding_of_rfc_8152s_example() {
     );
     assert_eq!(got, hex(want));
 }
+
+fn hex_of(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+// functional: SIG-011
+/// **Wycheproof's ML-DSA-65 vectors**, a cited subset
+/// (`data/wycheproof-mldsa65.json`, from C2SP's repository under
+/// Apache-2.0, case ids as published): the public key a seed expands to
+/// and the deterministic signature over each message, which is somebody
+/// else's arithmetic for the profile's post-quantum component
+/// (`wire-format.md` §2.2); and a verifier walked over valid signatures,
+/// wrong lengths, modified bytes, a non-canonical hint encoding, an
+/// infinity-norm violation and a public key of the wrong length. Cases
+/// carrying a context string are not in the subset: the profile signs
+/// under the empty context only.
+#[test]
+fn ml_dsa_65_agrees_with_wycheproofs_vectors() {
+    use rhtn_crypto::{Identity, SigningIdentity};
+    let v: serde_json::Value =
+        serde_json::from_str(include_str!("data/wycheproof-mldsa65.json")).expect("the subset");
+    assert_eq!(v["algorithm"], "ML-DSA-65");
+    let mut cases = 0;
+
+    // signing: the seed is FIPS 204's ξ, which is what the profile's
+    // second seed is
+    for g in v["sign"].as_array().expect("sign groups") {
+        let seed = h32(g["privateSeed"].as_str().unwrap());
+        let id = SigningIdentity::from_seeds(&[0u8; 32], &seed);
+        assert_eq!(
+            hex_of(id.public.pq.encode().as_ref()),
+            g["publicKey"].as_str().unwrap(),
+            "the public key the seed expands to"
+        );
+        for t in g["tests"].as_array().unwrap() {
+            let (msg, sig) = (
+                hex(t["msg"].as_str().unwrap()),
+                hex(t["sig"].as_str().unwrap()),
+            );
+            let valid = t["result"] == "valid";
+            if valid {
+                assert_eq!(
+                    id.sign_pq(&msg),
+                    sig,
+                    "tcId {}: {}",
+                    t["tcId"],
+                    t["comment"]
+                );
+            }
+            assert_eq!(
+                id.public.verify_pq(&sig, &msg),
+                valid,
+                "tcId {}: {}",
+                t["tcId"],
+                t["comment"]
+            );
+            cases += 1;
+        }
+    }
+
+    // verifying: a published key, which may itself be malformed
+    let ed = ed25519_dalek::VerifyingKey::from_bytes(&h32(
+        "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
+    ))
+    .expect("RFC 8032's key, standing in for the classical half");
+    for g in v["verify"].as_array().expect("verify groups") {
+        let pk = hex(g["publicKey"].as_str().unwrap());
+        let tests = g["tests"].as_array().unwrap();
+        let decoded = ml_dsa::EncodedVerifyingKey::<ml_dsa::MlDsa65>::try_from(&pk[..])
+            .ok()
+            .map(|enc| ml_dsa::VerifyingKey::<ml_dsa::MlDsa65>::decode(&enc));
+        let Some(pq) = decoded else {
+            for t in tests {
+                assert_eq!(
+                    t["result"],
+                    "invalid",
+                    "a key of {} bytes verifies nothing",
+                    pk.len()
+                );
+                cases += 1;
+            }
+            continue;
+        };
+        let id = Identity::from_public(ed, pq);
+        for t in tests {
+            let (msg, sig) = (
+                hex(t["msg"].as_str().unwrap()),
+                hex(t["sig"].as_str().unwrap()),
+            );
+            assert_eq!(
+                id.verify_pq(&sig, &msg),
+                t["result"] == "valid",
+                "tcId {}: {}",
+                t["tcId"],
+                t["comment"]
+            );
+            cases += 1;
+        }
+    }
+    assert_eq!(cases, 14, "the subset as extracted");
+}

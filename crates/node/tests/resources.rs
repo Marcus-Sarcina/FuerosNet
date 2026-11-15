@@ -1495,7 +1495,7 @@ fn a_standing_grant_follows_the_owners_horizon_in_and_out() {
         "and nothing is written until it is expanded"
     );
 
-    let (granted, dropped) = g.refresh(&sc.table, &Standing::unknown());
+    let (granted, dropped) = g.refresh(&sc.table, &Standing::unknown(), 0);
     assert!(
         granted >= 3,
         "the owner's horizon, expanded: {granted} rows"
@@ -1516,7 +1516,7 @@ fn a_standing_grant_follows_the_owners_horizon_in_and_out() {
     // a second expansion over the same membership writes nothing: the
     // moments §10.2 names are membership changes, not requests
     assert_eq!(
-        g.refresh(&sc.table, &Standing::unknown()),
+        g.refresh(&sc.table, &Standing::unknown(), 0),
         (0, 0),
         "nothing moved, so nothing to do"
     );
@@ -1530,7 +1530,7 @@ fn a_standing_grant_follows_the_owners_horizon_in_and_out() {
     };
     g.set_row(R1, kh("bob"), wider.clone())
         .expect("the operator's own row");
-    assert_eq!(g.refresh(&sc.table, &Standing::unknown()), (0, 0));
+    assert_eq!(g.refresh(&sc.table, &Standing::unknown(), 0), (0, 0));
     assert_eq!(
         g.row(&R1, &kh("bob")),
         Some(&wider),
@@ -1541,7 +1541,7 @@ fn a_standing_grant_follows_the_owners_horizon_in_and_out() {
     let mut w = World::new();
     let (a_b, _) = w.adopt("bob", "alice", 1);
     let narrowed = table_with(kh("alice"), &w, &[&a_b], &["alice"]);
-    let (granted, dropped) = g.refresh(&narrowed, &Standing::unknown());
+    let (granted, dropped) = g.refresh(&narrowed, &Standing::unknown(), 0);
     assert_eq!(granted, 0);
     assert!(dropped >= 2, "carol and w1 left: {dropped} rows dropped");
     assert!(
@@ -1607,7 +1607,7 @@ fn an_ending_purges_the_departed_subtree_from_every_resource_not_only_the_grante
         vec![Grant::standing(BTreeSet::from(["reader".to_string()]))],
     )
     .expect("a grant over the owner's horizon");
-    g.refresh(&table, &Standing::unknown());
+    g.refresh(&table, &Standing::unknown(), 0);
     for m in ["carol", "w1", "bob"] {
         g.set_row(R2, kh(m), row.clone())
             .expect("the operator's own row");
@@ -1631,7 +1631,7 @@ fn an_ending_purges_the_departed_subtree_from_every_resource_not_only_the_grante
         &[&a_c, &a_w1, &a_b, &dep],
         &["alice", "carol"],
     );
-    let (granted, dropped) = g.refresh(&after, &Standing::unknown());
+    let (granted, dropped) = g.refresh(&after, &Standing::unknown(), 0);
     assert_eq!(granted, 0, "nobody entered");
     assert!(dropped >= 4, "carol and w1, on both resources: {dropped}");
 
@@ -1704,7 +1704,7 @@ fn replacing_a_standing_grant_rewrites_what_it_wrote_and_leaves_the_operators_ow
         vec![Grant::standing(BTreeSet::from(["reader".to_string()]))],
     )
     .expect("and one on the other resource");
-    let (granted, _) = g.refresh(&sc.table, &Standing::unknown());
+    let (granted, _) = g.refresh(&sc.table, &Standing::unknown(), 0);
     assert!(granted >= 6, "both horizons expanded: {granted}");
     assert_eq!(g.row(&R1, &kh("carol")).map(|r| r.connect), Some(true));
 
@@ -1730,7 +1730,7 @@ fn replacing_a_standing_grant_rewrites_what_it_wrote_and_leaves_the_operators_ow
     };
     g.set_grants(R1, vec![Grant::standing(BTreeSet::new())])
         .expect("the policy is replaced");
-    g.refresh(&sc.table, &Standing::unknown());
+    g.refresh(&sc.table, &Standing::unknown(), 0);
 
     assert_eq!(
         g.row(&R1, &kh("carol")),
@@ -1757,7 +1757,7 @@ fn replacing_a_standing_grant_rewrites_what_it_wrote_and_leaves_the_operators_ow
     // example of an authorisation change is "a predicate ceasing to
     // match", and a predicate that is gone has ceased
     g.set_grants(R1, vec![]).expect("the policy is withdrawn");
-    g.refresh(&sc.table, &Standing::unknown());
+    g.refresh(&sc.table, &Standing::unknown(), 0);
     assert_eq!(
         g.row(&R1, &kh("carol")),
         None,
@@ -1775,7 +1775,7 @@ fn replacing_a_standing_grant_rewrites_what_it_wrote_and_leaves_the_operators_ow
         vec![Grant::standing(BTreeSet::from(["reader".to_string()]))],
     )
     .expect("the policy is replaced again");
-    g.refresh(&sc.table, &Standing::unknown());
+    g.refresh(&sc.table, &Standing::unknown(), 0);
     assert_eq!(
         g.row(&R1, &kh("carol")),
         Some(&open),
@@ -1880,7 +1880,7 @@ fn rsc_42_a_role_table_holds_the_current_row_and_no_history_of_it() {
     )
     .unwrap();
     let sc = scene();
-    g.refresh(&sc.table.clone_for(kh("bob")), &Standing::unknown());
+    g.refresh(&sc.table.clone_for(kh("bob")), &Standing::unknown(), 0);
     let derived: Vec<_> = g
         .rows()
         .into_iter()
@@ -1928,7 +1928,7 @@ fn a_named_row_for_a_party_outside_the_horizon_grants_nothing() {
     assert_eq!(backend.calls.load(Ordering::SeqCst), 0);
     // the row stood until membership was next re-evaluated, and goes then
     assert!(g.row(&R1, &kh("w2")).is_some());
-    g.refresh(&sc.table.clone_for(kh("alice")), &Standing::unknown());
+    g.refresh(&sc.table.clone_for(kh("alice")), &Standing::unknown(), 0);
     assert!(g.row(&R1, &kh("w2")).is_none(), "dropped at the refresh");
 }
 
@@ -1964,10 +1964,11 @@ fn a_grant_selects_by_the_vocabulary_section_10_3_fixes_and_two_grants_union() {
             vec![Grant {
                 roles: reader(),
                 clauses,
+                until: None,
             }],
         )
         .expect("a grant the package declared");
-        g.refresh(&sc.table, &Standing::unknown());
+        g.refresh(&sc.table, &Standing::unknown(), 0);
     };
     with(&mut g, vec![Clause::Clients]);
     assert!(
@@ -2033,6 +2034,7 @@ fn a_grant_selects_by_the_vocabulary_section_10_3_fixes_and_two_grants_union() {
         vec![Grant {
             roles: reader(),
             clauses: vec![Clause::MostTrusted { n: 2 }],
+            until: None,
         }],
     )
     .expect("a rank clause");
@@ -2042,7 +2044,7 @@ fn a_grant_selects_by_the_vocabulary_section_10_3_fixes_and_two_grants_union() {
         (kh("carol"), 1.0),
         (kh("alice"), 0.5),
     ]);
-    g.refresh(&sc.table, &order);
+    g.refresh(&sc.table, &order, 0);
     assert!(holds(&g, "w1") && holds(&g, "bob"), "the two most trusted");
     assert!(!holds(&g, "carol"), "the third is not in the first two");
 
@@ -2052,10 +2054,11 @@ fn a_grant_selects_by_the_vocabulary_section_10_3_fixes_and_two_grants_union() {
         vec![Grant {
             roles: reader(),
             clauses: vec![Clause::TopFraction { percent: 50 }],
+            until: None,
         }],
     )
     .expect("a quantile");
-    g.refresh(&sc.table, &order);
+    g.refresh(&sc.table, &order, 0);
     assert!(holds(&g, "bob") && !holds(&g, "carol"), "half of four");
 
     // **two grants are the disjunction the language has no operator
@@ -2066,15 +2069,17 @@ fn a_grant_selects_by_the_vocabulary_section_10_3_fixes_and_two_grants_union() {
             Grant {
                 roles: reader(),
                 clauses: vec![Clause::Clients],
+                until: None,
             },
             Grant {
                 roles: BTreeSet::from(["writer".to_string()]),
                 clauses: vec![Clause::Named { who: kh("bob") }],
+                until: None,
             },
         ],
     )
     .expect("two grants");
-    g.refresh(&sc.table, &Standing::unknown());
+    g.refresh(&sc.table, &Standing::unknown(), 0);
     assert_eq!(
         g.row(&R1, &kh("bob")).map(|r| r.roles.len()),
         Some(2),
@@ -2114,6 +2119,7 @@ fn a_grant_the_node_cannot_hold_is_refused_when_it_is_written() {
     let of = |roles: &[&str], clauses: Vec<Clause>| Grant {
         roles: roles.iter().map(|r| r.to_string()).collect(),
         clauses,
+        until: None,
     };
 
     assert!(
@@ -2609,4 +2615,80 @@ fn the_host_path_reads_a_response_with_the_same_parser() {
         0,
         "an ambiguous answer is not taken, so the node asks again",
     );
+}
+
+// acceptance: RSC-67
+// functional: GAT-010
+/// **A grant with an expiry lapses on the periodic pass, nothing having
+/// arrived** (`infra-client-requirements.md` §10.2's fourth moment;
+/// `resource-requirements.md` §7.1.2): the gateway says once that an
+/// expiry has passed since it last looked, the re-expansion drops the
+/// rows that grant wrote, and a permanent grant beside it is untouched.
+#[test]
+fn a_grant_with_an_expiry_lapses_on_the_pass_and_a_permanent_one_stands() {
+    let sc = scene();
+    let mut g = Gateway::default();
+    g.bind(
+        R1,
+        Binding {
+            owner: kh("alice"),
+            authority: "r1.internal".into(),
+            backend: None,
+            declared: Manifest {
+                roles: BTreeSet::from(["reader".to_string()]),
+                ..Default::default()
+            },
+        },
+    );
+    let reader = BTreeSet::from(["reader".to_string()]);
+    let until = 1_000;
+    g.set_grants(
+        R1,
+        vec![
+            Grant {
+                roles: reader.clone(),
+                clauses: vec![Clause::Named { who: kh("bob") }],
+                until: Some(until),
+            },
+            Grant {
+                roles: reader.clone(),
+                clauses: vec![Clause::Named { who: kh("carol") }],
+                until: None,
+            },
+        ],
+    )
+    .expect("two named grants, one with an expiry");
+
+    // before the expiry both hold their rows, and the pass has nothing
+    // to say
+    assert!(!g.lapsed(500), "nothing has lapsed by 500");
+    let (granted, dropped) = g.refresh(&sc.table, &Standing::unknown(), 500);
+    assert_eq!((granted, dropped), (2, 0));
+    assert!(g.row(&R1, &kh("bob")).is_some(), "bob, until 1000");
+    assert!(g.row(&R1, &kh("carol")).is_some(), "carol, for good");
+    assert!(!g.lapsed(999), "one second short");
+
+    // **the moment itself**: the pass says so, once, and the expansion
+    // drops bob's row while carol's stands. Nothing arrived; the clock
+    // moved
+    assert!(g.lapsed(until), "the expiry has passed since the last look");
+    let (granted, dropped) = g.refresh(&sc.table, &Standing::unknown(), until);
+    assert_eq!((granted, dropped), (0, 1), "bob's row and nothing else");
+    assert!(g.row(&R1, &kh("bob")).is_none(), "bob's role went on time");
+    assert!(
+        g.row(&R1, &kh("carol")).is_some(),
+        "the permanent grant is untouched"
+    );
+    assert!(g.session(&kh("bob"), &R1).is_none());
+    assert!(!g.lapsed(until + 1), "said once; nothing newly lapsed");
+    assert_eq!(
+        g.refresh(&sc.table, &Standing::unknown(), until + 1),
+        (0, 0),
+        "and a later expansion has nothing to do"
+    );
+
+    // the grant reads back with its expiry, so the operator sees it
+    let shown: Vec<String> = g.grants_for(&R1).iter().map(|x| x.to_string()).collect();
+    assert!(shown[0].ends_with(" until 1000"), "{}", shown[0]);
+    assert!(!shown[1].contains("until"), "{}", shown[1]);
 }

@@ -1257,7 +1257,7 @@ impl Surface {
     fn amend(
         &self,
         resource: &str,
-        change: impl FnOnce(&mut Vec<Grant>, &Manifest) -> Result<String, String>,
+        change: impl FnOnce(&mut Vec<Grant>, &Manifest, u64) -> Result<String, String>,
     ) -> (u16, String) {
         let Ok(node) = self.acting() else {
             return (409, "this node is not serving yet\n".into());
@@ -1285,7 +1285,7 @@ impl Surface {
         };
         let was: Vec<Grant> = view.resources.grants_for(&res).to_vec();
         let mut now = was.clone();
-        let said = match change(&mut now, &declared) {
+        let said = match change(&mut now, &declared, view.now()) {
             Ok(s) => s,
             Err(e) => return (400, format!("{e}\n")),
         };
@@ -1519,11 +1519,13 @@ impl Surface {
         ))
     }
 
-    /// Add a grant: roles, and one clause of §10.3's vocabulary or none at
-    /// all, which grants over every member of the owner's horizon.
+    /// Add a grant: roles, one clause of §10.3's vocabulary or none at all,
+    /// which grants over every member of the owner's horizon, and an
+    /// expiry or none (`resource-requirements.md` §7.1.2). An expiry
+    /// already past is refused here, at configuration time (§10.2).
     fn grant_add(&self, body: &[u8]) -> (u16, String) {
         let f = form(body);
-        self.amend(field(&f, "resource"), |grants, _| {
+        self.amend(field(&f, "resource"), |grants, _, now| {
             // a checkbox per declared role, so several arrive under one
             // name; a comma-separated value is read the same way, since
             // an operator reaching this route by hand will write one
@@ -1540,7 +1542,25 @@ impl Surface {
             } else {
                 vec![Clause::read(of, Some(field(&f, "with")))?]
             };
-            let g = Grant { roles, clauses };
+            let until = match field(&f, "until").trim() {
+                "" => None,
+                w => {
+                    let t: u64 = w
+                        .parse()
+                        .map_err(|_| "`until` is seconds since the epoch".to_string())?;
+                    if t <= now {
+                        return Err(format!(
+                            "`until` {t} is already past: this node's clock reads {now}"
+                        ));
+                    }
+                    Some(t)
+                }
+            };
+            let g = Grant {
+                roles,
+                clauses,
+                until,
+            };
             let said = format!("granted {g}");
             grants.push(g);
             Ok(said)
@@ -1552,7 +1572,7 @@ impl Surface {
     /// tier] with [trust above threshold]".
     fn grant_narrow(&self, body: &[u8]) -> (u16, String) {
         let f = form(body);
-        self.amend(field(&f, "resource"), |grants, _| {
+        self.amend(field(&f, "resource"), |grants, _, _| {
             let at: usize = field(&f, "at")
                 .parse()
                 .map_err(|_| "which grant is a number".to_string())?;
@@ -1568,7 +1588,7 @@ impl Surface {
     /// it.
     fn grant_drop(&self, body: &[u8]) -> (u16, String) {
         let f = form(body);
-        self.amend(field(&f, "resource"), |grants, _| {
+        self.amend(field(&f, "resource"), |grants, _, _| {
             let at: usize = field(&f, "at")
                 .parse()
                 .map_err(|_| "which grant is a number".to_string())?;
@@ -1583,7 +1603,7 @@ impl Surface {
     /// choice — and it is the operator's click, not the author's.
     fn grant_template(&self, body: &[u8]) -> (u16, String) {
         let f = form(body);
-        self.amend(field(&f, "resource"), |grants, declared| {
+        self.amend(field(&f, "resource"), |grants, declared, _| {
             let name = field(&f, "name");
             let t = declared
                 .templates
@@ -2185,7 +2205,7 @@ fn resource_views(node: &LiveNode) -> Vec<crate::operator::ResourceView> {
                             t.name.clone(),
                             t.label.clone(),
                             t.grant.to_string(),
-                            g.population(&resource, &t.grant, &table, &standing),
+                            g.population(&resource, &t.grant, &table, &standing, view.now()),
                         )
                     })
                     .collect(),

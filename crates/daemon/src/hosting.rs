@@ -208,6 +208,10 @@ pub(crate) struct GrantEntry {
     /// nothing further.
     #[serde(default, rename = "where")]
     clauses: Vec<ClauseEntry>,
+    /// When it lapses, in seconds by the node's clock; absent is never
+    /// (`resource-requirements.md` §7.1.2).
+    #[serde(default)]
+    until: Option<u64>,
 }
 
 /// One clause of §10.3's vocabulary as it is written down.
@@ -303,7 +307,11 @@ pub(crate) fn grant_of(g: &GrantEntry) -> Result<Grant, String> {
     for c in &g.clauses {
         clauses.push(clause_of(c)?);
     }
-    Ok(Grant { roles, clauses })
+    Ok(Grant {
+        roles,
+        clauses,
+        until: g.until,
+    })
 }
 
 /// **Where related instances other nodes host are reached**, from the
@@ -944,6 +952,9 @@ fn read_manifest(path: &Path) -> Result<(Manifest, Option<std::path::PathBuf>), 
             grant: grant_of(&GrantEntry {
                 roles: t.roles,
                 clauses: t.clauses,
+                // a template ships no expiry: taking one is the operator's
+                // act, and so is bounding it
+                until: None,
             })?,
         });
     }
@@ -994,6 +1005,9 @@ pub(crate) fn grant_toml(g: &Grant) -> String {
     let roles: Vec<String> = g.roles.iter().map(|r| format!("\"{r}\"")).collect();
     out.push_str(&roles.join(", "));
     out.push_str("]\n");
+    if let Some(t) = g.until {
+        let _ = writeln!(out, "until = {t}");
+    }
     for c in &g.clauses {
         let of = c.of();
         let _ = writeln!(out, "\n  [[grant.where]]\n  of = \"{of}\"");

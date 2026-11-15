@@ -129,6 +129,14 @@ pub struct Grant {
     /// of the owner's horizon** — §10.1's outer gate and nothing further,
     /// which is the simplest predicate there is.
     pub clauses: Vec<Clause>,
+    /// When it lapses, in seconds by the node's clock, or never. **The one
+    /// thing here that moves with time alone**: a grant at or past its
+    /// expiry admits nobody, so the rows it wrote go on the next pass
+    /// (`infra-client-requirements.md` §10.2's periodic pass for a
+    /// time-dependent predicate) with no message having arrived.
+    /// `resource-requirements.md` §7.1.2 has it optional, since some named
+    /// grants are permanent by intent.
+    pub until: Option<u64>,
 }
 
 /// **Why a grant was refused**, at configuration time rather than at a
@@ -171,6 +179,7 @@ impl Grant {
         Grant {
             roles,
             clauses: Vec::new(),
+            until: None,
         }
     }
 
@@ -221,19 +230,28 @@ impl Grant {
             .any(|c| matches!(c, Clause::MostTrusted { .. } | Clause::TopFraction { .. }))
     }
 
-    /// Whether `who` satisfies every clause. **Membership is not asked
-    /// here** — the caller has already established it, because it is the
-    /// gate the clauses sit behind rather than one of them (§10.1).
+    /// Whether `who` satisfies every clause, and the grant has not lapsed
+    /// at `now`. **Membership is not asked here** — the caller has already
+    /// established it, because it is the gate the clauses sit behind
+    /// rather than one of them (§10.1).
     pub fn admits(
         &self,
         owner: &Keyhash,
         who: &Keyhash,
         table: &Table,
         standing: &Standing,
+        now: u64,
     ) -> bool {
-        self.clauses
-            .iter()
-            .all(|c| c.admits(owner, who, table, standing))
+        !self.lapsed(now)
+            && self
+                .clauses
+                .iter()
+                .all(|c| c.admits(owner, who, table, standing))
+    }
+
+    /// Whether `now` is at or past this grant's expiry, where it has one.
+    pub fn lapsed(&self, now: u64) -> bool {
+        self.until.is_some_and(|t| now >= t)
     }
 }
 
@@ -340,11 +358,15 @@ impl fmt::Display for Grant {
                 .collect::<Vec<String>>()
                 .join(", ")
         };
+        let until = match self.until {
+            Some(t) => format!(" until {t}"),
+            None => String::new(),
+        };
         if self.clauses.is_empty() {
-            return write!(f, "{roles} to every member of my trust horizon");
+            return write!(f, "{roles} to every member of my trust horizon{until}");
         }
         let who: Vec<String> = self.clauses.iter().map(|c| c.to_string()).collect();
-        write!(f, "{roles} to {}", who.join(", and "))
+        write!(f, "{roles} to {}{until}", who.join(", and "))
     }
 }
 

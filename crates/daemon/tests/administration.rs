@@ -880,6 +880,41 @@ fn a_grant_is_made_and_withdrawn_from_the_page_and_is_written_back() {
         "and the role is no longer bound to nobody: {page}"
     );
 
+    // **an expiry already past is refused at the act** (§10.2: the
+    // operator hears at configuration time), and one ahead reads back on
+    // the page beside the grant (`resource-requirements.md` §7.1.2)
+    // acceptance: RSC-67
+    let past = ask(
+        at,
+        "POST /node/act/grant HTTP/1.1",
+        format!("resource={RES}&roles=writer&of=everyone&until=1").as_bytes(),
+    );
+    assert_eq!(400, status(&past), "{past}");
+    assert!(past.contains("already past"), "{past}");
+    let ahead = ask(
+        at,
+        "POST /node/act/grant HTTP/1.1",
+        format!("resource={RES}&roles=writer&of=everyone&until=4102444800").as_bytes(),
+    );
+    assert_eq!(200, status(&ahead), "{ahead}");
+    let page = ask(at, &tab, b"");
+    assert!(
+        page.contains("writer to every member of my trust horizon until 4102444800"),
+        "the expiry is visible with the grant: {page}"
+    );
+    let kept = std::fs::read_to_string(l.dir.join("grants").join(format!("{RES}.toml")))
+        .expect("the node wrote its grants");
+    assert!(kept.contains("until = 4102444800"), "{kept}");
+    // and withdrawn again, so what follows reads the page as it was
+    assert_eq!(
+        200,
+        status(&ask(
+            at,
+            "POST /node/grant/drop HTTP/1.1",
+            format!("resource={RES}&at=1").as_bytes()
+        ))
+    );
+
     // **written to the node's own table**, so a restart takes it
     let kept = std::fs::read_to_string(l.dir.join("grants").join(format!("{RES}.toml")))
         .expect("the node wrote its grants");

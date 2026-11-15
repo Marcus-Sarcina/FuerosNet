@@ -81,7 +81,8 @@ impl NodeView {
         } else {
             crate::grant::Standing::unknown()
         };
-        self.resources.refresh(&table, &standing)
+        let now = self.now();
+        self.resources.refresh(&table, &standing, now)
     }
 
     /// One computation over a set of candidates (design §16.2).
