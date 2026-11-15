@@ -22275,3 +22275,10 @@ in the order the machines produced them:
 The ignored ceremony-to-record test now reaches "proposed" and fails at
 the finalisation ("the body is out and its signatures are awaited"): the
 crossing-session finding, unchanged, one step later than before.
+
+**Closed the same evening**: commit 2e5bd33 (gate: 1062 passed, 13
+skipped, fmt and clippy clean, 0 stale pins); CI's image published 32
+minutes after the push; the machines re-provisioned with it as deployed
+(container, wildcard bind, mapped ports): ceremony fresh 1 of 1, ceremony
+rerun 1 of 1, subnet tests 3 of 3. Locally, five `rhtnd` from the same
+tree: ceremony 2 of 2 (fresh and rerun). The droplets were left up.
