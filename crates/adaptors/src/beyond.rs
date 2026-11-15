@@ -202,13 +202,30 @@ impl Beyond {
         request: u64,
         body: Vec<u8>,
     ) -> Option<Vec<u8>> {
-        let up = self.upstream(subject, reach).await?;
+        let up = self.upstream(subject, reach).await;
+        tracing::debug!(
+            target: "pay",
+            subject = %hex4(&subject),
+            upstream = %up.as_ref().map(|u| hex4(&u.node)).unwrap_or_else(|| "none".into()),
+            request,
+            "pay.theirs"
+        );
+        let up = up?;
         if served_by == Some(up.node) {
             return None;
         }
-        self.distant
+        let answered = self
+            .distant
             .ask(up.node, up.key_material, up.endpoints, request, body)
-            .await
+            .await;
+        tracing::debug!(
+            target: "pay",
+            node = %hex4(&up.node),
+            request,
+            answered = answered.is_some(),
+            "pay.theirs.asked"
+        );
+        answered
     }
 
     /// Who serves `to`: what the client already held, what a cached
@@ -308,11 +325,23 @@ impl Beyond {
                 // nothing answered: this node is no use for this
                 // resolution, and the next one this client holds is
                 let Some(reply) = bytes.and_then(|b| ResolveReply::decode(&b).ok()) else {
+                    tracing::debug!(target: "pay", hop = %hex4(&at.node), reply = "none", "pay.descent");
                     break;
                 };
                 if reply.nonce() != nonce {
+                    tracing::debug!(target: "pay", hop = %hex4(&at.node), reply = "another nonce", "pay.descent");
                     break;
                 }
+                tracing::debug!(
+                    target: "pay",
+                    hop = %hex4(&at.node),
+                    reply = match &reply {
+                        ResolveReply::Serving { .. } => "serving",
+                        ResolveReply::Referral { .. } => "referral",
+                        ResolveReply::Failure { .. } => "failure",
+                    },
+                    "pay.descent"
+                );
                 match reply {
                     ResolveReply::Serving { serving, .. } => {
                         let up = Upstreamed {
@@ -360,6 +389,11 @@ impl Beyond {
     }
 }
 
+/// The first four bytes of a keyhash, for a diagnostic field.
+fn hex4(k: &Keyhash) -> String {
+    k[..4].iter().map(|b| format!("{b:02x}")).collect()
+}
+
 /// `NetworkPoint`s as the client holds them: encoded, since that is the
 /// form a position arrives in and the form the dialler takes.
 fn encoded(points: &[NetworkPoint]) -> Vec<Vec<u8>> {
@@ -404,7 +438,16 @@ pub struct Beyonder {
     endpoint: quinn::Endpoint,
     cfg: ClientConfig,
     far: Mutex<HashMap<Keyhash, Far>>,
+    /// **A session already held with a node**, where the client has one:
+    /// a request to that node goes over it rather than over a second
+    /// connection from the same endpoint, which the node would take for a
+    /// replacement of the first (`wire-format.md` §8.2).  Installed by
+    /// whoever holds the sessions; nothing is held where nobody does.
+    held_sessions: Mutex<Option<HeldSessions>>,
 }
+
+/// What answers "the connection this client holds with `node`, if any".
+pub type HeldSessions = Arc<dyn Fn(&Keyhash) -> Option<quinn::Connection> + Send + Sync>;
 
 impl Beyonder {
     /// A dialler on `endpoint`, binding and pinning as `cfg` does.
@@ -420,7 +463,15 @@ impl Beyonder {
             endpoint,
             cfg,
             far: Mutex::new(HashMap::new()),
+            held_sessions: Mutex::new(None),
         })
+    }
+
+    /// Ask `held` for a session before dialling: the serving node a
+    /// client is attached to answers a request on the session it already
+    /// has (`wire-format.md` §7.7.1).
+    pub fn use_held_sessions(&self, held: HeldSessions) {
+        *self.held_sessions.lock().unwrap() = Some(held);
     }
 
     /// The connection held for `node`, where one is and it has not been
@@ -503,6 +554,12 @@ impl Distant for Beyonder {
             // and a dial with nothing pinned fails in its turn
             if let Some(km) = key_material {
                 let _ = self.cfg.pins.pin(node, &km);
+            }
+            // the session already up with this node, where one is: asked
+            // there, and never dialled a second time from this endpoint
+            let session = self.held_sessions.lock().unwrap().clone();
+            if let Some(conn) = session.and_then(|h| h(&node)) {
+                return request_on(&conn, request, &body).await.ok();
             }
             if let Some(conn) = self.held(&node) {
                 match request_on(&conn, request, &body).await {

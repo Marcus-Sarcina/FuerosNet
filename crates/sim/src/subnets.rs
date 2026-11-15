@@ -141,6 +141,10 @@ pub struct Subnet {
     /// The anchor's signed entry (`wire-format.md` §7.2): what an
     /// outsider knows this subnet by.
     pub entry: Vec<u8>,
+    /// Each infra node's signed endpoint record (`wire-format.md` §7.6),
+    /// by name: what a client takes to have somewhere to start a descent
+    /// from (design §12.3 Case 1).
+    pub endpoint_records: BTreeMap<&'static str, Vec<u8>>,
 }
 
 impl Subnet {
@@ -456,6 +460,7 @@ impl Fabric {
                 paths: paths.clone(),
                 records: Vec::new(),
                 entry: Vec::new(),
+                endpoint_records: BTreeMap::new(),
             };
             for n in &infra {
                 let mut table = Table::with_me(kh(n));
@@ -483,6 +488,17 @@ impl Fabric {
                 let mut cfg = NodeConfig::defaults(Arc::new(id(n)), pins.clone(), interval);
                 cfg.clock = Arc::new(move || clock);
                 cfg.log = Log::recording();
+                // **a node queues for the clients it serves and refuses the
+                // rest** (`infra-client-requirements.md` §2): the light
+                // members under it, and its own operator
+                let served: BTreeSet<Keyhash> = plan
+                    .members
+                    .iter()
+                    .filter(|m| !m.infra && tmp.serving_node_of(m.name) == *n)
+                    .map(|m| kh(m.name))
+                    .chain(std::iter::once(kh(n)))
+                    .collect();
+                cfg.serves = Arc::new(move |k| served.contains(k));
                 let node = LiveNode::start(
                     cfg,
                     view,
@@ -493,6 +509,7 @@ impl Fabric {
             }
             // every infra node's endpoint record, held by itself and by
             // its patron, which is what a referral is made from
+            let mut endpoint_records = BTreeMap::new();
             for n in &infra {
                 let node = &nodes[n];
                 let rec = endpoint_record(
@@ -503,6 +520,7 @@ impl Fabric {
                         counter: 1,
                     },
                 );
+                endpoint_records.insert(*n, rec.clone());
                 let mut holders = vec![*n];
                 if let Some(p) = tmp.patron_of(n) {
                     holders.push(p);
@@ -542,6 +560,7 @@ impl Fabric {
                 paths,
                 records,
                 entry,
+                endpoint_records,
             });
         }
         Fabric {

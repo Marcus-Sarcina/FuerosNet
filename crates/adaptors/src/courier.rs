@@ -396,6 +396,17 @@ impl Courier {
             PrekeyRequest::Batch { .. } => return None,
         };
         let reach = self.handle.with(move |c| c.reach_for(&subject)).await;
+        tracing::debug!(
+            target: "pay",
+            subject = %hex4(&subject),
+            upstream = match &reach.upstream {
+                Upstream::Known { .. } => "known",
+                Upstream::Position { .. } => "position",
+                Upstream::Unknown => "unknown",
+            },
+            ask = reach.ask.len(),
+            "pay.prekey.reach"
+        );
         // **over a held tab where the subject's node is one** [author,
         // 2026-11-12]: asked of the session rather than dialled, as a
         // payload is carried
@@ -404,9 +415,16 @@ impl Courier {
         {
             return held.prekey(self.me(), body).await;
         }
-        beyond
+        let answered = beyond
             .ask_their_node(subject, reach, self.via(), REQUEST_PREKEY, body.to_vec())
-            .await
+            .await;
+        tracing::debug!(
+            target: "pay",
+            subject = %hex4(&subject),
+            answered = answered.is_some(),
+            "pay.prekey.theirs"
+        );
+        answered
     }
 
     async fn their_profile(&self, body: &[u8]) -> Option<Vec<u8>> {

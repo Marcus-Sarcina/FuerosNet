@@ -328,3 +328,40 @@ async fn payload_crosses_between_clients_of_two_subnets_that_share_no_node() {
         (kh("c4"), b"hello from the far subnet".to_vec())
     );
 }
+
+// acceptance: RES-20
+/// **A client's serving node resolves a foreign party on its behalf**
+/// (`wire-format.md` §7.7.1's default): w1 holds no address in the far
+/// subnet at all and puts the resolution to bob, whose anchor table holds
+/// c1's entry; bob walks the far subnet's referrals itself and answers w1
+/// with c3 as c4's serving node, and the payload goes to c3.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_serving_node_resolves_a_foreign_party_for_its_client_from_its_anchor_table() {
+    let f = fabric();
+    assert!(f.introduce("bob", 1), "bob's table takes c1's entry");
+    let (b, watched) = beyond(&f, "w1");
+    let bob = f.subnet_of("w1").node("bob");
+    let ask = vec![Askable {
+        node: kh("bob"),
+        endpoints: vec![NetworkPoint::from_socket(bob.addr).unwrap().encode_bytes()],
+        key_material: Some(material("bob")),
+    }];
+    let reach = reach_by_anchor(&f, "c4", ask);
+    assert!(
+        b.carry(
+            kh("c4"),
+            [0; 32],
+            b"via bob".to_vec(),
+            reach,
+            Some(kh("bob"))
+        )
+        .await,
+        "c3 took it"
+    );
+    assert_eq!(
+        nodes_asked(&watched),
+        vec![(kh("bob"), REQUEST_RESOLVE), (kh("c3"), REQUEST_RELAY)],
+        "bob was asked once and answered with the serving node; c3 took the payload"
+    );
+    assert_eq!(f.subnet_of("c4").node("c3").node.queued(&kh("c4")), 1);
+}

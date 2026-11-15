@@ -801,6 +801,12 @@ pub struct Client {
     /// The pairing with another device of this identity for a dataset
     /// hand-over (`wire-format.md` §14.3.3), while one is under way.
     pairing: Option<Pairing>,
+    /// **The address each attachment was opened through**, as the session
+    /// landed: the one socket a light client certainly has (`wire-format.md`
+    /// §7.7.1), and so the one node it can always put a resolution to.
+    /// This process's memory alone: a start attaches again and records it
+    /// anew.
+    attached_through: BTreeMap<Keyhash, Vec<String>>,
 }
 
 /// Two devices of one identity paired for a dataset hand-over
@@ -1046,6 +1052,7 @@ impl Client {
             witnessing: BTreeMap::new(),
             engaged: BTreeMap::new(),
             pairing: None,
+            attached_through: BTreeMap::new(),
         }
     }
 
@@ -6571,6 +6578,14 @@ impl Client {
         self.payload.attachments.insert(node);
     }
 
+    /// **The session with `node` landed at `addresses`**: what the adaptors
+    /// say once an attach succeeds, so [`Client::reach_for`] can name the
+    /// serving node as a party to ask where nothing nearer the target is
+    /// held (`wire-format.md` §7.7.1).
+    pub fn attached_through(&mut self, node: Keyhash, addresses: Vec<String>) {
+        self.attached_through.insert(node, addresses);
+    }
+
     /// **A node agreed to**: an invitation taken, an instance enrolled or
     /// launched. Kept with the addresses the agreement named, which is
     /// what the next start attaches to [review, 2026-11-13].
@@ -6723,6 +6738,38 @@ impl Client {
                                 key_material: binds(anchor),
                             },
                         );
+                    }
+                }
+                // **and the nodes serving this client, last** (`wire-format.md`
+                // §7.7.1): the serving node is "the one socket a light
+                // client certainly has, not the only one it may use", and a
+                // node holding the anchor in its table resolves on the
+                // client's behalf where the client holds no address nearer
+                // the target.  Where the horizon named it already it is in
+                // place; otherwise at the dial addresses this client agreed
+                // to, in the order it dials them
+                for node in self.payload.attachments.iter() {
+                    if out.iter().any(|a| a.node == *node) {
+                        continue;
+                    }
+                    let mut held: Vec<String> =
+                        self.attached_through.get(node).cloned().unwrap_or_default();
+                    for a in self.payload.agreed.get(node).into_iter().flatten() {
+                        if !held.contains(a) {
+                            held.push(a.clone());
+                        }
+                    }
+                    let endpoints: Vec<Vec<u8>> = self
+                        .dial_order(node, &held)
+                        .iter()
+                        .filter_map(|a| point_bytes(a))
+                        .collect();
+                    if !endpoints.is_empty() {
+                        out.push(Askable {
+                            node: *node,
+                            endpoints,
+                            key_material: binds(node),
+                        });
                     }
                 }
                 out
@@ -8052,6 +8099,28 @@ fn point_address(bytes: &[u8]) -> Option<String> {
     // key 3 is omitted at the default port, as the transport's decoder reads it
     let port = map_get(m, 3).and_then(as_uint).unwrap_or(DEFAULT_QUIC_PORT);
     Some(format!("{}.{}.{}.{}:{}", ip[0], ip[1], ip[2], ip[3], port))
+}
+
+/// The `NetworkPoint` a `host:port` names, as `wire-format.md` §7.6 encodes
+/// one: key 1 the four octets, key 3 the port, absent at the default
+/// (§4.4), written with the codec alone as [`point_address`] reads it.
+/// `None` for anything but a v4 address.
+fn point_bytes(address: &str) -> Option<Vec<u8>> {
+    use rhtn_codec::encode::*;
+    let addr: std::net::SocketAddr = address.parse().ok()?;
+    let std::net::IpAddr::V4(ip) = addr.ip() else {
+        return None;
+    };
+    let port = u64::from(addr.port());
+    let mut out = Vec::new();
+    emit_map_head(&mut out, 1 + (port != DEFAULT_QUIC_PORT) as usize);
+    emit_uint(&mut out, 1);
+    emit_bstr(&mut out, &ip.octets());
+    if port != DEFAULT_QUIC_PORT {
+        emit_uint(&mut out, 3);
+        emit_uint(&mut out, port);
+    }
+    Some(out)
 }
 
 /// The names of the relations [`Client::durable_parts`] writes.

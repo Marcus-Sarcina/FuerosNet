@@ -22127,3 +22127,46 @@ reaches them. ARC-30 restated; `devices.rs` holds four tests (the codec,
 the away desktop with both holders asked and every refusal, the decline on
 either side, the fork). **Not done**: the FFI facade and the Android screen
 for the pairing; the catalogue portion (not persisted, not carried; asked).
+
+**The cross-subnet ceremony on the fabric, 2026-11-15 [author].**
+`sim/tests/ceremony.rs` runs four real kernels (`rhtn_ffi::Participant`)
+over the fabric's two subnets: alice and w1 under bob, c4 and c5 under c3,
+each kernel restored to its own adoption first (a fresh kernel self-anchors
+its locator, and a serving node is rightly not authoritative for that).
+The participants' legs cross by hand; every leg to a witness goes by the
+payload path. **Three kernel findings, each fixed in place:**
+1. A kernel's asking set held only nodes with endpoint records in its
+   horizon and the anchor's own record from its contacts, so a client
+   with neither could put a resolution to nobody. `reach_with` now adds
+   the nodes the client is attached to, last, at the address each session
+   landed on (`Client::attached_through`, recorded by the kernel's attach):
+   `wire-format.md` §7.7.1's default, the serving node resolving on the
+   client's behalf from its anchor table. The node side of that is
+   `a_serving_node_resolves_a_foreign_party_for_its_client_from_its_anchor_table`
+   in `subnets.rs`.
+2. A request to a node the kernel is attached to was dialled as a second
+   connection from the same endpoint, which the node takes as a
+   replacement of the session; `Beyonder::use_held_sessions` routes it
+   over the held session instead.
+3. The witness window (240 s releasable) is held across by the capture;
+   the test sets 5 s through `set_witness_window_s`.
+**What holds** (CER-73, families NET-022 and RES-016): the sets cross by
+locator, each side's request to the far nominee goes by its serving
+node's resolution across three infra nodes, both witnesses answer that
+they attest, and neither sender's own node holds anything for the far
+witness. **What does not yet, and is the author's**
+(`a_ceremony_runs_between_two_subnets_that_share_no_node`, `#[ignore]`):
+the proposer's body to the far witness is encrypted under the session the
+proposer opened; the witness meanwhile opened one back, the crossing rule
+kept the other; and the body arrives twice, by relay and by the direct
+path, the relayed copy failing `message does not authenticate` at the
+witness, so it never signs. Under the field-test flavour the session log
+shows `pay.session opened` both ways, `kept` at the witness, and the
+730-byte `pay.error`. **Also assumed in the fixture**: each witness is
+handed the far participant's introduction out of band, since neither the
+engagement (kind 20) nor the request (kind 12) carries a participant's
+locator, and a witness in another subnet cannot otherwise answer the
+proposer; asked of the author. The field-test flavour was switched on in
+`sim/Cargo.toml` for the diagnosis and restored; the `pay.prekey.reach`,
+`pay.theirs` and `pay.descent` debug lines stay, compiled out of the
+releasable flavour like the rest.

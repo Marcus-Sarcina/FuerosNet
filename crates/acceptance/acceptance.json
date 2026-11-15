@@ -18172,5 +18172,33 @@
   "families": [
    "APP-014"
   ]
+ },
+ {
+  "id": "CER-73",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "A ceremony opens across two subnets that share no node, each far witness reached by the serving node's resolution",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.7.1",
+   "wire-format.md §7.10.1",
+   "design §12.6.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.7.1",
+    "text": "A light client sends ResolveRequest to its serving infra node, not to the anchor"
+   }
+  ],
+  "given": "Two subnets of live nodes sharing no node, each serving node holding the other subnet's anchor entry. Two kernels, one a light client in each subnet, each holding its own adoption and one nominee of its own subnet by introduction; nothing of the other subnet.",
+  "when": "The two begin a ceremony across the local interface, each engages its nominee, the sets cross and are kept, and each opens the conversation.",
+  "then": "Each kernel reaches the counterparty's nominee across the subnets: the resolution goes to its own serving node over the session it holds, the node walks the other subnet's referrals from its anchor table, and the request and the answer travel by the far witness's serving node. Both witnesses answer that they will attest, nobody declines, and neither sender's own node holds anything for the far witness.",
+  "oracle": "behaviour",
+  "interpretation": null,
+  "families": [
+   "NET-022",
+   "RES-016"
+  ]
  }
 ]

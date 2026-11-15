@@ -554,6 +554,20 @@ impl Net {
         let (events_tx, events) = tokio::sync::mpsc::unbounded_channel();
         let beyonder = Beyonder::new(endpoint.clone(), cfg.clone());
         let beyond = Beyond::new(beyonder.clone(), nonce.clone());
+        let attachments: Arc<Mutex<Vec<(Keyhash, Attachment)>>> = Arc::new(Mutex::new(Vec::new()));
+        // a request to a node this kernel is attached to goes over the
+        // session it holds (`wire-format.md` §7.7.1), never a second
+        // connection from the same endpoint
+        beyonder.use_held_sessions({
+            let held = attachments.clone();
+            Arc::new(move |node: &Keyhash| {
+                let held = held.lock().unwrap();
+                held.iter()
+                    .find(|(k, _)| k == node)
+                    .and_then(|(_, a)| a.current.lock().unwrap().clone())
+                    .map(|s| s.conn.clone())
+            })
+        });
         Ok(Net {
             reachable: Reachable::default(),
             detached: Arc::new(Mutex::new(None)),
@@ -561,7 +575,7 @@ impl Net {
             endpoint,
             me,
             cfg,
-            attachments: Arc::new(Mutex::new(Vec::new())),
+            attachments,
             courier: Arc::new(Mutex::new(None)),
             forward: Mutex::new(None),
             direct: Arc::new(SwappableDirect::new()),
@@ -987,6 +1001,12 @@ impl Net {
             };
             let (deliveries, frames) = take_readers(&mut session);
             socket.set_stun(Some(session.conn.remote_address()));
+            // the address the session landed on is the one the client
+            // certainly holds for this node (`wire-format.md` §7.7.1)
+            let landed = session.conn.remote_address().to_string();
+            handle_for_task
+                .with(move |c| c.attached_through(serving_node, vec![landed]))
+                .await;
             let (mode, queued) = (session.ack.mode, session.ack.queued);
             let session = Arc::new(session);
             let current: Current = Arc::new(Mutex::new(Some(session.clone())));
