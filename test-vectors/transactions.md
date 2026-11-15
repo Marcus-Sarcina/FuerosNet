@@ -1,6 +1,6 @@
 # Transaction bodies, txids, and one full envelope
 
-Generated against `wire-format.md` `39d691d08a15aa9f…`, `network-design.md` `bafa6415a29ab652…` and `light-client-requirements.md` `f7ec95c54700b88e…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `6f6b14e48e1de897…`, `network-design.md` `bc2ab9c16f23bdc5…` and `light-client-requirements.md` `f7ec95c54700b88e…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Canonical. Spec-derived, reproduced by the independent harness.** See
 [README.md](README.md).
@@ -2149,7 +2149,7 @@ eafcb750701109956758202abad843094884f9d0ef5e9da0c9c60a9e94243a01
 591ed3ba21201a59c59289
 ```
 
-**Minimal** — all seven withheld (7340 bytes):
+**Minimal** — all six withheld (7340 bytes):
 
 ```
 82a40101020503a60082815820819a3ccd925a384a47b4efec09bec2932730dc
@@ -10470,7 +10470,7 @@ fdddaf1920468791a9eefa24454e7277899bebfd314d606e97b6d9deeaf22333
 ea430eb1d9143544c7df43596c70312e726574656e74696f6e03
 ```
 
-**Minimal** — all seven withheld (65261 bytes):
+**Minimal** — all six withheld (65261 bytes):
 
 ```
 82a40101020503a80092815820a7c7afe6432e0faef4ae81069cba2c292539b7

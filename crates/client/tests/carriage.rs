@@ -473,3 +473,81 @@ fn the_number_a_device_reports_crosses_with_the_intent_and_lands_on_the_contact(
         );
     }
 }
+
+// functional: NET-028
+/// **A carriage that will not open says nothing about why** (`wire-format.md`
+/// §14.3.2's Lifetime row; design §7.1).  The session key lives exactly as
+/// long as the ceremony, so a device whose ceremony has stopped has let it
+/// go and refuses the next step for want of a key, before reading a byte of
+/// it.  A device that never began, one that finished and one that stopped
+/// therefore answer alike, and a device live in some other ceremony answers
+/// with the one other thing a receiver can say about bytes it holds no key
+/// for.  Nothing in any refusal names a ceremony or a counterparty.
+#[test]
+fn a_carriage_to_a_device_without_the_key_is_refused_without_saying_why() {
+    let mut s = setup(&["alice", "bob", "carol", "c1", "c2", "c3", "c4"]);
+    // alice and bob are through the local exchanges; a conversation step
+    // waits on alice's side for bob
+    s.meet_locally("alice", "bob", &[], &[])
+        .expect("the local exchanges");
+    let steps = s.client("alice").carriages();
+    assert!(
+        !steps.is_empty(),
+        "the exchanges leave alice with a step for bob"
+    );
+    let step = steps[0].clone();
+    // c1 and c2 finished one: the record arrived and the ceremony closed
+    // with it
+    s.met_in_person("c1", "c2", "w1");
+    // c3 and c4 are live in a ceremony of their own
+    s.meet_locally("c3", "c4", &[], &[])
+        .expect("another pair's exchanges");
+    let _ = s.client("c3").carriages();
+
+    // bob, live, opens it
+    let live = s.client("bob").take_conversation_carriage(&step);
+    assert!(
+        live.is_ok(),
+        "the device holding the key reads the step: {live:?}"
+    );
+
+    // bob stops; the same bytes are now refused as a device that never
+    // began refuses them, and as one that finished does
+    s.client("bob").abandon();
+    let stopped = s
+        .client("bob")
+        .take_conversation_carriage(&step)
+        .unwrap_err();
+    let never = s
+        .client("carol")
+        .take_conversation_carriage(&step)
+        .unwrap_err();
+    let finished = s
+        .client("c1")
+        .take_conversation_carriage(&step)
+        .unwrap_err();
+    assert_eq!(stopped, Abort::NotActive, "refused for want of a key");
+    assert_eq!(never, stopped, "a device that never began answers the same");
+    assert_eq!(finished, stopped, "and so does one that finished");
+    for (who, e) in [("bob", &stopped), ("carol", &never), ("c1", &finished)] {
+        assert_eq!(
+            format!("{e:?}"),
+            "NotActive",
+            "{who}'s refusal carries nothing"
+        );
+        assert_eq!(
+            s.client(who).ceremony_id(),
+            None,
+            "{who} holds no ceremony afterwards"
+        );
+    }
+
+    // a device live in another ceremony holds a key, and not this one: the
+    // carriage does not open, which is all it can say
+    let elsewhere = s
+        .client("c3")
+        .take_conversation_carriage(&step)
+        .unwrap_err();
+    assert_eq!(elsewhere, Abort::Unsealable);
+    assert_eq!(format!("{elsewhere:?}"), "Unsealable");
+}

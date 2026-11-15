@@ -383,12 +383,12 @@ pub struct Proposed {
     pub formation: bool,
 }
 
-/// One of the seven values a record discloses, with the salt it is hashed
-/// under (`wire-format.md` §4.5.1.1).  The seven arrive in label order and
+/// One of the six values a record discloses, with the salt it is hashed
+/// under (`wire-format.md` §4.5.1.1).  The six arrive in label order and
 /// the label is carried so a shell can show which is which.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Revealed {
-    /// Which of the seven this is.
+    /// Which of the six this is.
     pub label: String,
     /// The salt the value is hashed under.
     pub salt: Vec<u8>,
@@ -698,12 +698,12 @@ impl Progress {
 }
 
 /// What a proposer holds after proposing: the record as every signer is
-/// shown it, and the seven disclosures it commits to.
+/// shown it, and the six disclosures it commits to.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Proposal {
     /// The record body as every signer is shown it.
     pub proposed: Proposed,
-    /// The seven disclosures the body's root commits to.
+    /// The six disclosures the body's root commits to.
     pub revealed: Vec<Revealed>,
 }
 
@@ -815,10 +815,10 @@ impl Proposed {
     }
 }
 
-/// The seven disclosures, out and back.
+/// The six disclosures, out and back.
 ///
 /// **Label order is the record's, not the shell's** (`wire-format.md`
-/// §4.5.1.1): the seven come back in the order they went out, and one
+/// §4.5.1.1): the six come back in the order they went out, and one
 /// carrying a label that does not belong at its position is refused rather
 /// than sorted into place.
 fn revealed_of(set: &rhtn_client::record::DisclosureSet) -> Vec<Revealed> {

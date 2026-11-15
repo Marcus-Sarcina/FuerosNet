@@ -21951,3 +21951,58 @@ own rule, which holds the register and is held by no test). Figure: 575
 live, 528 held, 47 by neither — APP 3, CAP 2, CER 7, ENC 1, GAT 2, MAIL 3,
 NET 2, PAY 3, PKG 2, POL 2, RES 3, SES 3, SIG 3, TOOL 2, TOP 2, TX 1, UX 1,
 VAL 5, each named in its group's note above.
+
+**Tests for the plain gaps, and the disclosure count made one, 2026-11-14
+[author].** Six of the eight gaps named on closing the linking programme
+got tests: TX-023 (`crypto/tests/limits.rs` walks the finalization gap
+from the `B-finalization-gap-86400` body to 0, 1, 86,400, 86,401 and −1
+seconds, and a decade hence with no clock read; the corpus test, which
+already ran R2, R3, D10 and D11, now carries the marker too), SIG-001
+(`limits.rs`: `transactions.md`'s adoption txid recomputed from its
+printed body, the corpus envelope shown to carry that body, a body
+extension moving the id, a flipped signature byte leaving the id and
+breaking the envelope), SIG-005 (`limits.rs`: every classical `COSE_Sign1`
+made under each of the codec's fifteen tags read under every other, 15×15,
+passing on the diagonal alone; the hybrid entries across one pair),
+SIG-011 (`primitives.rs`: RFC 8032 §7.1 TEST 1 and TEST 2 for Ed25519,
+with altered message, key, signature and both wrong lengths refused;
+ML-DSA-65 deterministic, FIPS 204's 1952/3309 sizes, alterations refused;
+the `Sign1` structure over RFC 8152 C.2.1's inputs byte for byte),
+NET-028 (`client/tests/carriage.rs`: a step for bob refused `NotActive`
+identically by bob stopped, carol who never began and c1 who finished,
+each holding no ceremony afterwards, and `Unsealable` by a device live in
+another ceremony), POL-014 (`policy/tests/rotation.rs`: a successor
+credited exactly as a stranger adopted beside it, a second vouching path
+worth more than one and at most two edges, and a patron's disavowal with
+prejudice denying that heir and neither its sibling nor the key it
+succeeded). **Two gaps have no code to test**: RES-016's client-driven
+descent (no client resolution path exists; `node::resolution` resolves on
+the client's behalf) and APP-014's device hand-over (nothing implements
+it, as the 2026-10-16 note said). Both need the feature before a test, and
+building either is work beyond "add tests"; asked in the output.
+
+**The disclosure count.** The only enumeration anywhere is six labels
+(`wire-format.md` §4.5.1.1, design §8.1.1, `verify.rs`, `schema.rs`,
+`generate.py`, `verify.py`), and the decoder refuses any other count; the
+sevens were the stale remainder of a seventh label since dropped. Made six
+everywhere, per the author's rule (match the highest enumerated count):
+`wire-format.md` §4.5.1.1 (leaf count, digest cost), §4.5.1.3 (slots,
+`6*6`, fully-withheld), §4.5.1.4 (96 bytes of salts, 192 of withheld
+digests), §7.9's `ArchiveEntry` comment, §7.10.2's `ProposedBody`
+(`6*6`), the size table; design §19.3; functional CAP-010, SCH-009,
+SCH-026 (which had listed "six slots" as the malformed count and now says
+seven), VAL-002 and the bounds table; acceptance CER-18 and CER-35's given
+and then, and the rule id `seven-slots-exactly` → `six-slots-exactly` here
+and in `Robot/transaction-rules.md`; the FFI doc comments and the
+regenerated Kotlin binding; `generate.py`'s "all six withheld". Pins
+re-accepted (code pin and vector pin); the vector outputs changed in hash
+lines and that phrase only.
+
+**A domain the table does not carry**: `rhtn/1:profile` is signed under
+by `wire-format.md` §7.11 and named by the codec as a fifteenth tag, while
+§1.1's table, which calls itself authoritative on the set, lists fourteen
+and SIG-005 says fourteen. Reported, not edited.
+
+Figure: 575 live, 534 held, 41 by neither — APP 3, CAP 2, CER 7, ENC 1,
+GAT 2, MAIL 3, NET 1, PAY 3, PKG 2, POL 1, RES 3, SES 3, TOOL 2, TOP 2,
+UX 1, VAL 5.

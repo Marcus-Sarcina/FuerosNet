@@ -133,3 +133,112 @@ fn the_profile_names_the_primitives_it_is_instantiated_with() {
     assert!(info.contains("ML-KEM-768"), "and the KEM: {info}");
     assert!(info.contains("SHA-256"), "and the hash: {info}");
 }
+
+// functional: SIG-011
+/// **RFC 8032 §7.1, TEST 1 and TEST 2**: the Ed25519 signing key, the
+/// public key it expands to, the message and the signature, as the RFC
+/// prints them.  The profile's classical component is this arithmetic
+/// (`wire-format.md` §2.2), and an altered message, key or signature
+/// length verifies as nothing.
+#[test]
+fn ed25519_agrees_with_rfc_8032_section_7_1() {
+    use rhtn_crypto::identity::sign_ed_seed;
+    use rhtn_crypto::verify::verify_ed_raw;
+    let vectors = [
+        (
+            "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60",
+            "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
+            "",
+            "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b",
+        ),
+        (
+            "4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb",
+            "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c",
+            "72",
+            "92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00",
+        ),
+    ];
+    for (sk, pk, msg, sig) in vectors {
+        let (sk, pk, msg, sig) = (h32(sk), h32(pk), hex(msg), hex(sig));
+        let (public, signature) = sign_ed_seed(&sk, &msg);
+        assert_eq!(public, pk, "the public key the RFC prints");
+        assert_eq!(signature.to_vec(), sig, "the signature the RFC prints");
+        assert!(verify_ed_raw(&pk, &sig, &msg));
+        let mut other_msg = msg.clone();
+        other_msg.push(0x00);
+        assert!(!verify_ed_raw(&pk, &sig, &other_msg), "an altered message");
+        let mut other_key = pk;
+        other_key[0] ^= 0x01;
+        assert!(!verify_ed_raw(&other_key, &sig, &msg), "an altered key");
+        assert!(!verify_ed_raw(&pk, &sig[..63], &msg), "a 63-byte signature");
+        let mut long = sig.clone();
+        long.push(0x00);
+        assert!(!verify_ed_raw(&pk, &long, &msg), "a 65-byte signature");
+        let mut flipped = sig.clone();
+        flipped[10] ^= 0x01;
+        assert!(!verify_ed_raw(&pk, &flipped, &msg), "an altered signature");
+    }
+}
+
+// functional: SIG-011
+/// **ML-DSA-65 as the profile fixes it** (`wire-format.md` §2.2):
+/// deterministic signing with the empty context, so one key over one
+/// message yields one signature; the sizes FIPS 204 Table 2 gives the
+/// parameter set, 1952-byte public keys and 3309-byte signatures; and
+/// refusal of an altered message, another key, a flipped byte and a
+/// signature of the wrong length.  **No independent known answer is
+/// checked here**: FIPS 204 publishes none in the standard itself, and the
+/// ACVP and Wycheproof sets are files this repository does not carry.
+#[test]
+fn ml_dsa_65_is_deterministic_has_fips_204_sizes_and_rejects_alterations() {
+    use rhtn_crypto::SigningIdentity;
+    let id = SigningIdentity::from_seeds(&[0x11; 32], &[0x22; 32]);
+    let msg = b"signed twice, the same both times";
+    let first = id.sign_pq(msg);
+    let second = id.sign_pq(msg);
+    assert_eq!(first, second, "deterministic");
+    assert_eq!(first.len(), 3309, "FIPS 204 Table 2: ML-DSA-65 signature");
+    assert_eq!(
+        id.public.pq.encode().len(),
+        1952,
+        "FIPS 204 Table 2: ML-DSA-65 public key"
+    );
+    assert!(id.public.verify_pq(&first, msg));
+    assert!(
+        !id.public.verify_pq(&first, b"another message"),
+        "an altered message"
+    );
+    let other = SigningIdentity::from_seeds(&[0x11; 32], &[0x33; 32]);
+    assert!(!other.public.verify_pq(&first, msg), "another key");
+    let mut flipped = first.clone();
+    flipped[100] ^= 0x01;
+    assert!(!id.public.verify_pq(&flipped, msg), "an altered signature");
+    assert!(
+        !id.public.verify_pq(&first[..3308], msg),
+        "a short signature"
+    );
+    let mut long = first.clone();
+    long.push(0x00);
+    assert!(!id.public.verify_pq(&long, msg), "a long signature");
+}
+
+// functional: SIG-011
+/// **The `COSE_Sign1` `Sig_structure`, byte for byte**: RFC 9052 §4.4
+/// defines it as `["Signature1", protected, external_aad, payload]` in
+/// deterministic CBOR, and RFC 8152 Appendix C.2.1's example signs the
+/// protected header `h'a10126'` over the payload `"This is the content."`.
+/// The RFC prints the inputs and not the structure; the bytes asserted are
+/// §4.4's encoding of them, written out by hand rather than by this crate.
+#[test]
+fn the_sign1_structure_is_rfc_9052s_encoding_of_rfc_8152s_example() {
+    use rhtn_codec::cose;
+    let got = cose::sig_structure_sign1(&hex("a10126"), b"", b"This is the content.");
+    let want = concat!(
+        "84",                                         // array(4)
+        "6a5369676e617475726531",                     // "Signature1"
+        "43a10126",                                   // the protected header, as a bstr
+        "40",                                         // external_aad, empty
+        "54546869732069732074686520636f6e74656e742e"  // "This is the content."
+    );
+    assert_eq!(got, hex(want));
+}

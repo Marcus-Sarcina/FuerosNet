@@ -1626,9 +1626,9 @@
     "text": "The digest count and labels always travel, so a recipient knows a field exists and was withheld."
    }
   ],
-  "given": "Client A holds a finalized record with all seven disclosable fields, and has given no instruction to reveal.",
+  "given": "Client A holds a finalized record with all six disclosable fields, and has given no instruction to reveal.",
   "when": "A presents the record to a party that is not a prospective patron.",
-  "then": "The presentation reveals none of the seven fields and carries every field's digest and label, and the envelope signature verifies over it.",
+  "then": "The presentation reveals none of the six fields and carries every field's digest and label, and the envelope signature verifies over it.",
   "oracle": "behaviour",
   "interpretation": null,
   "holds": [
@@ -1643,7 +1643,7 @@
    ],
    [
     5,
-    "seven-slots-exactly"
+    "six-slots-exactly"
    ],
    [
     5,
@@ -2169,7 +2169,7 @@
     "text": "Reject a Disclosure whose salt is not exactly 16 bytes."
    }
   ],
-  "given": "A presence record and the seven disclosures it committed to.",
+  "given": "A presence record and the six disclosures it committed to.",
   "when": "A presentation is offered with five slots, with seven, with a salt of fifteen bytes, with a revealed value of the wrong schema for its label, with a slot of some third shape, and as a bare envelope.",
   "then": "Each is refused, and the refusal names what was wrong. These are the rejections §4.5.1.5 requires, which a presentation the ceremony built well cannot exercise.",
   "oracle": "behaviour",
@@ -2177,7 +2177,7 @@
   "holds": [
    [
     5,
-    "seven-slots-exactly"
+    "six-slots-exactly"
    ],
    [
     5,

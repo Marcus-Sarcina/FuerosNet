@@ -1793,8 +1793,8 @@ both clients compute the root over one labelling without a table.
 | `pN.integrity` | `{ 1: bool, 2: uint, 3: ? bstr }` — attested, scheme, evidence (design §7.8) |
 
 **Why not a Merkle tree.** design §19.3 proposed one, following SD-JWT loosely. At
-the leaf count here (seven), a tree buys nothing: inclusion
-proofs would cost three hashes each where sending every digest costs seven, and a tree
+the leaf count here (six), a tree buys nothing: inclusion
+proofs would cost three hashes each where sending every digest costs six, and a tree
 adds real hazards a flat list does not have, **odd-node handling and the
 duplicated-node second-preimage class**. SD-JWT's own construction is a digest array
 for the same reason. **The 0x00 / 0x01 prefixes are still required**, so that a
@@ -1814,22 +1814,22 @@ both participants and by anyone given a full record.
 
 ##### 4.5.1.3 What travels: the presentation
 
-**A presented record is the envelope plus exactly seven disclosure slots, in
+**A presented record is the envelope plus exactly six disclosure slots, in
 ascending label order.** Stated as a schema because prose alone left
 encoders free to invent containers that could not interoperate:
 
 ```
 PresentedRecord = [
   Envelope,                  ; the signed transaction (§3), untouched
-  [ 7*7 DisclosureSlot ]     ; one per label, ascending by label byte order
+  [ 6*6 DisclosureSlot ]     ; one per label, ascending by label byte order
 ]
 DisclosureSlot = Disclosure / bstr .size 32   ; revealed, or the withheld digest
 ```
 
 **Position supplies the label.** Slot *i* belongs to label *i* of §4.5.1's sorted
 set, so a withheld digest needs no label of its own: a revealed `Disclosure` whose
-embedded label differs from its slot's is malformed. Exactly seven slots always: a
-shorter or longer array is malformed, and a fully-withheld presentation is seven
+embedded label differs from its slot's is malformed. Exactly six slots always: a
+shorter or longer array is malformed, and a fully-withheld presentation is six
 digests.
 
 **A recipient verifies by recomputing `root`** from what it holds — revealed
@@ -1837,15 +1837,15 @@ disclosures hashed, withheld digests taken as given, and checking it equals body
 field 8, which the envelope signature covers. A mismatch means the presentation is
 malformed, not that a field is missing.
 
-**Withholding is visible, and that is deliberate.** All seven slots are always
+**Withholding is visible, and that is deliberate.** All six slots are always
 present, so a recipient always knows a field exists and was withheld. This is the
 same posture as §5.5's unanswered queries and `unavailable` responses: absence is
 legible rather than silent, and a policy may weight it.
 
 ##### 4.5.1.4 Cost
 
-**+16 bytes per disclosable field at rest** — about 112 bytes on a ~35 KB record,
-**0.3%**. A minimised presentation carries 32 bytes per withheld field, at most 224
+**+16 bytes per disclosable field at rest** — about 96 bytes on a ~35 KB record,
+**0.3%**. A minimised presentation carries 32 bytes per withheld field, at most 192
 bytes. **Presentation size does not otherwise fall**: a presence record is ~96%
 signatures and the envelope requires exactly the required signer set, so a minimised
 record is still ~34 KB. This is a disclosure measure, not a bandwidth one.
@@ -3423,7 +3423,7 @@ ArchiveReply = {
 
 ArchiveEntry = PresentedRecord / Envelope
                        ; a presence record (§4.5) arrives in the presented form,
-                       ;   §4.5.1.3's envelope plus seven disclosure slots,
+                       ;   §4.5.1.3's envelope plus six disclosure slots,
                        ;   because the holder's disclosure choice is what this
                        ;   path is for. Every other type arrives as a bare
                        ;   envelope. A map is an envelope and an array is a
@@ -3855,7 +3855,7 @@ BackPointers = [ 1*8 bstr .size 32 ]   ; one signer's list (§3.1)
 ProposedBody = {
   1: bstr,             ; the record body, §4.5's map as every signer will
                        ;   sign it, back-pointers in place
-  2: ? [ 7*7 Disclosure ]  ; the set the body's root commits to (§4.5.1),
+  2: ? [ 6*6 Disclosure ]  ; the set the body's root commits to (§4.5.1),
                          ;   every slot revealed, so a signer recomputes the
                          ;   root before signing. PRESENT IFF field 1 is a
                          ;   presence record: §4.5.1's slots are a presence
@@ -5394,13 +5394,13 @@ column.
 | Departure | — | **~4 KB** |
 | Disavowal | — | **~4 KB** |
 | Peering | — | **~8 KB** |
-| Presence record (typical, ~10 signers) | ~2 KB | **~35 KB** at ML-DSA-65. Includes ~112 B of disclosure salts, **0.3%** (§4.5.1) |
+| Presence record (typical, ~10 signers) | ~2 KB | **~35 KB** at ML-DSA-65. Includes ~96 B of disclosure salts, **0.3%** (§4.5.1) |
 | Presence record (maximum signers) | ~5 KB | **~65 KB** — 18 logical signers × (64 + 3,309), plus 32 verifier responses at 2 classical signatures each |
 | Currency attestation | ~150 B, plus field 8's hybrid delegation at 3,373 B where carried (§7.1) | **—** — the attestation's own signature is classical only (§7.1): its relevance expires in ~10 h, well inside design §5.1's horizon. The delegation it carries is the hybrid part, and it is counted in the classical column because it is what travels |
 | Anchor entry | ~60 B (hashes only, and the entry's signature is classical only — §7.2) | **—** |
 
 **Selective disclosure does not reduce a presentation.** A minimised record replaces
-each withheld field with a 32-byte digest, at most 224 B, against ~34 KB of signatures
+each withheld field with a 32-byte digest, at most 192 B, against ~34 KB of signatures
 that cannot be omitted — the envelope requires exactly the required signer set. It buys
 disclosure control, not bandwidth (§4.5.1).
 

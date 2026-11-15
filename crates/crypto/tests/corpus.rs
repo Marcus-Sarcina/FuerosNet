@@ -75,6 +75,7 @@ fn parse_frame(raw: &[u8]) -> Result<frame::Frame, Error> {
 // functional: TX-020
 // functional: TX-021
 // functional: TX-022
+// functional: TX-023
 // functional: TX-024
 // functional: TX-025
 // functional: TX-029

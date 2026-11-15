@@ -1582,7 +1582,7 @@ three verify against the same body root under the same envelope signatures.
 {hexblock(pres_part)}
 ```
 
-**Minimal** — all seven withheld ({len(pres_min)} bytes):
+**Minimal** — all six withheld ({len(pres_min)} bytes):
 
 ```
 {hexblock(pres_min)}
@@ -1882,7 +1882,7 @@ Envelope bytes ({len(npr_env)} bytes — final, all 36 signatures real):
 {hexblock(npr_part)}
 ```
 
-**Minimal** — all seven withheld ({len(npr_min)} bytes):
+**Minimal** — all six withheld ({len(npr_min)} bytes):
 
 ```
 {hexblock(npr_min)}

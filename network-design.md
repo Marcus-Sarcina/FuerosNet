@@ -8310,7 +8310,7 @@ untouched** — the verifier and witness graph is the disclosure §19.1's compos
 argument keeps arriving at, and this is not the lever for it. §19.2 records the only
 direction that would be, and what it costs.
 
-**The construction is a flat list of salted digests, not a Merkle tree**: at seven
+**The construction is a flat list of salted digests, not a Merkle tree**: at six
 leaves a tree buys nothing and adds odd-node handling and the duplicated-node
 second-preimage class (`wire-format.md` §4.5.1).
 

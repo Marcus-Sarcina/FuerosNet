@@ -299,7 +299,7 @@ conditions cannot be reached on a machine with no radio and no camera.
 | `consent-is-classical` | The consent signature is classical everywhere | decoder | DEC-33 | DEC-33 |
 | `verifier-auth-hybrid-in-recovery` | Verifier authentication is hybrid only inside a `Recovery` block | decoder | REC-03 | DEC-33 |
 | `disclosure-root-recomputes` | A recipient verifies by recomputing `root`, and a record whose recomputed root differs from body field 8 is rejected | decoder | CER-18 | CER-18, CER-35 |
-| `seven-slots-exactly` | A presented record has exactly seven disclosure slots, in ascending label order; any other count is rejected | decoder | CER-18 | CER-35 |
+| `six-slots-exactly` | A presented record has exactly six disclosure slots, in ascending label order; any other count is rejected | decoder | CER-18 | CER-35 |
 | `salt-is-sixteen-bytes` | A `Disclosure` whose salt is not exactly sixteen bytes is rejected | decoder | CER-18 | CER-35 |
 | `revealed-value-matches-schema` | A revealed value that does not match its label's schema is rejected | decoder | CER-18 | CER-35 |
 | `any-subset-accepted` | Any subset of disclosures is accepted, including none | decoder | CER-18 | CER-36 |
