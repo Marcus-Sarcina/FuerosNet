@@ -192,6 +192,12 @@ fn a_device_that_was_away_is_brought_to_the_whole_dataset_once_both_holders_say_
         desk.store, phone.store,
         "the whole store, captures included"
     );
+    // **the catalogue is not carried** [author, 2026-11-15]: the device
+    // sweeps each patron it attaches to for what is available now
+    assert!(
+        desk.catalog.portions.is_empty(),
+        "no catalogue view crosses with the dataset"
+    );
 
     // **a replica of a capture whose key the subject has not released does
     // not open here**: the desktop holds the ciphertext and no key to it

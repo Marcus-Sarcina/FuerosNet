@@ -4,7 +4,6 @@ import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
@@ -592,13 +591,7 @@ class MeetActivity : Activity() {
         lastModules = m.width
         lastScale = scale
         val w = m.width * scale
-        val px = IntArray(w * w)
-        for (y in 0 until w) {
-            for (x in 0 until w) {
-                px[y * w + x] = if (m.get(x / scale, y / scale)) Color.BLACK else Color.WHITE
-            }
-        }
-        show(px, w)
+        show(Optical.pixels(m, scale), w)
     }
 
     /**
@@ -668,13 +661,7 @@ class MeetActivity : Activity() {
         if (m.width != lastModules || lastScale <= 0) return false
         val scale = lastScale
         val w = m.width * scale
-        val px = IntArray(w * w)
-        for (y in 0 until w) {
-            for (cx in 0 until w) {
-                px[y * w + cx] = if (m.get(cx / scale, y / scale)) Color.BLACK else Color.WHITE
-            }
-        }
-        code.setImageBitmap(Bitmap.createBitmap(px, w, w, Bitmap.Config.ARGB_8888))
+        code.setImageBitmap(Bitmap.createBitmap(Optical.pixels(m, scale), w, w, Bitmap.Config.ARGB_8888))
         val bits = x.tracking()
         val track = trackView
         if (track != null && bits.isNotEmpty()) {

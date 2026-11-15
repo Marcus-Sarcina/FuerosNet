@@ -4724,6 +4724,13 @@ impl Client {
         })
     }
 
+    /// **The pairing's id**, once both contributions are held: what a
+    /// shell names the local link by, as a ceremony's is named by its
+    /// ceremony-id (`wire-format.md` §14.3.3).  The key stays here.
+    pub fn dataset_pairing_id(&self) -> Result<[u8; 32], Abort> {
+        Ok(self.pairing_keys()?.id)
+    }
+
     /// **The dataset for the paired device, sealed, once its holder says
     /// yes** (design §23.3; `wire-format.md` §14.3.3): what the other's
     /// heads do not reach and the whole of the view, under the pairing key.

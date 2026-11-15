@@ -22285,3 +22285,32 @@ minutes after the push; the machines re-provisioned with it as deployed
 (container, wildcard bind, mapped ports): ceremony fresh 1 of 1, ceremony
 rerun 1 of 1, subnet tests 3 of 3. Locally, five `rhtnd` from the same
 tree: ceremony 2 of 2 (fresh and rerun). The droplets were left up.
+
+**2026-11-15, the third round [author].** (1) **The crossing session**: the
+author asked whether it is orchestration logic coupled to the network
+object; the field-test run of the ignored finalisation test says no — the
+ceremony advances on kind-tagged plaintexts and holds no session; the
+730-byte body fails at w1, the *home* witness, "message does not
+authenticate" under the payload layer's ratchet tables after two opens
+"kept" and four messages read "on_previous": a state-synchronisation
+defect in the crossing rule (lower keyhash's session stands, the other
+held a while), not in the witnessing logic. The test's doc comment had
+the far witness; corrected by the run. Still open; the harness's one
+process-wide diag sink is what makes the exact ratchet pair hard to read
+off. (2) **The catalogue** is not carried [author]: each device sweeps
+every patron it attaches to for the roles available now, which cannot
+drift and tells the node of both devices — D §23.3, L §4.2, APP-014; the
+kernel already carried none (`catalog::View` is in memory, built by
+browsing) and `devices.rs` asserts it. (3) **The facade and screen**
+[author: build them]: five calls on `Participant` (`dataset_contribution`,
+`take_dataset_contribution`, `dataset_pairing_id`, `dataset_carriage`,
+`take_dataset_carriage`) and the `DatasetTaken` record, `ffi/tests/
+devices.rs`; `Pairing.kt` (roles, steps, words; `PairingTest`) and
+`PairingActivity.kt` (codes as the meeting's, the radio under the pairing's
+id, the handing device advertising, the taking one seeking; the kernel's
+question through `Consent`), a door under Options, `OpticalExchange.DATASET`;
+APP-017.
+Figures: gate 1064 passed, 13 skipped, Kotlin round trip ok, Android unit
+tests 386 run 0 failed (the palette test now lists `Optical.kt` and
+`Tracking.kt`: both screens paint a code through `Optical.pixels`), field-test
+APK built, not installed (no confirmed free window on the bench).

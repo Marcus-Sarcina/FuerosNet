@@ -140,6 +140,7 @@
         <!-- The door to a backup (design §13.7.1): not exported, because
              nothing outside this app has business asking for one. -->
         <activity android:name=".BackupActivity" android:exported="false" />
+        <activity android:name=".PairingActivity" android:exported="false" />
         <!-- Changing the key a subnet knows you by (design §9.0): not
              exported, and reachable only from inside the app. -->
         <activity android:name=".RotationActivity" android:exported="false" />

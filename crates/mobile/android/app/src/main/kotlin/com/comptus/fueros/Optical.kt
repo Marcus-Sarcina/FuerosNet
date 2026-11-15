@@ -120,6 +120,22 @@ object Optical {
      * side in modules-or-more; ZXing returns at least the version the data
      * needs, so a small request yields the smallest symbol that fits.
      */
+    /**
+     * **The symbol's pixels, black on white**, `scale` device pixels a
+     * module: the one place a code is painted, since a symbol is read by
+     * a camera and has no palette ([PaletteTest]).
+     */
+    fun pixels(m: BitMatrix, scale: Int): IntArray {
+        val w = m.width * scale
+        val px = IntArray(w * w)
+        for (y in 0 until w) {
+            for (x in 0 until w) {
+                px[y * w + x] = if (m.get(x / scale, y / scale)) android.graphics.Color.BLACK else android.graphics.Color.WHITE
+            }
+        }
+        return px
+    }
+
     fun matrix(bytes: ByteArray, size: Int = 0): BitMatrix {
         val text = payload(bytes)
         return QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, size, size, HINTS)

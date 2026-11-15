@@ -9065,8 +9065,12 @@ asks of a person. No new permission arises: the subject is reading its own
 archive.
 
 **The latest dataset is the whole of it** [author, 2026-10-16]: the archive, the
-derived view the client keeps beside it — contacts, held locators, profiles, the
-resource catalogue's portion — and the sealed captures. The reason is that a
+derived view the client keeps beside it — contacts, held locators, profiles —
+and the sealed captures. **Not the catalogue** [author, 2026-11-15]: rather than
+one device's view of what is available replicated to another, each device
+sweeps every patron it attaches to for the roles available now (§11.5), which
+cannot fall out of step with what a sweep would show, and tells that node of
+both devices as devices of the identity under it. The reason is that a
 person's one ceremony device is not guaranteed: having several is ordinary, and
 what is ordinary about it is that only one of them is powered up and on the
 network at a time, so the device that is up is the only one that can be current

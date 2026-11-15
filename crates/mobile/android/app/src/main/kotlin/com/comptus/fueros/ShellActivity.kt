@@ -688,6 +688,11 @@ class ShellActivity : Activity() {
                     },
                 )
                 column.addView(
+                    row("Another device of this identity", "bring it to everything this one holds, side by side") {
+                        startActivity(Intent(this, PairingActivity::class.java).putExtra("by", Identities.focused()))
+                    },
+                )
+                column.addView(
                     row("Colour", Identities.colourName(focusColour())) { chooseColour() },
                 )
                 column.addView(

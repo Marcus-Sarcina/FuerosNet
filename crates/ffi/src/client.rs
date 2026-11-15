@@ -1763,6 +1763,75 @@ impl Participant {
         })
     }
 
+    /// **This device's dataset contribution** (`wire-format.md` §14.3.3):
+    /// what another device of this identity reads to pair with it, shown
+    /// as a ceremony's contribution is shown, and opaque to the shell
+    /// (NET-019).  Pairing starts here; the pairing's key never leaves the
+    /// kernel.
+    pub fn dataset_contribution(&self) -> Result<Vec<u8>, Refused> {
+        crate::diag::call("dataset_contribution", || {
+            Ok(self.handle.with_blocking(|c| c.dataset_contribution()))
+        })
+    }
+
+    /// The other device's contribution, as the camera read it: its
+    /// archive heads come back.  One from a device of another identity is
+    /// refused, and so is one that does not read.
+    pub fn take_dataset_contribution(&self, bytes: Vec<u8>) -> Result<Vec<Vec<u8>>, Refused> {
+        crate::diag::call("take_dataset_contribution", || {
+            self.handle.with_blocking(move |c| {
+                c.take_dataset_contribution(&bytes)
+                    .map(|heads| heads.into_iter().map(|h| h.to_vec()).collect())
+                    .map_err(|a| Refused::new(format!("{a:?}")))
+            })
+        })
+    }
+
+    /// **The pairing's id**, once both contributions are held: what the
+    /// shell names the local radio's link by, as a ceremony's link is
+    /// named by its ceremony-id.  Refused before the other device's
+    /// contribution is in.
+    pub fn dataset_pairing_id(&self) -> Result<Vec<u8>, Refused> {
+        crate::diag::call("dataset_pairing_id", || {
+            self.handle
+                .with_blocking(|c| c.dataset_pairing_id().map(|id| id.to_vec()))
+                .map_err(|a| Refused::new(format!("{a:?}")))
+        })
+    }
+
+    /// **The sealed dataset for the device beside this one** (`wire-format.md`
+    /// §14.3.3; APP-014): everything this device holds of the identity
+    /// that the other lacks, sealed under the pairing.  The kernel asks
+    /// this device's holder first, through the platform's operator, and
+    /// refuses `Declined` on a no; the bytes are for the local bearer
+    /// alone, never the network.
+    pub fn dataset_carriage(&self) -> Result<Vec<u8>, Refused> {
+        crate::diag::call("dataset_carriage", || {
+            self.handle
+                .with_blocking(|c| c.dataset_carriage())
+                .map_err(|a| Refused::new(format!("{a:?}")))
+        })
+    }
+
+    /// The sealed dataset from the device beside this one, taken into
+    /// this device: its holder is asked first and `Declined` moves
+    /// nothing; one that does not open under the pairing is `Unsealable`.
+    /// What it came to is counted back.
+    pub fn take_dataset_carriage(&self, sealed: Vec<u8>) -> Result<DatasetTaken, Refused> {
+        crate::diag::call("take_dataset_carriage", || {
+            self.handle.with_blocking(move |c| {
+                c.take_dataset_carriage(&sealed)
+                    .map(|r| DatasetTaken {
+                        records: r.records as u64,
+                        contacts: r.contacts as u64,
+                        other: r.other as u64,
+                        refused: r.refused as u64,
+                    })
+                    .map_err(|a| Refused::new(format!("{a:?}")))
+            })
+        })
+    }
+
     /// **This side's candidates for the counterparty, anchored, for the
     /// bearer** (`wire-format.md` §14.3.2, design §12.6.3): gathered on the
     /// direct socket and sealed under the ceremony, so that two parties who
@@ -4161,6 +4230,22 @@ pub fn administration_act_proof(
     }
     let p = rhtn_crypto::enrolment::act_proof(&token, &nonce, &method, &path, &body);
     Ok(p.iter().map(|b| format!("{b:02x}")).collect())
+}
+
+/// What a dataset hand-over came to on the device that took it
+/// (`rhtn_client::ceremony::Reconciled`): counts the shell shows, and
+/// nothing of the content.
+#[derive(uniffi::Record, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DatasetTaken {
+    /// Records appended to the archive.
+    pub records: u64,
+    /// Contacts inserted.
+    pub contacts: u64,
+    /// Everything else inserted: capture rows, late responses,
+    /// disclosure sets, profiles, direct hints.
+    pub other: u64,
+    /// Records that did not verify or did not chain.
+    pub refused: u64,
 }
 
 /// **One invitation to send**: where to send it, and what to send.

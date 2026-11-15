@@ -100,6 +100,10 @@ class OpticalExchange(
         const val CONTRIBUTION = 0
         /** [which] for the second, the transcript confirmation. */
         const val TRANSCRIPT = 1
+
+        /** The dataset contribution between two devices of one identity
+         *  (`wire-format.md` §14.3.3; [PairingActivity]). */
+        const val DATASET = 2
     }
 
     /** What a code the camera read came to. */
