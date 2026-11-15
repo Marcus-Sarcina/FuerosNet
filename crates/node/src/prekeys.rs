@@ -95,6 +95,38 @@ impl PrekeyService {
         if b.verify(ids).is_err() {
             return Err("bundle signature fails".into());
         }
+        // **new material empties the device's pool** [assumed pending the
+        // author, 2026-11-15]: a one-time key was stocked under the bundle
+        // it was generated beside, and a device publishing a bundle over
+        // different material (restored from its phrase, PAY-019; the
+        // kernel's ids start over) no longer holds the keys the old pool
+        // names, so a key handed out of it opens nothing.  Dropped before
+        // the new bundle is served, memory and disk alike, and the device
+        // restocks as it does on a first publish.  The same bytes again
+        // change nothing.
+        let held = self.bundles.get(&(b.subject, b.device));
+        let replaced = held.is_some_and(|h| h != bytes);
+        if replaced
+            && held
+                .and_then(|h| PrekeyBundle::parse(h).ok())
+                .is_none_or(|h| h.blob != b.blob)
+        {
+            for slot in [(b.subject, b.device), (b.subject, ANY_DEVICE)] {
+                if let Some(pool) = self.pools.remove(&slot) {
+                    for (name, _) in &pool {
+                        if !self.forget(&slot, name) {
+                            return Err("the pool could not be dropped".into());
+                        }
+                    }
+                    tracing::debug!(
+                        target: "node",
+                        subject8 = %crate::diag::id8(&b.subject),
+                        dropped = pool.len(),
+                        "node.prekeys.pool_dropped"
+                    );
+                }
+            }
+        }
         // written through where the service is kept, for the same reason
         // the keys are: what is held and what is stored never differ, and
         // a pool whose bundle is missing is a subject a restart drops

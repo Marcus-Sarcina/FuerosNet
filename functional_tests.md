@@ -251,6 +251,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | RES-014 | C | Use explicit lifetimes for positive/negative resolution, contact locators and intermediate addresses; expire stale entries and briefly cache negative results. Cache expiry affects performance, not currency security or signed historical truth. | D §§12.5, 12.6.4; I §4.3; L §5 |
 | RES-015 | C | Resolve only for an actual communication need or specified maintenance. A speculative per-click query can disclose interest; do not turn local catalog browsing into resolution traffic. | D §12.6.1; I §4.5; L §8 |
 | RES-016 | C | A light client **drives the descent itself**, against any infra node whose address it already holds rather than only its serving node (W §7.7.1) [author, 2026-10-05]. One nonce per logical resolution, reused across that resolution's endpoints and referrals; a reply that does not echo it is not an answer. Each referral is checked rather than an arrival total: `advances` at least 1 and never past the path's end, with arrival announced by the `ServingInfra` reply. Failure codes take their stated dispositions (W §7.7.3). What the descent came to is cached with a lifetime the implementation states, and no resolution is run speculatively. Test: a node that does not answer moves the resolution to the next address held; a referral advancing nothing is refused as a loop; a second message to the same party inside the lifetime asks nobody. | W §§7.7.1, 7.7.3; D §12.6.1; L §4 |
+| RES-017 | C | **The operator supplies the node's anchor table at launch** [author, 2026-11-15]: the other subnets' entries the operator holds out of band are handed to the node when it starts, each taken under the ingestion model the node states, and gossip adds to them. Test: a node started holding another subnet's anchor entry resolves a position under that anchor on a client's behalf, no peer having told it of that subnet; a supplied file that does not read as an entry is counted and named and does not stop the start; a node handed nothing starts with an empty table. | I §4.1; W §§7.2, 7.7.1 |
 
 ### Currency issuance, refresh, use and supersession
 
@@ -517,6 +518,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | PAY-018 | C | **Peers exchange, on every contact, a locator, the peering record, a request and a deposit, and the owner reconciles with the blob that comes back.** Kinds 26 to 29 are taken from a party the recipient holds a peering record with and dropped from anybody else; kind 30, the peering record naming the two, is taken from a party that is not yet a peer and makes it one once it verifies under the recipient's material and the sender's [author, 2026-10-30]. The deposit is D §13.7.1's envelope under the owner's identity, carrying the records and the view beside them and never a sealed capture of another or any identity material; the holder keeps the newest, reads none of it, and returns it on request. The owner opens a return under its own identity, refuses one naming another identity, appends the records it lacks where they verify and chain, inserts the contacts and view entries it lacks, and replaces nothing it holds. A fresh deposit goes only where the dataset moved since the last. A deposit and a return travel on the direct path only: where no path is held they wait for the next contact that holds one, and neither is ever put to a relay, whose request frame could not carry them (W §9.2). The contact interval is the client's own and is to be set low before release, the restore dribbling in over a day being acceptable [author, 2026-10-25]. Test: a contact removed on A comes back from B at the next contact; a deposit for a peer with no direct path is held back rather than relayed; B cannot open A's blob; A's sealed captures of others are absent from it; a second reconcile of the same blob takes nothing. | D §§6.3, 13.7.1, 23.3; W §§4.4, 7.10.1, 7.10.3; L §2 |
 | PAY-019 | C | **A client restored from its phrase is reached by its peers and gets its dataset back from them.** It knows nobody; a peer's greeting over the relay goes unread, and after two silent rounds the peer opens the session anew, the first message carrying its introduction (W §7.10.1) and its greeting the peering record (kind 30); with the material the record verifies and the sender is a peer, so the restored client greets it in turn, asks, and reconciles with the blob that comes back — records, contacts, the view, its name. Records the serving node replayed that its signers could not yet be verified for are held pending that material and applied as it comes, as a node holds an object for a signer's key (W §10.1.1). **No node is needed**: a dialler the restored client cannot bind presents its introduction first on the direct connection and is taken as a cold call (W §9.1), and the dialler asks the restored client for its prekey material on the same path (W §9.1 control stream 3, W §14.3.4), so the session opens with nothing between them. Test: a client holding only its own material and a peer's record that waits; the peer's introduction; the record applies and the peer is named; the blob reconciles with nothing refused. | D §§6.3, 10.2; W §§7.10.1, 7.10.3, 10.1.1; L §3 |
 | PAY-020 | C | **Every identity is a leaf, the patron included** [author, 2026-11-14]. A payload to an identity takes the asynchronous construction through the node holding that identity's device bundles, whether the identity runs a node, operates the node the sender is attached to, or runs none; nothing addressed to an identity is handed to a node as material for the node's own device. Test: a sender attached at a node that speaks as its operator P sends to P — a one-time key request names P, the message is encrypted under the construction and arrives at P's device; nothing rides the transport session as node material. | D §14.2.4.1; L §3 |
+| PAY-021 | C | **A first message relayed by a node that never served its sender is attributed before it is taken** [2026-11-15]. Under PAY-012 a sender dials the recipient's node itself, so that node has no bundle of the sender's to carry on the relay (W §7.10), and the recipient holds the introduction the message brought (W §7.10.1) and nothing else of the sender. The recipient asks the sender's own node for the sender's material, reached by the locator that introduction carries, as W §9 has it ask the sender on the direct path, and takes the message once the binding verifies; what followed the opener is taken after it, in order, not refused as having no session. Test: in a ceremony across two subnets that share no node, each participant holds both witnesses' answers, the far one's included; a payload from a stranger in another subnet is delivered on its first message, its follow-ups in order. | W §§7.10, 7.10.1, 9; D §14.2.2; L §5 |
 
 ## 3.5 Observer-relative trust and policy evaluation
 
@@ -1050,7 +1052,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **576 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **578 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -1059,7 +1061,7 @@ This specification contains **576 numbered requirement/test families** across **
 | TX | 30 |
 | ARC | 19 |
 | TOP | 46 |
-| RES | 16 |
+| RES | 17 |
 | CUR | 12 |
 | NET | 33 |
 | SES | 20 |
@@ -1068,7 +1070,7 @@ This specification contains **576 numbered requirement/test families** across **
 | VER | 18 |
 | CAP | 17 |
 | REC | 12 |
-| PAY | 18 |
+| PAY | 19 |
 | POL | 22 |
 | CAT | 26 |
 | GAT | 41 |

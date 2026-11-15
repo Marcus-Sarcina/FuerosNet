@@ -46,14 +46,16 @@ QUIC = 7447
 ADMIN = 7449
 IMAGE_DEFAULT = "docker.io/sarcina/rhtnd:latest"
 
-# the infra nodes of `rhtn_sim::subnets::wan_plans()`, one region each: no
-# two in one region, so every referral and every payload leg crosses a WAN
+# the infra nodes of `rhtn_sim::subnets::wan_plans()`, each in the first
+# region of its list that is up and offers the size (a size is not offered
+# everywhere: fra1 has none of the small ones), and no two in one region,
+# so every referral and every payload leg crosses a WAN
 REGIONS = {
-    "alice2": "nyc1",
-    "bob": "sfo3",
-    "c1": "ams3",
-    "c2": "sgp1",
-    "c3": "fra1",
+    "alice2": ["nyc1", "nyc3", "tor1"],
+    "bob": ["sfo3", "sfo2"],
+    "c1": ["ams3", "lon1"],
+    "c2": ["sgp1", "blr1", "syd1"],
+    "c3": ["fra1", "lon1", "blr1", "tor1"],
 }
 
 
@@ -104,6 +106,17 @@ class Provider:
 
     def droplets(self):
         return self.ask("GET", f"/v2/droplets?tag_name={TAG}&per_page=200").get("droplets", [])
+
+    def regions_offering(self, size):
+        live = {
+            r["slug"]
+            for r in self.ask("GET", "/v2/regions?per_page=200").get("regions", [])
+            if r.get("available")
+        }
+        for s in self.ask("GET", "/v2/sizes?per_page=200").get("sizes", []):
+            if s["slug"] == size:
+                return live & set(s.get("regions", []))
+        raise SystemExit(f"wan.py: the provider lists no size {size}")
 
 
 def ssh_key(out):
@@ -166,8 +179,19 @@ def cmd_up(a, p):
     key_id = p.ssh_key_id(pub)
     image = p.newest_debian()
     have = {d["name"]: d for d in p.droplets()}
+    offering = p.regions_offering(a.size)
+    regions, taken = {}, set()
+    for name, prefs in REGIONS.items():
+        machine = f"{TAG}-{name}"
+        if machine in have:
+            regions[name] = have[machine]["region"]["slug"]
+        else:
+            regions[name] = next((r for r in prefs if r in offering and r not in taken), None)
+            if regions[name] is None:
+                raise SystemExit(f"wan.py: none of {prefs} is up and offers {a.size}: {sorted(offering)}")
+        taken.add(regions[name])
     ids = {}
-    for name, region in REGIONS.items():
+    for name, region in regions.items():
         machine = f"{TAG}-{name}"
         if machine in have:
             say(f"{machine} exists already ({have[machine]['id']}, {region})")
@@ -205,7 +229,7 @@ def cmd_up(a, p):
     if len(addresses) < len(ids):
         raise SystemExit("wan.py: not every machine came up within ten minutes")
     with open(addresses_path(a.out), "w") as f:
-        json.dump({"droplets": ids, "addresses": addresses, "regions": REGIONS}, f, indent=2)
+        json.dump({"droplets": ids, "addresses": addresses, "regions": regions}, f, indent=2)
     say("waiting for cloud-init on each machine (podman installs)")
     for name, ip in addresses.items():
         for attempt in range(40):
@@ -228,10 +252,15 @@ def cmd_provision(a, p):
         shutil.rmtree(state)
     pairs = [f"{n}={ip}:{QUIC}" for n, ip in held["addresses"].items()]
     say("signing the fabric against", ", ".join(pairs))
+    # --host-network: the node sees the machine's interfaces and binds the
+    # address its record names; otherwise it binds the wildcard inside its
+    # container and the ports are mapped, as a deployment would
+    bind = ["--listen-own"] if a.host_network else []
+    net = ["--network=host"] if a.host_network else [f"-p {QUIC}:{QUIC}/udp -p {ADMIN}:{ADMIN}/tcp"]
     subprocess.run(
         [
             "cargo", "run", "-q", "-p", "rhtn-sim", "--example", "provision", "--",
-            "--out", state, "--root", "/var/lib/rhtn", "--image", a.image, *pairs,
+            "--out", state, "--root", "/var/lib/rhtn", *bind, *pairs,
         ],
         cwd=CRATES,
         check=True,
@@ -249,7 +278,7 @@ def cmd_provision(a, p):
             a.out, ip,
             "chown -R 10001:10001 /var/lib/rhtn && chmod 0700 /var/lib/rhtn &&",
             "podman run -d --name rhtnd --restart=always",
-            f"-p {QUIC}:{QUIC}/udp -p {ADMIN}:{ADMIN}/tcp",
+            *net,
             "-v /var/lib/rhtn:/var/lib/rhtn:Z", a.image,
         )
     say("started; `status` shows what each node says")
@@ -296,6 +325,7 @@ def main():
     up.set_defaults(run=cmd_up)
     pr = sub.add_parser("provision")
     pr.add_argument("--image", default=IMAGE_DEFAULT)
+    pr.add_argument("--host-network", action="store_true")
     pr.set_defaults(run=cmd_provision)
     sub.add_parser("status").set_defaults(run=cmd_status)
     lg = sub.add_parser("logs")

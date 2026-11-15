@@ -22219,3 +22219,59 @@ stays, and not in any document yet. **Not run yet**: the launch itself,
 which needs the provider token's location on this machine (the classifier
 refused a search for it) and an image on Docker Hub built from a commit
 carrying the `anchors` key.
+
+**2026-11-15, later — the launch, and what the rented machines found.**
+The token is at `~/Documents/WAN_Test_Token`; the `anchors` key is an
+operator obligation (I §4.1, RES-017: the operator supplies the node's
+anchor table at launch). Five droplets came up (nyc1, sfo3, ams3, sgp1,
+lon1 — fra1 offers none of the small sizes, so the launcher now picks the
+first region of a preference list that is up and offers the size), and
+the image for 34d709c ran on them with host networking (`wan.py provision
+--host-network`, each node bound to its public address). Four findings,
+in the order the machines produced them:
+
+1. **A node bound to the wildcard published the wildcard.** Every referral
+   and terminal answer named the next node at `0.0.0.0:7447`: the runtime
+   publishes its own endpoint record from the bound socket, and a bind
+   that is not the record's address minted a new record at the next
+   counter, displacing the operator's. Fixed at `NetworkPoint::from_socket`
+   (a wildcard is no point; the node then serves the record it holds), and
+   `daemon/tests/fabric.rs` binds every node to the wildcard, which
+   reproduced it locally before the fix. The three subnet tests then
+   passed on the machines (descent through three regions; bob resolving
+   from its anchor table; payload both ways).
+2. **The far witness's answer never crossed, in this process either.**
+   The ceremony test had asserted both answers at the proposer alone; made
+   to wait for both participants to hold both, it fails in-process too.
+   Field-test diagnostics (sim's ffi dev-dep flipped off its default, see
+   memory): the far participant refused the opener with "no bundle for
+   that peer". W §7.10 has the node carry the submitter's bundle because it
+   "holds that bundle already", which is false under the ruling of
+   2026-10-05: a sender from another subnet dials the recipient's node
+   itself, which never served it. The courier now asks the sender's own
+   node for the bundle on the reach the opener's introduction gives (as W
+   §9 has the direct path ask the sender), inline on the courier's single
+   inbox so the follow-ups wait in order; PAY-021. **Asked of the author**
+   whether the opener should carry the sender's bundle instead (a §7.10.1
+   change, no fetch, no one-time key spent at the sender's node).
+3. **A used fabric fails every opener; a fresh one crosses.** Fresh
+   machines: the ceremony opened with both witnesses attesting on both
+   sides (1 of 1). Any run after that with the same identities: no answer
+   anywhere (0 of 2), the openers refused with "message does not
+   authenticate": the ratchet's AEAD, because the kernels start their
+   prekey ids over and the node still serves the one-time pool stocked by
+   the previous kernels under the same ids — every run is four clients
+   restored from their phrases at once (PAY-019). The wire says nothing
+   about a pool across a bundle over new material. **Assumed pending the
+   author**: a bundle over new material empties the device's pool at the
+   node (`PrekeyService::publish`; SUB-13's incidental count adjusted, its
+   claim unchanged). If it goes the other way: revert that and the count,
+   and the rerun stays failing until another mechanism.
+4. **Tests that assumed a fresh fabric**: the first delivery a client
+   collects on a shared fabric may be an earlier test's (`delivered`
+   helper in subnets.rs reads past them on a remote fabric only); the
+   ceremony's node-count assertions are in-process only.
+
+The ignored ceremony-to-record test now reaches "proposed" and fails at
+the finalisation ("the body is out and its signatures are awaited"): the
+crossing-session finding, unchanged, one step later than before.

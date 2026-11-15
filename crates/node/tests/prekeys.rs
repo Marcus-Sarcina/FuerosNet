@@ -68,6 +68,51 @@ fn stocked(subject: &str, n: usize) -> PrekeyService {
     svc
 }
 
+/// **A bundle over new material empties the device's pool** [assumed
+/// pending the author, 2026-11-15]: the keys were stocked beside the
+/// material the old bundle named, and a device that restarted from its
+/// phrase holds none of them, so a request after the new bundle gets it
+/// and no one-time key until the device restocks.  The same bundle again,
+/// or one over the same material at a later time, keeps the pool.
+#[test]
+fn a_bundle_over_new_material_empties_the_pool_and_the_same_material_keeps_it() {
+    let mut svc = stocked("alice", 3);
+    let r = one_time_reply(&mut svc, "bob", "alice", 1, 1_800_000_000);
+    assert!(r.one_time.is_some(), "a key from the old pool");
+    assert_eq!(svc.pool_size(&kh("alice")), 2);
+    // the same material, re-signed later: nothing changes
+    svc.publish(
+        &ids(),
+        &bundle_for("alice", b"reusable material", 1_800_000_500),
+    )
+    .unwrap();
+    assert_eq!(
+        svc.pool_size(&kh("alice")),
+        2,
+        "the same material keeps its pool"
+    );
+    // new material: the pool goes with the old bundle
+    svc.publish(
+        &ids(),
+        &bundle_for("alice", b"material after a restore", 1_800_001_000),
+    )
+    .unwrap();
+    assert_eq!(
+        svc.pool_size(&kh("alice")),
+        0,
+        "new material empties the pool"
+    );
+    let r = one_time_reply(&mut svc, "carol", "alice", 2, 1_800_001_000);
+    assert_eq!(r.bundles.len(), 1, "the new bundle is served");
+    assert!(r.one_time.is_none(), "no key of the old pool is handed out");
+    assert!(
+        svc.stock(kh("alice"), vec![b"otk-new".to_vec()]),
+        "the device restocks"
+    );
+    let r = one_time_reply(&mut svc, "carol", "alice", 3, 1_800_001_000);
+    assert_eq!(r.one_time.as_deref(), Some(&b"otk-new"[..]));
+}
+
 // functional: MAIL-001
 #[test]
 fn the_corpus_prekey_objects_read_here() {
@@ -822,13 +867,16 @@ fn sub_13_a_node_holds_the_current_bundle_and_pool_and_no_history_of_them() {
     svc.publish(&ids(), &b1).unwrap();
     assert!(svc.stock(kh("alice"), vec![b"k1".to_vec()]));
     inspect(&svc, &b1, 1, "after the first publication and deposit");
+    // the second bundle is over new material, which takes the first
+    // pool with it [assumed pending the author, 2026-11-15]: the current
+    // pool is what was deposited beside the current bundle
     let b2 = bundle_for("alice", b"second material", 1_800_003_600);
     svc.publish(&ids(), &b2).unwrap();
     assert!(svc.stock(kh("alice"), vec![b"k2".to_vec()]));
-    inspect(&svc, &b2, 2, "after the second");
+    inspect(&svc, &b2, 1, "after the second");
     // after a save and a restart, the same and nothing more
     svc.save(&dir).unwrap();
     let again = PrekeyService::at(&dir, PrekeyConfig::default()).unwrap();
-    inspect(&again, &b2, 2, "after a restart");
+    inspect(&again, &b2, 1, "after a restart");
     let _ = std::fs::remove_dir_all(&dir);
 }

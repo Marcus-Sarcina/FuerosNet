@@ -144,12 +144,15 @@ yourself**; nothing routes through an intermediate light-client patron.
 only parties you refer to. Bounded at f, and holding only this keeps per-node state
 constant regardless of network size — the aggregation argument design §12.6.1 rests on.
 
-**An anchor table**, for starting points you did not learn out of band. Entries are
-gossiped and **their signatures cannot be checked on receipt** — an entry carries
-the anchor's keyhash, not its key (`wire-format.md` §7.2). **State plainly which
-model you implement**: entries verified on acceptance, possible only where the key
-is already pinned, or an unverified cache checked at contact. Treating gossip as
-verified gives you a partition vulnerability with no symptom.
+**An anchor table, which your operator supplies at launch** [author, 2026-11-15]
+and gossip adds to. The entries you are handed at launch are the other subnets'
+your operator holds out of band; the rest arrive gossiped and **their signatures
+cannot be checked on receipt** — an entry carries the anchor's keyhash, not its
+key (`wire-format.md` §7.2). **State plainly which model you implement**: entries
+verified on acceptance, possible only where the key is already pinned, or an
+unverified cache checked at contact, and take what your operator hands you under
+the same model. Treating gossip as verified gives you a partition vulnerability
+with no symptom.
 
 ### 4.2 How to answer
 

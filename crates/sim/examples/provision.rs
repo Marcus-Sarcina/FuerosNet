@@ -2,14 +2,16 @@
 //! the state directory each infra node's `rhtnd` starts from, and the
 //! manifest the tests read back.
 //!
-//!     provision --out DIR [--root /var/lib/rhtn] [--listen 0.0.0.0:7447] NAME=IP:PORT ...
+//!     provision --out DIR [--root /var/lib/rhtn] [--listen 0.0.0.0:7447 | --listen-own] NAME=IP:PORT ...
 //!
 //! One `NAME=IP:PORT` per infra node of `rhtn_sim::subnets::wan_plans()`
 //! (`alice2`, `bob`, `c1`, `c2`, `c3`), the address the node is reached
 //! at from outside.  `--root` is where the directory will sit on the
 //! machine that runs it, which the configuration's paths are written
-//! against; `--listen` the bind.  `crates/sim/tools/wan.py provision`
-//! drives this and copies the result up.
+//! against; `--listen` the bind, or `--listen-own` to bind each node to
+//! the address it is reached at, for a machine whose interfaces the node
+//! sees (`wan.py provision --host-network`).  `crates/sim/tools/wan.py
+//! provision` drives this and copies the result up.
 
 use rhtn_sim::subnets::{Fabric, wan_plans};
 use std::collections::BTreeMap;
@@ -21,6 +23,7 @@ fn main() {
     let mut out: Option<PathBuf> = None;
     let mut root = "/var/lib/rhtn".to_string();
     let mut listen = "0.0.0.0:7447".to_string();
+    let mut listen_own = false;
     let mut addrs: BTreeMap<&'static str, SocketAddr> = BTreeMap::new();
     let plans = wan_plans();
     let names: Vec<&'static str> = plans
@@ -34,6 +37,7 @@ fn main() {
             "--out" => out = args.next().map(PathBuf::from),
             "--root" => root = args.next().unwrap_or(root),
             "--listen" => listen = args.next().unwrap_or(listen),
+            "--listen-own" => listen_own = true,
             pair => {
                 let Some((n, addr)) = pair.split_once('=') else {
                     usage(&format!("not NAME=IP:PORT: {pair}"));
@@ -64,7 +68,13 @@ fn main() {
         &[("bob", 1), ("c3", 0)],
         &out,
         |_| root.clone(),
-        |_| listen.clone(),
+        |n| {
+            if listen_own {
+                addrs[n].to_string()
+            } else {
+                listen.clone()
+            }
+        },
     );
     for (n, d) in &p.dirs {
         println!("{n}: {}", d.display());
@@ -75,7 +85,7 @@ fn main() {
 fn usage(why: &str) -> ! {
     eprintln!("provision: {why}");
     eprintln!(
-        "usage: provision --out DIR [--root /var/lib/rhtn] [--listen 0.0.0.0:7447] NAME=IP:PORT ..."
+        "usage: provision --out DIR [--root /var/lib/rhtn] [--listen 0.0.0.0:7447 | --listen-own] NAME=IP:PORT ..."
     );
     std::process::exit(2)
 }

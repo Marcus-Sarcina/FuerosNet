@@ -291,10 +291,15 @@ impl NetworkPoint {
     pub fn socket(&self) -> std::net::SocketAddr {
         std::net::SocketAddr::from((self.ip, self.port.unwrap_or(DEFAULT_PORT) as u16))
     }
-    /// A point for a loopback socket address, as a test on one host makes.
+    /// A point for a v4 socket address: a loopback one as a test on one
+    /// host makes, or the address a node was reached at.  **A wildcard is
+    /// no point** [2026-11-15]: nothing can be dialled at `0.0.0.0`, and a
+    /// node bound to it is reached at addresses the bind does not name, so
+    /// it publishes nothing from the bind and serves the record its
+    /// operator signed (`infra-client-requirements.md` §4.4).
     pub fn from_socket(addr: std::net::SocketAddr) -> Option<Self> {
         match addr.ip() {
-            std::net::IpAddr::V4(v4) => {
+            std::net::IpAddr::V4(v4) if !v4.is_unspecified() => {
                 Some(NetworkPoint::new(v4.octets(), Some(addr.port() as u64)))
             }
             _ => None,
@@ -2919,6 +2924,18 @@ impl Session {
 #[cfg(test)]
 mod bounds_and_validity {
     use super::*;
+
+    #[test]
+    fn a_wildcard_bind_is_no_network_point() {
+        assert!(NetworkPoint::from_socket("0.0.0.0:7447".parse().unwrap()).is_none());
+        assert!(NetworkPoint::from_socket("[::]:7447".parse().unwrap()).is_none());
+        assert_eq!(
+            NetworkPoint::from_socket("127.0.0.1:7447".parse().unwrap())
+                .unwrap()
+                .socket(),
+            "127.0.0.1:7447".parse().unwrap()
+        );
+    }
 
     #[test]
     fn a_heartbeat_counter_counts_once_inside_a_window_and_the_set_stays_bounded() {

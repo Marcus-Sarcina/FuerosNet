@@ -12,7 +12,10 @@
 //! endpoint records it was given rather than sockets it holds; and that
 //! the `anchors` directory seeds a serving node's table with another
 //! subnet's entry, so it resolves on its client's behalf
-//! (`wire-format.md` §7.7.1).
+//! (`wire-format.md` §7.7.1); and that a node bound to the wildcard, as a
+//! containerised one is, refers with the address its operator-signed
+//! record names and never with the bind (`infra-client-requirements.md`
+//! §4.4), which the rented machines found first.
 
 use rhtn_adaptors::beyond::{Beyond, Beyonder};
 use rhtn_archive::submission::unrelayed;
@@ -121,6 +124,7 @@ fn anchor_of(f: &Fabric, to: &str) -> Askable {
 }
 
 // functional: RES-016
+// functional: RES-017
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_provisioned_fabric_runs_as_daemons_and_a_client_descends_it() {
     let out = std::env::temp_dir().join(format!("rhtn-fabric-{}", std::process::id()));
@@ -143,8 +147,14 @@ async fn the_provisioned_fabric_runs_as_daemons_and_a_client_descends_it() {
         &[("bob", 1), ("c3", 0)],
         &out,
         |n| out.join(n).display().to_string(),
-        |n| addrs[n].to_string(),
+        // the wildcard bind of a deployment: the record names where the
+        // node is reached, the bind does not
+        |n| format!("0.0.0.0:{}", addrs[n].port()),
     );
+    // **a supplied file that does not read is named, not fatal**: the
+    // table is a cache, and bob starts with c1's entry beside the stray
+    std::fs::write(p.dirs["bob"].join("anchors").join("stray"), b"not an entry")
+        .expect("a stray file");
     // the anchors first, then their children, as a deployment would:
     // a child's upstream attach is reported and not fatal either way
     let said = Arc::new(Mutex::new(Vec::new()));
@@ -153,9 +163,29 @@ async fn the_provisioned_fabric_runs_as_daemons_and_a_client_descends_it() {
     };
     for n in ["alice2", "c1", "bob", "c2", "c3"] {
         let (addr, child) = start(n, &p.dirs[n], &said);
-        assert_eq!(addr, addrs[n], "{n} serves where its record says");
+        assert!(
+            addr.ip().is_unspecified() && addr.port() == addrs[n].port(),
+            "{n} serves on the wildcard at its record's port: {addr}"
+        );
         running.children.push((n.to_string(), child));
     }
+    let named = |said: &Mutex<Vec<String>>| {
+        said.lock()
+            .unwrap()
+            .iter()
+            .any(|l| l.starts_with("bob: ") && l.contains("not an anchor entry this node takes"))
+    };
+    for _ in 0..40 {
+        if named(&said) {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    assert!(
+        named(&said),
+        "bob named the stray file and started regardless:\n{}",
+        said.lock().unwrap().join("\n")
+    );
     let f = Fabric::remote(wan_plans(), &p.manifest);
     assert!(f.is_remote());
     assert_eq!(f.subnet_of("c4").addr_of("c3"), addrs["c3"]);

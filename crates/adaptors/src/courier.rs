@@ -390,11 +390,18 @@ impl Courier {
     /// The sweep is not routed this way: a `PrekeyBatchRequest` names a
     /// whole population and is answered from what one node holds.
     async fn their_prekeys(&self, body: &[u8]) -> Option<Vec<u8>> {
-        let beyond = self.beyond.lock().unwrap().clone()?;
         let subject = match PrekeyRequest::decode(body).ok()? {
             PrekeyRequest::One { subject, .. } => subject,
             PrekeyRequest::Batch { .. } => return None,
         };
+        self.prekeys_by_reach(subject, body).await
+    }
+
+    /// `subject`'s material from the node that serves them, reached by
+    /// what this client holds of them (`reach_for`): asked over a held
+    /// tab where that node is one, dialled otherwise.
+    async fn prekeys_by_reach(&self, subject: Keyhash, body: &[u8]) -> Option<Vec<u8>> {
+        let beyond = self.beyond.lock().unwrap().clone()?;
         let reach = self.handle.with(move |c| c.reach_for(&subject)).await;
         tracing::debug!(
             target: "pay",
@@ -569,17 +576,44 @@ impl Courier {
         // (§9.1, control stream 3) and the message is taken again, once
         // [bench 9dbf607-restore-nodeless-1, 2026-10-30: every first
         // message met "no bundle for that peer"]
+        //
+        // **And by relay, from a node that never served the sender**
+        // [2026-11-15]: a sender in another subnet dials this client's node
+        // itself (the ruling of 2026-10-05, `functional_tests.md` PAY-012),
+        // so that node holds no bundle of the sender's to carry
+        // (`wire-format.md` §7.10) and the introduction the message brought
+        // (§7.10.1) is all this side has.  Its locator says where the
+        // sender's own node is, and that node is asked as a first message
+        // to the sender would ask it.  The inbox is one queue, so what
+        // followed the opener waits for the answer rather than meeting no
+        // session [sim: the far witness's answer never reached the
+        // participant that nominated it, in this process and on the WAN]
         let (d, owed) = match d {
-            Err(why) if why.contains("no bundle") && self.direct.reachable().holds(&from) => {
+            Err(why) if why.contains("no bundle") => {
                 let device = rhtn_client::payload::unchannel(&again)
                     .ok()
                     .map(|f| f.device)
                     .unwrap_or([0; 32]);
                 let nonce = rhtn_transport::tls::random_bytes();
                 let req = rhtn_client::payload::one_time_request(from, device, nonce);
-                match self.direct.request(from, req).await {
-                    Some(reply) => {
+                let reply = if self.direct.reachable().holds(&from) {
+                    let reply = self.direct.request(from, req).await;
+                    if reply.is_some() {
                         tracing::info!(target: "pay", from = %hex8(&from), "pay.direct.bundle.fetched");
+                    }
+                    reply
+                } else {
+                    let reply = self.prekeys_by_reach(from, &req).await;
+                    tracing::info!(
+                        target: "pay",
+                        from = %hex8(&from),
+                        fetched = reply.is_some(),
+                        "pay.relay.bundle.fetched"
+                    );
+                    reply
+                };
+                match reply {
+                    Some(reply) => {
                         let bytes = again;
                         self.handle
                             .with(move |c| {

@@ -12,9 +12,33 @@ use rhtn_archive::submission::{REQUEST_RELAY, unrelayed};
 use rhtn_client::horizon::{Askable, Reach, Upstream};
 use rhtn_node::resolution::{REQUEST_RESOLVE, ResolveRequest};
 use rhtn_sim::subnets::{Fabric, kh, material, wan_plans};
-use rhtn_transport::session::NetworkPoint;
+use rhtn_transport::session::{NetworkPoint, Session};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+
+/// The next delivery `to` collects is `what` from `from`.  **On a remote
+/// fabric, the next one that is**: the machines outlive the test and
+/// hold what an earlier test queued for the same client, so what an
+/// earlier run left is read past, bounded; in this process every fabric
+/// is fresh and the first delivery is the one.
+async fn delivered(f: &Fabric, to: &mut Session, from: &str, what: &[u8]) {
+    for _ in 0..8 {
+        let d = tokio::time::timeout(Duration::from_secs(3), to.deliveries.recv())
+            .await
+            .unwrap_or_else(|_| panic!("delivered: {what:?} from {from}"))
+            .expect("bytes");
+        let (who, got, _) = unrelayed(&d).expect("a relayed payload");
+        if (who, got.as_slice()) == (kh(from), what) {
+            return;
+        }
+        assert!(
+            f.is_remote(),
+            "a fresh fabric delivers {what:?} from {from} first, not {got:?} from {}",
+            hex::encode(&who[..4])
+        );
+    }
+    panic!("{what:?} from {from} was not among eight deliveries");
+}
 
 /// The two subnets of `wan_plans`: alice2 roots the home one with bob its
 /// infra child at index 1 and alice and w1 light clients under bob; c1
@@ -231,17 +255,8 @@ async fn a_client_drives_the_descent_through_a_foreign_subnet_it_knows_by_its_an
 
     // **what was queued reaches c4 when it attaches**, named by its sender
     let mut c4 = f.attach("c4").await;
-    let mut got = Vec::new();
-    while got.len() < 2 {
-        let d = tokio::time::timeout(Duration::from_secs(3), c4.deliveries.recv())
-            .await
-            .expect("delivered")
-            .expect("bytes");
-        got.push(unrelayed(&d).expect("a relayed payload"));
-    }
-    assert_eq!(got[0].0, kh("w1"));
-    assert_eq!(got[0].1, b"for c4".to_vec());
-    assert_eq!(got[1].1, b"again".to_vec());
+    delivered(&f, &mut c4, "w1", b"for c4").await;
+    delivered(&f, &mut c4, "w1", b"again").await;
     if !f.is_remote() {
         assert_eq!(queued(&f, "c3", "c4"), Some(0), "no copy outlives delivery");
         assert_eq!(queued(&f, "c3", "c5"), Some(1), "c5 has not collected");
@@ -300,24 +315,8 @@ async fn payload_crosses_between_clients_of_two_subnets_that_share_no_node() {
         vec![kh("c1"), kh("c2"), kh("c3"), kh("c3")]
     );
 
-    let to_c4 = tokio::time::timeout(Duration::from_secs(3), c4.deliveries.recv())
-        .await
-        .expect("delivered to c4")
-        .expect("bytes");
-    let to_w1 = tokio::time::timeout(Duration::from_secs(3), w1.deliveries.recv())
-        .await
-        .expect("delivered to w1")
-        .expect("bytes");
-    let (from, what, _) = unrelayed(&to_c4).unwrap();
-    assert_eq!(
-        (from, what),
-        (kh("w1"), b"hello from the home subnet".to_vec())
-    );
-    let (from, what, _) = unrelayed(&to_w1).unwrap();
-    assert_eq!(
-        (from, what),
-        (kh("c4"), b"hello from the far subnet".to_vec())
-    );
+    delivered(&f, &mut c4, "w1", b"hello from the home subnet").await;
+    delivered(&f, &mut w1, "c4", b"hello from the far subnet").await;
 }
 
 // acceptance: RES-20

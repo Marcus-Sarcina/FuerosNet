@@ -329,6 +329,7 @@ fn two_subnets() -> Fabric {
 // acceptance: CER-73
 // functional: NET-022
 // functional: CER-033
+// functional: PAY-021
 /// **A ceremony opens across two subnets that share no node**: alice, a
 /// light client of the home subnet served by bob, meets c4, a light
 /// client of the far subnet served by c3 three infra nodes deep.  alice
@@ -468,13 +469,19 @@ fn drive(f: &Fabric, to_the_record: bool) {
     c4.p.converse_gathered()
         .expect("c4 hands over what it gathered");
 
-    // the witnesses answer over the payload path: w1 to alice within the
-    // home subnet, c5 to c4 within the far one
+    // the witnesses answer over the payload path: each nominee to the
+    // side that nominated it within its own subnet, and to the other side
+    // across them, so the far answer is waited for and not expected at
+    // the instant the home one lands (on rented machines it is a
+    // resolution and a handshake behind)
     assert!(
         settle(&alice, &c4, 30, || {
             alice.p.progress().is_some_and(|pr| pr.proposable)
+                && [&alice, &c4]
+                    .iter()
+                    .all(|p| p.p.progress().is_some_and(|pr| pr.attesting.len() == 2))
         }),
-        "alice can propose: {}",
+        "alice can propose and both hold both answers: {}",
         dump(f, &[&alice, &c4, &w1, &c5])
     );
     eprintln!("[{:?}] proposable", t0.elapsed());
@@ -502,17 +509,20 @@ fn drive(f: &Fabric, to_the_record: bool) {
         "the proposer holds both answers: {}",
         dump(f, &[&alice, &c4, &w1, &c5])
     );
-    let (home, far) = (f.subnet_of("alice"), f.subnet_of("c4"));
-    assert_eq!(
-        home.node("bob").node.queued(&kh("c5")),
-        0,
-        "bob carried nothing for c5"
-    );
-    assert_eq!(
-        far.node("c3").node.queued(&kh("w1")),
-        0,
-        "c3 carried nothing for w1"
-    );
+    // a node's own counts, where this process holds the node
+    if !f.is_remote() {
+        let (home, far) = (f.subnet_of("alice"), f.subnet_of("c4"));
+        assert_eq!(
+            home.node("bob").node.queued(&kh("c5")),
+            0,
+            "bob carried nothing for c5"
+        );
+        assert_eq!(
+            far.node("c3").node.queued(&kh("w1")),
+            0,
+            "c3 carried nothing for w1"
+        );
+    }
     if !to_the_record {
         return;
     }
