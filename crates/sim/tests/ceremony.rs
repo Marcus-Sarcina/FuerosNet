@@ -10,7 +10,7 @@ use rhtn_archive::tx::TYPE_ADOPTION;
 use rhtn_ffi::client::Participant;
 use rhtn_ffi::device::*;
 use rhtn_ffi::types::*;
-use rhtn_sim::subnets::{Fabric, Plan, kh, material};
+use rhtn_sim::subnets::{Fabric, kh, material, wan_plans};
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -180,9 +180,9 @@ impl Phone {
         p.set_witness_window_s(5)
             .expect("the window is the shell's to set");
         let serving = subnet.serving_node_of(name);
-        let node = subnet.node(serving);
+        let addr = subnet.addr_of(serving);
         let attached = p
-            .attach(idv(serving), vec![node.addr.to_string()], vec![])
+            .attach(idv(serving), vec![addr.to_string()], vec![])
             .unwrap_or_else(|e| panic!("{name} attaches to {serving}: {}", e.reason()));
         assert!(attached.primary, "{name} is in {serving}'s subtree");
         Phone {
@@ -318,30 +318,17 @@ fn progress_of(p: &Phone) -> String {
     }
 }
 
-/// The two subnets, each serving node holding the other's anchor entry.
+/// The two subnets (`wan_plans`), each serving node holding the other's
+/// anchor entry as a node's anchor table does (`wire-format.md` §7.2) and
+/// nothing else of it: in this process, or the rented machines a manifest
+/// in `RHTN_WAN_MANIFEST` names.
 fn two_subnets() -> Fabric {
-    let f = Fabric::build(
-        vec![
-            Plan::new("alice2")
-                .infra("bob", "alice2", 1)
-                .light("alice", "bob", 0)
-                .light("w1", "bob", 1),
-            Plan::new("c1")
-                .infra("c2", "c1", 4)
-                .infra("c3", "c2", 2)
-                .light("c4", "c3", 1)
-                .light("c5", "c3", 3),
-        ],
-        30,
-    );
-    // each serving node knows the other subnet by its anchor's entry, as a
-    // node's anchor table does (`wire-format.md` §7.2); nothing else of it
-    assert!(f.introduce("bob", 1) && f.introduce("c3", 0));
-    f
+    Fabric::for_tests(wan_plans(), 30, &[("bob", 1), ("c3", 0)])
 }
 
 // acceptance: CER-73
 // functional: NET-022
+// functional: CER-033
 /// **A ceremony opens across two subnets that share no node**: alice, a
 /// light client of the home subnet served by bob, meets c4, a light
 /// client of the far subnet served by c3 three infra nodes deep.  alice
@@ -398,15 +385,9 @@ fn drive(f: &Fabric, to_the_record: bool) {
         .expect("alice holds w1");
     c4.p.take_introduction(c5.p.own_introduction().unwrap())
         .expect("c4 holds c5");
-    // **ASSUMED, and asked of the author** [2026-11-15]: a witness answers
-    // the far participant (its answer, its back-pointers, its signature)
-    // and so must hold that participant's locator, which neither the
-    // engagement nor the request carries today. Here each witness is
-    // handed the far participant's introduction out of band.
-    w1.p.take_introduction(c4.p.own_introduction().unwrap())
-        .expect("w1 holds c4");
-    c5.p.take_introduction(alice.p.own_introduction().unwrap())
-        .expect("c5 holds alice");
+    // neither witness holds the far participant: the request carries both
+    // participants' introductions (`wire-format.md` §7.10.2 field 6)
+    // [author, 2026-11-15], and that is how each reaches the other side
 
     // step 1: both begin, alice initiating; each engages its nominee
     alice

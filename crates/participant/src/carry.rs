@@ -85,11 +85,12 @@ pub fn take_carriage(s: &str) -> Result<Vec<Vec<u8>>, String> {
 /// A witness request as one line a terminal can carry.
 pub fn pack_ask(a: &WitnessAsk) -> String {
     format!(
-        "{}|{}|{}|{}",
+        "{}|{}|{}|{}|{}",
         hex(&a.ceremony),
         list(a.participants.iter().map(|p| hex(p)).collect()),
         a.started_at,
-        hex(&a.handle)
+        hex(&a.handle),
+        list(a.introductions.iter().map(|i| hex(i)).collect())
     )
 }
 
@@ -101,6 +102,7 @@ pub fn take_ask(s: &str) -> Result<WitnessAsk, String> {
         participants: ids(field(&f, 1, "an ask")?, "a participant")?,
         started_at: num(field(&f, 2, "an ask")?, "time")?,
         handle: bytes(field(&f, 3, "an ask")?, "a handle")?,
+        introductions: ids(field(&f, 4, "an ask")?, "an introduction")?,
     })
 }
 

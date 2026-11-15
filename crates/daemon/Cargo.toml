@@ -71,6 +71,8 @@ rhtn-sim = { path = "../sim" }
 rhtn-launch = { path = "../launch" }
 # the attached courier, for the test that sends a resource request as a sequence
 rhtn-adaptors = { path = "../adaptors" }
+# the client's reach types, for the test that descends the provisioned fabric
+rhtn-client = { path = "../client", default-features = false }
 rhtn-resources = { path = "../resources" }
 # the merge tool, for the field-test test that reads two daemons' files
 # into one timeline

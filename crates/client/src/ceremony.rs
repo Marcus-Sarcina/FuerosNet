@@ -504,6 +504,11 @@ pub struct WitnessRequest {
     /// side at `begin`, one per ceremony attempt, so what the witness
     /// watched under it binds to the record it may later sign.
     pub handle: [u8; 32],
+    /// Both participants' introductions (`wire-format.md` §7.10.2 field
+    /// 6), in `participants`' order [author, 2026-11-15]: a witness holds
+    /// a locator for the side that nominated it and nothing of the
+    /// other's, and answers both.
+    pub introductions: [Vec<u8>; 2],
 }
 
 /// What a patron is proposing, beside who and into which subnet.
@@ -1477,6 +1482,16 @@ impl Client {
                 Some(rhtn_archive::locator::introduction(&c.material, sl))
             })
             .collect()
+    }
+
+    /// One contact's introduction (`wire-format.md` §2.3): its material
+    /// with the most recent locator held for it, or nothing where no
+    /// locator is held.
+    #[must_use]
+    pub fn introduction_of(&self, who: &Keyhash) -> Option<Vec<u8>> {
+        let c = self.store.contacts.get(who)?;
+        let sl = c.locator.as_deref()?;
+        Some(rhtn_archive::locator::introduction(&c.material, sl))
     }
 
     /// **A contact learned, or dealt with again** (`light-client-requirements.md`
@@ -2629,11 +2644,26 @@ impl Client {
     /// What a nominee is asked to witness.
     pub fn witness_request(&self) -> Result<WitnessRequest, Abort> {
         let a = self.active.as_ref().ok_or(Abort::NotActive)?;
+        let ceremony_id = a.ceremony_id.ok_or(Abort::NoCeremonyId)?;
+        let peer = a.peer()?;
+        let parts = participants(self.keyhash(), peer);
+        // both introductions, in the participants' order: the
+        // counterparty's from the locator its intent stated outright
+        let mine = self.own_introduction()?;
+        let theirs = self
+            .introduction_of(&peer)
+            .ok_or(Abort::Waiting("the counterparty's locator"))?;
+        let introductions = if parts[0] == self.keyhash() {
+            [mine, theirs]
+        } else {
+            [theirs, mine]
+        };
         let req = WitnessRequest {
-            ceremony_id: a.ceremony_id.ok_or(Abort::NoCeremonyId)?,
-            participants: participants(self.keyhash(), a.peer()?),
+            ceremony_id,
+            participants: parts,
             started_at: a.started_at,
             handle: a.handle,
+            introductions,
         };
         tracing::info!(
             target: "cer",
@@ -2788,6 +2818,37 @@ impl Client {
     pub fn take_witness_request(&mut self, req: &WitnessRequest) -> Option<u64> {
         if let Some(w) = self.witnessing.get(&req.ceremony_id) {
             return Some(w.flags);
+        }
+        // **both participants, by the introductions the request carries**
+        // [author, 2026-11-15]: the answer and every leg after it go to
+        // both, and this client holds a locator for its nominator alone.
+        // One that does not read, or names a party other than the one
+        // beside it, reaches nobody: declined (CER-033)
+        for (who, intro) in req.participants.iter().zip(&req.introductions) {
+            if *who == self.keyhash() {
+                continue;
+            }
+            match self.take_introduction(intro) {
+                Ok(taken) if taken == *who => {}
+                Ok(_) => {
+                    tracing::warn!(
+                        target: "cer",
+                        ceremony = %id8(&req.ceremony_id),
+                        why = "an introduction naming a party the request does not",
+                        "cer.witness.declined"
+                    );
+                    return None;
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        target: "cer",
+                        ceremony = %id8(&req.ceremony_id),
+                        why = %format!("an introduction that does not read: {e}"),
+                        "cer.witness.declined"
+                    );
+                    return None;
+                }
+            }
         }
         // **The request closes an engagement** [author, 2026-10-19]: a
         // request whose handle this client never watched binds nothing it

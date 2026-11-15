@@ -1616,7 +1616,11 @@ ceremony-id itself** [author, 2026-10-19]: a nominee is watching before the
 counterparty has accepted anything, under a handle the engagement mints, and
 the witness request that opens the window carries the ceremony-id against that
 handle — so a witness holds the ceremony before the rest of it arrives, and
-then watches the rest of it arrive. That is what a witness observes: the
+then watches the rest of it arrive. **The request also carries both
+participants' introductions** [author, 2026-11-15]: a witness answers both
+participants and holds a locator for the one that nominated it alone, and
+nothing before the request reaches it from the other side
+(`wire-format.md` §7.10.2). That is what a witness observes: the
 sequence as it ran, on its own clock, proposals that did not land
 included, which is what lets it attest that the protocol ran and both parties
 were responsive, and nothing beyond that.

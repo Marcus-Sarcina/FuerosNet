@@ -165,6 +165,12 @@ shell exists.
   you have seen the by-products of the steps you were sent, is your readiness.
   No reply names waiting (`wire-format.md` §7.10.2), and the proposer waits
   on an unanswered signer.
+- **Answer both participants the request names** [author, 2026-11-15]. You
+  hold a locator for the one that nominated you; the other's the request
+  carries, as an introduction beside your nominator's (`wire-format.md`
+  §7.10.2 field 6), taken as any introduction is (§4.3). Decline a request
+  whose introductions do not read or name a party other than the one it
+  lists, since you could reach nobody with it.
 - **Hold only a few ceremonies as a witness at once.** The bound is yours; the
   reference client holds eight, and past it the request with the oldest claimed
   start goes. A request for a ceremony you already hold gets the answer you

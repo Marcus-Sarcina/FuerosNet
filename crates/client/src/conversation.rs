@@ -86,11 +86,12 @@ impl FishingProposal {
 
 impl WitnessRequest {
     /// The map a nominee is sent (§7.10.2, kind 12): the ceremony-id, the
-    /// participants in body order, the claimed start and the engagement
-    /// handle it closes; field 4 is retired [author, 2026-10-24].
+    /// participants in body order, the claimed start, the engagement
+    /// handle it closes and both participants' introductions in the same
+    /// order [author, 2026-11-15]; field 4 is retired [author, 2026-10-24].
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
-        emit_map_head(&mut out, 4);
+        emit_map_head(&mut out, 5);
         emit_uint(&mut out, 1);
         emit_bstr(&mut out, &self.ceremony_id);
         emit_uint(&mut out, 2);
@@ -102,10 +103,18 @@ impl WitnessRequest {
         emit_uint(&mut out, self.started_at);
         emit_uint(&mut out, 5);
         emit_bstr(&mut out, &self.handle);
+        emit_uint(&mut out, 6);
+        emit_array_head(&mut out, 2);
+        for i in &self.introductions {
+            out.extend_from_slice(i);
+        }
         out
     }
 
     /// Read a `WitnessRequest` from `b`; an error naming what did not read.
+    /// Each introduction must name the participant beside it: the schema
+    /// reads an introduction's own halves, and the pairing with field 2
+    /// is read here.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let it = checked(b, "WitnessRequest")?;
         let Item::Map(m) = &it else {
@@ -115,11 +124,25 @@ impl WitnessRequest {
             return Err("participants not an array".into());
         };
         let participants: [Keyhash; 2] = [fixed32(b, &parts[0])?, fixed32(b, &parts[1])?];
+        let at = value_slice(b, 6).ok_or("introductions")?.start;
+        let intros = raw_items(b, at)?;
+        if intros.len() != 2 {
+            return Err("two introductions".into());
+        }
+        let mut introductions: [Vec<u8>; 2] = [Vec::new(), Vec::new()];
+        for (n, (who, bytes)) in participants.iter().zip(intros).enumerate() {
+            let read = rhtn_archive::locator::Introduction::parse(&bytes)?;
+            if read.identity.keyhash != *who {
+                return Err("an introduction naming a party the request does not".into());
+            }
+            introductions[n] = bytes;
+        }
         Ok(WitnessRequest {
             ceremony_id: fixed32(b, map_get(m, 1).ok_or("ceremony-id")?)?,
             participants,
             started_at: map_get(m, 3).and_then(as_uint).ok_or("started_at")?,
             handle: fixed32(b, map_get(m, 5).ok_or("handle")?)?,
+            introductions,
         })
     }
 }

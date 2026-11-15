@@ -12,13 +12,14 @@ rhtn-crypto = { path = "../crypto" }
 rhtn-archive = { path = "../archive" }
 rhtn-transport = { path = "../transport" }
 rhtn-node = { path = "../node" }
+# the manifest a provisioned fabric is read back from (`subnets::Fabric::remote`)
+serde_json = { workspace = true }
 wat = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "io-util"] }
 quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls-aws-lc-rs", "log"] }
 
 [dev-dependencies]
 hex = { workspace = true }
-serde_json = { workspace = true }
 rhtn-ffi = { path = "../ffi" }
 # the client-driven descent and the dataset a client hands across a fabric
 # of subnets; the flavour is the leaf's to choose (`crates/README.md`)

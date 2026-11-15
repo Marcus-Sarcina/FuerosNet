@@ -217,6 +217,7 @@ malformed, not merely unusual.
 | Characters of the number a device reports for itself, in `IntentExchange` (§14.3.2) | 32 |
 | `Candidate` entries per `CandidateHandover` or per payload-path candidate exchange (§14.3.2) | 8 |
 | `Introduction` entries per `FishingProposal` (§7.10.2) | 1 — one candidate per proposal, in turns (§5.1) |
+| `Introduction` entries per `WitnessRequest` (§7.10.2) | 2 — the participants, in field 2's order |
 | `VerifierResponse` entries per `GatheredResponses` (§7.10.2) | 32 — the per-record bound above |
 | `COSE_Signature` entries per `SigningReply` (§7.10.2) | 2 — one logical signer (§3.5) |
 | Delegations per `DeviceCredential` (§14.3.3) | 45 — the run an instance is provisioned with, 90 days end to end (design §12.6.5) |
@@ -3718,7 +3719,10 @@ its row. The witness request and the sender's back-pointers (kinds 12 and 15)
 go first, before any query, so a witness holds the ceremony before anything
 else of it arrives and can attribute what follows. A witness's answer (kind
 13) goes to the two participants the request named, since a witness knows no
-other witness until the body names them; the proposer attributes each answer
+other witness until the body names them — and the request carries both
+participants' introductions (field 6) [author, 2026-11-15], because a
+witness holds a locator for the side that nominated it and nothing of the
+other side's, which nothing before the request has carried to it; the proposer attributes each answer
 to the side whose nominee list names that witness, the answer itself naming
 nobody. The proposed body and the finalised record (kinds 16 and 18) go to
 every signer: the counterparty and the witnesses that answered yes. **The
@@ -3835,10 +3839,16 @@ WitnessRequest = {
                        ;   RETIRED 2026-10-24: ranging is not used (design
                        ;   §7.6.3). The number is not reused, and a decoder
                        ;   meeting it REJECTS, as §4.5's key 7
-  5: bstr .size 32     ; the engagement handle this request closes [author,
+  5: bstr .size 32,    ; the engagement handle this request closes [author,
                        ;   2026-10-19]: the window opens with this request,
                        ;   and what the witness watched under the handle is
                        ;   what it may later sign
+  6: [ 2 Introduction ] ; both participants (§2.3), in field 2's order,
+                       ;   each hashing to its entry there [author,
+                       ;   2026-11-15]: a witness holds a locator for the
+                       ;   participant that nominated it and nothing of the
+                       ;   other's, and its answer and all that follows go
+                       ;   to both; one whose halves disagree is malformed
 }
 
 WitnessAnswer = {

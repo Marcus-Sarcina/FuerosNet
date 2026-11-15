@@ -2928,10 +2928,15 @@ fishing_proposal = intro_c1
 # the prune's two legs between the participants. One handle per nominating
 # side per ceremony attempt; the request's field 5 closes the loop.
 conv_handle = H(b'rhtn-test-vectors:engagement-handle:alice')
+# both participants' introductions in field 2's order (field 6) [author,
+# 2026-11-15]: how a witness reaches the participant that did not nominate it
+conv_intros = {alice.keyhash: e_arr([e_uint(1), alice.key_material, signed_locator]),
+               bob.keyhash: introduction(bob, locator(bob.keyhash, p_even, seqno(1, 0)))}
 witness_request = e_map([(e_uint(1), e_bstr(npr_precommit)),
                          (e_uint(2), e_arr([e_bstr(i.keyhash) for i in conv_parts])),
                          (e_uint(3), e_uint(TS_C2)),
-                         (e_uint(5), e_bstr(conv_handle))])
+                         (e_uint(5), e_bstr(conv_handle)),
+                         (e_uint(6), e_arr([conv_intros[i.keyhash] for i in conv_parts]))])
 witness_engagement = e_map([(e_uint(1), e_bstr(conv_handle)),
                             (e_uint(2), e_uint(TS_C2)),
                             (e_uint(3), e_bstr(bob.keyhash))])
@@ -2991,7 +2996,7 @@ _conv_pairs = [
     ('VerificationQuery, kind 9 — the normal record\'s first query as the querier sends it to the subject for consent; to the subject alone, never to a witness (§5.6)', npr_query0, 9),
     ('ConsentReply, kind 10 — the subject\'s consent over that query_id', consent_reply, 10),
     ('FishingProposal, kind 11 — one candidate offered in turn: an introduction to c1', fishing_proposal, 11),
-    ('WitnessRequest, kind 12 — the normal record\'s ceremony put to a nominee: its pre-commitment as ceremony-id, the participants in body order, the claimed start, NFC and optical passing, and the engagement handle the request closes (field 5)', witness_request, 12),
+    ('WitnessRequest, kind 12 — the normal record\'s ceremony put to a nominee: its pre-commitment as ceremony-id, the participants in body order, the claimed start, the engagement handle the request closes (field 5) and both participants\' introductions in field 2\'s order (field 6)', witness_request, 12),
     ('WitnessAnswer, kind 13 — witnessing, with the attestation bits it will set (7: protocol ran, both responsive, latency bound)', witness_answer_yes, 13),
     ('WitnessAnswer, kind 13 — declining; no bits', witness_answer_no, 13),
     ('GatheredResponses, kind 14 — the normal record\'s three responses in body order, for the proposer', gathered_responses, 14),
@@ -4304,7 +4309,14 @@ reg('N-witness-request-no-handle', 'bytes',
     REJ('WitnessRequest', 'schema', 'field 5 is required: the request closes an engagement (s7.10.2, T63, 2026-10-19)'),
     e_map([(e_uint(1), e_bstr(npr_precommit)),
            (e_uint(2), e_arr([e_bstr(i.keyhash) for i in conv_parts])),
-           (e_uint(3), e_uint(TS_C2))]))
+           (e_uint(3), e_uint(TS_C2)),
+           (e_uint(6), e_arr([conv_intros[i.keyhash] for i in conv_parts]))]))
+reg('N-witness-request-no-introductions', 'bytes',
+    REJ('WitnessRequest', 'schema', "field 6 is required: both participants' introductions, in field 2's order (s7.10.2, 2026-11-15)"),
+    e_map([(e_uint(1), e_bstr(npr_precommit)),
+           (e_uint(2), e_arr([e_bstr(i.keyhash) for i in conv_parts])),
+           (e_uint(3), e_uint(TS_C2)),
+           (e_uint(5), e_bstr(conv_handle))]))
 reg('N-trace-confirmed-with-index', 'bytes',
     REJ('ExchangeTrace', 'schema', "the event's fields are its own: a confirmation carries the ceremony-id and no index (s7.10.2, T62)"),
     trace_confirmed_bad)

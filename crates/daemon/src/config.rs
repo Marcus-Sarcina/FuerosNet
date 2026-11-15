@@ -65,6 +65,14 @@ pub struct Config {
     pub endpoint_record: Option<PathBuf>,
     /// This node's anchor entry, likewise operator-signed.
     pub anchor_entry: Option<PathBuf>,
+    /// **Other subnets' anchor entries the operator holds out of band**
+    /// [2026-11-15]: a directory, one entry per file, each offered to the
+    /// anchor table at start as a gossiped one would be and under the
+    /// same ingestion model (`infra-client-requirements.md` §4.1 keeps
+    /// the table for starting points *not* learned out of band; these
+    /// are the ones that were).  Absent, or a directory not there yet,
+    /// seeds nothing.
+    pub anchors: Option<PathBuf>,
     /// The standing acknowledgement policy (design §11.2.1,
     /// `infra-client-requirements.md` §10.1): true acknowledges every
     /// adoption under one of this node's subordinates as it is stored;
@@ -352,6 +360,7 @@ struct File {
     endpoint_record: Option<PathBuf>,
     #[serde(rename = "anchor-entry")]
     anchor_entry: Option<PathBuf>,
+    anchors: Option<PathBuf>,
     acknowledge: Option<bool>,
     listen: Spanned<String>,
     queue: PathBuf,
@@ -638,6 +647,7 @@ impl Config {
             delegations: f.delegations,
             endpoint_record: f.endpoint_record,
             anchor_entry: f.anchor_entry,
+            anchors: f.anchors,
             acknowledge: f.acknowledge.unwrap_or(false),
             administration,
             federation,

@@ -361,6 +361,9 @@ pub struct WitnessAsk {
     /// The engagement handle the request closes (`wire-format.md`
     /// §7.10.2 field 5).
     pub handle: Id,
+    /// Both participants' introductions, in `participants`' order
+    /// (`wire-format.md` §7.10.2 field 6) [author, 2026-11-15].
+    pub introductions: Vec<Vec<u8>>,
 }
 
 /// The record two parties are proposing, before anybody has signed it.
@@ -742,6 +745,7 @@ impl WitnessAsk {
             participants: r.participants.iter().map(id_of).collect(),
             started_at: r.started_at,
             handle: r.handle.to_vec(),
+            introductions: r.introductions.to_vec(),
         }
     }
 
@@ -765,6 +769,11 @@ impl WitnessAsk {
                 .as_slice()
                 .try_into()
                 .map_err(|_| Refused::new("a handle is 32 bytes"))?,
+            introductions: self
+                .introductions
+                .clone()
+                .try_into()
+                .map_err(|_| Refused::new("a request carries two introductions"))?,
         })
     }
 }

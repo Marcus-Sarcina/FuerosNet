@@ -205,6 +205,81 @@ fn strangers_pin_each_other_from_the_first_qr_and_the_first_code_fixes_the_count
     assert!(s.client("bob").store.records.contains_key(&txid));
 }
 
+/// Both participants' introductions as a request carries them
+/// (`wire-format.md` §7.10.2 field 6): in the participants' order.
+fn introductions_of(s: &mut Setup, a: &str, b: &str) -> [Vec<u8>; 2] {
+    let ia = s.client(a).own_introduction().expect("an introduction");
+    let ib = s.client(b).own_introduction().expect("an introduction");
+    if kh(a) < kh(b) { [ia, ib] } else { [ib, ia] }
+}
+
+/// **A witness reaches the participant that did not nominate it from the
+/// request** [author, 2026-11-15]: the request's introductions leave the
+/// witness holding a locator for both, and one whose introduction names
+/// somebody else is declined.
+// functional: CER-033
+#[test]
+fn a_request_leaves_the_witness_holding_both_participants_and_one_naming_another_party_is_declined()
+{
+    use rhtn_client::conversation::Engagement;
+    let mut s = setup(&EVERYONE);
+    let now = s.clock.get() / 1000;
+    let intros = introductions_of(&mut s, "alice", "bob");
+    // carol in bob's place: the halves of the request disagree
+    let carol = s
+        .client("carol")
+        .own_introduction()
+        .expect("an introduction");
+    let wrong = {
+        let mut w = intros.clone();
+        let at = usize::from(kh("alice") < kh("bob"));
+        w[at] = carol;
+        w
+    };
+    let w = s.client("w1");
+    let holds = |w: &rhtn_client::ceremony::Client, who: &str| {
+        w.store
+            .contacts
+            .get(&kh(who))
+            .is_some_and(|c| c.locator.is_some())
+    };
+    assert!(!holds(w, "bob"), "w1 holds nothing of bob before");
+    let engage = |w: &mut rhtn_client::ceremony::Client, h: u8| {
+        assert!(w.take_engagement(
+            kh("alice"),
+            &Engagement {
+                handle: [h; 32],
+                started_at: now,
+                counterparty: Some(kh("bob")),
+            },
+        ));
+    };
+    engage(w, 1);
+    let req = WitnessRequest {
+        ceremony_id: [1; 32],
+        participants: participants(kh("alice"), kh("bob")),
+        started_at: now,
+        handle: [1; 32],
+        introductions: wrong,
+    };
+    assert_eq!(
+        w.take_witness_request(&req),
+        None,
+        "declined: an introduction of carol"
+    );
+    engage(w, 2);
+    let req = WitnessRequest {
+        ceremony_id: [2; 32],
+        participants: participants(kh("alice"), kh("bob")),
+        started_at: now,
+        handle: [2; 32],
+        introductions: intros,
+    };
+    assert_eq!(w.take_witness_request(&req), Some(3), "attests");
+    assert!(holds(w, "bob"), "w1 holds bob's locator from the request");
+    assert!(holds(w, "alice"), "and alice's");
+}
+
 /// A witness holds at most `PENDING_WITNESS_REQUESTS` ceremonies at once,
 /// the holder's own bound: one more displaces the one with the oldest
 /// claimed start, which it then cannot sign; asked twice for one ceremony,
@@ -217,6 +292,7 @@ fn a_witness_holds_a_bounded_number_of_pending_requests_and_the_oldest_goes_firs
     let mut s = setup(&EVERYONE);
     let now = s.clock.get() / 1000;
     let bound = PENDING_WITNESS_REQUESTS as u64;
+    let intros = introductions_of(&mut s, "alice", "bob");
     let w = s.client("w1");
     // the bound is what this holds, not the window: a witness inside its
     // window withholds every signature, which `a_witness_will_not_sign_
@@ -227,6 +303,7 @@ fn a_witness_holds_a_bounded_number_of_pending_requests_and_the_oldest_goes_firs
         participants: participants(kh("alice"), kh("bob")),
         started_at: now - 100 + i,
         handle: [0xe0 | i as u8; 32],
+        introductions: intros.clone(),
     };
     // each request closes an engagement this witness watched [author,
     // 2026-10-19]: engaged just before asked, inside the engagement bound
@@ -278,6 +355,7 @@ fn a_request_binds_to_the_engagement_watched_and_its_ceremony_id() {
     use rhtn_client::conversation::{Engagement, Trace, TraceEvent};
     let mut s = setup(&EVERYONE);
     let now = s.clock.get() / 1000;
+    let intros = introductions_of(&mut s, "alice", "bob");
     let w = s.client("w1");
     let engagement = |h: u8| Engagement {
         handle: [h; 32],
@@ -289,6 +367,7 @@ fn a_request_binds_to_the_engagement_watched_and_its_ceremony_id() {
         participants: participants(kh("alice"), kh("bob")),
         started_at: now,
         handle: [h; 32],
+        introductions: intros.clone(),
     };
     // a request whose engagement this client never watched binds nothing
     // it observed: declined
@@ -571,6 +650,7 @@ fn a_witness_will_not_sign_before_its_window_has_passed() {
     let window_s = 30;
     s.client("w1").cfg.witness_window_s = window_s;
     let now = s.clock.get() / 1000;
+    let intros = introductions_of(&mut s, "alice", "bob");
     let w = s.client("w1");
     assert!(w.take_engagement(
         kh("alice"),
@@ -585,6 +665,7 @@ fn a_witness_will_not_sign_before_its_window_has_passed() {
         participants: participants(kh("alice"), kh("bob")),
         started_at: now,
         handle: [9; 32],
+        introductions: intros,
     };
     assert_eq!(w.take_witness_request(&req), Some(3), "it agreed to attest");
     let proposal = Proposal {
@@ -635,6 +716,7 @@ fn a_witness_will_not_sign_before_its_window_has_passed() {
     let mut t = setup(&EVERYONE);
     t.client("w1").cfg.witness_window_s = 0;
     let tnow = t.clock.get() / 1000;
+    let tintros = introductions_of(&mut t, "alice", "bob");
     let e2 = Engagement {
         handle: [8; 32],
         started_at: tnow,
@@ -646,6 +728,7 @@ fn a_witness_will_not_sign_before_its_window_has_passed() {
         participants: participants(kh("alice"), kh("bob")),
         started_at: tnow,
         handle: [8; 32],
+        introductions: tintros,
     };
     assert_eq!(t.client("w1").take_witness_request(&req2), Some(3));
     let mut p2 = proposal.clone();

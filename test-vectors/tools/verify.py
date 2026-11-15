@@ -1009,6 +1009,8 @@ check(wr[1] == n_query[3],
       "WitnessRequest: the ceremony-id is the normal record's pre-commitment (query field 3)")
 check(wr[2] == [pp[1] for pp in npr_c[3][3]] and wr[3] == npr_c[3][1],
       "WitnessRequest: the participants are the record's, in body field 3's order, and started_at is body field 1")
+check(len(wr[6]) == 2 and all(H(enc(i[1])).hex() == p and i[2][1] == p for i, p in zip(wr[6], wr[2])),
+      "WitnessRequest: field 6 carries both participants' introductions in field 2's order, each hashing to its entry (2026-11-15)")
 # the opening (s7.10.1, 20-25): one handle through engagement, trace and
 # request; the trace's confirmation carries the id the request repeats
 eng = canonical(bytes.fromhex(byid['P-witness-engagement']['hex']))

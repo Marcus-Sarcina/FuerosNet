@@ -805,6 +805,38 @@ impl Service {
                 )));
             }
         }
+        // **other subnets' entries the operator holds out of band**
+        // (`Config::anchors`) [2026-11-15]: each offered as a gossiped
+        // one would be, so the ingestion model the operator named
+        // decides it; one that does not parse or is refused is counted
+        // and named, never fatal, since the table is a cache
+        if let Some(dir) = cfg.anchors.as_deref().and_then(not_yet_written) {
+            let (mut taken, mut refused) = (0usize, 0usize);
+            if let Ok(rd) = std::fs::read_dir(dir) {
+                for e in rd.flatten() {
+                    let parsed = std::fs::read(e.path())
+                        .ok()
+                        .and_then(|b| rhtn_node::resolution::AnchorEntry::parse(&b).ok());
+                    let took = parsed.is_some_and(|entry| anchors.offer(entry, &known));
+                    if took {
+                        taken += 1;
+                    } else {
+                        refused += 1;
+                        crate::say!(
+                            "rhtnd: {}: not an anchor entry this node takes",
+                            e.path().display()
+                        );
+                    }
+                }
+            }
+            tracing::info!(
+                target: "daemon",
+                step = "anchors_read",
+                taken,
+                refused,
+                "daemon.lifecycle"
+            );
+        }
         let node = LiveNode::start_with(node_cfg, view, known.clone(), anchors, limits);
         // **the record against the address served on** [2026-10-10].  This
         // used to compare against the configured bind, which said "the

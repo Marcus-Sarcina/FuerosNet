@@ -22170,3 +22170,52 @@ proposer; asked of the author. The field-test flavour was switched on in
 `sim/Cargo.toml` for the diagnosis and restored; the `pay.prekey.reach`,
 `pay.theirs` and `pay.descent` debug lines stay, compiled out of the
 releasable flavour like the rest.
+
+### 2026-11-15 — the request carries both introductions; the fabric on rented machines
+
+**Ruled [author, 2026-11-15]: the witness request carries both
+participants' introductions.** `WitnessRequest` field 6, `[ 2 Introduction ]`
+in field 2's order, each hashing to its entry (wire §7.10.2, the §1 bounds
+row, design §7.1's engagement paragraph, L §1.2's new bullet, SCH-026, new
+CER-033). The kernel builds it from its own introduction and the
+counterparty's locator its intent stated; a witness takes both as
+introductions before anything else of the request and declines one that
+does not read or names another party (`take_witness_request`). Vectors:
+`P-witness-request` regenerated with field 6, `N-witness-request-no-
+introductions` added, the verifier checks each introduction hashes to its
+participant. The out-of-band hand in `sim/tests/ceremony.rs` is gone; the
+cross-subnet ceremony opens and both witnesses attest from the request
+alone. The participant driver's terminal line carries the introductions
+as a fifth field. The ceremony-to-record finding of yesterday stands
+(`a_ceremony_runs_between_two_subnets_that_share_no_node`, `#[ignore]`):
+same crossing session and duplicate body at the far witness.
+
+**The WAN harness [author, 2026-11-15]: the same fabric on DigitalOcean,
+one node per region.** `Fabric::build` was split into a signing stage and
+three ways of standing it up: in-process (unchanged), `Fabric::provision`
+(state directories for `rhtnd`: identity, peers, topology store with the
+derived table and slots, the node's own archive, endpoint record, the
+anchor's entry, and other subnets' entries in an `anchors` directory) and
+`Fabric::remote` (addresses, records and entries read back from the
+manifest `provision` writes). `Fabric::for_tests` picks remote when
+`RHTN_WAN_MANIFEST` names a manifest, so `sim/tests/subnets.rs` and
+`sim/tests/ceremony.rs` run unchanged against rented machines, their
+node-internal reads guarded. **One plan for all of it**, `wan_plans()`:
+subnets.rs's plan was folded into the ceremony's (alice2 roots the home
+subnet, alice and w1 are light under bob; c5 is light under c4 so c3
+serves a light subtree). `daemon/tests/fabric.rs` runs the provisioned
+directories as five `rhtnd` processes and a client descends them and has
+bob resolve on its behalf: this found that a restarted daemon reads its
+own position from the adoption in its **archive**, not its store, so the
+provisioner writes each node's archive. `sim/examples/provision.rs` is the
+command the launcher calls; `sim/tools/wan.py` makes the machines (nyc1,
+sfo3, ams3, sgp1, fra1), copies the state up, runs the image with podman,
+and destroys them; output under `../FuerosNet-output/wan`.
+
+**Assumed, asked of the author**: the daemon's new `anchors = "<dir>"`
+configuration key (other subnets' entries the operator holds out of band,
+offered under the named ingestion model) — an operator obligation if it
+stays, and not in any document yet. **Not run yet**: the launch itself,
+which needs the provider token's location on this machine (the classifier
+refused a search for it) and an image on Docker Hub built from a commit
+carrying the `anchors` key.

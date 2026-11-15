@@ -11,32 +11,28 @@ use rhtn_archive::Keyhash;
 use rhtn_archive::submission::{REQUEST_RELAY, unrelayed};
 use rhtn_client::horizon::{Askable, Reach, Upstream};
 use rhtn_node::resolution::{REQUEST_RESOLVE, ResolveRequest};
-use rhtn_sim::subnets::{Fabric, Plan, kh, material};
+use rhtn_sim::subnets::{Fabric, kh, material, wan_plans};
 use rhtn_transport::session::NetworkPoint;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-/// The home subnet: alice roots it, bob is her infra child at index 1,
-/// carol a light client under her at 0 and w1 a light client under bob
-/// at 0.  The far subnet: c1 roots it, c2 is infra under c1 at index 4,
-/// c3 infra under c2 at 2, c4 a light client under c3 at 1 and c5 a
-/// light client under c4 at 3 — two light clients served by c3, three
-/// infra nodes deep.
+/// The two subnets of `wan_plans`: alice2 roots the home one with bob its
+/// infra child at index 1 and alice and w1 light clients under bob; c1
+/// roots the far one, c2 is infra under c1 at index 4, c3 infra under c2
+/// at 2, c4 a light client under c3 at 1 and c5 a light client under c4
+/// at 3 — two light clients served by c3, three infra nodes deep.  In
+/// this process, or on the rented machines a manifest in
+/// `RHTN_WAN_MANIFEST` names, where a node's own counts cannot be read.
 fn fabric() -> Fabric {
-    Fabric::build(
-        vec![
-            Plan::new("alice")
-                .infra("bob", "alice", 1)
-                .light("carol", "alice", 0)
-                .light("w1", "bob", 0),
-            Plan::new("c1")
-                .infra("c2", "c1", 4)
-                .infra("c3", "c2", 2)
-                .light("c4", "c3", 1)
-                .light("c5", "c4", 3),
-        ],
-        30,
-    )
+    Fabric::for_tests(wan_plans(), 30, &[])
+}
+
+/// What a node holds queued for `who`, where the node is in this process.
+fn queued(f: &Fabric, node: &str, who: &str) -> Option<usize> {
+    f.subnet_of(node)
+        .nodes
+        .get(node)
+        .map(|n| n.node.queued(&kh(who)))
 }
 
 /// Every ask the client made, in order: of whom, which request, and the
@@ -139,7 +135,6 @@ fn resolve_nonces(w: &Watched) -> Vec<[u8; 16]> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_client_drives_the_descent_through_a_foreign_subnet_it_knows_by_its_anchor_alone() {
     let f = fabric();
-    let far = f.subnet_of("c4");
     let (b, watched) = beyond(&f, "w1");
 
     // **first a node that does not answer**: an address nothing listens
@@ -178,17 +173,15 @@ async fn a_client_drives_the_descent_through_a_foreign_subnet_it_knows_by_its_an
         nonces.iter().all(|n| *n == nonces[0]),
         "one nonce for the logical resolution, across every node asked"
     );
-    assert_eq!(
-        far.node("c3").node.queued(&kh("c4")),
-        1,
-        "queued where c4 collects"
-    );
-    assert_eq!(far.node("c1").node.queued(&kh("c4")), 0);
-    assert_eq!(
-        f.subnet_of("w1").node("bob").node.queued(&kh("c4")),
-        0,
-        "never the sender's own node"
-    );
+    if !f.is_remote() {
+        assert_eq!(queued(&f, "c3", "c4"), Some(1), "queued where c4 collects");
+        assert_eq!(queued(&f, "c1", "c4"), Some(0));
+        assert_eq!(
+            queued(&f, "bob", "c4"),
+            Some(0),
+            "never the sender's own node"
+        );
+    }
 
     // **inside the lifetime, nobody is asked where c4 is**
     assert!(
@@ -198,7 +191,9 @@ async fn a_client_drives_the_descent_through_a_foreign_subnet_it_knows_by_its_an
     let asked = nodes_asked(&watched);
     assert_eq!(asked.len(), 6);
     assert_eq!(asked[5], (kh("c3"), REQUEST_RELAY), "the submission alone");
-    assert_eq!(far.node("c3").node.queued(&kh("c4")), 2);
+    if !f.is_remote() {
+        assert_eq!(queued(&f, "c3", "c4"), Some(2));
+    }
 
     // **a party deeper under the same serving node**: c5 sits under c4,
     // a light client, so c3 is its serving node too and answers with the
@@ -230,7 +225,9 @@ async fn a_client_drives_the_descent_through_a_foreign_subnet_it_knows_by_its_an
         "a fresh nonce for a fresh logical resolution"
     );
     assert!(nonces[4..].iter().all(|n| *n == nonces[4]));
-    assert_eq!(far.node("c3").node.queued(&kh("c5")), 1);
+    if !f.is_remote() {
+        assert_eq!(queued(&f, "c3", "c5"), Some(1));
+    }
 
     // **what was queued reaches c4 when it attaches**, named by its sender
     let mut c4 = f.attach("c4").await;
@@ -245,16 +242,10 @@ async fn a_client_drives_the_descent_through_a_foreign_subnet_it_knows_by_its_an
     assert_eq!(got[0].0, kh("w1"));
     assert_eq!(got[0].1, b"for c4".to_vec());
     assert_eq!(got[1].1, b"again".to_vec());
-    assert_eq!(
-        far.node("c3").node.queued(&kh("c4")),
-        0,
-        "no copy outlives delivery"
-    );
-    assert_eq!(
-        far.node("c3").node.queued(&kh("c5")),
-        1,
-        "c5 has not collected"
-    );
+    if !f.is_remote() {
+        assert_eq!(queued(&f, "c3", "c4"), Some(0), "no copy outlives delivery");
+        assert_eq!(queued(&f, "c3", "c5"), Some(1), "c5 has not collected");
+    }
 }
 
 // acceptance: PAY-27
@@ -295,7 +286,7 @@ async fn payload_crosses_between_clients_of_two_subnets_that_share_no_node() {
     assert_eq!(
         nodes_asked(&c4_asked),
         vec![
-            (kh("alice"), REQUEST_RESOLVE),
+            (kh("alice2"), REQUEST_RESOLVE),
             (kh("bob"), REQUEST_RESOLVE),
             (kh("bob"), REQUEST_RELAY),
         ],
@@ -340,10 +331,10 @@ async fn a_serving_node_resolves_a_foreign_party_for_its_client_from_its_anchor_
     let f = fabric();
     assert!(f.introduce("bob", 1), "bob's table takes c1's entry");
     let (b, watched) = beyond(&f, "w1");
-    let bob = f.subnet_of("w1").node("bob");
+    let bob = f.subnet_of("w1").addr_of("bob");
     let ask = vec![Askable {
         node: kh("bob"),
-        endpoints: vec![NetworkPoint::from_socket(bob.addr).unwrap().encode_bytes()],
+        endpoints: vec![NetworkPoint::from_socket(bob).unwrap().encode_bytes()],
         key_material: Some(material("bob")),
     }];
     let reach = reach_by_anchor(&f, "c4", ask);
@@ -363,5 +354,7 @@ async fn a_serving_node_resolves_a_foreign_party_for_its_client_from_its_anchor_
         vec![(kh("bob"), REQUEST_RESOLVE), (kh("c3"), REQUEST_RELAY)],
         "bob was asked once and answered with the serving node; c3 took the payload"
     );
-    assert_eq!(f.subnet_of("c4").node("c3").node.queued(&kh("c4")), 1);
+    if !f.is_remote() {
+        assert_eq!(queued(&f, "c3", "c4"), Some(1));
+    }
 }

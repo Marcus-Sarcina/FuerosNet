@@ -1911,8 +1911,21 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             // key 4 (the proximity channels measured so far) was RETIRED
             // 2026-10-24: ranging is not used (`wire-format.md` §7.10.2);
             // the number is not reused and a decoder meeting it rejects
-            if m.len() != 4 || ![1, 2, 3, 5].iter().all(|k| map_get(m, *k).is_some()) {
-                return Err(Error("keys 1, 2, 3 and 5"));
+            if m.len() != 5 || ![1, 2, 3, 5, 6].iter().all(|k| map_get(m, *k).is_some()) {
+                return Err(Error("keys 1, 2, 3, 5 and 6"));
+            }
+            // both participants' introductions, in field 2's order
+            // [author, 2026-11-15]; the pairing with field 2 is the
+            // reader's, each introduction's own halves the schema's
+            let Some(Item::Array(intros)) = map_get(m, 6) else {
+                return Err(Error("introductions not array"));
+            };
+            if intros.len() != 2 {
+                return Err(Error("two introductions"));
+            }
+            let at = value_slice(b, 6).ok_or(Error("map walk"))?.start;
+            for r in array_item_ranges(b, at).ok_or(Error("array walk"))? {
+                introduction_ok(b, r.start)?;
             }
             // the engagement handle this request closes [author, 2026-10-19]
             if keyhash_at(b, m, 5).map(|k| k.len()) != Some(32) {

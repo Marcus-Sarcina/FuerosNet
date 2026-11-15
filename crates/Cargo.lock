@@ -3322,6 +3322,7 @@ dependencies = [
  "rhtn-adaptors",
  "rhtn-archive",
  "rhtn-cli",
+ "rhtn-client",
  "rhtn-codec",
  "rhtn-crypto",
  "rhtn-launch",
