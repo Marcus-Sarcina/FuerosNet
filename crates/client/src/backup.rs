@@ -294,7 +294,9 @@ fn decode_header(b: &[u8]) -> Result<(Wrap, [u8; 12], [u8; 12]), Failure> {
     ))
 }
 
-fn encode_contents(c: &Contents) -> Vec<u8> {
+/// The contents as bytes, which a backup seals and a dataset handed to
+/// another device of the identity carries as they are.
+pub(crate) fn encode_contents(c: &Contents) -> Vec<u8> {
     let mut out = Vec::new();
     emit_array_head(&mut out, 5);
     // the first slot held the seeds until 2026-10-24; it is written empty,
@@ -316,7 +318,8 @@ fn encode_contents(c: &Contents) -> Vec<u8> {
     out
 }
 
-fn decode_contents(b: &[u8]) -> Option<Contents> {
+/// One back; none where the bytes are not a contents' shape.
+pub(crate) fn decode_contents(b: &[u8]) -> Option<Contents> {
     let item = parse_all(b).ok()?;
     let Item::Array(f) = &item else { return None };
     // four fields is the shape written before the owner was named; it is

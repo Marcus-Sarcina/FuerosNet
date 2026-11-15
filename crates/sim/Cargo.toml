@@ -20,3 +20,7 @@ quinn = { version = "0.11", default-features = false, features = ["runtime-tokio
 hex = { workspace = true }
 serde_json = { workspace = true }
 rhtn-ffi = { path = "../ffi" }
+# the client-driven descent and the dataset a client hands across a fabric
+# of subnets; the flavour is the leaf's to choose (`crates/README.md`)
+rhtn-adaptors = { path = "../adaptors" }
+rhtn-client = { path = "../client", default-features = false }

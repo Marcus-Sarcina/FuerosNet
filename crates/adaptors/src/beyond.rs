@@ -773,6 +773,7 @@ mod tests {
 
     /// **The resolution is cached for its lifetime**: a second message to
     /// the same recipient asks nobody where to find them.
+    // functional: RES-016
     #[tokio::test]
     async fn a_second_message_reuses_the_resolution() {
         let serving = ResolveReply::Serving {
@@ -818,6 +819,7 @@ mod tests {
     /// A node that says nothing is not the end of the resolution: the
     /// next node this client holds is asked, which is what routing around
     /// an unanswering node means.
+    // functional: RES-016
     #[tokio::test]
     async fn an_unanswering_node_moves_the_resolution_to_the_next_one() {
         let serving = ResolveReply::Serving {
@@ -858,6 +860,7 @@ mod tests {
     }
 
     /// A referral that advances nothing is a loop, and is not followed.
+    // functional: RES-016
     #[tokio::test]
     async fn a_referral_advancing_nothing_is_refused() {
         let loopback = ResolveReply::Referral {

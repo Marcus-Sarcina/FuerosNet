@@ -889,6 +889,10 @@ fn insert_absent<K: Ord, V>(mine: &mut BTreeMap<K, V>, theirs: BTreeMap<K, V>) -
 /// key.
 const NO_SEED: &str = "this device holds no seed";
 
+/// The shape of the dataset one device of an identity hands another
+/// (design §23.3): `[version, owner, heads, contents]`.
+pub const DATASET_VERSION: u64 = 1;
+
 fn hex8(k: &Keyhash) -> String {
     k[..4].iter().map(|b| format!("{b:02x}")).collect()
 }
@@ -4417,19 +4421,30 @@ impl Client {
             .signer()
             .map_err(|_| backup::Failure::NoKey.to_string())?
             .identity_root();
-        let mut contents = backup::import(blob, root).map_err(|e| e.to_string())?;
+        let contents = backup::import(blob, root).map_err(|e| e.to_string())?;
         match contents.owner {
             Some(owner) if owner == self.public.keyhash => {}
             Some(_) => return Err("the blob a peer returned belongs to another identity".into()),
             None => return Err("the blob a peer returned names no owner".into()),
         }
+        Ok(self.take_contents(contents, "peer"))
+    }
+
+    /// **Take what another holder of this identity's state has and this
+    /// device lacks** (design §6.3 for a peer's blob, §23.3 for another
+    /// device's dataset): the material its contacts carry first, then its
+    /// records where they verify and chain, then the rest of the view
+    /// where absent here.  **Nothing held here is replaced**: what is here
+    /// is what this device knows now.  How much was taken, and how much
+    /// refused.
+    fn take_contents(&mut self, mut contents: backup::Contents, via: &'static str) -> Reconciled {
         contents.scan(self.now_s(), self.cfg.subject.retention_seconds);
         let mut out = Reconciled::default();
         let theirs = std::mem::take(&mut contents.store);
-        // **the blob's contacts carry the material its records verify
-        // under**: a client restored from its phrase knows nobody, so the
-        // material comes in ahead of the records, and the pins follow the
-        // contacts (§9.1)
+        // **the contacts carry the material the records verify under**: a
+        // device restored from its phrase knows nobody, so the material
+        // comes in ahead of the records, and the pins follow the contacts
+        // (§9.1)
         for c in theirs.contacts.values() {
             if let Some(idn) = Identity::from_key_material(&c.material)
                 && !self.known.iter().any(|k| k.keyhash == idn.keyhash)
@@ -4439,27 +4454,43 @@ impl Client {
                 self.learned(who);
             }
         }
-        // records: the ones not held, oldest first, each verified under the
-        // keys this client knows before it is appended
-        let mut parsed: Vec<Record> = contents
+        // records: the ones not held, each verified under the keys this
+        // client knows before it is appended, oldest first.  **A successor
+        // ahead of its predecessor waits for it** rather than being
+        // refused: the pass repeats while it makes progress, and what
+        // still will not chain when it stops is refused
+        let mut pending: Vec<Record> = contents
             .records
             .iter()
             .filter_map(|r| Record::parse(r).ok())
             .filter(|r| self.archive.get(&r.txid).is_none())
             .collect();
-        parsed.sort_by_key(|r| (r.effective, r.txid));
-        for rec in parsed {
-            if verify::envelope(&self.known, &rec.bytes).is_err() {
-                out.refused += 1;
-                continue;
+        pending.sort_by_key(|r| (r.effective, r.txid));
+        loop {
+            let before = pending.len();
+            let mut again = Vec::new();
+            for rec in pending {
+                if verify::envelope(&self.known, &rec.bytes).is_err() {
+                    out.refused += 1;
+                    continue;
+                }
+                let (t, bytes) = (rec.txid, rec.bytes.clone());
+                match self.archive.append(rec.clone()) {
+                    Ok(_) => {
+                        self.store.records.entry(t).or_insert(bytes);
+                        out.records += 1;
+                    }
+                    Err(_) => again.push(rec),
+                }
             }
-            let (t, bytes) = (rec.txid, rec.bytes.clone());
-            if self.archive.append(rec).is_ok() {
-                self.store.records.entry(t).or_insert(bytes);
-                out.records += 1;
-            } else {
-                out.refused += 1;
+            if again.is_empty() {
+                break;
             }
+            if again.len() == before {
+                out.refused += again.len();
+                break;
+            }
+            pending = again;
         }
         // the name this client went by, where it has none now
         if self.store.default_alias.is_none() && theirs.default_alias.is_some() {
@@ -4474,6 +4505,13 @@ impl Client {
         out.other += insert_absent(&mut self.store.profiles, theirs.profiles);
         out.other += insert_absent(&mut self.store.subnet_profiles, theirs.subnet_profiles);
         out.other += insert_absent(&mut self.store.direct_hints, theirs.direct_hints);
+        // **the sealed captures, as the ciphertext they are, and the blobs
+        // held for peers** (design §23.3): a peer's blob carries neither
+        // (`store_for_peer`), another device of this identity's dataset
+        // carries both, and a replica of a capture whose key its subject
+        // has not released is as inert here as where it came from
+        out.other += insert_absent(&mut self.store.sealed, theirs.sealed);
+        out.other += insert_absent(&mut self.store.held_for, theirs.held_for);
         if out.records > 0 {
             self.positions.clear();
             self.root_subnet = None;
@@ -4481,8 +4519,8 @@ impl Client {
             self.root_carried = false;
             self.adopt_own_positions();
         }
-        // what came back is a change like any other: the shell redraws
-        // what it shows of it
+        // what came in is a change like any other: the shell redraws what
+        // it shows of it
         if out.contacts > 0 {
             self.changed.insert(rhtn_model::Noun::Contacts);
         }
@@ -4498,13 +4536,120 @@ impl Client {
         }
         tracing::info!(
             target: "peer",
+            via,
             records = out.records,
             contacts = out.contacts,
             other = out.other,
             refused = out.refused,
             "peer.reconciled"
         );
-        Ok(out)
+        out
+    }
+
+    /// **Everything this device holds of the identity, for another device
+    /// of it that is behind** (design §23.3; `light-client-requirements.md`
+    /// §4.2): the records the other's heads do not reach, and the whole of
+    /// the view kept beside the archive — the contacts with the locators
+    /// and aliases they carry, the profiles, the own-capture rows, the
+    /// disclosure sets, late responses, direct hints and the blobs held for
+    /// peers — and the sealed captures, as the ciphertext they are.
+    ///
+    /// **No seed and no credential cross.**  The store writes no key; a
+    /// signing device holds the identity because its holder put the
+    /// material there (§2), and a device holding a transport credential
+    /// acquires none here.  The provider credential is the backup's
+    /// (design §13.7.1) and not the dataset's.  **Plaintext**: the bearer
+    /// is the two devices' own (`wire-format.md` §14.3.3), and what it
+    /// carries is what the other device already has the right to hold.
+    ///
+    /// `their_heads` is what the other device holds as its archive's
+    /// heads; a record reachable from them in this archive is one it has,
+    /// and is left out.  Heads this archive does not hold constrain
+    /// nothing, and the other side drops what it already holds.
+    pub fn dataset_for(&self, their_heads: &[Txid]) -> Vec<u8> {
+        use rhtn_codec::encode::*;
+        let me = self.keyhash();
+        let mut reached: BTreeSet<Txid> = BTreeSet::new();
+        let mut stack: Vec<Txid> = their_heads
+            .iter()
+            .copied()
+            .filter(|h| self.archive.get(h).is_some())
+            .collect();
+        while let Some(t) = stack.pop() {
+            if reached.insert(t)
+                && let Some(r) = self.archive.get(&t)
+            {
+                stack.extend(r.back_pointers_of(&me).unwrap_or(&[]).iter().copied());
+            }
+        }
+        let records: Vec<Vec<u8>> = self
+            .archive
+            .records()
+            .filter(|r| !reached.contains(&r.txid))
+            .map(|r| r.bytes.clone())
+            .collect();
+        let contents = backup::Contents {
+            owner: Some(me),
+            records,
+            store: self.store.clone(),
+            provider: None,
+        };
+        let heads = self.archive.heads();
+        let mut out = Vec::new();
+        emit_array_head(&mut out, 4);
+        emit_uint(&mut out, DATASET_VERSION);
+        emit_bstr(&mut out, &me);
+        emit_array_head(&mut out, heads.len());
+        for h in &heads {
+            emit_bstr(&mut out, h);
+        }
+        emit_bstr(&mut out, &backup::encode_contents(&contents));
+        tracing::info!(
+            target: "peer",
+            records = contents.records.len(),
+            heads = heads.len(),
+            "peer.dataset"
+        );
+        out
+    }
+
+    /// **Another device of this identity handed over what it holds**
+    /// (design §23.3; `light-client-requirements.md` §4.2): refused unless
+    /// it names this identity, then taken as a peer's blob is — records
+    /// appended where they verify and chain, a fork kept as the two heads
+    /// design §10.3's next record merges, the view and the sealed captures
+    /// inserted where absent.  **Nothing is asked of the person and nothing
+    /// of a seed**: a device holding none takes it as readily, and signs no
+    /// more afterwards than before.
+    pub fn take_dataset(&mut self, bytes: &[u8]) -> Result<Reconciled, String> {
+        use rhtn_codec::cbor::{Item, parse_all};
+        let item = parse_all(bytes).map_err(|_| "not a dataset".to_string())?;
+        let Item::Array(f) = &item else {
+            return Err("not a dataset".into());
+        };
+        let [v, owner, _heads, body] = f.as_slice() else {
+            return Err("not a dataset".into());
+        };
+        match v {
+            Item::Uint(n) if *n == DATASET_VERSION => {}
+            _ => return Err("a dataset version this reader does not know".into()),
+        }
+        let Item::Bytes(o) = owner else {
+            return Err("not a dataset".into());
+        };
+        if bytes[o.clone()] != self.public.keyhash[..] {
+            return Err("this dataset belongs to another identity".into());
+        }
+        let Item::Bytes(b) = body else {
+            return Err("not a dataset".into());
+        };
+        let contents = backup::decode_contents(&bytes[b.clone()])
+            .ok_or("the dataset's contents do not read")?;
+        match contents.owner {
+            Some(k) if k == self.public.keyhash => {}
+            _ => return Err("this dataset names another owner".into()),
+        }
+        Ok(self.take_contents(contents, "device"))
     }
 
     /// **Every contact out of the dataset**, how many went: the bench's

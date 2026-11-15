@@ -7,7 +7,10 @@
 //! test blackhole a heartbeat path without reaching into the session layer,
 //! and what lets it replay a client's first flight as an attacker would.
 //!
-//! [`scenario`] builds several nodes over loopback and scripts them.
+//! [`scenario`] builds several nodes over loopback and scripts them, and
+//! [`subnets`] stands up several subnets of them at once, each
+//! pre-populated with the shape a scenario describes, so a party in one
+//! can be reached from another by nothing but the anchor it holds.
 
 // Every public item carries its own documentation: the source is the
 // fourth reading of the design, and a bare name is not one.
@@ -20,3 +23,4 @@ pub mod packages;
 pub mod participants;
 pub mod path;
 pub mod scenario;
+pub mod subnets;

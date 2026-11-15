@@ -134,9 +134,8 @@ fn a_txid_is_the_digest_of_the_body_and_of_nothing_else() {
     );
 }
 
-/// The signing domains of `wire-format.md` §1.1, as the codec names them.
-/// The fourteen the table lists, and `profile`, which §7.11 signs under
-/// and the table does not yet carry.
+/// The signing domains of `wire-format.md` §1.1, as the codec names them:
+/// the fifteen the table lists.
 const DOMAINS: [&[u8]; 15] = [
     aad::ENVELOPE,
     aad::VERIFIER,
@@ -185,6 +184,7 @@ fn a_signature_made_for_one_domain_verifies_as_nothing_in_another() {
         "anchor",
         "endpoints",
         "prekey",
+        "profile",
         "subtree-ack",
         "successor",
         "transfer",

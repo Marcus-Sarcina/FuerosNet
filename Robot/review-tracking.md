@@ -22041,3 +22041,55 @@ encoding, a many-steps valid, an infinity-norm violation, a 1951-byte
 key). Cases with a context string were left out, the profile signing under
 the empty context only. `primitives.rs` runs them against `sign_pq`,
 `verify_pq` and the seed expansion.
+
+**RES-016 and APP-014 built, and `rhtn/1:profile` in §1.1, 2026-11-15
+[author].** `wire-format.md` §1.1's table gained the profile row (§7.11),
+"fourteen" became "fifteen" at both sites (§1 and §1.1), functional SIG-005
+lists fifteen, `limits.rs` checks the table's fifteen against the codec's,
+`cose.rs`'s "fourteenth" comment dropped; pins re-accepted, vector outputs
+changed in hash lines only.
+
+**The subnet fabric** (`crates/sim/src/subnets.rs`): several subnets of
+live nodes from a `Plan` each — anchor, infra and light members at child
+indices — the records signed as the parties would, each infra node's table
+folded from its subnet's records, slots and the attached set filled, the
+nodes started, every infra node's endpoint record held by itself and its
+patron (what §12.6.1 says a patron needs to refer), and each anchor's entry
+signed, which is all an outsider holds of a subnet. `Fabric::attach` gives
+a light member its session with its serving node; `introduce` hands an
+anchor entry to a node's table. `sim/tests/subnets.rs`: the client-driven
+descent through three infra nodes of a foreign subnet known by its anchor
+alone (a dark node passed over, one nonce across the hops, the second
+message asking nobody, a deeper party resolving to the same serving node
+under its own nonce, delivery on attach) — functional RES-016, acceptance
+RES-20; and payload both ways between clients of two subnets sharing no
+node, acceptance PAY-27 (families PAY-012, RES-016). The three inline
+`beyond.rs` tests that hold the row's clauses by script are marked RES-016
+too. **Not yet**: a ceremony across two subnets with the kernel's courier,
+which is `sim/tests/kernel.rs`'s shape (the FFI `Participant` over live
+nodes) run against this fabric; and the fabric's nodes behind the emulated
+NAT (`sim/src/nat.rs`), which the plan does not yet take.
+
+**The dataset hand-over** (design §23.3, L §4.2): `Client::dataset_for(their_heads)`
+is `[1, owner, heads, contents]`, the contents the backup's own shape in
+plaintext — the records the other's heads do not reach in this archive,
+and the whole store, sealed captures and blobs held for peers included,
+provider credential and seed excluded. `Client::take_dataset` refuses
+another identity's and takes the rest through `take_contents`, which is
+`reconcile_from_peer`'s body made shared: contacts' material first, records
+appended where they verify and chain with a retry pass so a successor ahead
+of its predecessor waits rather than being refused, then the view where
+absent, and now the sealed captures and held blobs too (a peer blob carries
+neither). `client/tests/devices.rs`: the away desktop, holding no seed,
+brought to the whole dataset unasked and signing, backing up and releasing
+nothing afterwards, the replica shut; two seed-holding devices forked from
+one head, each sent the one record it lacked, both heads kept, the next
+record carrying two back-pointers and the other device brought level by a
+plain append — functional APP-014, acceptance ARC-30. **Carriage is the
+seam**: the bytes are the kernel's, and nothing here dials; what moves them
+between two devices is asked of the author in the output (the view is not
+records, so §7.9 alone cannot carry it). The catalogue's portion is not in
+the dataset: `catalog::View` is a cache nothing persists, re-swept at
+attach; said in the output.
+
+Figure: 575 live, 536 held, 39 by neither; implemented 570 of 576.

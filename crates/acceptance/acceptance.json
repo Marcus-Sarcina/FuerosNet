@@ -18074,5 +18074,97 @@
    "GAT-033",
    "UX-010"
   ]
+ },
+ {
+  "id": "RES-20",
+  "area": "resolution",
+  "gap": "resolution",
+  "title": "A light client drives the descent itself through a foreign subnet it knows by its anchor alone",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.7.1",
+   "wire-format.md §7.7.3",
+   "design §12.6.1",
+   "light-client-requirements.md §4"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.7.1",
+    "text": "A client MAY put the request to any infra node whose address it already holds"
+   },
+   {
+    "where": "design §12.6.1",
+    "text": "It repeats until it reaches the serving node, caching what it learns"
+   }
+  ],
+  "given": "Two subnets of live nodes sharing no node, the far one three infra nodes deep with two light clients under its last. A client of the home subnet holds the far subnet's anchor entry and a position under it, and nothing else of it; ahead of that anchor it holds an address nothing answers on.",
+  "when": "The client sends payload to the far party, then again inside the resolution's lifetime, then to a party deeper under the same serving node.",
+  "then": "The dark node is asked and passed over; the anchor refers to its infra child and that child to the next, each asked under the one nonce; the last answers as serving node with the residual naming the party, and the payload is handed to it alone, never to the sender's own node. The second message asks nobody where the party is. The deeper party resolves to the same serving node under a nonce of its own. What was queued reaches the party when it attaches, named by its sender.",
+  "oracle": "behaviour",
+  "interpretation": null,
+  "families": [
+   "RES-016"
+  ]
+ },
+ {
+  "id": "PAY-27",
+  "area": "payload",
+  "gap": "payload",
+  "title": "Payload crosses between clients of two subnets that share no node, each resolving the other by its anchor",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "design §12.6.3",
+   "wire-format.md §7.7.1",
+   "wire-format.md §7.10"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.7.1",
+    "text": "a light client does not need its patron or infra node to address a distant node for which it holds a locator"
+   }
+  ],
+  "given": "Two subnets of live nodes sharing no node; a client attached in each, holding the other's position and the other subnet's anchor entry and nothing more.",
+  "when": "Each sends the other payload.",
+  "then": "Each descent runs from the other subnet's anchor through its referrals to the node serving the recipient, which takes the submission; neither sender's own node is asked anything; each client collects the other's payload on its own session, named by its sender.",
+  "oracle": "behaviour",
+  "interpretation": null,
+  "families": [
+   "PAY-012",
+   "RES-016"
+  ]
+ },
+ {
+  "id": "ARC-30",
+  "area": "archive",
+  "gap": "archive",
+  "title": "Bring another device of the identity to the whole dataset on contact: merge where forked, append where short, ciphertext as it is, no seed",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "design §23.3",
+   "design §10.3",
+   "design §7.5.2.6",
+   "light-client-requirements.md §4.2"
+  ],
+  "rule": [
+   {
+    "where": "design §23.3",
+    "text": "A device that knows another is behind is in contact with it"
+   },
+   {
+    "where": "light-client-requirements.md §4.2",
+    "text": "it hands over what the other lacks"
+   }
+  ],
+  "given": "A ceremony device that met three parties, one in person, while a device of the same identity holding no seed was away; and two seed-holding devices that each signed a record from one shared head while apart.",
+  "when": "Each device that is behind is handed the other's dataset, and the merged archive takes its next record.",
+  "then": "The away device holds every record and the whole store, the sealed capture as the ciphertext it is, with nobody asked. The two forked devices each hold both heads, having each been sent the one record they lacked; the next record carries both back-pointers and leaves one head, and the device that did not sign it is brought level by a plain append. The dataset carries no seed: the device given it signs nothing, writes no backup, releases no capture key, and the replicated capture does not open there. A dataset naming another identity is refused, and taking the same one twice changes nothing.",
+  "oracle": "behaviour",
+  "interpretation": null,
+  "families": [
+   "APP-014"
+  ]
  }
 ]

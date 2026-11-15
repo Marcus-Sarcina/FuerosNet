@@ -45,7 +45,7 @@ Three things this buys beyond interoperability:
   itself**, which this profile must supply. RFC 9052's `Sig_structure` context
   string is `"Signature"` or `"Signature1"`, distinguishing *COSE structure types*,
   not application roles. **COSE does not give role
-  separation for free**, and this protocol has **fourteen** signing roles, and will acquire more. See
+  separation for free**, and this protocol has **fifteen** signing roles, and will acquire more. See
   §1.1-§1.4 for the required profile rules.
 - **A place to put the algorithm identifier.** RFC 9052 requires `alg` to be
   authenticated but permits it either in the protected header **or as externally
@@ -122,6 +122,7 @@ either be structurally disjoint from every language above, or carry its own
 | Anchor entry (§7.2) | `rhtn/1:anchor` |
 | Node endpoint record (§7.6) | `rhtn/1:endpoints` |
 | Prekey bundle (§7.8) | `rhtn/1:prekey` |
+| Profile (§7.11) | `rhtn/1:profile` |
 | Subtree acknowledgement (§7.5) | `rhtn/1:subtree-ack` |
 | Old-key successor statement (§4.1) | `rhtn/1:successor` |
 | Former-patron transfer statement (§4.1) | `rhtn/1:transfer` |
@@ -130,7 +131,7 @@ either be structurally disjoint from every language above, or carry its own
 **Why it matters more than it did.** Exploiting cross-context confusion requires a
 byte string valid in two roles, which the differing CBOR structures argue against without ruling out
 — and unproven non-confusability is precisely what domain separation exists to
-replace. **Fourteen roles carry a tag**, and the risk domain separation
+replace. **Fifteen roles carry a tag**, and the risk domain separation
 answers grows with every one of them: each new signed context is another
 chance for a byte string to be valid in two places at once. A verifier that derives the tag from
 context rather than content also makes the check free.

@@ -180,7 +180,7 @@ pub mod aad {
     pub const ENDPOINTS: &[u8] = b"rhtn/1:endpoints";
     /// A prekey bundle (§1.1, §7.8).
     pub const PREKEY: &[u8] = b"rhtn/1:prekey";
-    /// A profile, an alias and an image per position (§7.11).
+    /// A profile, an alias and an image per position (§1.1, §7.11).
     pub const PROFILE: &[u8] = b"rhtn/1:profile";
     /// A subtree acknowledgement (§1.1, §7.5).
     pub const SUBTREE_ACK: &[u8] = b"rhtn/1:subtree-ack";
@@ -188,6 +188,6 @@ pub mod aad {
     pub const SUCCESSOR: &[u8] = b"rhtn/1:successor";
     /// A former patron's transfer statement (§1.1, §4.1).
     pub const TRANSFER: &[u8] = b"rhtn/1:transfer";
-    /// The fourteenth: a transport delegation (`wire-format.md` §8.2).
+    /// A transport delegation (§1.1, §8.2).
     pub const DELEGATION: &[u8] = b"rhtn/1:delegation";
 }
