@@ -22262,11 +22262,14 @@ in the order the machines produced them:
    prekey ids over and the node still serves the one-time pool stocked by
    the previous kernels under the same ids — every run is four clients
    restored from their phrases at once (PAY-019). The wire says nothing
-   about a pool across a bundle over new material. **Assumed pending the
-   author**: a bundle over new material empties the device's pool at the
-   node (`PrekeyService::publish`; SUB-13's incidental count adjusted, its
-   claim unchanged). If it goes the other way: revert that and the count,
-   and the rerun stays failing until another mechanism.
+   about a pool across a bundle over new material. **Ruled [author,
+   2026-11-15], accepted as assumed**: a bundle over new material empties
+   the device's pool at the node (W §7.8, I §6, the MAIL row;
+   `PrekeyService::publish`; SUB-13's incidental count adjusted, its claim
+   unchanged). The relayed stranger's fetch (PAY-021) was accepted the
+   same way. **Droplets**: destroyed once a WAN testing session is complete;
+   kept across rounds of discussion and edits while the session has open
+   items or failed tests [author, 2026-11-15].
 4. **Tests that assumed a fresh fabric**: the first delivery a client
    collects on a shared fabric may be an earlier test's (`delivered`
    helper in subnets.rs reads past them on a remote fabric only); the

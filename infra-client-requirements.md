@@ -423,6 +423,9 @@ serving node.
   session they arrive on, and a publication naming another device is refused
   (`wire-format.md` §7.10); a relay submission names the device its ciphertext
   is for and is queued for that device (design §14.1.6).
+- **A bundle over new material empties the device's pool** [author, 2026-11-15]
+  (`wire-format.md` §7.8): drop it, held and stored, before serving the new
+  bundle; the same material re-signed keeps it.
 - **Serve reusable material freely.** It is returned any number of times to anyone
   and consumes nothing — clients prefetch it org-wide by default so that fetching
   carries no intent signal (design §14.2.4).

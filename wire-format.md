@@ -3361,6 +3361,14 @@ discarded; when none remain, field 3 is simply absent and the session proceeds o
 reusable material alone, a **declared reduction in forward secrecy for the first
 message**, not a failure. Everything after it is covered by the ratchet.
 
+**A pool belongs to the bundle it was stocked beside** [author, 2026-11-15]. A
+publication for the same device over different material discards that device's
+pool, held and stored alike, before the new bundle is served, and the device
+restocks as on a first publication; the same material again, re-signed, keeps
+the pool. A device that starts over (restored from its phrase, design §6.3)
+numbers its keys from the start again and holds none of the old pool, so a key
+served from it would open nothing.
+
 **The split exists so that blanket prefetch is affordable.** A client prefetching
 reusable material for its whole trust horizon (design §14.2.4) consumes nothing
 scarce, and **leaves one-time-key depletion meaningful as a signal.** Under

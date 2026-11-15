@@ -95,8 +95,8 @@ impl PrekeyService {
         if b.verify(ids).is_err() {
             return Err("bundle signature fails".into());
         }
-        // **new material empties the device's pool** [assumed pending the
-        // author, 2026-11-15]: a one-time key was stocked under the bundle
+        // **new material empties the device's pool** [author, 2026-11-15;
+        // `wire-format.md` §7.8]: a one-time key was stocked under the bundle
         // it was generated beside, and a device publishing a bundle over
         // different material (restored from its phrase, PAY-019; the
         // kernel's ids start over) no longer holds the keys the old pool

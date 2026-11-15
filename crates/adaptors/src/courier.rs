@@ -578,7 +578,8 @@ impl Courier {
         // message met "no bundle for that peer"]
         //
         // **And by relay, from a node that never served the sender**
-        // [2026-11-15]: a sender in another subnet dials this client's node
+        // [author, 2026-11-15; `functional_tests.md` PAY-021]: a sender in
+        // another subnet dials this client's node
         // itself (the ruling of 2026-10-05, `functional_tests.md` PAY-012),
         // so that node holds no bundle of the sender's to carry
         // (`wire-format.md` §7.10) and the introduction the message brought

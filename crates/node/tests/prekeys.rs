@@ -68,12 +68,13 @@ fn stocked(subject: &str, n: usize) -> PrekeyService {
     svc
 }
 
-/// **A bundle over new material empties the device's pool** [assumed
-/// pending the author, 2026-11-15]: the keys were stocked beside the
+/// **A bundle over new material empties the device's pool** [author,
+/// 2026-11-15; `wire-format.md` §7.8]: the keys were stocked beside the
 /// material the old bundle named, and a device that restarted from its
 /// phrase holds none of them, so a request after the new bundle gets it
 /// and no one-time key until the device restocks.  The same bundle again,
 /// or one over the same material at a later time, keeps the pool.
+// functional: MAIL-028
 #[test]
 fn a_bundle_over_new_material_empties_the_pool_and_the_same_material_keeps_it() {
     let mut svc = stocked("alice", 3);
@@ -868,8 +869,8 @@ fn sub_13_a_node_holds_the_current_bundle_and_pool_and_no_history_of_them() {
     assert!(svc.stock(kh("alice"), vec![b"k1".to_vec()]));
     inspect(&svc, &b1, 1, "after the first publication and deposit");
     // the second bundle is over new material, which takes the first
-    // pool with it [assumed pending the author, 2026-11-15]: the current
-    // pool is what was deposited beside the current bundle
+    // pool with it (`wire-format.md` §7.8 [author, 2026-11-15]): the
+    // current pool is what was deposited beside the current bundle
     let b2 = bundle_for("alice", b"second material", 1_800_003_600);
     svc.publish(&ids(), &b2).unwrap();
     assert!(svc.stock(kh("alice"), vec![b"k2".to_vec()]));
