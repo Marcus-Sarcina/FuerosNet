@@ -3,6 +3,7 @@ package com.comptus.fueros
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -129,9 +130,43 @@ class ResourcePageTest {
 
     @Test
     fun a_framed_page_is_told_what_the_frame_is() {
-        assertTrue(ResourcePage.FRAME_SAYS, ResourcePage.FRAME_SAYS.contains("no script"))
-        assertTrue(ResourcePage.FRAME_SAYS, ResourcePage.FRAME_SAYS.contains("no network"))
-        assertTrue(ResourcePage.FRAME_SAYS, ResourcePage.FRAME_SAYS.contains("no storage"))
+        val still = ResourcePage.frameSays(false)
+        assertTrue(still, still.contains("runs no code"))
+        assertTrue(still, still.contains("this resource and nothing else"))
+        val runs = ResourcePage.frameSays(true)
+        assertTrue(runs, runs.contains("runs its code"))
+        assertTrue(runs, runs.contains("as you allowed"))
+        assertTrue(runs, runs.contains("its own storage"))
+    }
+
+    // functional: CAT-027
+    @Test
+    fun a_page_runs_only_where_it_declared_and_the_person_allowed() {
+        val declared = Gateway.Page(200, "text/html", null, Gateway.Shape.PAGE, ByteArray(0), "script-src 'self'", true)
+        val plain = Gateway.Page(200, "text/html", null, Gateway.Shape.PAGE, ByteArray(0))
+        assertEquals("declared, not yet asked: the question is owed", null, ResourcePage.runs(declared, null))
+        assertEquals(true, ResourcePage.runs(declared, true))
+        assertEquals(false, ResourcePage.runs(declared, false))
+        assertEquals("undeclared, never asked, never runs", false, ResourcePage.runs(plain, null))
+        assertEquals("an allowance cannot run a page that declared nothing", false, ResourcePage.runs(plain, true))
+        assertTrue(ResourcePage.SCRIPT_ASKS.contains("nothing else"))
+    }
+
+    @Test
+    fun a_resources_origin_is_its_own_and_resolves_nowhere() {
+        val a = "a".repeat(64)
+        val b = "b".repeat(64)
+        assertEquals("https://${"a".repeat(32)}.${"a".repeat(32)}.rhtn.invalid", Frames.origin(a))
+        assertNotEquals(Frames.origin(a), Frames.origin(b))
+        assertEquals(Frames.Going.INSIDE, Frames.resourceGoing(Frames.origin(a), Frames.origin(a) + "/x?y"))
+        assertEquals(Frames.Going.REFUSE, Frames.resourceGoing(Frames.origin(a), Frames.origin(b) + "/x"))
+        assertEquals(Frames.Going.REFUSE, Frames.resourceGoing(Frames.origin(a), "https://example.invalid/"))
+        assertEquals(Frames.Going.REFUSE, Frames.resourceGoing(Frames.origin(a), "file:///etc/hosts"))
+        assertEquals(
+            "a prefix of the host is another host",
+            Frames.Going.REFUSE,
+            Frames.resourceGoing(Frames.origin(a), Frames.origin(a) + ".example.invalid/"),
+        )
     }
 
     // ---- the frame, read out of the source ----------------------------
@@ -161,32 +196,38 @@ class ResourcePageTest {
         val src = source("Frames.kt")
         assertTrue(
             "ResourceActivity no longer frames through Frames.resource",
-            source("ResourceActivity.kt").contains("Frames.resource(this)"),
+            source("ResourceActivity.kt").contains("Frames.resource(this, script)"),
         )
         for (setting in listOf(
-            "javaScriptEnabled = false",
-            "domStorageEnabled = false",
-            "databaseEnabled = false",
+            "javaScriptEnabled = script",
+            "domStorageEnabled = script",
+            "databaseEnabled = script",
             "allowFileAccess = false",
             "allowContentAccess = false",
             "allowFileAccessFromFileURLs = false",
             "allowUniversalAccessFromFileURLs = false",
-            "blockNetworkLoads = true",
-            "blockNetworkImage = true",
             "setGeolocationEnabled(false)",
         )) {
             assertTrue("the frame does not set $setting", src.contains(setting))
         }
-        // the null base is the isolation, so it is asserted as text: a
-        // base URL here would give the document an origin to share. **It
-        // stays with the screen that loads**, not with [Frames], which
-        // configures and does not load
+        // **the origin is the resource's own, and the page loads at it**
+        // [author, 2026-11-15]: served from the kernel's answer by the
+        // screen's client, never handed to the engine with no origin
+        val screen = source("ResourceActivity.kt")
+        assertTrue("the page loads at the resource's own origin", screen.contains("Frames.origin(resource)"))
+        assertFalse("no document is given no origin any more", screen.contains("loadDataWithBaseURL("))
+        assertTrue("the first load is served from the answer in hand", screen.contains("loadUrl(\"\$origin\$path\")"))
+        // and the one object a running page is given is the bridge, in
+        // the screen and only behind the person's answer
+        assertFalse("Frames publishes nothing into a page", src.contains("addJavascriptInterface"))
         assertTrue(
-            "the page must load with a null base, which is its opaque origin",
-            source("ResourceActivity.kt").contains("loadDataWithBaseURL(null,"),
+            "the bridge is given only to a page that runs",
+            screen.contains("if (script) {\n            // **the one object**"),
         )
-        // and nothing is published into the page
-        assertFalse("a bridge is the one way in", src.contains("addJavascriptInterface"))
+        val bridge = source("ResourceBridge.kt")
+        assertTrue("the bridge carries a request and nothing else", bridge.contains("@JavascriptInterface"))
+        assertEquals("one method on the one object", 1, Regex("@JavascriptInterface").findAll(bridge).count())
+        assertTrue("a path under /.rhtn/ is the node's and refused", bridge.contains("/.rhtn/"))
     }
 
     /** No screen framing somebody else's content may be written without
@@ -206,17 +247,26 @@ class ResourcePageTest {
         )
     }
 
-    /** And neither of them enables script, whatever else they differ on. */
+    /** A node's frame never runs script; a resource's runs it only as the
+     *  screen decided from the declaration and the person's answer. */
     @Test
-    fun neither_frame_runs_somebody_elses_script() {
+    fun script_runs_only_in_a_resources_frame_and_only_as_decided() {
         val frames = source("Frames.kt")
-        // one definition each, and both refuse
         assertEquals(
-            "both frames must refuse script",
-            2,
+            "the node's frame refuses script, once",
+            1,
             Regex("javaScriptEnabled = false").findAll(frames).count(),
         )
-        assertFalse("a frame enables script", frames.contains("javaScriptEnabled = true"))
+        assertEquals(
+            "the resource's frame takes the decision and makes none of its own",
+            1,
+            Regex("javaScriptEnabled = script").findAll(frames).count(),
+        )
+        assertFalse("no frame enables script on its own", frames.contains("javaScriptEnabled = true"))
+        assertTrue(
+            "the screen decides from the declaration and the answer",
+            source("ResourceActivity.kt").contains("ResourcePage.runs(showing.page, Frames.scriptAllowed(this, resource))"),
+        )
         // and each screen reaches for its own frame rather than setting
         // anything of its own
         assertTrue(
@@ -225,7 +275,7 @@ class ResourcePageTest {
         )
         assertTrue(
             "ResourceActivity does not frame through Frames.resource",
-            source("ResourceActivity.kt").contains("Frames.resource(this)"),
+            source("ResourceActivity.kt").contains("Frames.resource(this, script)"),
         )
         for (name in listOf("NodePageActivity.kt", "ResourceActivity.kt")) {
             assertFalse(

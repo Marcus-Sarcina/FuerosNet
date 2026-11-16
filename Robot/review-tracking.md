@@ -22383,3 +22383,51 @@ and nothing to configure one; the TTL rule. Neither is in a document or
 a row, by that ruling. **Not built, stated**: the client half — the Android shell
 registers no wake endpoint, having no push subscription; which service
 is the person's choice, and the registration call exists at the facade.
+
+**Resource hosting, the five dispositions, 2026-11-15 and 16 [plan:
+author].** Built in order, each with its documents, rows and a gate, each
+committed: (2) the instance's secret both ways — the node presents
+`rhtn-secret` on every relayed request to a socket package (`Relay::
+presenting`), the host mints it per instance under `state/secrets/`,
+hands it as `--secret` on the start, the test application reads the
+node's headers behind it and nowhere else (GAT-042); the digest
+requirement — an install names an image by `@sha256:` and never by a tag
+(PKG-019). (5a) the request-rate budget — the deferred question of
+2026-10-31 answered as option (c): `Gateway::serve` takes the clock,
+counts handoffs per resource per minute, answers the one past the budget
+with an HTTP 429 and `retry-after` inside status 0, counts it on the
+operator's tab (GAT-043; `Robot/deferred-decisions.md` entry answered).
+(3) the mounted block — the runner's `start` takes `block=<bytes>` after
+the image, provisions an ext4 project-quota directory under
+`RHTN_BLOCKS` (`/var/lib/rhtn-blocks`), mounts it at `/rhtn-block` and
+says `block /rhtn-block <bytes>` first, or `block none <why>` and starts
+without it; the node records the path (`Package.block`, `block =` in the
+hosting entry), tells it as `rhtn-block`, provisions no surface block,
+refuses the path on a component (PKG-020; infra §9.3 "And where a path
+after all"; resource §§3.3, 8). **The mounted half is untested on a
+host**: this machine's root is ext4 without `prjquota`, so the runner's
+`block none` path is what the test and a local run exercise; a droplet
+with a volume formatted for project quotas would hold the rest. The
+pre-start reload provisions a surface block directory that the second
+reload abandons empty under `state/blocks/`; harmless, noted. (4) the
+page rule relaxed — the kernel reads `content-security-policy` and
+`runs_script` (= names `script-src`) into the answer (`Answer.policy`,
+`ResourcePage.policy/runs_script`); the shell mints an origin per
+resource (`Frames.origin`: two 32-hex labels under `rhtn.invalid`),
+loads the page at it and serves every in-origin `GET` through the kernel
+from `shouldInterceptRequest`, answers every other load empty, refuses
+navigation outside the origin, runs script only where declared and
+allowed (`Frames.scriptAllowed`, asked once with `ResourcePage.
+SCRIPT_ASKS`), gives a running page `ResourceBridge` (`rhtn.request`)
+and nothing else, keeps storage under the origin and wipes it with
+`Frames.forget`; the node page wipes its own origin and no longer every
+origin (CAT-025 rewritten, CAT-027 new; light §8, resource §3.4).
+**Owed on the bench**: `FrameIsolationTest` rewritten for the new rule
+compiles in the gate and has not run on a device; the media-element
+egress question (a `<video src>` to an outside host bypasses
+`shouldInterceptRequest` on Android) is open and put to the author.
+**A flake surfaced by the gates**: `adaptors::ceremony::the_counterparty
+_prunes_to_three_and_the_dismissed_stands_down` failed one gate in three
+and one local run in five (4 signers where 5 were expected: a kept
+witness's attestation missing at finalisation); not touched by any of
+these changes, reported to the author with the numbers.

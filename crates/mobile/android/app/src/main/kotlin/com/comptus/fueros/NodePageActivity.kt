@@ -201,8 +201,10 @@ class NodePageActivity : Activity() {
     }
 
     override fun onDestroy() {
-        // **nothing the page left behind outlives the screen**
-        WebStorage.getInstance().deleteAllData()
+        // **nothing the page left behind outlives the screen** — under the
+        // instance's own origin, since a resource's storage under its own
+        // ([Frames.origin]) is the resource's to keep [2026-11-15]
+        if (at.isNotEmpty()) runCatching { WebStorage.getInstance().deleteOrigin("http://$at") }
         android.webkit.CookieManager.getInstance().removeAllCookies(null)
         super.onDestroy()
     }

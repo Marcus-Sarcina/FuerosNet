@@ -1365,16 +1365,36 @@ to show a resource's page has to read one.
   nothing. **Never inspect a body to find out what it is.** Sniffing delivers a
   page as something the user did not agree to look at, and *could not display*
   tells them nothing where *this is a PDF of 40 kB* tells them what happened.
-- **Frame a resource's page so that it reaches nothing of the user's**: no
-  script, no bridge into the client, no file or content access, no storage
-  outliving the screen, no fetch, no navigation, and no origin — the reply came
-  through the kernel and has none, so the page is same-origin with nothing. This
-  is `infra-client-requirements.md` §8.3's argument for framing a node's own
-  pages, one step further: a resource is an application its owner packaged,
-  hosted by a node that owner chose, and **the party whose isolation it is cannot
-  be the party asserting it**. The cost to an application is nil — its every
-  exchange goes through the kernel in any case, so a form is carried by the
-  client whether or not a page could run code.
+- **Frame a resource's page so that it reaches its own resource and nothing of
+  the user's** [author, 2026-11-15]: no bridge into the client, no file or
+  content access, no reach to another resource or to the network. This is
+  `infra-client-requirements.md` §8.3's argument for framing a node's own
+  pages: a resource is an application its owner packaged, hosted by a node that
+  owner chose, and **the party whose isolation it is cannot be the party
+  asserting it**. What that argument forbids is reach into the device; it does
+  not forbid a page running against its own resource, and an application of any
+  size needs to. So:
+  - **Give the page an origin of its own**, minted by the client from the
+    resource's keyhash under a name no network resolves, so it is same-origin
+    with its own resource and nothing else, and its storage is its own.
+  - **Carry every load and navigation inside that origin through the kernel**,
+    to the same resource by the same node, and answer every other one with
+    nothing. The kernel stays the only network and sees every exchange, as it
+    does a form's.
+  - **Run script only where the page declared it and the user allowed it.** The
+    declaration is the page's own `content-security-policy` naming
+    `script-src`, read by the kernel and handed to the frame's engine to
+    enforce; the allowance is asked once per resource, in words that say what
+    the code can and cannot reach, and remembered. A page that declares
+    nothing runs nothing, whatever its markup carries.
+  - **Publish one object into a page that runs, and no other**: a request to
+    the same resource, with a body where there is one — since a frame's engine
+    hands the client a request's method and path and never its body, a page
+    that posts has nowhere else to go. Nothing of the client is reachable
+    through it.
+  - **Keep what a page stores, under its origin**, across screens, and wipe it
+    when the user forgets the resource. Nothing of one resource reaches
+    another.
 - **Style beneath the page rather than over it, and do not rewrite its markup.**
   What the resource has not styled for itself the client may style to match its
   own surface, with rules the page's own override. Editing somebody else's

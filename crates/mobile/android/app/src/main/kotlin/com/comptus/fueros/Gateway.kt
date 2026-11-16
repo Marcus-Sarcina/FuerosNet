@@ -389,6 +389,11 @@ object Gateway {
         val charset: String?,
         val shape: Shape,
         val body: ByteArray,
+        /** The page's own `content-security-policy`, handed to the engine. */
+        val policy: String? = null,
+        /** **Whether the page declares that it runs script**: its policy
+         *  names `script-src` (`light-client-requirements.md` §8). */
+        val runsScript: Boolean = false,
     )
 
     /**
@@ -446,6 +451,8 @@ object Gateway {
                     uniffi.rhtn_ffi.PageShape.TEXT -> Shape.TEXT
                     uniffi.rhtn_ffi.PageShape.OTHER -> Shape.OTHER
                 },
+                policy = q.policy,
+                runsScript = q.runsScript,
                 body = q.body,
             )
         },
@@ -559,9 +566,34 @@ object Gateway {
      * is acting within one — so the entry's holder is who asks, and not
      * whichever identity happens to act ([Identities.Owned]).
      */
-    fun askAs(by: String, node: String, resource: String, path: String): Answered? {
+    fun askAs(by: String, node: String, resource: String, path: String): Answered? =
+        requestAs(by, node, resource, "GET", path, null, null)
+
+    /**
+     * **One request to a resource, composed here** (`wire-format.md`
+     * §11.1): the method, the path and, where there is one, a body under
+     * its type and length — what a page's own form or script asks this
+     * shell to carry to the same resource, through the kernel and the
+     * node that served it, and nowhere else (`light-client-requirements.md`
+     * §8) [author, 2026-11-15].
+     */
+    fun requestAs(
+        by: String,
+        node: String,
+        resource: String,
+        method: String,
+        path: String,
+        type: String?,
+        body: ByteArray?,
+    ): Answered? {
         val p = asHolder(by) ?: return null
-        val request = ("GET $path HTTP/1.1\r\nhost: resource\r\n\r\n").toByteArray()
+        val head = StringBuilder("$method $path HTTP/1.1\r\nhost: resource\r\n")
+        if (body != null) {
+            if (type != null) head.append("content-type: $type\r\n")
+            head.append("content-length: ${body.size}\r\n")
+        }
+        head.append("\r\n")
+        val request = head.toString().toByteArray() + (body ?: ByteArray(0))
         return call("requestResource", { null }) {
             answered(p.requestResource(unhex(node), unhex(resource), request))
         }

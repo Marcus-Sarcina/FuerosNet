@@ -578,6 +578,15 @@ pub struct ResourcePage {
     pub charset: Option<String>,
     /// What may be shown of it.
     pub shape: PageShape,
+    /// The page's own `content-security-policy`, as the resource sent
+    /// it: a frame hands it to the engine, so the page runs under the
+    /// policy its author wrote.
+    pub policy: Option<String>,
+    /// **Whether the page declares that it runs script**: its policy
+    /// names `script-src` (`light-client-requirements.md` §8) [author,
+    /// 2026-11-15].  A shell runs none without this, and puts it to the
+    /// person once per resource with it.
+    pub runs_script: bool,
     /// The body as it arrived.
     pub body: Vec<u8>,
 }
@@ -4592,6 +4601,8 @@ impl Participant {
                             PageShape::Other
                         }
                     },
+                    policy: a.policy,
+                    runs_script: a.runs_script,
                     body: a.body,
                 })
             }

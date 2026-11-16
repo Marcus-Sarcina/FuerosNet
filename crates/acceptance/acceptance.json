@@ -17638,7 +17638,7 @@
   "id": "RSC-58",
   "area": "resources",
   "gap": "resources",
-  "title": "A resource's page is framed so that it reaches nothing of the user's",
+  "title": "A resource's page is framed so that it reaches its own resource and nothing of the user's",
   "milestone": "manual",
   "kind": "manual",
   "spec": [
@@ -17648,7 +17648,7 @@
   "rule": [
    {
     "where": "light-client-requirements.md §8",
-    "text": "Frame a resource's page so that it reaches nothing of the user's"
+    "text": "Frame a resource's page so that it reaches its own resource and nothing of\n  the user's"
    },
    {
     "where": "light-client-requirements.md §8",
@@ -17656,10 +17656,10 @@
    }
   ],
   "given": "A release build showing a page a resource served, with the client's own state on the device.",
-  "when": "A reviewer serves a page that attempts script, a fetch, storage, a file URL and a navigation away.",
-  "then": "None of them takes effect: the document has no origin to share, nothing is published into it, no fetch is served, nothing it stored outlives the screen, and the navigation is refused with the person told the frame did not go. The client's own styling applies where the page sets none and loses where it sets any, and the page's markup is unaltered.",
+  "when": "A reviewer serves a page that attempts a fetch and a navigation outside its origin, a file URL, a bridge into the client, and script with and without a `content-security-policy` naming `script-src`; and a page that stores under its origin.",
+  "then": "The page has an origin of its own, minted from the resource's keyhash; a load or navigation outside it is refused with the person told the frame did not go, and one inside it is carried through the kernel to the same resource. Script runs only where the page declared it and the person allowed it for the resource, asked once; a page declaring nothing runs nothing. A running page reaches `rhtn.request` and nothing else of the client. What a page stores under its origin outlives the screen and is wiped when the resource is forgotten. The client's own styling applies where the page sets none and loses where it sets any, and the page's markup is unaltered.",
   "oracle": "behaviour",
-  "interpretation": " **Closed by an instrumentation run** [2026-11-08]: `app/src/androidTest/.../FrameIsolationTest.kt`, five tests, run on GXV (SM-G996U1, Android 15) with `./gradlew connectedFieldtestDebugAndroidTest` — 0 failures. A real `WebView` is fed a page that tries to run script, write local storage, fetch, open a window, navigate away, load a remote image and read `file:///etc/hosts`. The settings both screens had inline moved into `Frames`, so the run applies **the same code the screens use**: a test asserting a copy would pass while the screens drifted. **The gate compiles the source set and does not run it**, there being no device in the gate and a test nothing compiles being one that rots. **The first attempt failed on the device and was right to**: it asserted the frame was never *asked* to navigate, and an `iframe src=\"file://…\"` reaches `shouldOverrideUrlLoading` — being asked is the page trying, refusing is the frame's answer, and the two were conflated. The decision is now `Frames.nodeGoing` and `Frames.resourceGoing`, which the screen and the run both ask rather than the run standing in for the screen's client. One test allows script on purpose, to establish that the page is loud when it can be; without it a frame that rendered nothing would pass everything.",
+  "interpretation": " **Relaxed by the author on 2026-11-15** (light §8; CAT-025, CAT-027): the first rule gave a page no origin, no script, no fetch and no storage; the rule now gives it an origin of its own, the same resource through the kernel, storage of its own, and script by the page's declaration and the person's consent. `FrameIsolationTest` was rewritten for it and compiles in the gate; **its run on a device is owed**, as is a look at media elements, which on Android may fetch past `shouldInterceptRequest`. **Closed by an instrumentation run** [2026-11-08]: `app/src/androidTest/.../FrameIsolationTest.kt`, five tests, run on GXV (SM-G996U1, Android 15) with `./gradlew connectedFieldtestDebugAndroidTest` — 0 failures. A real `WebView` is fed a page that tries to run script, write local storage, fetch, open a window, navigate away, load a remote image and read `file:///etc/hosts`. The settings both screens had inline moved into `Frames`, so the run applies **the same code the screens use**: a test asserting a copy would pass while the screens drifted. **The gate compiles the source set and does not run it**, there being no device in the gate and a test nothing compiles being one that rots. **The first attempt failed on the device and was right to**: it asserted the frame was never *asked* to navigate, and an `iframe src=\"file://…\"` reaches `shouldOverrideUrlLoading` — being asked is the page trying, refusing is the frame's answer, and the two were conflated. The decision is now `Frames.nodeGoing` and `Frames.resourceGoing`, which the screen and the run both ask rather than the run standing in for the screen's client. One test allows script on purpose, to establish that the page is loud when it can be; without it a frame that rendered nothing would pass everything.",
   "families": [
    "CAT-025"
   ]

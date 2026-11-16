@@ -347,9 +347,18 @@ tells you which you have, and nothing else about it changes.
 
 ### 3.4 What you may ask of a member's client
 
-**A member's client frames your page so that it reaches nothing of theirs**
-(`light-client-requirements.md` §8): no script, no bridge, no fetch. So a
-capability of their device — a scan, a photograph, a place, a tag read, a
+**A member's client frames your page so that it reaches you and nothing of
+theirs** (`light-client-requirements.md` §8) [author, 2026-11-15]: an origin
+of its own per resource, every load and navigation inside it carried by the
+kernel to you and every other one answered with nothing, storage of its own,
+and **script only where your page declares it** — a `content-security-policy`
+naming `script-src`, which the frame's engine then holds you to — **and the
+member has allowed it**, asked once per resource. A page that runs is given one
+object, `rhtn.request(method, path, type, body)`, carrying a request to you
+with a body, since a frame's engine hands the client a request's method and
+path and never its body; a `GET` the page makes of its own origin is carried
+as it is. No bridge into the client, no reach to the device. So a capability
+of their device — a scan, a photograph, a place, a tag read, a
 signature — is not yours to take from a page; **you ask for it, in one typed
 ask, and their client answers** [author, 2026-10-30]. The kernel on their
 side reads the ask, puts it to the person, and composes the answer; what

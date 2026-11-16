@@ -1,6 +1,8 @@
 package com.comptus.fueros
 
+import android.content.Context
 import android.webkit.WebSettings
+import android.webkit.WebStorage
 import android.webkit.WebView
 
 /**
@@ -15,41 +17,106 @@ import android.webkit.WebView
  * `FrameIsolationTest` on a real `WebView`, and there is one definition of
  * each.
  *
- * **Two frames and not one**, because the two differ in a way that
- * matters: a resource's page arrives as markup already in hand and fetches
- * nothing ever, while a node's own pages are *served* by the instance and
- * must load from its origin. Folding them together would mean either
- * letting a resource's page fetch or stopping a node's pages working.
+* **Two frames and not one**, because the two differ in a way that
+ * matters: a node's own pages are *served* by the instance and load from
+ * its origin with no script ever, while a resource's page lives in an
+ * origin of its own that this shell mints for the resource, reaches that
+ * one resource through the kernel, keeps storage of its own, and runs
+ * script only where the page declared it and the person allowed it
+ * (`light-client-requirements.md` §8) [author, 2026-11-15]. Folding them
+ * together would mean either giving a node's pages a bridge or taking a
+ * resource's own storage away.
  *
- * What neither permits, in both: script, DOM storage, a database, file or
- * content access, a cache that outlives the screen.
+ * What neither permits, in both: a bridge into this app, file or content
+ * access, a load from anywhere but its own origin.
  */
 object Frames {
 
     /**
-     * **A resource's page** (RSC-58; `light-client-requirements.md` §8):
-     * markup handed over by a resource, rendered with no origin to share,
-     * nothing published into it, no fetch served, and nothing it stored
-     * outliving the screen.
-     *
-     * The caller loads it with `loadDataWithBaseURL(null, …)`: **the null
-     * base is the point** — an opaque origin, same-origin with nothing,
-     * not even with itself.
+     * **A resource's origin, minted here** (`light-client-requirements.md`
+     * §8): the resource's keyhash under a name no network resolves, so the
+     * page is same-origin with its own resource and nothing else, its
+     * storage is its own, and a load to it reaches the kernel and not a
+     * socket. Two labels, since one may not exceed 63 characters.
      */
-    fun resource(web: WebView) {
+    fun origin(resource: String): String {
+        val hex = resource.lowercase()
+        require(hex.length == 64 && hex.all { it in '0'..'9' || it in 'a'..'f' }) { "a resource is 64 hex digits" }
+        return "https://${hex.substring(0, 32)}.${hex.substring(32)}.rhtn.invalid"
+    }
+
+    /** The per-resource store of what the person allowed a page to run. */
+    const val SCRIPT_STORE: String = "resource-script"
+
+    /**
+     * **Whether the person allowed this resource's pages to run their
+     * code**: `true` or `false` once they decided, `null` before — and
+     * null is what puts the question, once per resource.
+     */
+    fun scriptAllowed(context: Context, resource: String): Boolean? =
+        runCatching {
+            val prefs = context.getSharedPreferences(SCRIPT_STORE, Context.MODE_PRIVATE)
+            if (prefs.contains(resource)) prefs.getBoolean(resource, false) else null
+        }.getOrNull()
+
+    /** The person's answer, kept for the resource. */
+    fun allowScript(context: Context, resource: String, allowed: Boolean) {
+        runCatching {
+            context.getSharedPreferences(SCRIPT_STORE, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(resource, allowed)
+                .apply()
+        }
+    }
+
+    /**
+     * **Forget a resource on this device**: what its pages stored under
+     * their origin, and what the person allowed them. Nothing of another
+     * resource is touched, which is what the origin per resource is for.
+     */
+    fun forget(context: Context, resource: String) {
+        runCatching {
+            context.getSharedPreferences(SCRIPT_STORE, Context.MODE_PRIVATE)
+                .edit()
+                .remove(resource)
+                .apply()
+        }
+        runCatching { WebStorage.getInstance().deleteOrigin(origin(resource)) }
+    }
+
+    /**
+     * **A resource's page** (RSC-58; `light-client-requirements.md` §8)
+     * [author, 2026-11-15]: a page in the origin [origin] mints for its
+     * resource, reaching that resource and nothing else — every load and
+     * navigation inside the origin is carried by the screen's client
+     * through the kernel, and every other one is answered with nothing —
+     * keeping storage under that origin, and running script only as
+     * `script` says: the page's own declaration and the person's answer,
+     * both decided by the screen before the frame is made. **No bridge
+     * into this app**: the one object a page that runs script is given
+     * ([ResourceBridge]) carries a request to the same resource and
+     * nothing else.
+     *
+     * The caller loads the origin's URL and serves it from the kernel's
+     * answer: the engine then enforces the page's own policy, and no
+     * document is ever handed to it with no origin.
+     */
+    fun resource(web: WebView, script: Boolean = false) {
         web.settings.apply {
-            javaScriptEnabled = false
+            javaScriptEnabled = script
             javaScriptCanOpenWindowsAutomatically = false
-            domStorageEnabled = false
-            databaseEnabled = false
+            // storage of the resource's own, under its origin, where its
+            // pages run; nothing to keep where they do not
+            domStorageEnabled = script
+            databaseEnabled = script
             allowFileAccess = false
             allowContentAccess = false
             allowFileAccessFromFileURLs = false
             allowUniversalAccessFromFileURLs = false
-            // nothing in the page can be fetched, and the arithmetic of
-            // whether a `src` resolves is not what this rests on
-            blockNetworkLoads = true
-            blockNetworkImage = true
+            // loads are the screen's client's to carry or refuse, every
+            // one, so the engine is not told to block them before it asks
+            blockNetworkLoads = false
+            blockNetworkImage = false
             setGeolocationEnabled(false)
             mediaPlaybackRequiresUserGesture = true
             cacheMode = WebSettings.LOAD_NO_CACHE
@@ -126,11 +193,15 @@ object Frames {
     }
 
     /**
-     * **A resource's page goes nowhere at all** (RSC-58): it has no origin
-     * to be inside of, so there is no navigation it could be allowed and
-     * the decision takes no arguments.
+     * **Where a resource's frame will go** (RSC-58): inside the origin
+     * minted for its resource, and nowhere else — the same shape as
+     * [nodeGoing] without the bounce, since a resource has no acts of the
+     * client's to ask for.
      */
-    fun resourceGoing(): Going = Going.REFUSE
+    fun resourceGoing(origin: String, going: String): Going = when {
+        going == origin || going.startsWith("$origin/") -> Going.INSIDE
+        else -> Going.REFUSE
+    }
 
     /**
      * **What both frames must refuse**, named rather than left implicit:
@@ -142,10 +213,7 @@ object Frames {
      * `WebView`.
      */
     val SHUT_IN_BOTH: List<String> = listOf(
-        "javaScriptEnabled",
         "javaScriptCanOpenWindowsAutomatically",
-        "domStorageEnabled",
-        "databaseEnabled",
         "allowFileAccess",
         "allowContentAccess",
         "allowFileAccessFromFileURLs",
@@ -153,11 +221,13 @@ object Frames {
     )
 
     /**
-     * **What only a resource's page refuses**: it fetches nothing ever,
-     * where a node's pages are served and must load from their origin.
+     * **What a node's page refuses always, and a resource's page refuses
+     * unless its author declared it and the person allowed it**: script,
+     * and the storage that goes with a page that runs.
      */
-    val SHUT_IN_A_RESOURCE_PAGE: List<String> = listOf(
-        "blockNetworkLoads",
-        "blockNetworkImage",
+    val SHUT_UNLESS_ALLOWED: List<String> = listOf(
+        "javaScriptEnabled",
+        "domStorageEnabled",
+        "databaseEnabled",
     )
 }

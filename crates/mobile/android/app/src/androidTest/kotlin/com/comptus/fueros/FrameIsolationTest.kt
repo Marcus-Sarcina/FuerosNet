@@ -35,14 +35,19 @@ import java.util.concurrent.TimeUnit
  *
  * ## What is observable without script, and why that is the point
  *
- * The frames refuse JavaScript, so a test cannot ask the page what it
- * managed to do. **The observable channel is the `WebViewClient`**: a page
- * that tried to navigate, fetch or open a window would reach
+ * The frames refuse JavaScript unless a resource's page declared it and
+ * the person allowed it, so a test cannot ask the page what it managed to
+ * do. **The observable channel is the `WebViewClient`**: a page that
+ * tried to navigate, fetch or open a window would reach
  * `shouldOverrideUrlLoading` or `shouldInterceptRequest`, and a recording
  * client counts them. A script that never ran reaches neither — so the
  * silence is the evidence, and it is evidence because the same page
  * reaches both when script is allowed, which [a_page_that_runs_is_what_the
- * _frame_is_refusing] establishes before relying on it.
+ * _frame_is_refusing] establishes before relying on it. **A resource's
+ * frame no longer tells the engine to block loads** [author, 2026-11-15]:
+ * every load reaches the screen's client, which carries the ones inside
+ * the resource's own origin and answers the rest with nothing — so here
+ * the rule under test is [Frames.resourceGoing] on each request seen.
  *
  * **And the settings are asserted directly**, after the frame is applied,
  * on the engine's own object: that is what [Frames.SHUT_IN_BOTH] is for,
@@ -124,7 +129,7 @@ class FrameIsolationTest {
             frame(web)
             if (script) web.settings.javaScriptEnabled = true
             web.webViewClient = seen
-            web.loadDataWithBaseURL(null, hostile, "text/html", "utf-8", null)
+            web.loadDataWithBaseURL(ORIGIN, hostile, "text/html", "utf-8", null)
         }
         seen.finished.await(20, TimeUnit.SECONDS)
         // whatever the page would do after loading, it has a moment to try
@@ -132,10 +137,13 @@ class FrameIsolationTest {
         return seen
     }
 
+    /** The origin a resource's page is given: one resource's own. */
+    private val ORIGIN = Frames.origin("c".repeat(64))
+
     // acceptance: RSC-58
     @Test
     fun a_resource_page_goes_nowhere_it_is_asked_to_go() {
-        val seen = load(Frames::resource)
+        val seen = load({ Frames.resource(it) })
         // **the engine does ask**, which is what makes the rest evidence:
         // the first run of this file asserted no ask ever arrived, and the
         // device said otherwise — an `iframe src="file://…"` reaches
@@ -145,20 +153,23 @@ class FrameIsolationTest {
             "the page asked for nothing at all, so this test shows nothing",
             seen.navigations.isNotEmpty() || seen.fetches.isNotEmpty(),
         )
-        // and the answer, for every one of them, is nowhere
-        for (where in seen.navigations) {
+        // and the answer, for every one of them, is outside the resource's
+        // own origin and so refused — the hostile page names nothing inside it
+        for (where in seen.navigations + seen.fetches) {
             assertEquals(
-                "a resource's page has no origin, so no navigation is allowed: $where",
+                "a resource's page reaches its own origin and nothing else: $where",
                 Frames.Going.REFUSE,
-                Frames.resourceGoing(),
+                Frames.resourceGoing(ORIGIN, where),
             )
         }
-        // **no fetch is served a body**: the settings block loads, and
-        // what arrives anyway is answered empty by the screen's client
+        // **no fetch outside the origin is served a body**: what arrives
+        // is answered empty by the screen's client
         assertTrue(
             "a resource's page was served something: ${seen.bodies}",
             seen.bodies.all { it == 0 },
         )
+        // and inside its own origin it goes, which is what the client carries
+        assertEquals(Frames.Going.INSIDE, Frames.resourceGoing(ORIGIN, "$ORIGIN/threads/42"))
     }
 
     // acceptance: PRD-12
@@ -203,7 +214,7 @@ class FrameIsolationTest {
      */
     @Test
     fun a_page_that_runs_is_what_the_frame_is_refusing() {
-        val seen = load(Frames::resource, script = true)
+        val seen = load({ Frames.resource(it) }, script = true)
         assertTrue(
             "the hostile page did nothing even with script allowed, so this " +
                 "test proves nothing about the frames: nav=${seen.navigations} " +
@@ -217,24 +228,28 @@ class FrameIsolationTest {
     fun every_setting_both_frames_shut_is_shut_on_the_engines_own_object() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext
         for ((name, frame) in listOf<Pair<String, (WebView) -> Unit>>(
-            "resource" to Frames::resource,
+            "resource" to { Frames.resource(it) },
+            "resource, allowed" to { Frames.resource(it, script = true) },
             "node" to Frames::node,
         )) {
             lateinit var got: Map<String, Boolean>
+            lateinit var unless: Map<String, Boolean>
             InstrumentationRegistry.getInstrumentation().runOnMainSync {
                 val web = WebView(app)
                 frame(web)
                 val s = web.settings
                 got = mapOf(
-                    "javaScriptEnabled" to s.javaScriptEnabled,
                     "javaScriptCanOpenWindowsAutomatically" to
                         s.javaScriptCanOpenWindowsAutomatically,
-                    "domStorageEnabled" to s.domStorageEnabled,
-                    "databaseEnabled" to s.databaseEnabled,
                     "allowFileAccess" to s.allowFileAccess,
                     "allowContentAccess" to s.allowContentAccess,
                     "allowFileAccessFromFileURLs" to s.allowFileAccessFromFileURLs,
                     "allowUniversalAccessFromFileURLs" to s.allowUniversalAccessFromFileURLs,
+                )
+                unless = mapOf(
+                    "javaScriptEnabled" to s.javaScriptEnabled,
+                    "domStorageEnabled" to s.domStorageEnabled,
+                    "databaseEnabled" to s.databaseEnabled,
                 )
             }
             // the list and the readings are the same set, so a setting
@@ -247,33 +262,34 @@ class FrameIsolationTest {
             for (which in Frames.SHUT_IN_BOTH) {
                 assertFalse("$name: $which is not shut", got.getValue(which))
             }
+            assertEquals(Frames.SHUT_UNLESS_ALLOWED.toSet(), unless.keys)
+            for (which in Frames.SHUT_UNLESS_ALLOWED) {
+                assertEquals(
+                    "$name: $which follows the decision and nothing else",
+                    name == "resource, allowed",
+                    unless.getValue(which),
+                )
+            }
         }
     }
 
     // acceptance: RSC-58
     @Test
-    fun a_resource_page_fetches_nothing_ever_where_a_nodes_pages_may() {
+    fun neither_frame_tells_the_engine_to_block_loads_since_the_client_answers_each() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext
         lateinit var resource: Pair<Boolean, Boolean>
         lateinit var node: Pair<Boolean, Boolean>
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
-            val a = WebView(app).also(Frames::resource)
+            val a = WebView(app).also { Frames.resource(it) }
             resource = a.settings.blockNetworkLoads to a.settings.blockNetworkImage
             val b = WebView(app).also(Frames::node)
             node = b.settings.blockNetworkLoads to b.settings.blockNetworkImage
         }
-        assertEquals(
-            "a resource's page must fetch nothing: ${Frames.SHUT_IN_A_RESOURCE_PAGE}",
-            true to true,
-            resource,
-        )
-        // **and the node's frame must not block them**, or the operator's
-        // own pages would not load at all — the asymmetry is the reason
-        // there are two frames and not one
-        assertEquals(
-            "a node's own pages are served by the instance and must load",
-            false to false,
-            node,
-        )
+        // **every load reaches the screen's client** [author, 2026-11-15],
+        // which carries the ones inside the page's own origin through the
+        // kernel and answers the rest with nothing; an engine told to
+        // block loads would never ask
+        assertEquals("a resource's loads are the client's to answer", false to false, resource)
+        assertEquals("a node's own pages are served by the instance and must load", false to false, node)
     }
 }

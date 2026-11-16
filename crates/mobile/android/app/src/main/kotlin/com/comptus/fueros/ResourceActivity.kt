@@ -25,29 +25,26 @@ import android.widget.TextView
  * page may do was written down as owed.
  *
  * **[ResourcePage] holds the policy and the reasons**; this is the frame
- * that enforces it. In one place, because a second screen deciding what a
- * page may do is how the two come apart:
+ * that enforces it [author, 2026-11-15]. In one place, because a second
+ * screen deciding what a page may do is how the two come apart:
  *
- *  - **A null base URL**, so the document has an opaque origin: same
- *    origin with nothing, not even itself. There is no URL to give it —
- *    §11's exchange is one request and one response through the kernel —
- *    and nothing to be same-origin *with* is the strongest isolation a
- *    web view has.
- *  - **No network, twice over**: the settings block loads, and
- *    `shouldInterceptRequest` answers every request with nothing. A
- *    page's `src` has no base to resolve against in any case, so this
- *    costs an application nothing it could have had.
- *  - **No script**, and with no origin, no network and no bridge there is
- *    nothing script could reach: not the resource, not this process, not
- *    the device. A form is carried by the shell through the kernel
- *    either way.
- *  - **No bridge**: nothing is published into the page.
+ *  - **An origin of its own** ([Frames.origin]): the page is loaded at
+ *    that origin's URL and served from the kernel's answer, so the engine
+ *    enforces the page's own policy and the document is same-origin with
+ *    its resource and nothing else.
+ *  - **The same resource, carried**: `shouldInterceptRequest` answers a
+ *    `GET` inside the origin from the kernel, and everything outside it
+ *    with nothing; `shouldOverrideUrlLoading` lets the frame go inside
+ *    the origin and refuses it anywhere else, saying so.
+ *  - **Script by declaration and consent** ([ResourcePage.runs]): the
+ *    frame is made with script on only where the page declared it and
+ *    the person allowed it, asked once per resource.
+ *  - **One object** ([ResourceBridge]) for a page that runs, carrying a
+ *    request with a body to the same resource; no other bridge.
  *  - **No local reach**: file and content access off, both file-URL
  *    escapes off.
- *  - **No storage**, and what a page leaves behind is deleted with the
- *    screen.
- *  - **No navigation**: there is no origin to stay inside, so every
- *    navigation is refused and the person is told the frame did not go.
+ *  - **Storage of the resource's own** under its origin, kept across
+ *    screens and wiped when the person forgets the resource.
  *
  * **Text takes no frame at all.** `text/plain` is not a page, so it is
  * drawn in a `TextView` and no web view is created — the policy's own
@@ -104,9 +101,10 @@ class ResourceActivity : Activity() {
         val says = TextView(this).apply {
             textSize = 12f
             setTextColor(Palette.now.sub)
-            text = ResourcePage.FRAME_SAYS
+            text = ResourcePage.frameSays(false)
             setPadding(Screen.gutter(context), 0, Screen.gutter(context), 10)
         }
+        this.says = says
         val held = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(
@@ -132,6 +130,10 @@ class ResourceActivity : Activity() {
     }
 
     private var held: LinearLayout? = null
+    /** What the frame says of itself, under the provenance line. */
+    private var says: TextView? = null
+    /** The first page, served to the frame's first load of its origin. */
+    private var first: Pair<String, Gateway.Page>? = null
     private var camera: QrCamera? = null
     private var still: Still? = null
     private var reading: android.nfc.NfcAdapter? = null
@@ -159,7 +161,14 @@ class ResourceActivity : Activity() {
             last = answered?.page
             held.removeAllViews()
             when (val showing = ResourcePage.showing(answered)) {
-                is ResourcePage.Showing.Page -> held.addView(frame(showing.html))
+                is ResourcePage.Showing.Page -> {
+                    val resource = intent.getStringExtra("resource").orEmpty()
+                    when (ResourcePage.runs(showing.page, Frames.scriptAllowed(this, resource))) {
+                        null -> held.addView(consenting(showing))
+                        true -> held.addView(frame(showing.html, showing.page, script = true))
+                        false -> held.addView(frame(showing.html, showing.page, script = false))
+                    }
+                }
                 is ResourcePage.Showing.Text -> held.addView(text(showing.text))
                 is ResourcePage.Showing.Said -> {
                     held.addView(note(showing.why))
@@ -753,28 +762,63 @@ class ResourceActivity : Activity() {
 
     private fun short(permission: String) = permission.substringAfterLast('.').lowercase()
 
+    /**
+     * **The question, once per resource** ([ResourcePage.SCRIPT_ASKS]):
+     * the page declares that it runs code and the person has not said.
+     * Either answer frames the page; only one runs it.
+     */
+    private fun consenting(showing: ResourcePage.Showing.Page): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        val resource = intent.getStringExtra("resource").orEmpty()
+        addView(words(ResourcePage.SCRIPT_ASKS))
+        val decide = { allowed: Boolean ->
+            Frames.allowScript(this@ResourceActivity, resource, allowed)
+            Diag.event("resource.script", "resource" to resource.take(12), "allowed" to allowed.toString())
+            held?.let {
+                it.removeAllViews()
+                it.addView(frame(showing.html, showing.page, script = allowed))
+            }
+        }
+        addView(button("Allow its code for this resource") { decide(true) })
+        addView(button("Show it without its code") { decide(false) })
+    }
+
     /** The frame, and the whole of what it permits. */
     @SuppressLint("SetJavaScriptEnabled")
-    private fun frame(html: String): WebView = WebView(this).apply {
+    private fun frame(html: String, page: Gateway.Page, script: Boolean): WebView = WebView(this).apply {
         web = this
         layoutParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.MATCH_PARENT,
         )
+        val node = intent.getStringExtra("node").orEmpty()
+        val resource = intent.getStringExtra("resource").orEmpty()
+        val path = intent.getStringExtra("path") ?: "/"
+        val origin = Frames.origin(resource)
+        says?.text = ResourcePage.frameSays(script)
         // **the frame itself is [Frames.resource]**, which the
         // instrumentation run applies to a real `WebView` of its own: one
         // definition, so a test cannot pass while this screen drifts
-        Frames.resource(this)
+        Frames.resource(this, script)
+        if (script) {
+            // **the one object** ([ResourceBridge]): a request to the same
+            // resource through the kernel, and nothing else of this app
+            addJavascriptInterface(ResourceBridge(by, node, resource), "rhtn")
+        }
+        // the page as it was answered, styled, served to the first load
+        first = path to page.copy(body = html.toByteArray(Charsets.UTF_8))
         webViewClient = object : WebViewClient() {
-            /** **No origin, so no navigation.** Every one is refused. */
+            /** **Inside the origin the frame goes; anywhere else it does not.** */
             override fun shouldOverrideUrlLoading(
                 view: WebView,
                 request: WebResourceRequest,
             ): Boolean {
+                val going = request.url.toString()
+                if (Frames.resourceGoing(origin, going) == Frames.Going.INSIDE) return false
                 view.post {
                     android.widget.Toast.makeText(
                         view.context,
-                        "a resource's page goes nowhere: the frame did not follow that",
+                        "a resource's page reaches its own resource and nothing else: the frame did not follow that",
                         android.widget.Toast.LENGTH_SHORT,
                     ).show()
                 }
@@ -782,23 +826,49 @@ class ResourceActivity : Activity() {
             }
 
             /**
-             * **And nothing is fetched.** The settings already block
-             * loads; this is the same rule where a request would arrive
-             * anyway, answered with an empty body rather than an error
-             * the page could time.
+             * **Every load inside the origin is carried through the
+             * kernel; every other one is answered with nothing**, an
+             * empty body rather than an error the page could time. The
+             * engine hands over the method and the path and never a body,
+             * so a `POST` the engine makes is answered as such: a page
+             * that posts does it through [ResourceBridge].
              */
             override fun shouldInterceptRequest(
                 view: WebView,
                 request: WebResourceRequest,
-            ): WebResourceResponse = WebResourceResponse(
-                "text/plain",
-                "utf-8",
-                java.io.ByteArrayInputStream(ByteArray(0)),
-            )
+            ): WebResourceResponse {
+                val url = request.url.toString()
+                if (Frames.resourceGoing(origin, url) != Frames.Going.INSIDE) {
+                    return WebResourceResponse("text/plain", "utf-8", java.io.ByteArrayInputStream(ByteArray(0)))
+                }
+                val at = url.removePrefix(origin).ifEmpty { "/" }
+                if (request.method.uppercase() != "GET") {
+                    return WebResourceResponse(
+                        "text/plain", "utf-8", 405, "Method Not Allowed", emptyMap(),
+                        java.io.ByteArrayInputStream(
+                            "this frame carries a GET as the engine asks it; a request with a body goes through rhtn.request\n".toByteArray(),
+                        ),
+                    )
+                }
+                val served = first?.takeIf { it.first == at }?.also { first = null }?.second
+                    ?: askAsHolder(node, resource, at)?.page
+                    ?: return WebResourceResponse("text/plain", "utf-8", java.io.ByteArrayInputStream(ByteArray(0)))
+                val headers = mutableMapOf<String, String>()
+                served.policy?.let { headers["content-security-policy"] = it }
+                return WebResourceResponse(
+                    served.media ?: "application/octet-stream",
+                    served.charset ?: "utf-8",
+                    served.httpStatus,
+                    if (served.httpStatus in 200..299) "OK" else "Answered",
+                    headers,
+                    java.io.ByteArrayInputStream(served.body),
+                )
+            }
         }
-        // the null base is the point: an opaque origin, same-origin with
-        // nothing, not even with itself
-        loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
+        // **the origin's own URL, served from the answer in hand**: the
+        // document is same-origin with its resource, and the engine holds
+        // it to the policy the resource declared
+        loadUrl("$origin$path")
     }
 
     /** `text/plain` is not a page, so it is not framed as one. */
@@ -838,15 +908,15 @@ class ResourceActivity : Activity() {
         runCatching { cancelling?.cancel() }
         cancelling = null
         stopReading()
-        // **nothing the page left behind outlives the screen**
+        // **what the page stored stays, under its own origin** [author,
+        // 2026-11-15]: the resource's, until the person forgets the
+        // resource ([Frames.forget]); the view itself goes with the screen
         web?.let {
             it.stopLoading()
             it.loadUrl("about:blank")
             it.destroy()
         }
         web = null
-        WebStorage.getInstance().deleteAllData()
-        android.webkit.CookieManager.getInstance().removeAllCookies(null)
         super.onDestroy()
     }
 }

@@ -67,8 +67,29 @@ pub struct Answer {
     pub charset: Option<String>,
     /// What may be shown of it.
     pub shape: Shape,
+    /// **The page's own declaration of what it does**: its
+    /// `content-security-policy`, as the resource sent it, or none.  A
+    /// frame hands it to the engine so the page runs under the policy its
+    /// author wrote.
+    pub policy: Option<String>,
+    /// **Whether the page declares that it runs script**
+    /// (`light-client-requirements.md` §8) [author, 2026-11-15]: its
+    /// policy names `script-src`.  A page that declares nothing runs no
+    /// script, whatever its markup carries; a page that declares it is put
+    /// to the person once per resource before any of it runs.
+    pub runs_script: bool,
     /// The body as it arrived.
     pub body: Vec<u8>,
+}
+
+/// Whether a policy names `script-src`: the declaration, and the only
+/// reading of the policy this kernel makes.  Directives are `;`-separated
+/// and a header may carry several policies `,`-separated.
+#[must_use]
+pub fn declares_script(policy: &str) -> bool {
+    policy
+        .split([';', ','])
+        .any(|d| d.trim().to_ascii_lowercase().starts_with("script-src"))
 }
 
 /// Why a message was not taken.
@@ -153,6 +174,7 @@ pub fn answer(bytes: &[u8]) -> Result<Answer, Refusal> {
     let mut encodings = 0usize;
     let mut content_type: Option<String> = None;
     let mut types = 0usize;
+    let mut policies: Vec<String> = Vec::new();
     for line in &lines[1..] {
         if line.is_empty() {
             return Err(Refusal::Header("an empty line inside the headers".into()));
@@ -192,6 +214,8 @@ pub fn answer(bytes: &[u8]) -> Result<Answer, Refusal> {
                 types += 1;
                 content_type = Some(value);
             }
+            // repeated policies combine, as the header does
+            b"content-security-policy" => policies.push(value),
             _ => {}
         }
     }
@@ -233,11 +257,15 @@ pub fn answer(bytes: &[u8]) -> Result<Answer, Refusal> {
     };
 
     let (media, charset) = type_of(content_type.as_deref());
+    let policy = (!policies.is_empty()).then(|| policies.join(", "));
+    let runs_script = policy.as_deref().is_some_and(declares_script);
     Ok(Answer {
         http_status: status,
         shape: shape_of(media.as_deref()),
         media,
         charset,
+        policy,
+        runs_script,
         body,
     })
 }
@@ -328,4 +356,43 @@ fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 
 fn lossy(line: &[u8]) -> String {
     String::from_utf8_lossy(&line[..line.len().min(64)]).to_string()
+}
+
+#[cfg(test)]
+mod script_declaration {
+    use super::*;
+
+    // functional: CAT-027
+    #[test]
+    fn a_page_runs_script_only_where_its_own_policy_names_it() {
+        let plain =
+            answer(b"HTTP/1.1 200 OK\r\ncontent-type: text/html\r\ncontent-length: 2\r\n\r\nhi")
+                .unwrap();
+        assert_eq!(plain.policy, None);
+        assert!(
+            !plain.runs_script,
+            "no declaration, no script, whatever the markup carries"
+        );
+        let declared = answer(
+            b"HTTP/1.1 200 OK\r\ncontent-type: text/html\r\ncontent-security-policy: default-src 'none'; script-src 'self' 'unsafe-inline'\r\ncontent-length: 2\r\n\r\nhi",
+        )
+        .unwrap();
+        assert_eq!(
+            declared.policy.as_deref(),
+            Some("default-src 'none'; script-src 'self' 'unsafe-inline'")
+        );
+        assert!(declared.runs_script);
+        // a policy without script-src declares no script, and two headers combine
+        let other = answer(
+            b"HTTP/1.1 200 OK\r\ncontent-type: text/html\r\ncontent-security-policy: default-src 'self'\r\nContent-Security-Policy: img-src *\r\ncontent-length: 2\r\n\r\nhi",
+        )
+        .unwrap();
+        assert_eq!(
+            other.policy.as_deref(),
+            Some("default-src 'self', img-src *")
+        );
+        assert!(!other.runs_script);
+        assert!(declares_script("SCRIPT-SRC 'none'"));
+        assert!(!declares_script("default-src 'self'; style-src 'self'"));
+    }
 }
