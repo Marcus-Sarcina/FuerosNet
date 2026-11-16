@@ -118,12 +118,6 @@ impl HostSurface {
         block: Option<Arc<Block>>,
         log: Option<Arc<LogFile>>,
     ) -> [u8; 32] {
-        let mut held = self.held.lock().unwrap();
-        if let Some(h) = held.iter_mut().find(|h| h.instance == instance) {
-            h.block = block;
-            h.log = log;
-            return h.secret;
-        }
         let mut secret = [0u8; 32];
         {
             use aws_lc_rs::rand::SecureRandom as _;
@@ -139,6 +133,27 @@ impl HostSurface {
                 );
                 return [0u8; 32];
             }
+        }
+        self.register_with(instance, block, log, secret)
+    }
+
+    /// Register under the secret the host established for the instance
+    /// when it started it [author, 2026-11-15]: one secret both ways, so
+    /// what the node presents on the hop to the instance is what the
+    /// instance presents here.  An instance held already keeps its secret
+    /// and takes the block and log given.
+    pub fn register_with(
+        &self,
+        instance: Keyhash,
+        block: Option<Arc<Block>>,
+        log: Option<Arc<LogFile>>,
+        secret: [u8; 32],
+    ) -> [u8; 32] {
+        let mut held = self.held.lock().unwrap();
+        if let Some(h) = held.iter_mut().find(|h| h.instance == instance) {
+            h.block = block;
+            h.log = log;
+            return h.secret;
         }
         held.push(Held {
             instance,

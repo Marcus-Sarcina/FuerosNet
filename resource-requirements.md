@@ -180,7 +180,13 @@ stated as requirements:
 
 **Where a resource cannot guarantee it is unreachable except through the node**, it
 should require a shared secret established at package installation, so
-gateway-inserted headers are distinguishable from client-supplied ones.
+gateway-inserted headers are distinguishable from client-supplied ones. **The
+secret is the one your host started you with** [author, 2026-11-15]: handed over
+as an argument at your start, presented by the node as `rhtn-secret` on every
+request it relays to you (`wire-format.md` §11.2), and the same one you present
+to your host's surface (§3.3), one secret both ways. Read the node's `rhtn-*`
+headers on a request that presents it and on no other; answer a request that
+does not as you would an anonymous one.
 
 ### 3.2 Why HTTP rather than something purpose-built
 
@@ -319,8 +325,9 @@ path on its filesystem: a package in the sandbox reaches its block as a binding
 it imported, and you reach the same block by asking the host, so one
 implementation enforces the ceiling for both of you
 (`infra-client-requirements.md` §9.3). **Present `rhtn-secret` on every
-request**; it is what says which instance is asking, so there is no instance to
-name and none you could name. Against `rhtn-block` you may list your files, and
+request** — the secret your host started you with, the one it presents to you
+(§3.1) [author, 2026-11-15]; it is what says which instance is asking, so there
+is no instance to name and none you could name. Against `rhtn-block` you may list your files, and
 read, write, `sync`, size or remove one under a flat name of your choosing;
 against `rhtn-log` you may write a line, which your host stamps, **and nothing
 else** — the log is for your operator to read and not for you to read back. A

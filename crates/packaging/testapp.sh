@@ -293,7 +293,13 @@ install_it() {
     *) network="--network=container:$NODE"
        say "the node keeps its own network namespace ($mode), so the package joins it" ;;
   esac
-  there "$REMOTE_ENGINE run -d --name $CONTAINER --restart=always $network $NAME:latest --listen 127.0.0.1:$PORT --resource $resource" > /dev/null
+  # **the secret the node established for this instance** (resource §3.1):
+  # minted when the node applied the hosting file above, presented on every
+  # request it relays, and what the package reads its headers behind
+  local secret
+  secret="$(get "$STATE/state/secrets/$resource.secret" | tr -d '[:space:]')"
+  [ "${#secret}" -eq 64 ] || die "the node kept no secret for $resource under $STATE/state/secrets; a daemon older than the secret refuses nothing and presents nothing"
+  there "$REMOTE_ENGINE run -d --name $CONTAINER --restart=always $network $NAME:latest --listen 127.0.0.1:$PORT --resource $resource --secret $secret" > /dev/null
   say "the resource is running as $CONTAINER on 127.0.0.1:$PORT"
   echo
   echo "  resource  $resource"

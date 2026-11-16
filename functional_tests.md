@@ -649,6 +649,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | GAT-039 | C | **The response written out declares its extent exactly once and narrows nothing the package may answer with.** Bare-newline, chunked and unframed answers all become one canonical message whose length agrees with its content, and re-parsing that output yields the same response. Every body byte survives, including bytes that read as a second message; repeated headers stay repeated and the declared type and content-encoding are untouched. Test that framing is settled and semantics are not. | W §11.2 |
 | GAT-040 | C | **Strip the resource's `rhtn-*` headers from its response as the caller's are stripped from the request**, so that an `rhtn-*` header on the member path was written by the node in both directions. Strip rather than reject — a stray header is a package defect for the operator, not a reason to take the resource down — and leave the node's own control exchanges with a resource untouched, they being a different path. Test that none of the namespace travels, that the package's own headers and body do, and that the answer is still delivered. | W §11.2; R §§3.1, 3.3 |
 | GAT-041 | S | **A resource request or response larger than one frame travels as a sequence of frames on the one stream, and the whole is bounded per message.** A `ResourceRequest` may repeat, each portion naming the same resource and carrying the next part of one HTTP message, the requester closing its side when it ends; the node joins the portions before parsing, and a portion naming another resource or failing to decode fails the stream. A delivered response larger than a frame is written as repeated status-0 frames. Either message is bounded at 16 MiB; a request past it is dropped unanswered and a response past it is not read on. Test: a request body and a response body each over the frame bound crossing a real node whole; a portion naming another resource failing the stream; a one-frame request unchanged. | W §§9.2, 11, 11.2 |
+| GAT-042 | C | **The node presents the instance's secret on the hop to a resource on a socket of its own** [author, 2026-11-15]: one secret per instance, established by the host when it starts the instance and handed over as an argument, inserted as `rhtn-secret` among the node's own headers after the caller's namespace is stripped, the same secret the instance presents to the host's surface; kept by the host across its restart; none on the hop to a sandboxed resource, which nothing but the node can call. A resource on a socket reads the node's `rhtn-*` headers behind that secret and nowhere else, answering a request without it as anonymous. Test: the request a socket package receives through the gateway is the node's canonical serialisation with `rhtn-secret` equal to what the package was started with and nothing else added; a request to the socket from another local process carrying `rhtn-principal` and `rhtn-roles` is answered as anonymous; the install's start carries the secret; a second apply over the same state reads the secret back rather than minting one; the surface registers the instance under the same secret. | W §11.2; R §§3.1, 3.3; I §9.3 |
 
 ### Package admission, isolation, federation and abuse reporting
 
@@ -667,6 +668,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | PKG-011 | C | Deliver abuse reports privately to the relevant owner for local action. Do not flood them, add resource assertions to social trust, or append them to identity archives; application detail may identify a complainant but there is no extra protocol reporter identity field. | D §§11.0.3, 11.6; W §6.3 |
 | PKG-012 | C | A local application-report bridge may submit the resource's bounded report, but must not hand a package privileged participant signing keys or general network transaction primitives. Receipt does not imply an automatic punishment or an unspecified report-response protocol. | R §9; I §9.2; W §6.3 |
 | PKG-018 | C | **Ask a member's client for a utility only by answering with one typed ask**, and read what comes back as submitted application data: a POST to the return path with the named parts, `outcome` given or declined with a reason, and for a capture or a signature the digest, key and claim verified over the stated array with the key the answer carried. An ask the client could not read gets no answer; a declined ask is an answer and is not re-asked in a loop; the key is the device's for this resource alone and changes on a restore. Test: a package answering with an ask and taking the POST; the claim verified and refused under another audience; a malformed ask yielding nothing. | R §3.4; L §8.1 |
+| PKG-019 | C | **An image is installed by its digest and never by a tag** [author, 2026-11-15]: the host refuses an install request whose image reference carries no `@sha256:<64 hex>`, naming the form it wants; a tag names whatever a registry holds today, a digest the bytes the publisher showed the operator and what a signature will pin to. Test: references by digest install; a tag, a bare name, a short digest and a digest with no path are each refused with the form named; an already-installed package is read back as installed whatever its reference. | I §9.1 |
 
 ### Resource-side session and portability behavior
 
@@ -1055,7 +1057,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **581 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **583 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -1076,8 +1078,8 @@ This specification contains **581 numbered requirement/test families** across **
 | PAY | 20 |
 | POL | 22 |
 | CAT | 26 |
-| GAT | 41 |
-| PKG | 18 |
+| GAT | 42 |
+| PKG | 19 |
 | APP | 17 |
 | UX | 31 |
 | OPS | 27 |

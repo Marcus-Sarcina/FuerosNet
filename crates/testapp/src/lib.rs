@@ -371,6 +371,8 @@ pub struct App {
     pub walks: BTreeMap<String, Walk>,
     /// Every line this application would write to its log.
     pub said: Vec<String>,
+    /// The secret the host started this instance with, if any.
+    secret: Option<[u8; 32]>,
 }
 
 impl App {
@@ -380,7 +382,29 @@ impl App {
             me,
             walks: BTreeMap::new(),
             said: Vec::new(),
+            secret: None,
         }
+    }
+
+    /// **The secret the host started this instance with**
+    /// (`resource-requirements.md` §3.1): a request presenting it came
+    /// through the node, whose `rhtn-*` headers are then read; one that
+    /// does not is answered as anonymous, whatever headers it carries,
+    /// since a port of this instance's own is one any local process can
+    /// open.
+    #[must_use]
+    pub fn with_secret(mut self, secret: [u8; 32]) -> App {
+        self.secret = Some(secret);
+        self
+    }
+
+    /// Whether `headers` carry the secret this instance was started with.
+    fn behind_the_secret(&self, headers: &[(String, String)]) -> bool {
+        let Some(s) = &self.secret else {
+            return false;
+        };
+        let want: String = s.iter().map(|b| format!("{b:02x}")).collect();
+        header(headers, "rhtn-secret").is_some_and(|h| h.eq_ignore_ascii_case(&want))
     }
 
     /// **One request in, one response out** (`wire-format.md` §11): the
@@ -393,8 +417,18 @@ impl App {
                 b"this is not one HTTP/1.1 request\n".to_vec(),
             );
         };
-        let principal = header(&headers, "rhtn-principal").unwrap_or_else(|| "unknown".into());
-        let roles = header(&headers, "rhtn-roles").unwrap_or_default();
+        // **the node's headers are read behind the secret and nowhere else**
+        let node = self.behind_the_secret(&headers);
+        let principal = if node {
+            header(&headers, "rhtn-principal").unwrap_or_else(|| "unknown".into())
+        } else {
+            "unknown".into()
+        };
+        let roles = if node {
+            header(&headers, "rhtn-roles").unwrap_or_default()
+        } else {
+            String::new()
+        };
         match method.as_str() {
             "GET" => {
                 let walk = self.walks.entry(principal.clone()).or_default();
@@ -661,4 +695,46 @@ pub fn unhex(s: &str) -> Option<Vec<u8>> {
 
 fn unhex32(s: &str) -> Option<[u8; 32]> {
     unhex(s)?.try_into().ok()
+}
+
+#[cfg(test)]
+mod secret {
+    use super::*;
+
+    fn req(headers: &str) -> Vec<u8> {
+        format!("GET /walk HTTP/1.1\r\nhost: a\r\n{headers}\r\n").into_bytes()
+    }
+
+    /// **The node's headers are read behind the secret and nowhere else**
+    /// (`resource-requirements.md` §3.1; GAT-042): a request from any local
+    /// process carrying `rhtn-principal` is anonymous without it.
+    // functional: GAT-042
+    #[test]
+    fn the_nodes_headers_count_only_behind_the_secret() {
+        let secret = [7u8; 32];
+        let hex: String = secret.iter().map(|b| format!("{b:02x}")).collect();
+        let mut app = App::new([1; 32]).with_secret(secret);
+        // behind the secret, the principal the node named is the one whose walk begins
+        app.handle(&req(&format!(
+            "rhtn-principal: alice\r\nrhtn-roles: reader\r\nrhtn-secret: {hex}\r\n"
+        )));
+        assert!(app.walks.contains_key("alice"), "{:?}", app.walks.keys());
+        // without it, the same headers from any local process are anonymous
+        app.handle(&req("rhtn-principal: bob\r\nrhtn-roles: reader\r\n"));
+        assert!(app.walks.contains_key("unknown") && !app.walks.contains_key("bob"));
+        // a wrong secret is no secret
+        app.handle(&req(
+            "rhtn-principal: carol\r\nrhtn-roles: reader\r\nrhtn-secret: 00\r\n",
+        ));
+        assert!(!app.walks.contains_key("carol"));
+        // an instance started with no secret trusts nobody
+        let mut bare = App::new([1; 32]);
+        bare.handle(&req(&format!(
+            "rhtn-principal: alice\r\nrhtn-secret: {hex}\r\n"
+        )));
+        assert_eq!(
+            bare.walks.keys().cloned().collect::<Vec<_>>(),
+            vec!["unknown".to_string()]
+        );
+    }
 }

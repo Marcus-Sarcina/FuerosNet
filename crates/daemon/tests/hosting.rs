@@ -512,6 +512,7 @@ fn an_operators_grant_is_written_in_clauses_and_refused_as_a_whole() {
 /// credential of §2 travels as request headers, and what comes back is the
 /// resource's own answer relayed unread (§3: "the node relays them; it
 /// does not interpret them").
+// functional: GAT-042
 #[test]
 fn a_resource_that_holds_its_own_port_is_reached_over_a_socket() {
     use rhtn_archive::topology::Table;
@@ -606,6 +607,33 @@ fn a_resource_that_holds_its_own_port_is_reached_over_a_socket() {
     assert!(
         seen.contains("host: shop.internal"),
         "the authority the operator bound, not the one the caller wrote: {seen}"
+    );
+    // **and the instance's secret, once, the one the host keeps for it**
+    // (`wire-format.md` §11.2; `resource-requirements.md` §3.1; GAT-042)
+    let kept = std::fs::read_to_string(
+        d.0.join("state")
+            .join("secrets")
+            .join(format!("{RES}.secret")),
+    )
+    .expect("the host keeps the instance's secret under its state");
+    assert_eq!(kept.trim().len(), 64, "64 hex digits: {kept}");
+    assert_eq!(
+        seen.matches("rhtn-secret:").count(),
+        1,
+        "the secret is presented once on the hop: {seen}"
+    );
+    assert!(
+        seen.contains(&format!("rhtn-secret: {}\r\n", kept.trim())),
+        "and it is the one kept: {seen}"
+    );
+    // the same state read again yields the same secret rather than a new one
+    let res = g.bound()[0];
+    assert_eq!(
+        rhtn_daemon::hosting::instance_secret(Some(&d.0.join("state")), &res)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>(),
+        kept.trim()
     );
 }
 

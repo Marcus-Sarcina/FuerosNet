@@ -729,6 +729,13 @@ distribution problem rather than a protocol one:
 - Update channel and its trust model
 - Capability declaration in the manifest
 
+**Until those exist, one thing you can do already: install an image by its
+digest and never by a tag** [author, 2026-11-15]. A tag names whatever the
+registry holds under it at the moment you pull, which is nothing anybody
+looked at; a digest names the bytes the publisher showed your operator, and
+it is what a signature or a provenance record will pin to when there is one.
+Refuse an install that names no digest, with the form it should have.
+
 **It also creates a trust relationship the trust model does not represent:** a
 subnet's members trust their patron's judgment about which packages to run.
 Nothing in design §16 expresses that, and it is not obviously reducible to the
@@ -922,7 +929,13 @@ not declare; a package importing fetch that names no destination, or jobs
 without a `job` entry, is refused at installation. A package on a socket of its own has its own network, and the
 list it declared is its operator's to read. A package on a socket of its own
 reaches them on a surface of yours rather than on your filesystem [author,
-2026-11-05]; **you tell it where its block and its log are, and
+2026-11-05]. **Establish one secret per instance when you start it, hand it
+over as an argument, present it as `rhtn-secret` on every request you relay to
+its socket, and take it on its requests to your surface** [author,
+2026-11-15]: one secret both ways (`resource-requirements.md` §§3.1, 3.3;
+`wire-format.md` §11.2), kept where only you read it and surviving your
+restart, since the runner restarts the instance with the arguments it was
+started with. **You tell it where its block and its log are, and
 what it may fill them to, on the relationships exchange**
 (`resource-requirements.md` §3.3): `rhtn-host` with the versions you offer,
 `rhtn-block` and `rhtn-block-bytes`, `rhtn-log` and `rhtn-log-bytes`,

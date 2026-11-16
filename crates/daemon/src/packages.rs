@@ -267,6 +267,26 @@ pub fn image(s: &str) -> Result<String, String> {
             "`{s}` is not an image reference: a registry path and a tag or digest"
         ));
     }
+    // **by digest, never by tag** [author, 2026-11-15]: a tag names whatever
+    // the registry holds under it today, and an install that pulled one
+    // would have installed something nobody looked at.  The digest is what
+    // a signature or a provenance record will pin to
+    // (`infra-client-requirements.md` §9.1); until those exist it is the
+    // one name an operator can check against what they were shown.
+    let Some((path, digest)) = s.rsplit_once("@sha256:") else {
+        return Err(format!(
+            "`{s}` names no digest: install an image as `<registry path>@sha256:<64 hex>`, \
+             the digest the publisher showed you, never a tag"
+        ));
+    };
+    if path.is_empty() || path.contains('@') {
+        return Err(format!(
+            "`{s}` is not an image reference: a registry path before `@sha256:`"
+        ));
+    }
+    if digest.len() != 64 || !digest.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(format!("`{s}`: a digest is 64 hex digits after `@sha256:`"));
+    }
     Ok(s.to_string())
 }
 
@@ -442,8 +462,25 @@ mod tests {
         ] {
             assert!(authority(bad).is_err(), "`{bad}` is not an authority");
         }
-        assert!(image("ggcr.io/mzuech/fuerosnet/rhtn-testapp:abc12345").is_ok());
-        assert!(image("rhtn-testapp@sha256:00ff").is_ok());
+        // functional: PKG-019
+        let digest = "ab".repeat(32);
+        assert!(
+            image(&format!(
+                "ggcr.io/mzuech/fuerosnet/rhtn-testapp@sha256:{digest}"
+            ))
+            .is_ok()
+        );
+        assert!(image(&format!("rhtn-testapp@sha256:{digest}")).is_ok());
+        // **a tag is not an install** [author, 2026-11-15]: by digest alone
+        for bad in [
+            "ggcr.io/mzuech/fuerosnet/rhtn-testapp:abc12345",
+            "rhtn-testapp:latest",
+            "rhtn-testapp",
+            "rhtn-testapp@sha256:00ff",
+            "@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        ] {
+            assert!(image(bad).is_err(), "`{bad}` is not an install by digest");
+        }
         for bad in ["", "-rm", "a;b", "a b", "a$b", "a|b"] {
             assert!(image(bad).is_err(), "`{bad}` is not an image reference");
         }

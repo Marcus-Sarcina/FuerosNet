@@ -39,6 +39,7 @@ fn main() -> std::process::ExitCode {
     let mut listen = "127.0.0.1:7460".to_string();
     let mut resource = String::new();
     let mut log: Option<String> = None;
+    let mut secret: Option<[u8; 32]> = None;
     let mut i = 0usize;
     while i < args.len() {
         match args[i].as_str() {
@@ -52,6 +53,20 @@ fn main() -> std::process::ExitCode {
             }
             "--log" => {
                 log = args.get(i + 1).cloned();
+                i += 2;
+            }
+            "--secret" => {
+                let Some(s) = args
+                    .get(i + 1)
+                    .and_then(|h| unhex(h))
+                    .and_then(|b| <[u8; 32]>::try_from(b).ok())
+                else {
+                    eprintln!(
+                        "rhtn-testapp: --secret is the 64 hex digits the host started this instance with"
+                    );
+                    return std::process::ExitCode::from(2);
+                };
+                secret = Some(s);
                 i += 2;
             }
             other => {
@@ -75,6 +90,11 @@ fn main() -> std::process::ExitCode {
         }
     };
     let mut app = App::new(me);
+    if let Some(s) = secret {
+        app = app.with_secret(s);
+    } else {
+        eprintln!("rhtn-testapp: started without --secret: every request is answered as anonymous");
+    }
     println!(
         "rhtn-testapp: {listen}, resource {}…",
         &resource[..16.min(resource.len())]

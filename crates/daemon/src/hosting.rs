@@ -442,6 +442,7 @@ pub struct Applied {
         Keyhash,
         Option<Arc<rhtn_resources::Block>>,
         Option<Arc<rhtn_resources::LogFile>>,
+        [u8; 32],
     )>,
 }
 
@@ -458,13 +459,13 @@ impl Applied {
     /// every instance this file did not bind, so an instance the operator
     /// stopped hosting loses its block with the binding and not after it.
     pub fn over(&mut self, surface: &crate::host::HostSurface) {
-        let mine: Vec<Keyhash> = self.provisioned.iter().map(|(r, _, _)| *r).collect();
+        let mine: Vec<Keyhash> = self.provisioned.iter().map(|(r, _, _, _)| *r).collect();
         surface.retain(&mine);
-        for (res, block, log) in &self.provisioned {
+        for (res, block, log, secret) in &self.provisioned {
             if block.is_none() && log.is_none() {
                 continue;
             }
-            let secret = surface.register(*res, block.clone(), log.clone());
+            let secret = surface.register_with(*res, block.clone(), log.clone(), *secret);
             let Some((_, own)) = self.facts.iter_mut().find(|(r, _)| r == res) else {
                 continue;
             };
@@ -523,6 +524,7 @@ pub fn apply(
         Keyhash,
         Option<Arc<rhtn_resources::Block>>,
         Option<Arc<rhtn_resources::LogFile>>,
+        [u8; 32],
     )> = Vec::new();
     // **two resources at one address is a collision, not a choice.**
     // Nothing partitions ports across package authors and nothing could,
@@ -567,6 +569,11 @@ pub fn apply(
         // under the node's state directory and named to the instance; a
         // node with no such directory cannot host a package that needs
         // one, which §9 makes ordinary capacity, said at installation
+        // **the instance's secret** (`resource-requirements.md` §3.1): the
+        // host establishes it when it starts the instance, presents it on
+        // every hop to a socket of the instance's own, and takes it on the
+        // instance's requests to its block and log
+        let secret = instance_secret(state, &res);
         let wants_block = manifest.budget.block_bytes.is_some()
             || manifest.imports.iter().any(|i| i == "rhtn/1:block");
         let wants_log = manifest.budget.log_bytes.is_some()
@@ -617,7 +624,7 @@ pub fn apply(
                     kept_log = Some(log.clone());
                     env.log = Some(log);
                 }
-                provisioned.push((res, kept_block, kept_log));
+                provisioned.push((res, kept_block, kept_log, secret));
                 facts.push((res, own));
                 env
             }
@@ -704,7 +711,9 @@ pub fn apply(
                     ));
                 }
                 addresses.push((addr, h.resource.clone()));
-                Some(Arc::new(Relay::to(addr, limits.response)))
+                Some(Arc::new(
+                    Relay::to(addr, limits.response).presenting(secret),
+                ))
             }
             (None, Some(c)) => {
                 let bytes = std::fs::read(c).map_err(|e| at(0, format!("{}: {e}", c.display())))?;
@@ -1022,4 +1031,71 @@ pub(crate) fn grant_toml(g: &Grant) -> String {
         }
     }
     out
+}
+
+/// **The secret the host establishes for an instance** [author,
+/// 2026-11-15]: kept under the state directory, one file per resource,
+/// closed to everything but the host, minted on first need and read back
+/// after a restart so an instance the runner restarts with its original
+/// arguments still holds the secret the node presents.  Without a state
+/// directory it is minted once per process and said so, since nothing
+/// could keep it.
+pub fn instance_secret(state: Option<&Path>, res: &Keyhash) -> [u8; 32] {
+    use std::sync::{Mutex, OnceLock};
+    static MINTED: OnceLock<Mutex<std::collections::BTreeMap<Keyhash, [u8; 32]>>> = OnceLock::new();
+    let mint = || {
+        let mut s = [0u8; 32];
+        use aws_lc_rs::rand::SecureRandom as _;
+        if aws_lc_rs::rand::SystemRandom::new().fill(&mut s).is_err() {
+            crate::say!("rhtnd: no randomness for an instance's secret");
+        }
+        s
+    };
+    let Some(root) = state else {
+        let held = MINTED.get_or_init(|| Mutex::new(Default::default()));
+        let mut held = held.lock().unwrap();
+        return *held.entry(*res).or_insert_with(mint);
+    };
+    let dir = root.join("secrets");
+    let file = dir.join(format!("{}.secret", hex_of(res)));
+    if let Ok(text) = std::fs::read_to_string(&file)
+        && let Some(bytes) = unhex32(text.trim())
+    {
+        return bytes;
+    }
+    let s = mint();
+    let _ = std::fs::create_dir_all(&dir);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700));
+    }
+    if std::fs::write(&file, crate::host::hex_secret(&s)).is_ok() {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600));
+        }
+    } else {
+        crate::say!(
+            "rhtnd: {}: an instance's secret could not be kept; it will not survive a restart",
+            file.display()
+        );
+    }
+    s
+}
+
+fn hex_of(k: &Keyhash) -> String {
+    k.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn unhex32(s: &str) -> Option<[u8; 32]> {
+    if s.len() != 64 {
+        return None;
+    }
+    let mut out = [0u8; 32];
+    for (i, o) in out.iter_mut().enumerate() {
+        *o = u8::from_str_radix(&s[2 * i..2 * i + 2], 16).ok()?;
+    }
+    Some(out)
 }

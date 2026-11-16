@@ -60,12 +60,52 @@ pub struct Relay {
     /// backends must agree, or the same resource answers differently for
     /// having been packaged differently.
     cap: usize,
+    /// **The instance's secret, presented on every hop** [author,
+    /// 2026-11-15]: the one the host established when it started the
+    /// instance and the one the instance presents to the host's surface,
+    /// one secret both ways (`resource-requirements.md` §§3.1, 3.3;
+    /// `wire-format.md` §11.2).  A resource on a socket of its own can be
+    /// reached by any local process, and this header, inserted after the
+    /// caller's namespace is stripped, is what tells it the node from one.
+    secret: Option<[u8; 32]>,
 }
 
 impl Relay {
     /// Reach the resource at `addr`, carrying at most `cap` bytes back.
     pub fn to(addr: SocketAddr, cap: usize) -> Self {
-        Relay { addr, cap }
+        Relay {
+            addr,
+            cap,
+            secret: None,
+        }
+    }
+
+    /// The same relay, presenting `secret` on every hop.
+    #[must_use]
+    pub fn presenting(mut self, secret: [u8; 32]) -> Self {
+        self.secret = Some(secret);
+        self
+    }
+
+    /// The message as it goes on the wire: the node's canonical
+    /// serialisation, the secret inserted among the node's own headers
+    /// where one is held.
+    pub fn on_the_wire(&self, message: &[u8]) -> Vec<u8> {
+        let Some(s) = &self.secret else {
+            return message.to_vec();
+        };
+        let Some(end) = find(message, b"\r\n\r\n") else {
+            return message.to_vec();
+        };
+        let mut out = Vec::with_capacity(message.len() + 80);
+        out.extend_from_slice(&message[..end + 2]);
+        out.extend_from_slice(b"rhtn-secret: ");
+        for b in s {
+            out.extend_from_slice(format!("{b:02x}").as_bytes());
+        }
+        out.extend_from_slice(b"\r\n");
+        out.extend_from_slice(&message[end + 2..]);
+        out
     }
 
     /// Where it points, for the operator's page.
@@ -92,7 +132,8 @@ impl Backend for Relay {
         s.set_write_timeout(Some(PATIENCE))
             .map_err(|e| e.to_string())?;
         let _ = s.set_nodelay(true);
-        s.write_all(message).map_err(|e| e.to_string())?;
+        let message = self.on_the_wire(message);
+        s.write_all(&message).map_err(|e| e.to_string())?;
         s.flush().map_err(|e| e.to_string())?;
 
         // the head first, because the framing is in it

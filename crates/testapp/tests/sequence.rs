@@ -17,6 +17,19 @@ const ME: [u8; 32] = [0x5a; 32];
 /// A device's application secret, as the kernel mints one.
 const SECRET: [u8; 32] = [0x11; 32];
 
+/// **The secret the host started this instance with**: the node's
+/// headers are read behind it and nowhere else (`resource-requirements.md`
+/// §3.1), so the fixture presents it as the node does.
+const HOST_SECRET: [u8; 32] = [0x22; 32];
+
+fn host_secret() -> String {
+    HOST_SECRET.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn app() -> App {
+    App::new(ME).with_secret(HOST_SECRET)
+}
+
 /// **A principal as the node writes it**: `rhtn-principal` carries the
 /// keyhash base64url-encoded (`rhtn_node::http::serialise`), not hex, so
 /// the walks below are keyed the way a real one is.
@@ -25,7 +38,8 @@ const OTHER: &str = "Zm9sZGVyAAAAAAAAAAAAAAAAAA";
 
 fn get(app: &mut App, who: &str) -> (u16, String, Vec<u8>) {
     let request = format!(
-        "GET / HTTP/1.1\r\nhost: testapp.internal\r\nrhtn-principal: {who}\r\nrhtn-roles: reader\r\n\r\n"
+        "GET / HTTP/1.1\r\nhost: testapp.internal\r\nrhtn-principal: {who}\r\nrhtn-roles: reader\r\nrhtn-secret: {}\r\n\r\n",
+        host_secret()
     );
     answered(app.handle(request.as_bytes()))
 }
@@ -36,7 +50,10 @@ fn post(app: &mut App, who: &str, request: &[u8]) -> (u16, String, Vec<u8>) {
     let text = String::from_utf8_lossy(request).to_string();
     let with = text.replacen(
         "host: resource\r\n",
-        &format!("host: testapp.internal\r\nrhtn-principal: {who}\r\nrhtn-roles: reader\r\n"),
+        &format!(
+            "host: testapp.internal\r\nrhtn-principal: {who}\r\nrhtn-roles: reader\r\nrhtn-secret: {}\r\n",
+            host_secret()
+        ),
         1,
     );
     answered(app.handle(with.as_bytes()))
@@ -128,7 +145,7 @@ fn compose(ask: &utility::Ask, outcome: &Outcome, at: u64) -> Vec<u8> {
 // acceptance: RSC-66
 #[test]
 fn the_whole_sequence_walks_and_every_claim_verifies_at_the_resource() {
-    let mut app = App::new(ME);
+    let mut app = app();
     let who = WHO.to_string();
 
     // the first request is answered with the first ask, under the media
@@ -195,7 +212,7 @@ fn the_whole_sequence_walks_and_every_claim_verifies_at_the_resource() {
 // acceptance: RSC-66
 #[test]
 fn a_claim_for_another_audience_or_over_other_bytes_is_refused_here() {
-    let mut app = App::new(ME);
+    let mut app = app();
     let who = WHO.to_string();
     // walk to the capture, which is the first step that signs
     let mut body = get(&mut app, &who).2;
@@ -273,7 +290,7 @@ fn body_of(request: &[u8]) -> &[u8] {
 
 #[test]
 fn an_answer_that_crosses_the_walk_is_refused_and_the_walk_stands() {
-    let mut app = App::new(ME);
+    let mut app = app();
     let who = WHO.to_string();
     let body = get(&mut app, &who).2;
     let ask = utility::parse(&body).expect("the first ask");

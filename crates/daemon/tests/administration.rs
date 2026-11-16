@@ -1544,7 +1544,7 @@ fn a_package_is_installed_on_the_hosts_shell_and_the_node_then_hosts_it() {
     });
     let resource = hex(&[0xa7u8; 32]);
     let owner = hex(&test_identity("bob").public.keyhash);
-    let image = "ggcr.io/mzuech/fuerosnet/rhtn-testapp:abc12345";
+    let image = "ggcr.io/mzuech/fuerosnet/rhtn-testapp@sha256:abc12345abc12345abc12345abc12345abc12345abc12345abc12345abc12345";
 
     // nothing installed yet, and the surface says so
     let none = ask(at, "GET /node/packages HTTP/1.1", b"");
@@ -1565,17 +1565,19 @@ fn a_package_is_installed_on_the_hosts_shell_and_the_node_then_hosts_it() {
     // **the host was asked for the image before anything was written,
     // and for the package afterwards**
     let asked = asked_of_host(&l.dir);
-    assert_eq!(
-        asked,
-        vec![
-            format!("pull {image}"),
-            format!(
-                "start {} {image} --listen 127.0.0.1:37460 --resource {resource}",
-                &resource[..16]
-            ),
-        ],
-        "the vocabulary, in order"
+    assert_eq!(asked.len(), 2, "the vocabulary, in order: {asked:?}");
+    assert_eq!(asked[0], format!("pull {image}"));
+    // **and the start carries the secret the host established for the
+    // instance** (`resource-requirements.md` §3.1; GAT-042): 64 hex digits
+    // minted at this install, kept under the state directory
+    let start = format!(
+        "start {} {image} --listen 127.0.0.1:37460 --resource {resource} --secret ",
+        &resource[..16]
     );
+    assert!(asked[1].starts_with(&start), "{:?}", asked[1]);
+    let secret = &asked[1][start.len()..];
+    assert_eq!(secret.len(), 64, "{secret}");
+    assert!(secret.bytes().all(|b| b.is_ascii_hexdigit()));
 
     // the manifest where the node reads it, and the package's own words
     let manifest = l.dir.join("packages").join(format!("{resource}.manifest"));
@@ -1616,7 +1618,7 @@ fn a_package_is_installed_on_the_hosts_shell_and_the_node_then_hosts_it() {
         &install_body(
             &resource,
             &owner,
-            "ggcr.io/mzuech/fuerosnet/rhtn-testapp:def67890",
+            "ggcr.io/mzuech/fuerosnet/rhtn-testapp@sha256:def67890def67890def67890def67890def67890def67890def67890def67890",
             37460,
             "roles = [\"reader\"]\n",
         ),
@@ -1662,7 +1664,7 @@ fn an_install_the_node_or_the_host_refuses_leaves_the_configuration_as_it_was() 
     std::fs::write(l.dir.join("hosting"), theirs).unwrap();
     let resource = hex(&[0xb3u8; 32]);
     let owner = hex(&test_identity("bob").public.keyhash);
-    let image = "ggcr.io/mzuech/fuerosnet/rhtn-testapp:abc12345";
+    let image = "ggcr.io/mzuech/fuerosnet/rhtn-testapp@sha256:abc12345abc12345abc12345abc12345abc12345abc12345abc12345abc12345";
 
     // **a manifest this host will not admit**: refused before the package
     // is ever started, so the host is asked for the image and no more
@@ -1727,7 +1729,7 @@ fn an_install_says_what_it_was_missing_rather_than_half_doing_it() {
     });
     let resource = hex(&[0xc1u8; 32]);
     let owner = hex(&test_identity("bob").public.keyhash);
-    let image = "ggcr.io/mzuech/fuerosnet/rhtn-testapp:abc12345";
+    let image = "ggcr.io/mzuech/fuerosnet/rhtn-testapp@sha256:abc12345abc12345abc12345abc12345abc12345abc12345abc12345abc12345";
     let manifest = "roles = [\"reader\"]\n";
 
     let refusing = |body_: Vec<u8>| ask(at, "POST /node/package/install HTTP/1.1", &body_);

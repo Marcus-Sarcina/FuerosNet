@@ -1005,6 +1005,14 @@ impl Surface {
         // resource so a second install replaces it
         let mut request: Vec<String> = vec!["start".into(), name.clone(), want.image.clone()];
         request.extend(want.arguments());
+        // **and the secret the host establishes for it** (`resource-
+        // requirements.md` §3.1): what the node will present on every hop
+        // to its socket, and what it presents to the host's surface
+        request.push("--secret".into());
+        request.push(crate::host::hex_secret(&crate::hosting::instance_secret(
+            self.state.as_deref(),
+            &want.resource,
+        )));
         let words: Vec<&str> = request.iter().map(String::as_str).collect();
         let started = match shell.ask(&key, &words) {
             Ok(s) => s,

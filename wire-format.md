@@ -5369,6 +5369,14 @@ other as a fresh request — with the node's authenticated headers attached to i
   protocol [2026-09-02]. Field 1 already named the resource; letting a header re-aim the request
   is how a proxy is turned into someone else's client.
 - **Insert your headers after stripping, into the re-serialised message.**
+- **Present the instance's secret on the hop to a resource on a socket of its
+  own** [author, 2026-11-15]: `rhtn-secret`, among the headers you insert, the
+  one your host established when it started the instance and the one the
+  instance presents to your host's surface, one secret both ways
+  (`resource-requirements.md` §§3.1, 3.3). A port of the instance's own is one
+  any local process can open, and this is what tells it your request from
+  theirs; a resource in the sandbox is reached by nothing but you and is told
+  none on this path.
 - **Strip the resource's `rhtn-*` headers from its response, as you strip the
   caller's from the request.** The namespace is yours in both directions, and that
   is what makes *an `rhtn-*` header on this path was written by the node* a
