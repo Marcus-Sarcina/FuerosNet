@@ -70,6 +70,9 @@ pub struct OneTimePair {
     pub kem: KemSecret,
 }
 
+/// Both halves wipe on drop.  Stated for the audit (APP-012).
+impl zeroize::ZeroizeOnDrop for OneTimePair {}
+
 /// The material a client holds for PQXDH: its identity DH key, the signed
 /// prekey and the post-quantum signed prekey in force, and the one-time
 /// pairs not yet served.
@@ -95,6 +98,11 @@ pub struct PayloadKeys {
     /// When the bundle was last published, where it has been.
     pub published_at: Option<u64>,
 }
+
+/// Every secret here is a [`DhSecret`] or a [`KemSecret`], each wiping on
+/// drop, the retired and one-time pairs included.  Stated for the audit
+/// (APP-012).
+impl zeroize::ZeroizeOnDrop for PayloadKeys {}
 
 impl OneTimePair {
     fn encode(&self, out: &mut Vec<u8>) {

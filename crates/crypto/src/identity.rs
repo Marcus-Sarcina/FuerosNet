@@ -35,6 +35,11 @@ pub struct SigningIdentity {
     root: Zeroizing<[u8; 32]>,
 }
 
+/// Every secret here wipes on drop: the Ed25519 key and the ML-DSA key by
+/// their crates' `zeroize` features, both on, and the root by its wrapper.
+/// Stated for the audit (APP-012).
+impl zeroize::ZeroizeOnDrop for SigningIdentity {}
+
 impl Identity {
     /// An identity from its two public keys, hashing the keyhash from
     /// them (`wire-format.md` §2.2).

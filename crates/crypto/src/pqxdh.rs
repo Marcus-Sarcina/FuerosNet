@@ -28,6 +28,11 @@ pub const KEM_CIPHERTEXT_BYTES: usize = 1088;
 #[derive(Clone)]
 pub struct DhSecret(StaticSecret);
 
+/// The scalar is wiped by `x25519-dalek` on drop (its `zeroize` feature,
+/// which this crate turns on); the marker states it where the audit
+/// (`rhtn-client`'s `tests/zeroize.rs`, APP-012) can hold it.
+impl zeroize::ZeroizeOnDrop for DhSecret {}
+
 /// An X25519 public key.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, PartialOrd, Ord)]
 pub struct DhPublic(pub [u8; 32]);
@@ -81,6 +86,19 @@ impl Drop for KemSecret {
     fn drop(&mut self) {
         use zeroize::Zeroize;
         self.seed.zeroize();
+    }
+}
+
+/// The seed is wiped above; the expanded key wipes itself (`ml-kem`'s
+/// `zeroize` feature, on).  Stated for the audit (APP-012).
+impl zeroize::ZeroizeOnDrop for KemSecret {}
+
+impl KemSecret {
+    /// Whether the seed this holds is all zero: what the audit reads after
+    /// dropping one in place.  Not a key accessor.
+    #[doc(hidden)]
+    pub fn seed_wiped(&self) -> bool {
+        self.seed.iter().all(|b| *b == 0)
     }
 }
 

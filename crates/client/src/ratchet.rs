@@ -159,6 +159,30 @@ impl<P: PostQuantumRatchet + Clone + Default> Drop for Ratchet<P> {
     }
 }
 
+/// What the drop above wipes, plus the sending secret wiping itself and
+/// whatever the post-quantum half holds wiping by its own claim.  Stated
+/// for the audit (APP-012): a copy a ratchet makes of itself while
+/// deciding whether a message opens goes the same way.
+impl<P: PostQuantumRatchet + Clone + Default + zeroize::ZeroizeOnDrop> zeroize::ZeroizeOnDrop
+    for Ratchet<P>
+{
+}
+
+/// Nothing to wipe.
+impl zeroize::ZeroizeOnDrop for NoPostQuantum {}
+
+impl<P: PostQuantumRatchet + Clone + Default> Ratchet<P> {
+    /// Whether the keys held inline, the root and both chains, are zero:
+    /// what the audit reads after dropping one in place.  The skipped
+    /// message keys are wiped in the same drop, before their map frees,
+    /// which a read after the drop cannot look at.  Not a key accessor.
+    #[doc(hidden)]
+    pub fn wiped(&self) -> bool {
+        let zero = |k: &[u8; 32]| k.iter().all(|b| *b == 0);
+        zero(&self.rk) && self.cks.as_ref().is_none_or(zero) && self.ckr.as_ref().is_none_or(zero)
+    }
+}
+
 impl std::fmt::Debug for Ratchet {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(

@@ -22347,3 +22347,18 @@ tab where the horizon holds no node yet (W §7.7.1). The cross-subnet
 ceremony runs to its record in-process (`a_ceremony_runs_between_two_
 subnets_that_share_no_node`, live, 28 s). The test's doc comment had
 blamed the far witness's crossing session: corrected by the run.
+
+**The zeroize audit, 2026-11-15 [plan: author].** APP-012 held by a test:
+`client/tests/zeroize.rs` walks every holder of key material and asserts
+the `ZeroizeOnDrop` marker on each at compile time (`DhSecret`,
+`KemSecret`, `SigningIdentity`, `Ratchet<NoPostQuantum>`, `PayloadKeys`,
+`OneTimePair`, `Zeroizing`), the markers added where our own types wipe
+by hand or by their fields; and drops a ratchet mid-conversation, a KEM
+secret and a scalar in place and reads zeros back. All four
+cryptographic crates run with their `zeroize` features (x25519-dalek,
+ed25519-dalek, ml-dsa, ml-kem: checked with `cargo tree -e features`).
+Found and corrected in the audit itself, not the code: a post-drop read
+of the ratchet's skipped-key map is a read of freed memory; the drop
+wipes those keys before the map frees, and the view reads the inline
+keys. The JVM side stays as stated at the boundary: a `ByteArray` is not
+Rust's to wipe; the shell fills its seed arrays itself.
