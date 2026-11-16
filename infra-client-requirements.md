@@ -911,7 +911,7 @@ a binding that cannot answer it is not in the surface.
 | Binding | What it is | The §9.2 answer |
 |---|---|---|
 | **request and response** | the gateway's door as §3 and `resource-requirements.md` §3 have it, and the exchanges on your own paths (`resource-requirements.md` §3.3) | unchanged: the credential-bearing request traffic and nothing else |
-| **the storage block** | a durable region of your own storage, provisioned per instance when you bind it and destroyed only by an operator's act, never by a reload; flat files under names of the package's choosing; a **byte ceiling the package declared and you enforce on every write**, the refusal naming the ceiling; `sync` as the whole of the durability discipline — when it returns, the bytes are on stable storage | instance-local data the package wrote; you read none of it, keep no persistence logic for it, and share it with no other instance |
+| **the storage block** | a durable region of your own storage, provisioned per instance when you bind it and destroyed only by an operator's act, never by a reload; flat files under names of the package's choosing — or, for a package on a socket of its own, a filesystem of its own mounted into its container where you can bound one (below) [author, 2026-11-15]; a **byte ceiling the package declared and you enforce on every write**, the refusal naming the ceiling; `sync` as the whole of the durability discipline — when it returns, the bytes are on stable storage | instance-local data the package wrote; you read none of it, keep no persistence logic for it, and share it with no other instance |
 | **the log** | lines the package writes for its operator, each stamped by you, kept per instance within the bytes the package declared, the oldest going first, shown on your administration surface (§8.3) | outward only: the package writes, the operator reads; it is for operators and never carries member content, which is the package's rule to keep |
 | **the clock** | your time, milliseconds since the epoch | advisory by nature: wire timestamps are signer-controlled (`wire-format.md` §3.3) and nothing here treats yours as proof of anything |
 | **fetch** | an outbound request to one of the destinations the package's manifest declared — `https://host` or `https://host:port`, exactly, no wildcard, never your own machine or network — the package handing you one HTTP/1.1 request as bytes and taking one response as bytes, as the gateway hands it a request and takes its answer; the destination is the request's `host`, you send with your own `host` and `connection: close` over TLS to the roots your operating system trusts, bound what you read back, honour a redirect only to a declared destination and only a few times, and refuse a declared name that resolves to your own machine or network | the package's own traffic to parties its operator read and accepted at installation; you are its egress and learn nothing of the network by carrying it |
@@ -952,6 +952,18 @@ what named the ceiling would be your operating system's refusal rather than
 your own. Reaching the block over a surface of yours puts one
 implementation behind both kinds of package, and reserves nothing in
 advance on a machine whose storage is finite.
+
+**And where a path after all** [author, 2026-11-15]. Software ported into
+a package on a socket of its own wants a filesystem and not a surface: a
+database keeps its own files. So where your host's filesystem can bound a
+directory — ext4 mounted for project quotas, the ceiling then the kernel's
+and held on every write — mount one into the instance's container as its
+block, tell it the path as `rhtn-block` in place of the surface's address,
+and provision no surface block for it; where it cannot, the surface stands,
+and the operator is told which at installation. The ceiling is still yours,
+set by you and enforced beneath the package, which is what the paragraph
+above asked for. It is asked for and answered on the same act that starts
+the instance, and a removal leaves it, as it leaves the surface's.
 
 **The terms of that surface.** It takes the block's own operations — list,
 read, write, `sync`, size and remove, under the flat names the package

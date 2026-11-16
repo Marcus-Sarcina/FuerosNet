@@ -1004,6 +1004,26 @@ impl Surface {
         // and now the package itself, under a name derived from the
         // resource so a second install replaces it
         let mut request: Vec<String> = vec!["start".into(), name.clone(), want.image.clone()];
+        // **a block of its own, where the package asked for one**
+        // (`infra-client-requirements.md` §9.3) [author, 2026-11-15]: the
+        // host mounts one bounded by its filesystem where it can and says
+        // so on the start's first line; where it cannot, the surface
+        // stands and the operator is told which
+        let block_bytes: Option<u64> =
+            crate::hosting::read_manifest(&manifest_at)
+                .ok()
+                .and_then(|(m, _)| {
+                    (m.budget.block_bytes.is_some()
+                        || m.imports.iter().any(|i| i == "rhtn/1:block"))
+                    .then(|| {
+                        m.budget
+                            .block_bytes
+                            .unwrap_or(crate::hosting::DEFAULT_BLOCK_BYTES)
+                    })
+                });
+        if let Some(b) = block_bytes {
+            request.push(format!("block={b}"));
+        }
         request.extend(want.arguments());
         // **and the secret the host establishes for it** (`resource-
         // requirements.md` §3.1): what the node will present on every hop
@@ -1024,6 +1044,30 @@ impl Surface {
                 );
             }
         };
+        // **and where the host mounted a block, the node tells that path**:
+        // recorded with the package and re-read, so the instance is told
+        // `rhtn-block` as the path and no surface block is kept for it
+        let (block, block_said) = crate::packages::block_said(&started, block_bytes.is_some());
+        if block.is_some() {
+            if let Some(p) = now.iter_mut().find(|p| p.resource == want.resource) {
+                p.block = block.clone();
+            }
+            if let Err(why) = crate::packages::write(&hosting, &now) {
+                return (
+                    500,
+                    format!("the package started and its block could not be recorded: {why}\n"),
+                );
+            }
+            let (code, said) = self.reload();
+            if code != 200 {
+                return (
+                    500,
+                    format!(
+                        "the package started and the node did not take its block path: {said}\n"
+                    ),
+                );
+            }
+        }
         tracing::info!(
             target: "daemon",
             step = "surface_act",
@@ -1036,12 +1080,13 @@ impl Surface {
         (
             200,
             format!(
-                "installed {}\nname rhtn-pkg-{name}\nimage {}\naddress 127.0.0.1:{}\nauthority \
+                "installed {}\nname rhtn-pkg-{name}\nimage {}\naddress 127.0.0.1:{}\nblock {}\nauthority \
                  {}\nowner {}\ngrants none\nnext nobody may reach it until a role is granted on \
                  it\npulled {}\nstarted {}\n",
                 hex(&want.resource),
                 want.image,
                 want.port,
+                block_said,
                 want.authority,
                 hex(&want.owner),
                 pulled.trim(),
@@ -2310,6 +2355,7 @@ fn asked(f: &[(String, String)]) -> Result<crate::packages::Package, String> {
         authority: crate::packages::authority(field(f, "authority"))?,
         image: crate::packages::image(field(f, "image"))?,
         port,
+        block: None,
     })
 }
 

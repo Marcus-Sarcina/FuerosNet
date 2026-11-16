@@ -61,6 +61,11 @@ pub struct Package {
     pub image: String,
     /// Where it listens on the loopback this node and the package share.
     pub port: u16,
+    /// Where the host mounted a block of the package's own inside its
+    /// container, where it did (`infra-client-requirements.md` §9.3): the
+    /// runner's `block` line on the start, kept so the node tells the
+    /// instance that path as `rhtn-block` in place of its surface.
+    pub block: Option<String>,
 }
 
 impl Package {
@@ -127,6 +132,8 @@ struct Entry {
     authority: String,
     image: String,
     port: u16,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    block: Option<String>,
 }
 
 /// **Read what this node installed**, or nothing where it has installed
@@ -151,6 +158,7 @@ pub fn read(hosting: &Path) -> Result<Vec<Package>, String> {
             authority: e.authority.clone(),
             image: e.image.clone(),
             port: e.port,
+            block: e.block.clone(),
         });
     }
     Ok(out)
@@ -177,6 +185,7 @@ pub fn write(hosting: &Path, packages: &[Package]) -> Result<(), String> {
                 authority: p.authority.clone(),
                 image: p.image.clone(),
                 port: p.port,
+                block: p.block.clone(),
             })
             .collect(),
     };
@@ -215,13 +224,53 @@ pub fn above(held: &str) -> &str {
 
 /// One generated `[[host]]` entry.
 fn entry(hosting: &Path, p: &Package) -> String {
-    format!(
+    let mut out = format!(
         "\n[[host]]\nresource = \"{}\"\nowner = \"{}\"\nauthority = \"{}\"\nmanifest = \"{}\"\naddress = \"127.0.0.1:{}\"\n",
         hex(&p.resource),
         hex(&p.owner),
         p.authority,
         manifest_at(hosting, &p.resource).display(),
         p.port
+    );
+    if let Some(b) = &p.block {
+        out.push_str(&format!("block = \"{b}\"\n"));
+    }
+    out
+}
+
+/// **What the host said of a block on the start** (`infra-client-requirements.md`
+/// §9.3): the runner's first line is `block <path> <bytes>` where it
+/// mounted one, `block none <why>` where it could not, and nothing of a
+/// block where none was asked for or the runner is older than the block.
+/// The path, where there is one, and the sentence the operator reads.
+#[must_use]
+pub fn block_said(reply: &str, asked: bool) -> (Option<String>, String) {
+    if !asked {
+        return (None, "none: the package declared no block".into());
+    }
+    for line in reply.lines() {
+        let Some(rest) = line.strip_prefix("block ") else {
+            continue;
+        };
+        if let Some(why) = rest.strip_prefix("none") {
+            return (None, format!("the host's surface: {}", why.trim()));
+        }
+        let mut words = rest.split_whitespace();
+        if let (Some(path), Some(bytes)) = (words.next(), words.next())
+            && path.starts_with('/')
+            && bytes.bytes().all(|b| b.is_ascii_digit())
+        {
+            return (
+                Some(path.to_string()),
+                format!("{path}, mounted by the host at {bytes} bytes"),
+            );
+        }
+    }
+    (
+        None,
+        "the host's surface: the host's runner said nothing of a block, so it is older \
+         than the block (2026-11-15)"
+            .into(),
     )
 }
 
@@ -350,7 +399,42 @@ mod tests {
             authority: "testapp.internal".into(),
             image: "ggcr.io/mzuech/fuerosnet/rhtn-testapp:abc12345".into(),
             port,
+            block: None,
         }
+    }
+
+    // functional: PKG-020
+    #[test]
+    fn the_hosts_block_line_is_read_and_a_mounted_block_goes_into_the_entry() {
+        let (path, said) = block_said("block /rhtn-block 4096\nabc123\n", true);
+        assert_eq!(path.as_deref(), Some("/rhtn-block"));
+        assert!(said.contains("4096 bytes"), "{said}");
+        let (path, said) = block_said("block none / is not mounted with prjquota\nabc\n", true);
+        assert_eq!(path, None);
+        assert!(said.contains("prjquota"), "{said}");
+        let (path, said) = block_said("abc123\n", true);
+        assert_eq!(path, None);
+        assert!(said.contains("older"), "{said}");
+        let (path, said) = block_said("block /rhtn-block 4096\n", false);
+        assert_eq!(
+            path, None,
+            "a block the package did not declare is not taken"
+        );
+        assert!(said.starts_with("none"), "{said}");
+        // and the entry carries the path, so the node tells it
+        let dir = Dir::new("block-entry");
+        let hosting = dir.path().join("hosting");
+        let mut p = one(2, 7002);
+        p.block = Some("/rhtn-block".into());
+        write(&hosting, &[p.clone()]).unwrap();
+        let text = std::fs::read_to_string(&hosting).unwrap();
+        assert!(text.contains("block = \"/rhtn-block\"\n"), "{text}");
+        assert_eq!(read(&hosting).unwrap(), vec![p]);
+        let bare = one(3, 7003);
+        write(&hosting, std::slice::from_ref(&bare)).unwrap();
+        let text = std::fs::read_to_string(&hosting).unwrap();
+        assert!(!text.contains("block ="), "{text}");
+        assert_eq!(read(&hosting).unwrap(), vec![bare]);
     }
 
     // acceptance: DMN-38

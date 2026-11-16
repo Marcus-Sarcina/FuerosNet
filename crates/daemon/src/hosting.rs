@@ -169,6 +169,11 @@ struct HostEntry {
     /// declaring": an address and the node proxies, a component and the
     /// node runs it, neither and the node brokers.
     address: Option<String>,
+    /// Where the host mounted a block of the resource's own inside its
+    /// container, where it did (`infra-client-requirements.md` §9.3)
+    /// [author, 2026-11-15]: told to the instance as `rhtn-block` in
+    /// place of the surface, and nothing provisioned here for it.
+    block: Option<String>,
     /// **Where grants used to be written**, kept only to say where they
     /// went: this file is the operator's and the node never rewrites it,
     /// and a grant is a table update an act on the operator's surface
@@ -606,13 +611,22 @@ pub fn apply(
                 let mut kept_log = None;
                 if wants_block {
                     let quota = manifest.budget.block_bytes.unwrap_or(DEFAULT_BLOCK_BYTES);
-                    let dir = root.join("blocks").join(&h.resource);
-                    let block = rhtn_resources::Block::provision(&dir, quota)
-                        .map_err(|e| at(0, format!("{}: {e}", dir.display())))?;
                     own.push(("rhtn-block-bytes".into(), quota.to_string()));
-                    let block = Arc::new(block);
-                    kept_block = Some(block.clone());
-                    env.block = Some(block);
+                    if let Some(path) = &h.block {
+                        // **mounted by the host** [author, 2026-11-15]: a
+                        // filesystem of the instance's own, bounded by the
+                        // host's quota and reached at this path inside its
+                        // container; nothing is provisioned here, and the
+                        // surface keeps no block for it
+                        own.push(("rhtn-block".into(), path.clone()));
+                    } else {
+                        let dir = root.join("blocks").join(&h.resource);
+                        let block = rhtn_resources::Block::provision(&dir, quota)
+                            .map_err(|e| at(0, format!("{}: {e}", dir.display())))?;
+                        let block = Arc::new(block);
+                        kept_block = Some(block.clone());
+                        env.block = Some(block);
+                    }
                 }
                 if wants_log {
                     let retain = manifest.budget.log_bytes.unwrap_or(DEFAULT_LOG_BYTES);
@@ -665,6 +679,20 @@ pub fn apply(
         // and this node runs it.  Both is a contradiction rather than a
         // choice, and the operator is told so rather than having one of
         // them silently win
+        // a mounted block is a socket package's: a component in this
+        // node's sandbox reaches its block as a binding, and a path inside
+        // a container it does not have names nothing
+        if let Some(b) = &h.block
+            && h.address.is_none()
+        {
+            return Err(at(
+                0,
+                named(&format!(
+                    "`block = \"{b}\"` names a mount inside a container, and this resource runs \
+                     in the node's sandbox, which has none"
+                )),
+            ));
+        }
         let backend: Option<Arc<dyn rhtn_node::resources::Backend>> = match (&h.address, &component)
         {
             (Some(_), Some(c)) => {
@@ -829,7 +857,7 @@ fn manifest_error(text: &str, e: &toml::de::Error) -> String {
 /// configuration off that format. Strict for the reason that one is too:
 /// an unknown key or a missing one is an error, because a manifest the
 /// host quietly repairs declares something the package did not.
-fn read_manifest(path: &Path) -> Result<(Manifest, Option<std::path::PathBuf>), String> {
+pub(crate) fn read_manifest(path: &Path) -> Result<(Manifest, Option<std::path::PathBuf>), String> {
     #[derive(serde::Deserialize)]
     #[serde(deny_unknown_fields)]
     struct File {

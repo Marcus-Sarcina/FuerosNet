@@ -1302,3 +1302,65 @@ fn a_package_that_schedules_jobs_is_given_a_table_where_the_node_keeps_state() {
         .expect("refused");
     assert!(why.contains("state directory"), "{why}");
 }
+
+// functional: PKG-020
+#[test]
+fn a_block_the_host_mounted_is_told_as_a_path_and_nothing_is_provisioned_for_it() {
+    let d = Dir::new("mounted-block");
+    let m = d.put(
+        "front.manifest",
+        "roles = [\"reader\"]\n[budget]\nblock_bytes = 4096\nlog_bytes = 512\n",
+    );
+    let f = d.put(
+        "hosting",
+        format!(
+            "[[host]]\nresource = \"{RES}\"\nowner = \"{WHO}\"\nauthority = \"shop.internal\"\n\
+             manifest = \"{}\"\naddress = \"127.0.0.1:9\"\nblock = \"/rhtn-block\"\n",
+            m.display()
+        ),
+    );
+    let mut g = Gateway::default();
+    let applied = apply(
+        &mut g,
+        Path::new(&f),
+        Limits::default(),
+        Some(&d.0.join("grants")),
+        Some(&d.0.join("state")),
+    )
+    .expect("bound");
+    assert_eq!(applied.bound, 1);
+    assert!(
+        !d.0.join("state").join("blocks").exists(),
+        "no block is provisioned here for one the host mounted"
+    );
+    let (_, facts) = &applied.facts[0];
+    let get = |n: &str| facts.iter().find(|(k, _)| k == n).map(|(_, v)| v.clone());
+    assert_eq!(
+        get("rhtn-block").as_deref(),
+        Some("/rhtn-block"),
+        "the path, not a surface"
+    );
+    assert_eq!(get("rhtn-block-bytes").as_deref(), Some("4096"));
+    assert_eq!(get("rhtn-log-bytes").as_deref(), Some("512"));
+    // named a surface, the log is reached there and the block stays the path
+    let rt = tokio::runtime::Runtime::new().expect("a runtime");
+    let surface = rt
+        .block_on(rhtn_daemon::host::HostSurface::bind())
+        .expect("bound");
+    let mut applied = applied;
+    applied.over(&surface);
+    let (_, facts) = &applied.facts[0];
+    let get = |n: &str| facts.iter().find(|(k, _)| k == n).map(|(_, v)| v.clone());
+    assert_eq!(get("rhtn-block").as_deref(), Some("/rhtn-block"));
+    assert_eq!(get("rhtn-log").as_deref(), Some(surface.log_url().as_str()));
+    assert!(get("rhtn-secret").is_some());
+
+    // and a block path on a component is a contradiction, said
+    d.put("echo.wasm", rhtn_sim::packages::echo());
+    let cm = d.put(
+        "comp.manifest",
+        "roles = [\"reader\"]\nimports = [\"rhtn/1:request\", \"rhtn/1:response\"]\ncomponent = \"echo.wasm\"\n",
+    );
+    let why = run(&d, &format!("{}block = \"/rhtn-block\"\n", host(&cm))).expect_err("refused");
+    assert!(why.contains("sandbox"), "{why}");
+}

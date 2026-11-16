@@ -97,7 +97,7 @@ fn layout_on(tag: &str, token: &[u8; 32], quic_port: u16, surface: &str) -> Layo
              listen = \"127.0.0.1:{}\"\n\
              endpoint-record = \"{}\"\nanchor-entry = \"{}\"\n\
              queue = \"{}\"\nprekeys = \"{}\"\ntopology = \"{}\"\narchive = \"{}\"\n\
-             resources = \"{}\"\ngrants = \"{}\"\n\
+             resources = \"{}\"\ngrants = \"{}\"\nstate = \"{}\"\n\
              heartbeat = 30\ningestion = \"unverified-gossip\"\n\
              [allowance]\nrequests = 120\nseconds = 60\n\
              [administration]\nlisten = \"{}\"\ntoken = \"{}\"\ntoken-file = \"{}\"\n\
@@ -114,6 +114,7 @@ fn layout_on(tag: &str, token: &[u8; 32], quic_port: u16, surface: &str) -> Layo
             dir.join("archive").display(),
             dir.join("hosting").display(),
             dir.join("grants").display(),
+            dir.join("state").display(),
             surface,
             hex(token),
             dir.join("administration.token").display(),
@@ -1488,6 +1489,9 @@ fn recorder(dir: &Path, refuse: &str) -> PathBuf {
              case \"$last\" in\n\
              \x20 {refuse}*) echo \"the host refused it\" >&2; exit 2 ;;\n\
              esac\n\
+             case \"$last\" in\n\
+             \x20 *\" block=\"*) echo \"block /rhtn-block 4096\" ;;\n\
+             esac\n\
              echo \"ok: $last\"\n",
             log.display()
         ),
@@ -1610,20 +1614,47 @@ fn a_package_is_installed_on_the_hosts_shell_and_the_node_then_hosts_it() {
     let page = ask(at, "GET / HTTP/1.1", b"");
     assert!(page.contains(&resource), "the page shows what it hosts");
 
+    // the first install declared no block, and the answer says so
+    assert_eq!(
+        field(&said, "block").as_deref(),
+        Some("none: the package declared no block")
+    );
+
     // **a second install of the same resource replaces it** rather than
-    // running beside it, which is how a package is upgraded
+    // running beside it, which is how a package is upgraded — **and this
+    // one declares a block** (PKG-020): the host is asked `block=<bytes>`
+    // after the image, mounts one, and the node records the path
+    let image2 = "ggcr.io/mzuech/fuerosnet/rhtn-testapp@sha256:def67890def67890def67890def67890def67890def67890def67890def67890";
     let again = ask(
         at,
         "POST /node/package/install HTTP/1.1",
         &install_body(
             &resource,
             &owner,
-            "ggcr.io/mzuech/fuerosnet/rhtn-testapp@sha256:def67890def67890def67890def67890def67890def67890def67890def67890",
+            image2,
             37460,
-            "roles = [\"reader\"]\n",
+            "roles = [\"reader\"]\n[budget]\nblock_bytes = 4096\n",
         ),
     );
     assert!(again.starts_with("HTTP/1.1 200"), "{again}");
+    assert_eq!(
+        field(&again, "block").as_deref(),
+        Some("/rhtn-block, mounted by the host at 4096 bytes"),
+        "{again}"
+    );
+    let asked = asked_of_host(&l.dir);
+    let start2 = format!(
+        "start {} {image2} block=4096 --listen 127.0.0.1:37460 --resource {resource} --secret ",
+        &resource[..16]
+    );
+    assert!(
+        asked.iter().any(|a| a.starts_with(&start2)),
+        "the block is asked for after the image: {asked:?}"
+    );
+    let record = std::fs::read_to_string(l.dir.join("packages.toml")).unwrap();
+    assert!(record.contains("block = \"/rhtn-block\""), "{record}");
+    let hosting = std::fs::read_to_string(l.dir.join("hosting")).unwrap();
+    assert!(hosting.contains("block = \"/rhtn-block\""), "{hosting}");
     let listed = ask(at, "GET /node/packages HTTP/1.1", b"");
     assert_eq!(field(&listed, "packages").as_deref(), Some("1"), "{listed}");
 

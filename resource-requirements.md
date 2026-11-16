@@ -337,6 +337,14 @@ Your host binds this where only its own machine reaches it, which is a
 deployment fact and not a thing you can verify: **the secret is the whole of
 what authorises you**, as §3.1 says of the one running the other way.
 
+**Unless your host mounted you a filesystem of your own** [author,
+2026-11-15]: a package on a socket of its own that declared a block is given
+one where the host can bound it, and then `rhtn-block` is a path inside your
+container rather than an address — bounded by the host's filesystem at
+`rhtn-block-bytes`, a write past it failing as your operating system fails
+one — and the surface's operations are not there against a path. Your host
+tells you which you have, and nothing else about it changes.
+
 ### 3.4 What you may ask of a member's client
 
 **A member's client frames your page so that it reaches nothing of theirs**
@@ -865,7 +873,8 @@ delivered with the package so the operator reads it at installation, and replace
 whole by an update, since an allow-list a package could grow at run time is no
 list. A host that offers none of your versions, or cannot keep a block, refuses you
 at installation with the reason; one that can tells your instance where its block
-and its log are on the relationships exchange (§3.3).
+and its log are on the relationships exchange (§3.3) — a filesystem of your own
+where the host can bound one, its surface otherwise [author, 2026-11-15].
 
 ---
 

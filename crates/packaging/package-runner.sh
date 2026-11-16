@@ -17,7 +17,10 @@
 #  refuses anything it does not recognise.  Whoever reads it on a host can
 #  see exactly what the instance may ask for.
 #
-#    start <name> <image-ref> [<argument> ...]   run a package's container
+#    start <name> <image-ref> [block=<bytes>] [<argument> ...]
+#                                                run a package's container,
+#                                                with a bounded block of its
+#                                                own mounted where it can be
 #    stop <name>                                 remove it
 #    list                                        the packages running
 #    logs <name> [<lines>]                       what one said
@@ -46,6 +49,19 @@
 #  will not pass a flag to the engine: a package's arguments go after the
 #  image reference, where the engine hands them to the container.  And it
 #  will not run a shell for anybody.
+#
+#  **A block of the package's own, bounded by the filesystem** [author,
+#  2026-11-15].  A package on a socket of its own may need a filesystem --
+#  ported software, a database -- and `block=<bytes>` after the image asks
+#  for one: a directory under RHTN_BLOCKS, kept to that many bytes by an
+#  ext4 project quota, mounted at /rhtn-block in the container.  The
+#  ceiling is the kernel's and holds on every write.  **Where the host
+#  cannot keep one** -- not ext4, not mounted with `prjquota`, no quota
+#  tools -- the start goes on without it and the first line of the reply
+#  says `block none` and why, so the node tells the package its surface
+#  instead; where it can, the line says `block /rhtn-block <bytes>`.  A
+#  stop leaves the directory: the block is destroyed by an operator and
+#  never by a restart or a reinstall.
 # =============================================================================
 set -eu
 
@@ -53,6 +69,8 @@ PREFIX=rhtn-pkg-
 NODE=rhtnd
 ENGINE="${RHTN_ENGINE:-podman}"
 LOG=/var/log/rhtn-package-runner.log
+BLOCKS="${RHTN_BLOCKS:-/var/lib/rhtn-blocks}"
+MOUNT_AT=/rhtn-block
 
 # **a host that will not take the log is not a failure**: the redirection
 # itself is what fails where the file cannot be made, so the whole of it is
@@ -99,10 +117,64 @@ image_of() {
   printf '%s' "$1"
 }
 
+# a stable project id per block, from a file beside the blocks
+project_id() {
+  ids="$BLOCKS/.projects"
+  touch "$ids"
+  id="$(awk -v n="$1" '$1==n{print $2}' "$ids")"
+  if [ -z "$id" ]; then
+    last="$(awk 'BEGIN{m=10000}{if($2>m)m=$2}END{print m}' "$ids")"
+    id=$((last+1))
+    printf '%s %s\n' "$1" "$id" >> "$ids"
+  fi
+  printf '%s' "$id"
+}
+
+# **provision one bounded block, or say why not** (above): prints the
+# reply's first line and leaves the mount in BLOCK_VOLUME, empty where
+# there is none.  Nothing here refuses the start: a host that cannot keep
+# a block is ordinary capacity, said rather than failed.
+block_for() {
+  BLOCK_VOLUME=""
+  bytes="$2"
+  case "$bytes" in ''|*[!0-9]*) refuse "block= takes a byte count" ;; esac
+  [ "${#bytes}" -le 15 ] || refuse "block= is more bytes than a host has"
+  [ "$bytes" -ge 4096 ] || refuse "a block is at least 4096 bytes"
+  case "$BLOCKS" in *[!A-Za-z0-9/._-]*) refuse "RHTN_BLOCKS carries unexpected characters" ;; esac
+  if ! mkdir -p "$BLOCKS" 2>/dev/null; then echo "block none $BLOCKS cannot be made"; return 0; fi
+  chmod 0700 "$BLOCKS"
+  fs="$(findmnt -T "$BLOCKS" -no FSTYPE 2>/dev/null || true)"
+  opts="$(findmnt -T "$BLOCKS" -no OPTIONS 2>/dev/null || true)"
+  mnt="$(findmnt -T "$BLOCKS" -no TARGET 2>/dev/null || true)"
+  if [ "$fs" != ext4 ]; then
+    echo "block none $BLOCKS is on ${fs:-no filesystem findmnt knows}, and a bounded block wants ext4 mounted with prjquota"; return 0
+  fi
+  case ",$opts," in *,prjquota,*) ;; *) echo "block none $mnt is not mounted with prjquota, so no ceiling could be kept"; return 0 ;; esac
+  if ! command -v chattr > /dev/null 2>&1 || ! command -v setquota > /dev/null 2>&1; then
+    echo "block none chattr and setquota are wanted on this host and not installed"; return 0
+  fi
+  dir="$BLOCKS/$1"
+  mkdir -p "$dir"
+  id="$(project_id "$1")"
+  if ! chattr -p "$id" +P "$dir" 2>/dev/null; then echo "block none the project could not be set on $dir"; return 0; fi
+  kb=$(( (bytes + 1023) / 1024 ))
+  if ! setquota -P "$id" 0 "$kb" 0 0 "$mnt" 2>/dev/null; then echo "block none the quota could not be set on $mnt"; return 0; fi
+  chmod 0777 "$dir"
+  BLOCK_VOLUME="$dir:$MOUNT_AT:rw"
+  echo "block $MOUNT_AT $bytes"
+  return 0
+}
+
 case "$verb" in
   start)
     name="$(name_of "${1:-}")"; shift
     image="$(image_of "${1:-}")"; shift
+    # **a block, where the package asked for one**: consumed here, never
+    # handed to the container as an argument
+    BLOCK_VOLUME=""
+    case "${1:-}" in
+      block=*) block_for "$name" "${1#block=}"; shift ;;
+    esac
     # **every remaining word is the package's own argument**, handed to the
     # container after the image, where the engine does not read flags of
     # its own; each is still checked for a flag that would reach the engine
@@ -113,8 +185,10 @@ case "$verb" in
     done
     say "start $name $image $*"
     "$ENGINE" rm -f "$name" > /dev/null 2>&1 || true
+    # shellcheck disable=SC2086
     "$ENGINE" run -d --name "$name" --restart=always --network=host \
       --read-only --tmpfs /tmp --cap-drop=all --security-opt=no-new-privileges \
+      ${BLOCK_VOLUME:+-v "$BLOCK_VOLUME"} \
       "$image" "$@"
     ;;
   stop)
