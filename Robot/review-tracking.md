@@ -22470,7 +22470,9 @@ own ssh as root); not built until answered.
    with `prjquota` (a WAN session).
 2. Chase the ceremony flake: `adaptors::ceremony::the_counterparty_prunes
    _to_three_and_the_dismissed_stands_down`, 4 signers where 5 were
-   expected, one gate in three and one local run in five on 2026-11-16.
+   expected, one gate in three and one local run in five on 2026-11-16;
+   failed again on the gate over the signature removal the same day (a
+   re-run passed, 1085 of 1085).
 
 **The upgrade act and the signed runner, 2026-11-16 [author: "Option 1
 for the runner, option 4 for federation"].** "Renew its run" on both GXV
@@ -22495,3 +22497,18 @@ gives both, after which the upgrade act and the refresh can be tried.
 **Federation option 4 is two choices** — keep the instance key and the
 envelope signature as they are (carried, not verified), or remove both —
 put back to the author; nothing changed meanwhile.
+
+**Federation: the instance key and the envelope signature removed**
+[author, 2026-11-16: "Remove both"]. Resource §3.3 (an envelope is a
+claim, carries no signature, the origin's node vouches for it, one hop),
+infra §9.2 ("It is the whole of the guarantee"; the watermark sentence no
+longer leans on a signature) and §9.3 (the instance key paragraph gone).
+PKG-016 and OPS-022 amended; acceptance RSC-44 rewritten to the round
+trip without a signature, DMN-35 without the key. Code: `Envelope`
+loses `signature`, `signed_bytes`, `MAX_SIGNATURE` and `State::code`; a
+`signature` an older sender brings is read past (the applications
+repository's packages may still send one); the hosting entry's `key`
+field is gone, so a hosting file still carrying one is refused by name as
+an unknown field. Sweep: the remaining hits for "instance key" or a
+signed envelope are statements of absence or the unrelated transaction
+envelope, transport key and operator token.

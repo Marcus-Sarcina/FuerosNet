@@ -794,31 +794,24 @@ authenticates the claim, and your operator's own surface is where such an envelo
 is handed over by hand (§8.2). **Refuse before the plane is touched, not after**,
 because taking a record moves its revision watermark: an envelope accepted on a
 caller's word alone can claim the largest revision there is and leave every
-legitimate revision after it classified as older and never delivered, which a
-signature the application would have rejected does not undo. **Authenticating the
-node is not authenticating the instance**, and this is the narrower of the two
-guarantees.
+legitimate revision after it classified as older and never delivered, which
+nothing the application checks afterwards undoes. **Authenticating the node is not
+authenticating the instance**, and it is the narrower claim.
 
-**It is also the guarantee this version offers** [author, 2026-10-27]. A node
+**It is the whole of the guarantee** [author, 2026-10-27; 2026-11-16]. A node
 speaks for the instances it hosts, which is no concession: it runs their code and
 holds their store, so a dishonest one could make its own instance say anything
-whatever a signature said. **So the envelope's signature is carried and not
-verified here**, and the narrower claim is the one to make — not the wider one
-worded loosely. What the narrower claim does not cover is anything that outlives
-the connection carrying it: a record verifiable at a node it did not come from, a
-receipt an operator can hold up afterwards, an envelope restored from a backup,
-and a provenance that survives a transport key being rolled. Each of those wants
-the instance's own signature checked before the record state moves, and that waits
-on a key contract — introduction, proof of possession, algorithm, rotation,
-restoration, and a signature bound that follows the scheme rather than choosing
-it. Custody is where it would go: verify, admit, acknowledge.
+whatever a signature said. **So an envelope carries no instance signature and you
+hold no instance key**, and the narrower claim is the only one made. What it does
+not cover is anything that outlives the connection carrying it — a record
+verifiable at a node it did not come from, a receipt an operator holds up
+afterwards, an envelope restored from a backup — and none of those is offered.
 
-**And so this version carries one hop, by construction rather than by rule.**
+**And so an envelope travels one hop, by construction rather than by rule.**
 Ingress requires the caller to be the origin's *own* node, so no third party can
 deliver on another instance's behalf; an envelope therefore cannot arrive
-forwarded, and an instance may only emit envelopes it originated. Carrying a
-record further than one hop needs the signature above, because a receiver two hops
-out is otherwise trusting the forwarder's word about who wrote it.
+forwarded, and an instance may only emit envelopes it originated. A receiver two
+hops out would be trusting the forwarder's word about who wrote it.
 
 **Keep the record bookkeeping
 `resource-requirements.md` §3.3 states before anything is delivered** — conflict before duplicate, newer
@@ -1058,12 +1051,6 @@ answer (`wire-format.md` §11) — the budget is the package's claim about
 itself, so a refusal under it is the application's and not the network's,
 and the member is told what to do where a bare *unavailable* would not.
 Count what you answered this way beside the resource on your surface.
-
-**An instance's key** — the one its envelopes are signed under
-(`resource-requirements.md` §3.3) — is provisioned per instance at its
-creation, written beside the resource in your hosting file as its public
-half, shown on your surface, and never present in a package. You carry the
-signature it makes and do not verify it in this version.
 
 ### 9.4 Installing a package from your operator's client
 

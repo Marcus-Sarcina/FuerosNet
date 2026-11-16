@@ -153,12 +153,6 @@ struct HostEntry {
     owner: String,
     authority: String,
     manifest: std::path::PathBuf,
-    /// The instance's own public key, provisioned at instance creation
-    /// and never in a package (`resource-requirements.md` §3.3's envelope
-    /// signature): 32 bytes of Ed25519, hex. Recorded and shown; the node
-    /// carries the signature it makes and does not verify it in this
-    /// version.
-    key: Option<String>,
     /// Where the resource listens, where it holds its own port rather
     /// than running inside this node's sandbox
     /// (`resource-requirements.md` §3's second leg,
@@ -554,20 +548,6 @@ pub fn apply(
         }
         let (manifest, component) = read_manifest(&h.manifest).map_err(|e| at(0, named(&e)))?;
         instantiate(&manifest).map_err(|e| at(0, named(&e)))?;
-        if let Some(k) = &h.key
-            && (k.len() != 64
-                || !k
-                    .bytes()
-                    .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()))
-        {
-            return Err(at(
-                0,
-                format!(
-                    "`{}`: an instance key is 32 bytes of Ed25519 as 64 lower-case hex digits",
-                    h.resource
-                ),
-            ));
-        }
         // **the host surface the package asked for, provisioned**
         // (`infra-client-requirements.md` §9.3): a block where it budgeted
         // or imports one, a log where it imports or budgets one, each

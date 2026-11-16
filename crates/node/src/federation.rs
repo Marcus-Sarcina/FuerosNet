@@ -43,11 +43,10 @@
 //! newer revision superseding, an older discarded, a tombstone that no
 //! replayed older live copy undoes. A conflict — a different digest at a
 //! revision already held — is kept and surfaced to the operator, never
-//! resolved. The signature is the origin instance's over the immutable
-//! fields; its bytes are carried and the canonical form is fixed here
-//! ([`Envelope::signed_bytes`]) so both ends sign and check the same
-//! thing, but **this stub does not verify it**: instance keys are the
-//! applications' and no key material for them is held here yet.
+//! resolved. **An envelope carries no signature** [author, 2026-11-16]:
+//! the node hosting its origin vouches for it, which is what the
+//! sender's authentication below checks, and no instance key is held
+//! anywhere.
 //!
 //! **Between nodes: HTTPS, node to node, raw public keys pinned by the
 //! operator** [author, 2026-10-26]. An envelope for a related instance
@@ -71,7 +70,6 @@ use crate::Keyhash;
 use crate::http::base64url;
 use crate::resources::Backend;
 use rhtn_codec::cose::sha256;
-use rhtn_codec::encode::{emit_array_head, emit_bstr, emit_tstr, emit_uint};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::{Path, PathBuf};
@@ -118,8 +116,6 @@ pub const MAX_SCHEMA: usize = 64;
 pub const MAX_PATH: usize = 16;
 /// The largest body carried with an envelope.
 pub const MAX_BODY: usize = 64 * 1024;
-/// The longest signature carried.
-pub const MAX_SIGNATURE: usize = 512;
 /// The most (origin, record) identities one resource's plane remembers.
 pub const MAX_HELD: usize = 4096;
 /// The most envelopes waiting for one resource to take them.
@@ -388,17 +384,11 @@ impl State {
             _ => State::Live,
         }
     }
-    fn code(self) -> u64 {
-        match self {
-            State::Live => 0,
-            State::Withdrawn => 1,
-        }
-    }
 }
 
-/// **One envelope** (`federation-model.md` §5): the identity of a copy
-/// is (`origin`, `record`); the origin signs the immutable fields and
-/// never the route.
+/// **One envelope** (`resource-requirements.md` §3.3): the identity of a
+/// copy is (`origin`, `record`), and the node hosting the origin vouches
+/// for it; nothing in it is signed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Envelope {
     /// The originating instance: its resource keyhash.
@@ -413,34 +403,15 @@ pub struct Envelope {
     pub digest: [u8; 32],
     /// Live or withdrawn.
     pub state: State,
-    /// The instances this copy has crossed: transport metadata outside
-    /// the signature, which a forwarder appends to.
+    /// The instances this copy has crossed: transport metadata, which a
+    /// forwarder appends to.
     pub path: Vec<Keyhash>,
-    /// The origin instance's signature over [`Envelope::signed_bytes`];
-    /// carried, not checked here.
-    pub signature: Vec<u8>,
     /// The body, where it travels with the envelope; a tombstone has
     /// none. Where present its hash is `digest`, which the node checks.
     pub body: Option<Vec<u8>>,
 }
 
 impl Envelope {
-    /// The bytes the origin signs: a CBOR array of the six immutable
-    /// fields, `[origin, record, schema, revision, digest, state]`, with
-    /// `state` 0 for live and 1 for withdrawn. Fixed here so an origin
-    /// and a verifier agree without a second specification.
-    pub fn signed_bytes(&self) -> Vec<u8> {
-        let mut out = Vec::new();
-        emit_array_head(&mut out, 6);
-        emit_bstr(&mut out, &self.origin);
-        emit_tstr(&mut out, &self.record);
-        emit_tstr(&mut out, &self.schema);
-        emit_uint(&mut out, self.revision);
-        emit_bstr(&mut out, &self.digest);
-        emit_uint(&mut out, self.state.code());
-        out
-    }
-
     /// Why this envelope is not one the node will hold, where it is not:
     /// a bound exceeded, a body whose hash is not its digest, a tombstone
     /// carrying a body.
@@ -457,9 +428,6 @@ impl Envelope {
                  many is looping",
                 self.path.len()
             ));
-        }
-        if self.signature.len() > MAX_SIGNATURE {
-            return Some(format!("a signature is at most {MAX_SIGNATURE} bytes"));
         }
         match (&self.body, self.state) {
             (Some(b), State::Live) => {
@@ -486,8 +454,8 @@ impl Envelope {
     }
 
     /// The envelope as JSON, the form it crosses HTTP in: keyhashes and
-    /// the digest as 64 hex digits, the signature and the body base64url
-    /// (RFC 4648 §5, no padding), the state a word.
+    /// the digest as 64 hex digits, the body base64url (RFC 4648 §5, no
+    /// padding), the state a word.
     pub fn to_json(&self) -> Value {
         let mut v = json!({
             "origin": hex(&self.origin),
@@ -497,7 +465,6 @@ impl Envelope {
             "digest": hex(&self.digest),
             "state": self.state.word(),
             "path": self.path.iter().map(|k| hex(k)).collect::<Vec<_>>(),
-            "signature": base64url(&self.signature),
         });
         if let Some(b) = &self.body {
             v["body"] = Value::String(base64url(b));
@@ -535,11 +502,8 @@ impl Envelope {
                 .collect::<Result<Vec<_>, _>>()?,
             Some(_) => return Err("`path` is not a list".into()),
         };
-        let signature = match v.get("signature") {
-            None | Some(Value::Null) => Vec::new(),
-            Some(Value::String(b)) => unbase64url(b).ok_or("`signature` is not base64url")?,
-            Some(_) => return Err("`signature` is not a string".into()),
-        };
+        // a `signature` an older sender brings is read past, as any field
+        // this form does not name: nothing here would check it
         let body = match v.get("body") {
             None | Some(Value::Null) => None,
             Some(Value::String(b)) => Some(unbase64url(b).ok_or("`body` is not base64url")?),
@@ -553,7 +517,6 @@ impl Envelope {
             digest,
             state,
             path,
-            signature,
             body,
         };
         if let Some(why) = e.refused() {
@@ -562,8 +525,7 @@ impl Envelope {
         Ok(e)
     }
 
-    /// A live envelope over `body` with its digest computed, unsigned:
-    /// what a test or an application's first draft builds before signing.
+    /// A live envelope over `body` with its digest computed.
     pub fn live(origin: Keyhash, record: &str, schema: &str, revision: u64, body: &[u8]) -> Self {
         Envelope {
             origin,
@@ -573,7 +535,6 @@ impl Envelope {
             digest: sha256(body),
             state: State::Live,
             path: Vec::new(),
-            signature: Vec::new(),
             body: Some(body.to_vec()),
         }
     }
@@ -595,7 +556,6 @@ impl Envelope {
             digest,
             state: State::Withdrawn,
             path: Vec::new(),
-            signature: Vec::new(),
             body: None,
         }
     }
@@ -2177,32 +2137,28 @@ mod tests {
 
     // acceptance: RSC-44
     #[test]
-    fn the_envelope_crosses_json_whole_and_signs_the_six_immutable_fields_only() {
+    fn the_envelope_crosses_json_whole_and_carries_no_signature() {
         let mut e = Envelope::live(k(1), "notice-7", SCHEMA_DIRECTIVE, 3, b"{\"retain\":90}");
         e.path = vec![k(9)];
-        e.signature = vec![1, 2, 3];
-        let back = Envelope::from_json(&e.to_json()).unwrap();
-        assert_eq!(back, e);
+        let json = e.to_json();
+        assert!(json.get("signature").is_none(), "nothing is signed: {json}");
+        assert_eq!(Envelope::from_json(&json).unwrap(), e);
+        // an older sender's signature is read past, and changes nothing
+        let mut older = json.clone();
+        older["signature"] = Value::String("AQID".into());
+        assert_eq!(Envelope::from_json(&older).unwrap(), e);
+        // and the route is metadata: the copy is the same record with or without it
         let mut routed = e.clone();
         routed.path.push(k(8));
-        routed.signature = vec![];
         assert_eq!(
-            routed.signed_bytes(),
-            e.signed_bytes(),
-            "the route and the signature are outside what is signed"
+            (
+                routed.origin,
+                &routed.record,
+                routed.revision,
+                routed.digest
+            ),
+            (e.origin, &e.record, e.revision, e.digest)
         );
-        let mut other = e.clone();
-        other.revision = 4;
-        assert_ne!(other.signed_bytes(), e.signed_bytes());
-        // the array is the six fields in order, and the state is the
-        // integer §3.3 fixes: 0 live, 1 withdrawn, and nothing else moves
-        let live = Envelope::live(k(1), "r", "s@1", 1, b"x");
-        let gone = Envelope::withdrawn(k(1), "r", "s@1", 1, live.digest);
-        let (lb, gb) = (live.signed_bytes(), gone.signed_bytes());
-        assert_eq!(lb[0], 0x86, "a definite array of six");
-        assert_eq!(*lb.last().unwrap(), 0, "live is 0");
-        assert_eq!(*gb.last().unwrap(), 1, "withdrawn is 1");
-        assert_eq!(lb[..lb.len() - 1], gb[..gb.len() - 1]);
     }
 
     // acceptance: RSC-45

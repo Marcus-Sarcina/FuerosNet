@@ -1155,7 +1155,7 @@ fn a_package_answering_with_something_that_is_not_a_response_is_unavailable() {
 /// a block is provisioned under the node's state directory at the budget
 /// the package declared, and the instance is to be told where; a fetch
 /// destination with a path, a wildcard or the node's own machine in it is
-/// refused; and an instance key that is not 32 bytes of hex is refused.
+/// refused.
 // acceptance: DMN-35
 #[test]
 fn a_manifest_declares_its_host_version_its_budget_and_its_destinations() {
@@ -1267,14 +1267,6 @@ fn a_manifest_declares_its_host_version_its_budget_and_its_destinations() {
         "roles = [\"reader\"]\nimports = [\"rhtn/1:request\", \"rhtn/1:response\"]\ncomponent = \"echo.wasm\"\nfetch = [\"https://feeds.example\", \"https://api.example:8443\"]\n",
     );
     assert_eq!(run(&d, &host(&ok)), Ok(1));
-
-    // an instance key is 32 bytes of hex, or nothing
-    let keyed = format!(
-        "[[host]]\nresource = \"{RES}\"\nowner = \"{WHO}\"\nauthority = \"shop.internal\"\nmanifest = \"{}\"\nkey = \"deadbeef\"\n",
-        tolerant.display()
-    );
-    let why = run(&d, &keyed).expect_err("refused");
-    assert!(why.contains("instance key"), "{why}");
 }
 
 /// **A package that schedules jobs gets its table under the node's state

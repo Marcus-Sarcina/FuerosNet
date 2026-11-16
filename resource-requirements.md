@@ -241,25 +241,20 @@ operator bound and `rhtn-audience` naming you.
 | `PUT /.rhtn/envelope` | one **envelope** from a related instance, with `rhtn-origin` (that instance, hex) and `rhtn-relation` (`patron`, `subordinate` or `kin:<name>`, the node's reading of your operator's configuration) | 2xx to take it, which the node remembers; the body may carry envelopes to send (below) |
 | `GET /.rhtn/outbox` | **the items the node has taken**, as `?taken=a,b` [2026-10-27] | 2xx with `{"emit": [{"item": …, "to": …, "envelope": …}, …]}`, empty where you have nothing to send; `to` is `patron`, `subordinates`, `kin:<name>` or one related instance in hex |
 
-**An envelope is one instance's signed claim about one record**: `origin` (the
-instance, a resource keyhash), `record` (its local identifier), `schema`,
-`revision` (strictly ordered per record), `digest` (SHA-256 of the body), `state`
-(`live` or `withdrawn`), `path` (the instances it crossed, transport metadata outside
-the signature), `signature`, and the body where live. The origin signs the six
-immutable fields and never the route: a CBOR array `[origin, record, schema,
-revision, digest, state]` with `state` 0 for live and 1 for withdrawn. **The
-signature authenticates the instance's claim, not any person's**: authorship within
-the instance is your application data, attributed by the pairwise principal's local
-label, never a network identity. **The node carries that signature and does not
-check it** [author, 2026-10-27]: what it checks is that the node delivering an
-envelope is the node hosting the instance the envelope claims — which is the
-guarantee this version offers, a hosting node speaking for its own instances in
-any case. The field travels so that you may check it yourself where it matters to
-you, and so that its shape does not change when the node comes to check it. **One
-consequence to design around: this version carries one hop.** An envelope cannot
-reach you forwarded, because the node delivering it must be the origin's own, and
-you may emit only envelopes your instance originated. A record that must travel
-further is a record whose signature has to be verified, which is not yet built. **A live envelope carries its body**
+**An envelope is one instance's claim about one record**: `origin` (the instance,
+a resource keyhash), `record` (its local identifier), `schema`, `revision`
+(strictly ordered per record), `digest` (SHA-256 of the body), `state` (`live` or
+`withdrawn`), `path` (the instances it crossed, transport metadata), and the body
+where live. **It carries no signature, and the node that hosts its origin vouches
+for it** [author, 2026-10-27; 2026-11-16]: what the receiving node checks is that
+the node delivering an envelope is the node hosting the instance the envelope
+claims, which is a hosting node speaking for its own instances — as it does in any
+case, since it runs their code and holds their store. Authorship within the
+instance is your application data, attributed by the pairwise principal's local
+label, never a network identity. **One consequence to design around: an envelope
+travels one hop.** It cannot reach you forwarded, because the node delivering it
+must be the origin's own, and you may emit only envelopes your instance
+originated. **A live envelope carries its body**
 [2026-10-27]: nothing offers a record and lets you fetch it afterwards, so a live
 envelope without one is refused rather than taking the record's revision and
 suppressing the complete copy behind it.

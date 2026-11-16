@@ -16805,7 +16805,7 @@
   "id": "RSC-44",
   "area": "resources",
   "gap": "resources",
-  "title": "The envelope crosses whole, and the origin signs the six immutable fields and never the route",
+  "title": "The envelope crosses whole, carrying no signature, and its route is transport metadata",
   "milestone": "after-5",
   "kind": "positive",
   "spec": [
@@ -16814,14 +16814,14 @@
   "rule": [
    {
     "where": "resource-requirements.md §3.3",
-    "text": "The origin signs the six immutable fields and never the route: a CBOR array [origin, record, schema, revision, digest, state] with state 0 for live and 1 for withdrawn."
+    "text": "It carries no signature, and the node that hosts its origin vouches\nfor it"
    }
   ],
   "given": "An envelope whose path records the instances it crossed.",
-  "when": "It is serialised, read back, and the bytes its origin signs are composed before and after the path changes.",
-  "then": "Every field survives the round trip; the signed bytes are the CBOR array of the six immutable fields with the state encoded as 0 or 1; and the bytes do not move when the path does, so transport metadata is outside the signature.",
+  "when": "It is serialised and read back, and a copy that brings a `signature` field from an older sender is read.",
+  "then": "Every field survives the round trip and the serialised form carries no signature; a `signature` brought by an older sender is read with it ignored, and nothing the node decides moves with it.",
   "oracle": "fixture",
-  "interpretation": null
+  "interpretation": "**The signature is withdrawn** [author, 2026-11-16]: the instance key and the envelope signature were removed, the node hosting the origin vouching for it (OPS-022). This entry held the signed bytes before; it now holds the round trip without them."
  },
  {
   "id": "RSC-45",
@@ -17239,9 +17239,9 @@
     "text": "you tell it where its block and its log are, and\nwhat it may fill them to, on the relationships exchange"
    }
   ],
-  "given": "A hosting file naming a package whose manifest declares host versions, a block and log budget, fetch destinations and an instance key, and a node with a state directory.",
-  "when": "The file is applied, and again with a package tolerating only versions this host does not offer, with an ill-formed destination, with a bad key, and on a node with no state directory.",
-  "then": "The block exists under the state directory at the declared quota and the log beside it; the instance's plane carries rhtn-host, rhtn-block, rhtn-block-bytes, rhtn-log and rhtn-log-bytes on its relationships PUT, told again when they move; the version mismatch, the destination, the key and the missing state directory are each refused at installation with the reason named.",
+  "given": "A hosting file naming a package whose manifest declares host versions, a block and log budget and fetch destinations, and a node with a state directory.",
+  "when": "The file is applied, and again with a package tolerating only versions this host does not offer, with an ill-formed destination, and on a node with no state directory.",
+  "then": "The block exists under the state directory at the declared quota and the log beside it; the instance's plane carries rhtn-host, rhtn-block, rhtn-block-bytes, rhtn-log and rhtn-log-bytes on its relationships PUT, told again when they move; the version mismatch, the destination and the missing state directory are each refused at installation with the reason named.",
   "oracle": "behaviour",
   "interpretation": "",
   "families": [
