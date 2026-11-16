@@ -20,6 +20,7 @@ use rhtn_archive::record::Record;
 use rhtn_client::record::{LABELS, read_presentation};
 use rhtn_client::store::open;
 use rhtn_codec::cbor::*;
+use std::time::Duration;
 
 /// A test identity's identity root, which is what a capture key derives
 /// from (design §7.5.2.6).  Nothing is stored per capture, so a test that
@@ -773,5 +774,42 @@ async fn the_counterparty_prunes_to_three_and_the_dismissed_stands_down() {
         m.party(gone).with(|c| c.archive.len()).await,
         0,
         "{gone} was dismissed and holds nothing"
+    );
+}
+
+/// **An attesting witness is outstanding until its back-pointers are
+/// held, not only its answer.** The two leave the witness together as two
+/// messages, and a witness without back-pointers is one the proposal
+/// cannot carry: a proposer that counted the answer alone proposed in the
+/// gap and finalised without that witness. Here each witness's
+/// back-pointers trail its answer by a second, and the record carries
+/// both witnesses all the same.
+// acceptance: CER-68
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_witness_whose_back_pointers_trail_its_answer_is_waited_for() {
+    let mut m = Meeting::open(
+        vec![
+            Who::with("alice"),
+            Who::with("bob"),
+            Who::watching("w1"),
+            Who::watching("w2"),
+            Who::watching("witness"),
+        ],
+        "witness",
+        Scene::new().table("witness", &["witness"]),
+    )
+    .await;
+    for to in ["alice", "bob"] {
+        m.stagger(to, &["w1", "w2"], Duration::from_secs(1));
+    }
+    let t = m
+        .meet("alice", "bob", &["w1"], &["w2"])
+        .await
+        .expect("a record");
+    let rec = Record::parse(&m.record("alice", t).await).expect("a record");
+    assert_eq!(
+        rec.signers.len(),
+        4,
+        "two participants and both witnesses, their back-pointers awaited"
     );
 }

@@ -908,6 +908,34 @@ impl Meeting {
         self.parties.get_mut(name).expect("a party in this meeting")
     }
 
+    /// **Each of `senders`' first message to `to` arrives at once and the
+    /// rest `hold` later**, in the order sent: what a loaded network does
+    /// to two messages that left together, held open long enough that a
+    /// poll cannot miss the gap.
+    pub fn stagger(&self, to: &str, senders: &[&str], hold: Duration) {
+        let straight = self.party(to).courier.inbound();
+        let senders: Vec<Keyhash> = senders.iter().map(|s| kh(s)).collect();
+        let first = Mutex::new(std::collections::BTreeSet::new());
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let late = straight.clone();
+        tokio::spawn(async move {
+            while let Some((from, bytes, binding)) = rx.recv().await {
+                tokio::time::sleep(hold).await;
+                late(from, bytes, binding);
+            }
+        });
+        self.inboxes.host(
+            kh(to),
+            Arc::new(move |from, bytes, binding| {
+                if senders.contains(&from) && !first.lock().unwrap().insert(from) {
+                    let _ = tx.send((from, bytes, binding));
+                } else {
+                    straight(from, bytes, binding);
+                }
+            }),
+        );
+    }
+
     /// What `who` holds of `scene`, as a start from storage reads it: the
     /// records, the acquaintance they fold to, and a contact with a
     /// locator for each party `introduce` names.

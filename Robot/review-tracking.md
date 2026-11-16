@@ -22575,3 +22575,25 @@ side logs it; the unit test holds it). **The test application ignores
 SIGTERM**: both restart and removal fell back to SIGKILL. Droplet
 620024250 destroyed; the account holds only the two bench droplets; keys,
 token and identity shredded.
+
+**The ceremony flake, chased, 2026-11-16 [author: "Yes, chase the
+ceremony flake now"].** `adaptors::ceremony::the_counterparty_prunes_to_
+three_and_the_dismissed_stands_down` reproduced 4 in 108 runs at 12 in
+parallel (3/48, 1/60), with 4 or 3 signers of 5. A probe at the harness's
+propose showed the cause: three witnesses answered attesting and
+`witnesses_outstanding` was 0 while back-pointers were held from only one
+(`answered [44, 92, 247] back_from [107, 247]`). A witness sends its
+answer and its back-pointers as two messages; the count dropped a witness
+on the answer, and `converse_propose` silently skips one whose
+back-pointers are not held. 8 of 60 runs proposed in that state; 7 were
+saved by the back-pointers landing between the progress read and the
+propose. **Not a test defect**: the shell paces by the same count
+(`Meet.kt` through ffi), so a bench meeting could finalise short a
+witness the same way. Fixed in `Client::progress`: an attesting survivor
+stays outstanding until its back-pointers are held. New test
+`a_witness_whose_back_pointers_trail_its_answer_is_waited_for` with a
+harness `Meeting::stagger` holding each witness's messages after its
+first by 1 s: 6/6 failed before the fix, every one finalising with **2**
+signers (witnessless, both witnesses having agreed); 6/6 pass after. The
+prune test 96/96 after. No document states the count; the APK needs a
+rebuild to carry it to the bench.

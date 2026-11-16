@@ -281,7 +281,8 @@ pub struct Progress {
     pub waiting_on: Option<String>,
     /// Queries issued and not yet answered.
     pub queries_outstanding: usize,
-    /// Surviving witnesses, of either side, whose answer has not arrived:
+    /// Surviving witnesses, of either side, whose answer has not arrived,
+    /// or whose back-pointers have not where it answered attesting:
     /// what a patient proposer is waiting on inside the window [author,
     /// 2026-10-19].  Never a gate — the floor is gone — but the one count
     /// a shell paces its proposal by.
@@ -890,13 +891,21 @@ impl Client {
                     .is_none_or(|t| *t == vec![rhtn_archive::genesis(&p)])
             });
         // the survivors asked whose answer has not arrived, of both
-        // sides: the other side's answers reach this side too (§7.10.1)
+        // sides: the other side's answers reach this side too (§7.10.1).
+        // **An attesting answer is not the whole of it**: the back-pointers
+        // follow as a message of their own, and a witness without them is
+        // one `converse_propose` leaves out — counted answered on the
+        // answer alone, a proposer proposed in the gap and finalised
+        // without it
         let witnesses_outstanding = a
             .my_survivors
             .iter()
             .flat_map(|s| s.iter())
             .chain(a.their_survivors.iter().flatten())
-            .filter(|w| !c.answers.contains_key(*w))
+            .filter(|w| match c.answers.get(*w) {
+                None => true,
+                Some(flags) => flags.is_some() && !c.back.contains_key(*w),
+            })
             .count();
         let ready = a.initiator && waiting_on.is_none();
         Some(Progress {
