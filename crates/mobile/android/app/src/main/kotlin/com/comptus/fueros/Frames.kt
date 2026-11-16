@@ -106,9 +106,12 @@ object Frames {
             javaScriptEnabled = script
             javaScriptCanOpenWindowsAutomatically = false
             // storage of the resource's own, under its origin, where its
-            // pages run; nothing to keep where they do not
+            // pages run; nothing to keep where they do not. **WebSQL stays
+            // off**: the engine has removed it and reads `false` whatever
+            // is set [found on MRK, 2026-11-16], and IndexedDB comes with
+            // script and DOM storage
             domStorageEnabled = script
-            databaseEnabled = script
+            databaseEnabled = false
             allowFileAccess = false
             allowContentAccess = false
             allowFileAccessFromFileURLs = false
@@ -214,6 +217,7 @@ object Frames {
      */
     val SHUT_IN_BOTH: List<String> = listOf(
         "javaScriptCanOpenWindowsAutomatically",
+        "databaseEnabled",
         "allowFileAccess",
         "allowContentAccess",
         "allowFileAccessFromFileURLs",
@@ -228,6 +232,5 @@ object Frames {
     val SHUT_UNLESS_ALLOWED: List<String> = listOf(
         "javaScriptEnabled",
         "domStorageEnabled",
-        "databaseEnabled",
     )
 }

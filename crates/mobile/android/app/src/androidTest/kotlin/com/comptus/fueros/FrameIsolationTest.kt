@@ -153,14 +153,22 @@ class FrameIsolationTest {
             "the page asked for nothing at all, so this test shows nothing",
             seen.navigations.isNotEmpty() || seen.fetches.isNotEmpty(),
         )
-        // and the answer, for every one of them, is outside the resource's
-        // own origin and so refused — the hostile page names nothing inside it
-        for (where in seen.navigations + seen.fetches) {
+        // and the answer: everything the hostile page names is outside the
+        // resource's own origin and refused. **The engine asks for one
+        // thing inside it of its own accord** — `/favicon.ico` [found on
+        // MRK, 2026-11-16] — and that is the resource's to answer, carried
+        // like any load inside the origin, so it is classed as inside
+        val outside = (seen.navigations + seen.fetches).filterNot { it.startsWith("$ORIGIN/") }
+        assertTrue("the hostile page asked for nothing outside: nav=${seen.navigations} fetch=${seen.fetches}", outside.isNotEmpty())
+        for (where in outside) {
             assertEquals(
                 "a resource's page reaches its own origin and nothing else: $where",
                 Frames.Going.REFUSE,
                 Frames.resourceGoing(ORIGIN, where),
             )
+        }
+        for (where in (seen.navigations + seen.fetches) - outside.toSet()) {
+            assertEquals("inside its origin is carried: $where", Frames.Going.INSIDE, Frames.resourceGoing(ORIGIN, where))
         }
         // **no fetch outside the origin is served a body**: what arrives
         // is answered empty by the screen's client
@@ -241,6 +249,7 @@ class FrameIsolationTest {
                 got = mapOf(
                     "javaScriptCanOpenWindowsAutomatically" to
                         s.javaScriptCanOpenWindowsAutomatically,
+                    "databaseEnabled" to s.databaseEnabled,
                     "allowFileAccess" to s.allowFileAccess,
                     "allowContentAccess" to s.allowContentAccess,
                     "allowFileAccessFromFileURLs" to s.allowFileAccessFromFileURLs,
@@ -249,7 +258,6 @@ class FrameIsolationTest {
                 unless = mapOf(
                     "javaScriptEnabled" to s.javaScriptEnabled,
                     "domStorageEnabled" to s.domStorageEnabled,
-                    "databaseEnabled" to s.databaseEnabled,
                 )
             }
             // the list and the readings are the same set, so a setting

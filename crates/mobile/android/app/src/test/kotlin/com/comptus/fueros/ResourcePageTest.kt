@@ -201,7 +201,7 @@ class ResourcePageTest {
         for (setting in listOf(
             "javaScriptEnabled = script",
             "domStorageEnabled = script",
-            "databaseEnabled = script",
+            "databaseEnabled = false",
             "allowFileAccess = false",
             "allowContentAccess = false",
             "allowFileAccessFromFileURLs = false",

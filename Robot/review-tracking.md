@@ -22422,8 +22422,15 @@ SCRIPT_ASKS`), gives a running page `ResourceBridge` (`rhtn.request`)
 and nothing else, keeps storage under the origin and wipes it with
 `Frames.forget`; the node page wipes its own origin and no longer every
 origin (CAT-025 rewritten, CAT-027 new; light §8, resource §3.4).
-**Owed on the bench**: `FrameIsolationTest` rewritten for the new rule
-compiles in the gate and has not run on a device; the media-element
+**On the bench, 2026-11-16**: installed on all four phones (data kept:
+ZU8 42802 KB, GXV 46925, 4VC 61870 unchanged; MRK 59445 to 50773, all of
+it diagnostics rotation — two new app runs pruned an older run's logs,
+kernel stores intact). `FrameIsolationTest` run on MRK with `am
+instrument` (not gradle's connected run, which uninstalls the app): 3 of
+5 first, then 5 of 5 after two corrections the device made — WebSQL
+cannot be enabled on the current engine (reads false), so it is shut in
+both frames; the engine fetches `/favicon.ico` inside the origin of its
+own accord, which the test had counted as the page's. The media-element
 egress question (a `<video src>` to an outside host bypasses
 `shouldInterceptRequest` on Android) is open and put to the author.
 **A flake surfaced by the gates**: `adaptors::ceremony::the_counterparty
