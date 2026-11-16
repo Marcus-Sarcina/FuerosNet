@@ -81,6 +81,15 @@ pub struct NodeView {
     /// The wake endpoints this node holds for the clients it serves
     /// (design §14.1.5).
     pub wake: crate::wake::WakeRegister,
+    /// **Doorbells owed** (design §14.1.5; `infra-client-requirements.md`
+    /// §6.1): the endpoint of each client a relay was taken for while the
+    /// client held no session here, one entry per arrival, drained by
+    /// whoever posts ([`NodeView::take_rings`]).  Behind its own lock so
+    /// the relay path, which reads the view, can add to it; rung by
+    /// [`NodeView::bell`].  Nothing of a ring is logged or stored.
+    pub rings: std::sync::Mutex<Vec<crate::wake::Endpoint>>,
+    /// Rung once per doorbell owed, for a poster that waits on it.
+    pub bell: Arc<tokio::sync::Notify>,
     /// The catalog this node answers from (`wire-format.md` §6).
     pub catalog: crate::catalog::CatalogService,
     /// The resources this node hosts or brokers, their role tables and
@@ -171,6 +180,8 @@ impl NodeView {
             prekeys: crate::prekeys::PrekeyService::default(),
             profiles: crate::profiles::ProfileStore::default(),
             wake: crate::wake::WakeRegister::new(),
+            rings: std::sync::Mutex::new(Vec::new()),
+            bell: Arc::new(tokio::sync::Notify::new()),
             catalog: crate::catalog::CatalogService::default(),
             resources: crate::resources::Gateway::default(),
             federation: crate::federation::Federation::default(),
@@ -199,6 +210,38 @@ impl NodeView {
         self.signer
             .clone()
             .map(|s| s as Arc<dyn rhtn_crypto::signer::Sign1 + Send + Sync>)
+    }
+
+    /// **A relay was taken for `client`'s `device`**: where the client is
+    /// away and holds a live endpoint, one doorbell is owed, the device's
+    /// own endpoint first and any of the client's otherwise.  A client
+    /// with a session here gets the message on it and no ring.  Whether a
+    /// ring was owed.
+    pub fn ring_for(&self, client: &Keyhash, device: &[u8; 32], away: bool) -> bool {
+        if !away {
+            return false;
+        }
+        let now = self.now();
+        let Some(e) = self
+            .wake
+            .doorbell_for(client, device, now)
+            .or_else(|| self.wake.doorbell(client, now))
+        else {
+            return false;
+        };
+        if let Ok(mut r) = self.rings.lock() {
+            r.push(e.clone());
+        }
+        self.bell.notify_one();
+        true
+    }
+
+    /// The doorbells owed since the last drain, in arrival order.
+    pub fn take_rings(&self) -> Vec<crate::wake::Endpoint> {
+        self.rings
+            .lock()
+            .map(|mut r| std::mem::take(&mut *r))
+            .unwrap_or_default()
     }
 
     /// The time now, by this node's clock.

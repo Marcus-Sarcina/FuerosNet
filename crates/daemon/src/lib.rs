@@ -31,6 +31,7 @@ pub mod acts;
 pub mod administration;
 pub mod config;
 pub mod diag;
+pub mod doorbell;
 /// The directive plane between nodes: a TLS listener that takes envelopes
 /// for the instances this node hosts, and the carrier that delivers
 /// pending ones to the nodes the operator located.

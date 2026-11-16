@@ -150,6 +150,8 @@ fn hex_bytes(s: &str) -> Option<Vec<u8>> {
 
 /// A running daemon: the node, and the state it must write back.
 pub struct Service {
+    /// What rings a client's doorbell (`crate::doorbell`).
+    bell: crate::doorbell::Bell,
     /// The running node.
     pub node: Arc<LiveNode>,
     /// Where the prekey pools and the topology store are kept.  Held so
@@ -960,6 +962,7 @@ impl Service {
             }
         }
         let service = Service {
+            bell: crate::doorbell::Bell::native(None),
             node,
             presenter,
             prekeys: cfg.prekeys.clone(),
@@ -1045,6 +1048,22 @@ impl Service {
             self.hosts_resources,
             view.serving_node.is_some(),
         )
+    }
+
+    /// **Ring every doorbell owed**, each on a thread of its own since the
+    /// post blocks, and say nothing of any of them
+    /// (`infra-client-requirements.md` §6.1: do not log doorbells).
+    fn ring_owed(&self) {
+        let (owed, now) = {
+            let view = self.node.view.lock().unwrap();
+            (view.take_rings(), view.now())
+        };
+        for e in owed {
+            let bell = self.bell.clone();
+            tokio::task::spawn_blocking(move || {
+                let _ = bell.ring(&e, now);
+            });
+        }
     }
 
     /// Routine maintenance: one-time keys whose window has passed are
@@ -1174,8 +1193,15 @@ impl Service {
         let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
         let mut tick = tokio::time::interval(Duration::from_secs(60));
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        let rings = self.node.view.lock().unwrap().bell.clone();
         loop {
             tokio::select! {
+                // **a doorbell owed is rung now, not on the tick**: the
+                // client it is for is away, and the ring is what brings it
+                // back (design §14.1.5)
+                _ = rings.notified() => {
+                    self.ring_owed();
+                }
                 _ = tokio::signal::ctrl_c() => {
                     tracing::info!(target: "daemon", step = "signalled", signal = "SIGINT", "daemon.lifecycle");
                     break;
@@ -1192,6 +1218,7 @@ impl Service {
                     break;
                 }
                 _ = tick.tick() => {
+                    self.ring_owed();
                     self.mind_the_run();
                     for dry in self.maintain() {
                         crate::say!("rhtnd: one-time pool exhausted for {}", hex8(&dry));

@@ -243,7 +243,15 @@ pub fn relay(
             r.device,
             relayed(*peer, &r.ciphertext, binding.as_deref()),
         ) {
-            Ok(()) => SUBMISSION_ACCEPTED,
+            // **a doorbell where the recipient is away** (design §14.1.5):
+            // one per arrival, to the endpoint the recipient registered,
+            // for the poster to ring; a recipient with a session here is
+            // handed the message on it instead
+            Ok(()) => {
+                let away = !n.has_session_for(&r.recipient, &r.device);
+                view.ring_for(&r.recipient, &r.device, away);
+                SUBMISSION_ACCEPTED
+            }
             // at a cap is a bound; a recipient this node holds no record
             // of, and a credential it has verified superseded, are both
             // refusals about somebody else

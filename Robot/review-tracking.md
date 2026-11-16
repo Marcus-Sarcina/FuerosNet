@@ -22362,3 +22362,23 @@ of the ratchet's skipped-key map is a read of freed memory; the drop
 wipes those keys before the map frees, and the view reads the inline
 keys. The JVM side stays as stated at the boundary: a `ByteArray` is not
 Rust's to wipe; the shell fills its seed arrays itself.
+
+**The doorbell, 2026-11-15 [plan: author].** SUB-14's posting half,
+built: the node owes a ring when a relay is taken for a recipient with
+no session here and a live endpoint (`NodeView::ring_for`, the device's
+own endpoint first, one per arrival, drained by `take_rings`, a `Notify`
+waking the poster); the daemon rings at once rather than on the tick
+(`doorbell::Bell`): RFC 8291's aes128gcm body over an empty plaintext,
+held to the RFC's Appendix A vector byte for byte; RFC 8292's VAPID
+token ES256-signed with the lent key over the endpoint's origin and a
+twelve-hour expiry; `TTL` a day or the endpoint's lapse; all on
+aws-lc-rs, already in the graph, no new crate. Nothing of a ring is
+logged, counted or stored. Tests: the vector, the token under the public
+point, a loopback TLS endpoint under the transport's raw-key profile
+receiving two signed posts whose bodies open to nothing (acceptance
+SUB-14, its stub gone), and the node's rule for when a ring is owed.
+**Assumed, asked of the author**: no `sub` contact claim unless an
+operator supplies one, and no configuration key for it yet; the TTL
+rule. **Not built, stated**: the client half — the Android shell
+registers no wake endpoint, having no push subscription; which service
+is the person's choice, and the registration call exists at the facade.
