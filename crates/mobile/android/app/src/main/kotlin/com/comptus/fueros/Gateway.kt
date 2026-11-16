@@ -497,6 +497,16 @@ object Gateway {
     }
 
     /**
+     * **This client's own runner, signed by the operator's host key**
+     * (`infra-client-requirements.md` §9.4): what the runner-refresh act
+     * carries to a machine through its instance, which cannot forge it.
+     */
+    fun hostRunnerRefresh(by: String): uniffi.rhtn_ffi.RunnerRefresh? {
+        val p = loaded[by] ?: return null
+        return call("hostRunnerRefresh", { null }) { p.hostRunnerRefresh() }
+    }
+
+    /**
      * **The private half, in the form `ssh -i` reads.** A secret: whoever
      * holds it has a shell on the machines this identity launched. Shown
      * to the person, never written by this shell, and derived again

@@ -27,6 +27,9 @@
 #    pull <image-ref>                            fetch an image
 #    node-restart                                restart the node itself
 #    node-upgrade <image-ref>                    replace the node on a new image
+#    version                                     which runner this is
+#    runner-refresh                              take a newer runner, signed by
+#                                                the operator, on standard input
 #
 #  **Why `node-upgrade` exists at all** [author, 2026-11-04]: "the node
 #  operators do not own their address space and are taking a randomly
@@ -50,6 +53,17 @@
 #  image reference, where the engine hands them to the container.  And it
 #  will not run a shell for anybody.
 #
+#  **It is the host's, and the node does not rewrite it** [author,
+#  2026-11-16].  This file is the limit on what an instance may ask its
+#  host, so a newer one is taken only signed by the operator's own key --
+#  the one in root's authorized_keys with no forced command, which no
+#  instance ever holds -- under the namespace rhtn-runner@1, checked with
+#  ssh-keygen before anything is written.  The node carries the bytes and
+#  cannot forge the signature; a runner older than this one is refused, so
+#  nothing is taken back; and one that does not parse is refused.  A
+#  machine whose runner predates this verb cannot take one, and a relaunch
+#  gives it the current runner.
+#
 #  **A block of the package's own, bounded by the filesystem** [author,
 #  2026-11-15].  A package on a socket of its own may need a filesystem --
 #  ported software, a database -- and `block=<bytes>` after the image asks
@@ -64,6 +78,13 @@
 #  never by a restart or a reinstall.
 # =============================================================================
 set -eu
+
+# **which runner this is**: a client compares it with the one it carries
+# and tells its operator when a newer one is available
+RUNNER_VERSION=2
+RUNNER_SELF="${RHTN_RUNNER_SELF:-/usr/local/bin/rhtn-package-runner}"
+AUTHORIZED="${RHTN_AUTHORIZED_KEYS:-/root/.ssh/authorized_keys}"
+NAMESPACE=rhtn-runner@1
 
 PREFIX=rhtn-pkg-
 NODE=rhtnd
@@ -253,6 +274,38 @@ case "$verb" in
       run "$RHTN_UP_OLD"
     ' < /dev/null > /dev/null 2>&1 &
     say "replacing the node on $image; its surface answers again when it is up"
+    ;;
+  version)
+    [ $# -eq 0 ] || refuse "version takes nothing"
+    printf 'runner %s %s\n' "$RUNNER_VERSION" "$(sha256sum "$RUNNER_SELF" 2> /dev/null | cut -c1-64)"
+    ;;
+  runner-refresh)
+    [ $# -eq 0 ] || refuse "runner-refresh takes nothing; the signature and the runner come on standard input"
+    command -v ssh-keygen > /dev/null 2>&1 || refuse "ssh-keygen is wanted to check the signature and this host has none; nothing changed"
+    work="$(mktemp -d)" || refuse "there is no room to take a runner; nothing changed"
+    trap 'rm -rf "$work"' EXIT
+    # **the signature, then the runner, byte for byte**: what was signed
+    # is what is written, so nothing here rewrites a line of it
+    head -c 262144 > "$work/in"
+    end="$(grep -n -m1 '^-----END SSH SIGNATURE-----$' "$work/in" | cut -d: -f1)"
+    [ -n "$end" ] || refuse "standard input carries a signature and then the runner; nothing changed"
+    head -n "$end" "$work/in" > "$work/sig"
+    tail -n "+$((end + 1))" "$work/in" > "$work/new"
+    [ -s "$work/new" ] || refuse "no runner followed the signature; nothing changed"
+    # the operator's own key: the plain line, never the runner key's,
+    # which carries a forced command and is the one an instance is handed
+    awk '/^ssh-ed25519 /{ print "operator " $1 " " $2 }' "$AUTHORIZED" > "$work/allowed" 2> /dev/null || true
+    [ -s "$work/allowed" ] || refuse "this host holds no operator key to check a runner against; nothing changed"
+    ssh-keygen -Y verify -f "$work/allowed" -I operator -n "$NAMESPACE" -s "$work/sig" < "$work/new" > /dev/null 2>&1 \
+      || refuse "that runner is not signed by this machine's operator; nothing changed"
+    sh -n "$work/new" || refuse "that runner does not parse; nothing changed"
+    new="$(sed -n 's/^RUNNER_VERSION=\([0-9][0-9]*\)$/\1/p' "$work/new" | head -n 1)"
+    [ -n "$new" ] || refuse "that runner names no version; nothing changed"
+    [ "$new" -ge "$RUNNER_VERSION" ] || refuse "that runner is version $new and this one is $RUNNER_VERSION, and a runner is not taken back; nothing changed"
+    cp "$work/new" "$RUNNER_SELF.new" && chmod 0755 "$RUNNER_SELF.new" && mv -f "$RUNNER_SELF.new" "$RUNNER_SELF" \
+      || refuse "the runner could not be written; nothing changed"
+    say "runner-refresh $new"
+    printf 'runner %s %s\n' "$new" "$(sha256sum "$RUNNER_SELF" | cut -c1-64)"
     ;;
   *)
     refuse "no such verb: $verb"

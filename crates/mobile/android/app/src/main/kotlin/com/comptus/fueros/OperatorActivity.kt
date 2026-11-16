@@ -60,6 +60,11 @@ class OperatorActivity : Activity() {
          *  client launched it (H1); blank where it was enrolled by hand. */
         val provider: String = "",
         val remoteId: String = "",
+        /** The runner version this machine was given, where this client
+         *  knows it: from its launch here, or from a refresh since; 1 for a
+         *  machine launched here before the version was recorded, 0 where
+         *  nothing says. */
+        val runner: Int = 0,
     )
 
     /**
@@ -109,10 +114,13 @@ class OperatorActivity : Activity() {
                     parts.getOrElse(2) { parts[0] },
                     parts.getOrElse(3) { "" },
                     parts.getOrElse(4) { "" },
+                    parts.getOrNull(5)?.toIntOrNull()
+                        ?: if (parts.getOrElse(3) { "" }.isNotEmpty()) 1 else 0,
                 )
             }
 
-    private fun line(it: Instance) = "${it.at}\t${it.subnet ?: ""}\t${it.label}\t${it.provider}\t${it.remoteId}"
+    private fun line(it: Instance) =
+        "${it.at}\t${it.subnet ?: ""}\t${it.label}\t${it.provider}\t${it.remoteId}\t${if (it.runner > 0) it.runner else ""}"
 
     private fun remember(i: Instance) {
         val kept = instances().filter { it.at != i.at } + i
@@ -294,6 +302,32 @@ class OperatorActivity : Activity() {
                     }
                 },
             )
+            // **a newer runner, where this client carries one** [author,
+            // 2026-11-16]: said here, with the act beside it where the
+            // machine can take one
+            OperatorStore.runnerPrompt(i.runner, Launch.RUNNER_VERSION)?.let { (says, can) ->
+                roll.addView(
+                    TextView(this).apply {
+                        textSize = 13f
+                        setTextColor(Palette.now.sub)
+                        text = says
+                    },
+                )
+                if (can && i.at.isNotEmpty()) {
+                    roll.addView(
+                        Button(this).apply {
+                            text = "Give it this app's runner"
+                            setOnClickListener {
+                                startActivity(
+                                    Intent(this@OperatorActivity, ActActivity::class.java).putExtra("by", by)
+                                        .putExtra("at", i.at)
+                                        .putExtra("act", "runner-refresh"),
+                                )
+                            }
+                        },
+                    )
+                }
+            }
             roll.addView(
                 Button(this).apply {
                     text = "Forget it here"
@@ -947,7 +981,7 @@ class OperatorActivity : Activity() {
                     }
                     if (ip == null) {
                         said += "no address within five minutes; the machine $id is running at ${provider.name} and can be destroyed from the list"
-                        remember(Instance("", subnet, "$label — launching, no address", provider.name.lowercase(), id))
+                        remember(Instance("", subnet, "$label — launching, no address", provider.name.lowercase(), id, Launch.RUNNER_VERSION))
                         show(); runOnUiThread { isEnabled = true; drawInstances() }; return@Thread
                     }
                     val surface = "$ip:${Launch.ADMIN_PORT}"
@@ -982,7 +1016,7 @@ class OperatorActivity : Activity() {
                         // the operator's own key can
                         said += Launch.silence(reachedSsh, false, waited, true, surface, provider.name, id)
                         val how = Launch.silenceLabel(reachedSsh, false, waited, true)
-                        remember(Instance(surface, subnet, "$label — $how", provider.name.lowercase(), id))
+                        remember(Instance(surface, subnet, "$label — $how", provider.name.lowercase(), id, Launch.RUNNER_VERSION))
                         rememberToken(surface, minted)
                         show(); runOnUiThread { isEnabled = true; drawInstances() }; return@Thread
                     }
@@ -1002,7 +1036,7 @@ class OperatorActivity : Activity() {
                         narration.text = said.joinToString("\n")
                         isEnabled = true
                         if (took) {
-                            remember(Instance(surface, subnet, label, provider.name.lowercase(), id))
+                            remember(Instance(surface, subnet, label, provider.name.lowercase(), id, Launch.RUNNER_VERSION))
                             rememberToken(surface, minted)
                             // **the launch enrols too, and this is the path
                             // a new machine actually takes** [2026-11-04]:

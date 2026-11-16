@@ -107,6 +107,17 @@ impl Shell {
     /// `key` is the private half of the restricted key, as the operator's
     /// client sent it, held no longer than the call.
     pub fn ask(&self, key: &str, request: &[&str]) -> Result<String, String> {
+        self.ask_with(key, request, None)
+    }
+
+    /// The same, with `input` on the runner's standard input: what a verb
+    /// that takes more than words is handed, a signed runner among them.
+    pub fn ask_with(
+        &self,
+        key: &str,
+        request: &[&str],
+        input: Option<&[u8]>,
+    ) -> Result<String, String> {
         let line = bare(request)?;
         let held = Secret::write(key)?;
         // **-F /dev/null and no known hosts**: this process has no home
@@ -138,11 +149,23 @@ impl Shell {
                 &format!("{USER}@{}", self.at.ip()),
                 &line,
             ])
-            .stdin(Stdio::null())
+            .stdin(if input.is_some() {
+                Stdio::piped()
+            } else {
+                Stdio::null()
+            })
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| format!("this image has no ssh client, or it would not run: {e}"))?;
+        // written from a thread of its own, so a runner that answers before
+        // it has read everything cannot leave this call waiting on a pipe
+        if let (Some(bytes), Some(mut stdin)) = (input, child.stdin.take()) {
+            let bytes = bytes.to_vec();
+            std::thread::spawn(move || {
+                let _ = stdin.write_all(&bytes);
+            });
+        }
         // **waited for by hand, and killed at the deadline.** The surface
         // takes one caller at a time and this call is the caller, so the
         // bound has to be on the child rather than on a future nothing

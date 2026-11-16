@@ -2164,3 +2164,91 @@ fn a_declared_act_is_proved_as_any_act_is_and_not_otherwise() {
 
     d.stop();
 }
+
+// functional: OPS-028
+#[test]
+fn the_node_is_upgraded_in_place_by_asking_its_host_and_a_bad_image_asks_nothing() {
+    let (l, d, at) = enrolled_with("upgrade", 37467, |l| {
+        l.ssh_client = Some(recorder(&l.dir, "none"));
+    });
+    // declared, so a client draws it and the page links it with the image suggested
+    let acts = ask(at, "GET /node/acts HTTP/1.1", b"");
+    assert!(acts.contains("\"upgrade\""), "{acts}");
+    let page = ask(at, "GET / HTTP/1.1", b"");
+    assert!(
+        page.contains("rhtn-act:upgrade?image=docker.io%2Fsarcina%2Frhtnd%3Alatest"),
+        "the page suggests the image: {page}"
+    );
+    let key = RUNNER_KEY.replace('\n', "%0A");
+    // a reference with a flag in it is refused before the host is asked
+    let bad = ask(
+        at,
+        "POST /node/act/upgrade HTTP/1.1",
+        format!("image=--privileged&key={key}").as_bytes(),
+    );
+    assert!(bad.starts_with("HTTP/1.1 400"), "{bad}");
+    assert!(
+        asked_of_host(&l.dir).is_empty(),
+        "nothing was asked: {:?}",
+        asked_of_host(&l.dir)
+    );
+    let image = "docker.io/sarcina/rhtnd:b15511ee";
+    let said = ask(
+        at,
+        "POST /node/act/upgrade HTTP/1.1",
+        format!("image={}&key={key}", image.replace(':', "%3A")).as_bytes(),
+    );
+    assert!(said.starts_with("HTTP/1.1 202"), "{said}");
+    assert!(said.contains(&format!("upgrading to {image}")), "{said}");
+    assert_eq!(asked_of_host(&l.dir), vec![format!("node-upgrade {image}")]);
+    d.stop();
+    let _ = std::fs::remove_dir_all(&l.dir);
+}
+
+// functional: OPS-029
+#[test]
+fn a_runner_reaches_the_host_only_with_a_signature_and_the_node_carries_it_unread() {
+    let (l, d, at) = enrolled_with("runner-refresh", 37468, |l| {
+        l.ssh_client = Some(recorder(&l.dir, "none"));
+    });
+    let key = RUNNER_KEY.replace('\n', "%0A");
+    let enc = |s: &str| {
+        s.bytes()
+            .map(|b| match b {
+                b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                    (b as char).to_string()
+                }
+                _ => format!("%{b:02X}"),
+            })
+            .collect::<String>()
+    };
+    let runner = rhtn_launch::PACKAGE_RUNNER;
+    let signature = rhtn_crypto::ssh::sshsig(
+        &[3u8; 32],
+        rhtn_crypto::ssh::RUNNER_NAMESPACE,
+        runner.as_bytes(),
+    );
+    // no signature, nothing asked
+    let bare = ask(
+        at,
+        "POST /node/act/runner-refresh HTTP/1.1",
+        format!("key={key}&runner={}", enc(runner)).as_bytes(),
+    );
+    assert!(bare.starts_with("HTTP/1.1 400"), "{bare}");
+    assert!(asked_of_host(&l.dir).is_empty());
+    // signed: one request, the verb alone — the bytes go on its input
+    let said = ask(
+        at,
+        "POST /node/act/runner-refresh HTTP/1.1",
+        format!(
+            "key={key}&runner={}&signature={}",
+            enc(runner),
+            enc(&signature)
+        )
+        .as_bytes(),
+    );
+    assert!(said.starts_with("HTTP/1.1 200"), "{said}");
+    assert_eq!(asked_of_host(&l.dir), vec!["runner-refresh".to_string()]);
+    d.stop();
+    let _ = std::fs::remove_dir_all(&l.dir);
+}

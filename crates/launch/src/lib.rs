@@ -129,6 +129,23 @@ pub const CLEAR_EXPIRY: &str = "chage -M -1 -d $(date +%Y-%m-%d) root || true";
 /// readable on the host it lands on.
 pub const PACKAGE_RUNNER: &str = include_str!("../../packaging/package-runner.sh");
 
+/// **The runner's version**, as its own `RUNNER_VERSION=` line says: what a
+/// client compares a machine's against to say a newer runner is available
+/// [author, 2026-11-16]. A runner that names none is version 1, which is
+/// every runner launched before the line existed.
+#[must_use]
+pub fn runner_version() -> u32 {
+    runner_version_of(PACKAGE_RUNNER)
+}
+
+/// The version a runner's text names, or 1 where it names none.
+#[must_use]
+pub fn runner_version_of(text: &str) -> u32 {
+    text.lines()
+        .find_map(|l| l.strip_prefix("RUNNER_VERSION=")?.trim().parse().ok())
+        .unwrap_or(1)
+}
+
 /// The port the node serves on: `wire-format.md` §4.4's default, so an
 /// endpoint record may omit it.
 pub const QUIC_PORT: u16 = 7431;

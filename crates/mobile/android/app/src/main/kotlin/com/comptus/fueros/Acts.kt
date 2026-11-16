@@ -56,6 +56,11 @@ object Acts {
         /** The restricted ssh key for the instance's host, for one act. */
         HOST_KEY,
 
+        /** **That key, and this client's own runner signed by the
+         *  operator's host key**, which the instance carries and cannot
+         *  forge (`infra-client-requirements.md` §9.4). */
+        SIGNED_RUNNER,
+
         /** **Something this client does not know how to bring**, which is
          *  a refusal and not a field left empty: an act is not sent
          *  without what it says it needs. */
@@ -124,6 +129,7 @@ object Acts {
             brings = when (Json.string(o["brings"])) {
                 "nothing" -> Brings.NOTHING
                 "host-key" -> Brings.HOST_KEY
+                "signed-runner" -> Brings.SIGNED_RUNNER
                 else -> Brings.UNKNOWN
             },
             parameters = Json.list(o["parameters"]).map { parameter(it) },

@@ -13,6 +13,7 @@ import uniffi.rhtn_ffi.launchProviderAsn
 import uniffi.rhtn_ffi.launchProviders
 import uniffi.rhtn_ffi.launchRegions
 import uniffi.rhtn_ffi.launchRegistryDefault
+import uniffi.rhtn_ffi.launchRunnerVersion
 import uniffi.rhtn_ffi.launchSizes
 import uniffi.rhtn_ffi.launchStanding
 import uniffi.rhtn_ffi.launchTokenPage
@@ -46,6 +47,11 @@ object Launch {
 
     /** Where the image is pulled from unless the operator names another. */
     val REGISTRY_DEFAULT: String get() = launchRegistryDefault()
+
+    /** **The runner this client carries**, by the version its own
+     *  `RUNNER_VERSION=` line names: what a machine launched from here is
+     *  given, and what a machine's is compared against. */
+    val RUNNER_VERSION: Int get() = launchRunnerVersion().toInt()
 
     /**
      * **Whether a port at the machine answers**, which is the half of

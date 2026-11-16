@@ -1333,7 +1333,14 @@ fn node_controls(status: &StatusView) -> String {
                  restricted key for it and keeps it no longer than the act.</p>\n",
             );
         }
-        out.push_str(&control(&a.operation.name, "Make this act", &[]));
+        // the upgrade's image is suggested rather than typed: a hint the
+        // operator confirms, never an act the page performs
+        let hints: &[(&str, &str)] = if a.operation.name == "upgrade" {
+            &[("image", crate::acts::NODE_IMAGE_HINT)]
+        } else {
+            &[]
+        };
+        out.push_str(&control(&a.operation.name, "Make this act", hints));
     }
     out.push_str(acts_are_the_clients());
     out

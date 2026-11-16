@@ -1727,6 +1727,18 @@ one that is true.
   grant as the next step (`infra-client-requirements.md` §7, §9.4): a
   package's roles start bound to nobody, and an operator who has just
   installed something will otherwise look for why it refuses them.
+- **Upgrade an instance in place, and give its machine a newer runner when
+  you carry one** [author, 2026-11-04; 2026-11-16]. An operator does not own
+  the address their instance answers at, so a new node image goes onto the
+  machine already serving: the instance declares the act, and this client
+  brings the host key for it as for an install. The machine's runner is the
+  limit on what an instance may ask its host, so a newer one is signed here
+  with the operator's own host key and carried by the instance, which cannot
+  forge it; the machine checks the signature (`infra-client-requirements.md`
+  §9.4). **Record which runner each machine you launch was given, and tell
+  the operator when this client carries a newer one**, with the act beside
+  it; a machine whose runner predates refreshing is told so, and a relaunch
+  is its remedy.
 - **Carry the adopted node's key material in the adoption you compose**
   [author, 2026-11-03]. `wire-format.md` §4.1's field 5 is what it is for, and a
   patron composing one has **just met that node in person**, so it already holds

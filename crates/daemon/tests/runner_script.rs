@@ -42,13 +42,32 @@ impl Host {
     /// One request, as the restricted key would carry it: exit status,
     /// stdout, stderr.
     fn ask(&self, request: &str) -> (i32, String, String) {
-        let out = Command::new("sh")
-            .arg(runner())
+        self.ask_with(request, b"")
+    }
+
+    /// The same with `input` on standard input, as ssh carries it, against
+    /// a copy of the runner at `self.dir/runner` and the operator lines in
+    /// `self.dir/authorized_keys`.
+    fn ask_with(&self, request: &str, input: &[u8]) -> (i32, String, String) {
+        use std::io::Write;
+        let me = self.dir.join("runner");
+        if !me.exists() {
+            std::fs::copy(runner(), &me).unwrap();
+        }
+        let mut child = Command::new("sh")
+            .arg(&me)
             .env("SSH_ORIGINAL_COMMAND", request)
             .env("RHTN_ENGINE", &self.engine)
             .env("RHTN_BLOCKS", self.dir.join("blocks"))
-            .output()
+            .env("RHTN_RUNNER_SELF", &me)
+            .env("RHTN_AUTHORIZED_KEYS", self.dir.join("authorized_keys"))
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
             .expect("sh runs the runner");
+        child.stdin.take().unwrap().write_all(input).unwrap();
+        let out = child.wait_with_output().expect("the runner ends");
         (
             out.status.code().unwrap_or(-1),
             String::from_utf8_lossy(&out.stdout).to_string(),
@@ -113,4 +132,72 @@ fn a_block_is_asked_for_after_the_image_and_said_rather_than_failed_where_the_ho
         assert!(!out.contains("engine:"), "{bad}: nothing ran: {out}");
         assert!(err.contains("rhtn-package-runner:"), "{bad}: {err}");
     }
+}
+
+// functional: OPS-029
+#[test]
+fn a_runner_is_taken_only_signed_by_the_operators_key_and_never_older() {
+    let h = Host::new("refresh");
+    let operator = rhtn_crypto::ssh::HostControlKey::from_seed(&[5u8; 32]);
+    let runner_key =
+        rhtn_crypto::ssh::HostControlKey::from_seed_named(&[6u8; 32], "rhtn-host-runner");
+    std::fs::write(
+        h.dir.join("authorized_keys"),
+        format!(
+            "{}\n{}\n",
+            operator.public_line,
+            runner_key.restricted_line()
+        ),
+    )
+    .unwrap();
+    let (code, out, _) = h.ask("version");
+    assert_eq!(code, 0);
+    assert!(out.starts_with("runner 2 "), "{out}");
+    let before = std::fs::read(h.dir.join("runner")).unwrap();
+
+    let newer = String::from_utf8(before.clone())
+        .unwrap()
+        .replace("RUNNER_VERSION=2", "RUNNER_VERSION=3");
+    let ns = rhtn_crypto::ssh::RUNNER_NAMESPACE;
+    // signed by the runner key, which an instance holds: refused, nothing written
+    let forged = rhtn_crypto::ssh::sshsig(&[6u8; 32], ns, newer.as_bytes());
+    let (code, _, err) = h.ask_with("runner-refresh", format!("{forged}{newer}").as_bytes());
+    assert_eq!(code, 2, "{err}");
+    assert!(
+        err.contains("not signed by this machine's operator"),
+        "{err}"
+    );
+    assert_eq!(
+        std::fs::read(h.dir.join("runner")).unwrap(),
+        before,
+        "nothing changed"
+    );
+    // signed by the operator over other bytes: refused
+    let other = rhtn_crypto::ssh::sshsig(&[5u8; 32], ns, b"#!/bin/sh\n");
+    let (code, _, _) = h.ask_with("runner-refresh", format!("{other}{newer}").as_bytes());
+    assert_eq!(code, 2);
+    // signed by the operator under another namespace: refused
+    let elsewhere = rhtn_crypto::ssh::sshsig(&[5u8; 32], "file", newer.as_bytes());
+    let (code, _, _) = h.ask_with("runner-refresh", format!("{elsewhere}{newer}").as_bytes());
+    assert_eq!(code, 2);
+    // older: refused even signed
+    let older = String::from_utf8(before.clone())
+        .unwrap()
+        .replace("RUNNER_VERSION=2", "RUNNER_VERSION=1");
+    let sig = rhtn_crypto::ssh::sshsig(&[5u8; 32], ns, older.as_bytes());
+    let (code, _, err) = h.ask_with("runner-refresh", format!("{sig}{older}").as_bytes());
+    assert_eq!(code, 2, "{err}");
+    assert!(err.contains("not taken back"), "{err}");
+    assert_eq!(std::fs::read(h.dir.join("runner")).unwrap(), before);
+    // signed by the operator and newer: taken, byte for byte, and it says so
+    let sig = rhtn_crypto::ssh::sshsig(&[5u8; 32], ns, newer.as_bytes());
+    let (code, out, err) = h.ask_with("runner-refresh", format!("{sig}{newer}").as_bytes());
+    assert_eq!(code, 0, "{err}");
+    assert!(out.starts_with("runner 3 "), "{out}");
+    assert_eq!(
+        std::fs::read_to_string(h.dir.join("runner")).unwrap(),
+        newer
+    );
+    let (_, out, _) = h.ask("version");
+    assert!(out.starts_with("runner 3 "), "{out}");
 }

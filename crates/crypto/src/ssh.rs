@@ -52,6 +52,11 @@ pub const RUNNER_COMMENT: &str = "rhtn-host-runner";
 /// run that program and nothing else.
 pub const RUNNER_PROGRAM: &str = "/usr/local/bin/rhtn-package-runner";
 
+/// **The namespace a runner is signed under** [author, 2026-11-16]: what
+/// the host's runner asks `ssh-keygen -Y verify` for, so a signature this
+/// key made for anything else is not a runner's.
+pub const RUNNER_NAMESPACE: &str = "rhtn-runner@1";
+
 /// The options the host's `authorized_keys` entry carries for the runner
 /// key: the forced command, and every door ssh offers shut.
 pub const RUNNER_OPTIONS: &str =
@@ -104,6 +109,61 @@ impl SigningIdentity {
         let seed = host_runner_seed(&self.ed_signing_key().to_bytes());
         HostControlKey::from_seed_named(&seed, RUNNER_COMMENT)
     }
+
+    /// **`message`, signed by the operator's own host key** as
+    /// `ssh-keygen -Y sign` signs (armored SSHSIG), under `namespace`
+    /// [author, 2026-11-16]: how a newer runner reaches a machine through
+    /// an instance that never holds this key. The key is derived for the
+    /// call and dropped with it.
+    pub fn host_control_sign(&self, namespace: &str, message: &[u8]) -> String {
+        let seed = host_control_seed(&self.ed_signing_key().to_bytes());
+        sshsig(&seed, namespace, message)
+    }
+}
+
+/// **An SSHSIG signature, armored**, as OpenSSH's `PROTOCOL.sshsig` has
+/// it: SHA-512 over the message, signed with the Ed25519 key `seed`
+/// expands to, over the preamble, the namespace, an empty reserved field,
+/// the hash's name and the hash. `ssh-keygen -Y verify` reads what this
+/// writes.
+pub fn sshsig(seed: &[u8; 32], namespace: &str, message: &[u8]) -> String {
+    use ed25519_dalek::Signer;
+    use sha2::Digest;
+    let sk = ed25519_dalek::SigningKey::from_bytes(seed);
+    let public = sk.verifying_key().to_bytes();
+    let hash = sha2::Sha512::digest(message);
+    let mut signed = Vec::new();
+    signed.extend_from_slice(b"SSHSIG");
+    string(&mut signed, namespace.as_bytes());
+    string(&mut signed, b"");
+    string(&mut signed, b"sha512");
+    string(&mut signed, &hash);
+    let sig = sk.sign(&signed).to_bytes();
+
+    let mut pub_blob = Vec::new();
+    string(&mut pub_blob, b"ssh-ed25519");
+    string(&mut pub_blob, &public);
+    let mut sig_blob = Vec::new();
+    string(&mut sig_blob, b"ssh-ed25519");
+    string(&mut sig_blob, &sig);
+
+    let mut all = Vec::new();
+    all.extend_from_slice(b"SSHSIG");
+    all.extend_from_slice(&1u32.to_be_bytes());
+    string(&mut all, &pub_blob);
+    string(&mut all, namespace.as_bytes());
+    string(&mut all, b"");
+    string(&mut all, b"sha512");
+    string(&mut all, &sig_blob);
+
+    let body = base64(&all);
+    let mut out = String::from("-----BEGIN SSH SIGNATURE-----\n");
+    for line in body.as_bytes().chunks(70) {
+        out.push_str(std::str::from_utf8(line).expect("base64 is ascii"));
+        out.push('\n');
+    }
+    out.push_str("-----END SSH SIGNATURE-----\n");
+    out
 }
 
 /// An Ed25519 ssh key in the two shapes ssh wants.
@@ -412,5 +472,51 @@ mod tests {
         assert_eq!(base64(b"foob"), "Zm9vYg==");
         assert_eq!(base64(b"fooba"), "Zm9vYmE=");
         assert_eq!(base64(b"foobar"), "Zm9vYmFy");
+    }
+
+    /// **What this signs, ssh-keygen verifies** — the host's own tool, as
+    /// the runner calls it — and a byte changed is refused.
+    #[test]
+    fn a_signature_made_here_is_one_ssh_keygen_verifies() {
+        let seed = [9u8; 32];
+        let key = HostControlKey::from_seed(&seed);
+        let message = b"#!/bin/sh\nRUNNER_VERSION=2\necho hi\n";
+        let sig = sshsig(&seed, RUNNER_NAMESPACE, message);
+        assert!(sig.starts_with("-----BEGIN SSH SIGNATURE-----\n"));
+        assert!(sig.ends_with("-----END SSH SIGNATURE-----\n"));
+        let dir = std::env::temp_dir().join(format!("rhtn-sshsig-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let allowed = dir.join("allowed");
+        let mut words = key.public_line.split_whitespace();
+        let (kind, b64) = (words.next().unwrap(), words.next().unwrap());
+        std::fs::write(&allowed, format!("operator {kind} {b64}\n")).unwrap();
+        std::fs::write(dir.join("sig"), &sig).unwrap();
+        let verify = |msg: &[u8], ns: &str| {
+            use std::io::Write;
+            let mut c = std::process::Command::new("ssh-keygen")
+                .args(["-Y", "verify", "-f"])
+                .arg(&allowed)
+                .args(["-I", "operator", "-n", ns, "-s"])
+                .arg(dir.join("sig"))
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+                .expect(
+                    "ssh-keygen is what a host checks a runner with, and this machine has none",
+                );
+            c.stdin.take().unwrap().write_all(msg).unwrap();
+            c.wait().unwrap().success()
+        };
+        assert!(
+            verify(message, RUNNER_NAMESPACE),
+            "ssh-keygen did not verify the signature"
+        );
+        assert!(
+            !verify(b"#!/bin/sh\nRUNNER_VERSION=2\necho ho\n", RUNNER_NAMESPACE),
+            "a changed byte verified"
+        );
+        assert!(!verify(message, "file"), "another namespace verified");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

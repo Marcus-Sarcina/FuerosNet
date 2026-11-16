@@ -153,6 +153,16 @@ class ActActivity : Activity() {
             fields.addView(label(p.label.ifEmpty { p.name }))
             fields.addView(field(p))
         }
+        if (a.brings == Acts.Brings.SIGNED_RUNNER) {
+            fields.addView(
+                label(
+                    "This act gives the machine the runner this app carries, version " +
+                        "${Launch.RUNNER_VERSION}, signed here with your own key for the machine. " +
+                        "The instance carries it and cannot change it; the machine checks the " +
+                        "signature before it takes it, and refuses a runner older than its own.",
+                ),
+            )
+        }
         if (a.brings == Acts.Brings.HOST_KEY) {
             fields.addView(
                 label(
@@ -298,7 +308,7 @@ class ActActivity : Activity() {
             // **the credential, derived for this act and held no longer**:
             // the kernel holds the seed, and nothing of the key is written
             // down here or there
-            if (a.brings == Acts.Brings.HOST_KEY) {
+            if (a.brings == Acts.Brings.HOST_KEY || a.brings == Acts.Brings.SIGNED_RUNNER) {
                 val key = Gateway.hostRunnerPrivateKey(by)
                 if (key == null) {
                     runOnUiThread {
@@ -310,7 +320,24 @@ class ActActivity : Activity() {
                 }
                 fields.add("key" to key)
             }
+            if (a.brings == Acts.Brings.SIGNED_RUNNER) {
+                val signed = Gateway.hostRunnerRefresh(by)
+                if (signed == null) {
+                    runOnUiThread {
+                        answer.text = "this device could not sign the runner; is the kernel " +
+                            "running under the identity that launched the machine?"
+                        button.isEnabled = true
+                    }
+                    return@Thread
+                }
+                fields.add("runner" to signed.runner)
+                fields.add("signature" to signed.signature)
+            }
             val said = Provision.act(at, token, a.name, fields)
+            // **what the machine now runs, recorded where the prompt reads it**
+            said.getOrNull()?.let { text ->
+                OperatorStore.runnerSaid(text)?.let { v -> OperatorStore.recordRunner(this, by, at, v) }
+            }
             runOnUiThread {
                 answer.text = said.fold({ it.trim() }, { "${it.message}" })
                 button.isEnabled = true

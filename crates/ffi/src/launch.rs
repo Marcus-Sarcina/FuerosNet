@@ -152,6 +152,13 @@ pub fn launch_registry_default() -> String {
     rhtn_launch::REGISTRY_DEFAULT.to_string()
 }
 
+/// **The version of the runner this client carries**, which a machine's
+/// is compared against (`rhtn_launch::runner_version`).
+#[uniffi::export]
+pub fn launch_runner_version() -> u32 {
+    rhtn_launch::runner_version()
+}
+
 /// The once-run script for a machine: the operator's public material as
 /// hex, the token as 64 hex digits, the registry and the tag.
 ///

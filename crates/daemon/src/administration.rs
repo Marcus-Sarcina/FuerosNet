@@ -812,6 +812,8 @@ impl Surface {
             "remove" => self.package_remove(body),
             "running" => self.package_said(body, false),
             "logs" => self.package_said(body, true),
+            "upgrade" => self.node_upgrade(body),
+            "runner-refresh" => self.runner_refresh(body),
             other => (
                 404,
                 format!(
@@ -1256,6 +1258,103 @@ impl Surface {
         match shell.ask(&key, &words) {
             Ok(said) => (200, said),
             Err(why) => (502, format!("{why}\n")),
+        }
+    }
+
+    /// **Upgrade this node in place** (`infra-client-requirements.md`
+    /// §9.4) [author, 2026-11-04]: the host's runner pulls the image first,
+    /// so a pull that fails changes nothing, then replaces this node on it
+    /// with the same address and state. **This process may be gone before
+    /// it answers**, since the replacement removes it; what it can say, it
+    /// says.
+    fn node_upgrade(&self, body: &[u8]) -> (u16, String) {
+        let shell = match self.shell() {
+            Ok(s) => s,
+            Err(e) => return e,
+        };
+        let f = form(body);
+        let key = match runner_key(&f) {
+            Ok(k) => k,
+            Err(e) => return e,
+        };
+        let image = field(&f, "image").trim();
+        if image.is_empty()
+            || image.len() > 512
+            || image.starts_with('-')
+            || !image
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"./:@_-".contains(&b))
+        {
+            return (
+                400,
+                "an image is a registry reference — letters, digits and ./:@_- — and nothing a \
+                 shell or the engine would read as a flag\n"
+                    .into(),
+            );
+        }
+        tracing::info!(
+            target: "daemon",
+            step = "surface_act",
+            act = "upgrade",
+            image = %image,
+            "daemon.lifecycle"
+        );
+        match shell.ask(&key, &["node-upgrade", image]) {
+            Ok(said) => (
+                202,
+                format!(
+                    "upgrading to {image}\n{}\nthis node is being replaced; its page answers \
+                     again when the new one is up\n",
+                    said.trim()
+                ),
+            ),
+            Err(why) => (502, format!("the host did not take the upgrade: {why}\n")),
+        }
+    }
+
+    /// **Hand the host a newer runner, signed by the operator**
+    /// (`infra-client-requirements.md` §9.4) [author, 2026-11-16]. This
+    /// node carries the bytes and cannot forge them: the signature is the
+    /// operator's own host key's, which no instance holds, and the runner
+    /// checks it before it writes anything.
+    fn runner_refresh(&self, body: &[u8]) -> (u16, String) {
+        let shell = match self.shell() {
+            Ok(s) => s,
+            Err(e) => return e,
+        };
+        let f = form(body);
+        let key = match runner_key(&f) {
+            Ok(k) => k,
+            Err(e) => return e,
+        };
+        let signature = field(&f, "signature");
+        let runner = field(&f, "runner");
+        if !signature.starts_with("-----BEGIN SSH SIGNATURE-----\n")
+            || !signature
+                .trim_end()
+                .ends_with("-----END SSH SIGNATURE-----")
+        {
+            return (
+                400,
+                "a runner comes with its signature, armored as ssh-keygen writes one\n".into(),
+            );
+        }
+        if runner.is_empty() || !runner.starts_with("#!") {
+            return (400, "the runner is the script itself\n".into());
+        }
+        let mut input = signature.trim_end().to_string();
+        input.push('\n');
+        input.push_str(runner);
+        tracing::info!(
+            target: "daemon",
+            step = "surface_act",
+            act = "runner-refresh",
+            bytes = runner.len(),
+            "daemon.lifecycle"
+        );
+        match shell.ask_with(&key, &["runner-refresh"], Some(input.as_bytes())) {
+            Ok(said) => (200, said),
+            Err(why) => (502, format!("the host did not take the runner: {why}\n")),
         }
     }
 

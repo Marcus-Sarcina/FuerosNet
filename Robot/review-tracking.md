@@ -22471,3 +22471,27 @@ own ssh as root); not built until answered.
 2. Chase the ceremony flake: `adaptors::ceremony::the_counterparty_prunes
    _to_three_and_the_dismissed_stands_down`, 4 signers where 5 were
    expected, one gate in three and one local run in five on 2026-11-16.
+
+**The upgrade act and the signed runner, 2026-11-16 [author: "Option 1
+for the runner, option 4 for federation"].** "Renew its run" on both GXV
+nodes signed 45 more credentials each and is not an upgrade [author: "I
+selected 'renew it's run' for both nodes, but I am not sure that's doing
+what was intended"]. **No upgrade act existed**: the runner had
+`node-upgrade` since 2026-11-04 and the node declared nothing that asked
+for it, so the in-place upgrade existed only on the host. Built: the
+`upgrade` act (OPS-028; I §9.4, L §10), host key brought, image hinted on
+the page as the launch default (`NODE_IMAGE_HINT`, held to `rhtn_launch`
+by a test), 202 because the node may be gone before it answers. Runner
+option 1 (OPS-029): runner version 2 with `version` and `runner-refresh`;
+the client signs its own `PACKAGE_RUNNER` as SSHSIG under `rhtn-runner@1`
+with the host control key (`rhtn_crypto::ssh::sshsig`, checked against
+`ssh-keygen -Y verify` in a test); the node carries it on the runner's
+stdin (`Shell::ask_with`); the runner verifies against root's plain
+`authorized_keys` line, refuses older, unparseable, unversioned; the
+Operator page records each launched machine's runner version (sixth
+field) and prompts. **The two bench droplets run images and runners from
+before both acts**, so neither appears for them: one relaunch of each
+gives both, after which the upgrade act and the refresh can be tried.
+**Federation option 4 is two choices** — keep the instance key and the
+envelope signature as they are (carried, not verified), or remove both —
+put back to the author; nothing changed meanwhile.

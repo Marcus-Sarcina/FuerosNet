@@ -116,6 +116,11 @@ pub enum Brings {
     /// (`rhtn_crypto::ssh::host_runner_key`, [`crate::runner`]). The
     /// client sends it as `key`.
     HostKey,
+    /// **The restricted key and this client's own runner, signed by the
+    /// operator's key** [author, 2026-11-16]: the one thing a client brings
+    /// that the node could not make, since the key that signs it is never
+    /// handed to an instance.
+    SignedRunner,
 }
 
 impl Brings {
@@ -124,6 +129,7 @@ impl Brings {
         match self {
             Brings::Nothing => "nothing",
             Brings::HostKey => "host-key",
+            Brings::SignedRunner => "signed-runner",
         }
     }
 }
@@ -262,8 +268,37 @@ pub fn node_acts(acknowledging: bool) -> Vec<Act> {
             Brings::HostKey,
             Vec::new(),
         ),
+        act(
+            "upgrade",
+            "Upgrade this node in place",
+            "Pulls the image first; a failed pull changes nothing. Then replaces this node on \
+             the same address and state, and puts the old one back if the new one will not \
+             start. Its page answers again when the new one is up.",
+            About::Node,
+            Brings::HostKey,
+            vec![p(
+                "image",
+                "the node image to run, as the registry names it",
+                Kind::Text { max: 512 },
+            )],
+        ),
+        act(
+            "runner-refresh",
+            "Give the machine this client's runner",
+            "The runner limits what this node may ask its host, so this node cannot rewrite \
+             it: the client signs its own copy with the operator's key, which this node never \
+             holds, and the machine checks that first.",
+            About::Node,
+            Brings::SignedRunner,
+            Vec::new(),
+        ),
     ]
 }
+
+/// **What the upgrade control suggests**: the image a launch pulls unless
+/// its operator names another (`rhtn_launch`'s default, held to this by a
+/// test). A hint, which the operator confirms or changes.
+pub const NODE_IMAGE_HINT: &str = "docker.io/sarcina/rhtnd:latest";
 
 /// **The acts about one resource**, drawn from what that resource is: the
 /// roles its package declared, the grants that stand on it now, and the
@@ -517,6 +552,8 @@ mod tests {
         let acts = node_acts(false);
         let brings = |n: &str| acts.iter().find(|a| a.operation.name == n).expect(n).brings;
         assert_eq!(brings("install"), Brings::HostKey);
+        assert_eq!(brings("upgrade"), Brings::HostKey);
+        assert_eq!(brings("runner-refresh"), Brings::SignedRunner);
         assert_eq!(brings("running"), Brings::HostKey);
         assert_eq!(brings("reload"), Brings::Nothing);
         assert_eq!(brings("stop"), Brings::Nothing);
@@ -570,5 +607,19 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// The upgrade's suggested image is the one a launch pulls by default.
+    #[test]
+    fn the_upgrades_suggested_image_is_the_launchs_default() {
+        assert_eq!(
+            NODE_IMAGE_HINT,
+            format!(
+                "{}/{}:{}",
+                rhtn_launch::REGISTRY_DEFAULT,
+                rhtn_launch::IMAGE,
+                rhtn_launch::TAG_DEFAULT
+            )
+        );
     }
 }

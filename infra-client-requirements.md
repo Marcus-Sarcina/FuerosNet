@@ -1164,6 +1164,24 @@ conformance failure* — and it is the state of every instance launched
 before this door existed. What it must not do is fail an install for a
 reason it made up.
 
+**Upgrading yourself is an act of the same kind** [author, 2026-11-04].
+Your operator does not own the address you answer at, so a new image goes
+onto the machine already serving rather than onto a new launch: declare the
+act, bring the host key, and ask your host to pull the image first — a pull
+that fails changes nothing — then to replace you on it with the same address
+and state, putting back what was serving where the replacement will not
+start. You may be gone before you can answer, and your page answering again
+is the answer.
+
+**The runner is your host's, and you do not rewrite it** [author,
+2026-11-16]. It is the limit on what you may ask your host, so a newer one
+reaches the machine only signed by your operator's own host key — the one
+that opens a shell, which is never handed to you — and the machine checks
+that signature, and refuses a runner older than its own or one that does not
+parse, before it writes anything. You carry the bytes and cannot forge them.
+A machine whose runner predates the check cannot take one, and a relaunch
+gives it the current runner.
+
 ## 10. Role assignment and hosted-session lifecycle
 
 **The node evaluates access and presents the result as a credential**

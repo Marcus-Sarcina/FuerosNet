@@ -591,6 +591,18 @@ pub struct ResourcePage {
     pub body: Vec<u8>,
 }
 
+/// **A runner, signed for a machine**: the script this client carries, the
+/// operator's signature over it, and the version it names.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RunnerRefresh {
+    /// The script, byte for byte.
+    pub runner: String,
+    /// The operator's SSHSIG over it, armored.
+    pub signature: String,
+    /// The version its `RUNNER_VERSION=` line names.
+    pub version: u32,
+}
+
 /// One candidate provider, as a provisioning screen orders them
 /// (`light-client-requirements.md` §6; PRD-11).
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -2993,6 +3005,27 @@ impl Participant {
                 c.signer()
                     .map(|id| id.host_runner_key().private_key)
                     .map_err(|_| Refused::new("this device holds no seed, so it derives no key"))
+            })
+        })
+    }
+
+    /// **This client's own runner, signed by the operator's host key**
+    /// (`infra-client-requirements.md` §9.4) [author, 2026-11-16]: what the
+    /// runner-refresh act carries to a machine through its instance, which
+    /// carries it and cannot forge it.
+    pub fn host_runner_refresh(&self) -> Result<RunnerRefresh, Refused> {
+        self.call("host_runner_refresh", || {
+            self.handle.with_blocking(|c| {
+                c.signer()
+                    .map(|id| RunnerRefresh {
+                        runner: rhtn_launch::PACKAGE_RUNNER.to_string(),
+                        signature: id.host_control_sign(
+                            rhtn_crypto::ssh::RUNNER_NAMESPACE,
+                            rhtn_launch::PACKAGE_RUNNER.as_bytes(),
+                        ),
+                        version: rhtn_launch::runner_version(),
+                    })
+                    .map_err(|_| Refused::new("this device holds no seed, so it signs nothing"))
             })
         })
     }

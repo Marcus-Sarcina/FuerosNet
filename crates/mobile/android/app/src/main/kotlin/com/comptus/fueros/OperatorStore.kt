@@ -55,6 +55,44 @@ object OperatorStore {
     }
 
     /**
+     * **Record the runner a machine now has** against its instance, in the
+     * record's sixth field, so the Operator page can say when this client
+     * carries a newer one.
+     */
+    fun recordRunner(context: Context, by: String, at: String, version: Int) {
+        val mine = context.getSharedPreferences("operator-$by", Context.MODE_PRIVATE)
+        val lines = mine.getString("instances", "").orEmpty().lines().filter { it.isNotBlank() }
+        val updated = lines.map { line ->
+            val parts = line.split('\t').toMutableList()
+            if (parts.firstOrNull() != at) return@map line
+            while (parts.size < 6) parts += ""
+            parts[5] = version.toString()
+            parts.joinToString("\t")
+        }
+        mine.edit().putString("instances", updated.joinToString("\n")).apply()
+    }
+
+    /** The version a runner's answer names (`runner <n> <digest>`), or null. */
+    fun runnerSaid(text: String): Int? =
+        Regex("""(?m)^runner (\d+) [0-9a-f]{64}$""").find(text)?.groupValues?.get(1)?.toIntOrNull()
+
+    /**
+     * **What the Operator page says of a machine's runner**, and whether
+     * the act is offered: nothing where the machine's is unknown or not
+     * behind this client's; the act where it is behind and can take one;
+     * the remedy where it predates refreshing. Pure, for a JVM test.
+     */
+    fun runnerPrompt(machine: Int, mine: Int): Pair<String, Boolean>? = when {
+        machine <= 0 || machine >= mine -> null
+        machine == 1 ->
+            "This machine's runner predates refreshing (version 1; this app carries $mine), so " +
+                "it cannot take a newer one: a relaunch gives it the current runner." to false
+        else ->
+            "A newer runner is available for this machine: it has version $machine and this " +
+                "app carries $mine." to true
+    }
+
+    /**
      * **Which old records are this identity's**: those whose subnet (the
      * second tab-separated field) is one it holds, and those naming none.
      * Pure, so a JVM test holds it.
