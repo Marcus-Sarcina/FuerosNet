@@ -22530,3 +22530,18 @@ the runner key refused, nothing changed; the same runner signed with the
 control key by `ssh-keygen -Y sign` taken; `id` refused as no verb. Keys
 shredded after. **Still owed on the phones**: the upgrade act and the
 refresh made through the node from GXV's screens.
+
+**The two acts through the node, on the bench, 2026-11-16 [author: "Bench
+is free, run the checks"].** Driven on GXV against E Two
+(167.172.146.119): the Operator screen showed no runner prompt (machine
+and app both at 2). **Runner refresh** through the node's act: answered
+`runner 2 04d211fc…`, the repository's runner; the host's runner log
+shows `runner-refresh 2` at 20:01:37. **Upgrade** through the node's
+act, image prefilled from the page's hint: answered `upgrading to
+docker.io/sarcina/rhtnd:latest` with the host's pull output within 8 s;
+on the host the container went from 42017177dbf1 (created 19:27:17) to
+38318efd5cd1 (created 20:02:34), the state directory unchanged, the
+surface answering; the node's page came back as the same node — same
+identity, subnet, run (7 credentials, ending 1796066844), 1 subordinate —
+with `attached` 1 → 0 at the restart and back to 1 within 75 s, the
+phone reattaching by itself. Key derived for the run and shredded.
