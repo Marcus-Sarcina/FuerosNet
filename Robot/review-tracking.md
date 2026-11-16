@@ -22314,3 +22314,17 @@ Figures: gate 1064 passed, 13 skipped, Kotlin round trip ok, Android unit
 tests 386 run 0 failed (the palette test now lists `Optical.kt` and
 `Tracking.kt`: both screens paint a code through `Optical.pixels`), field-test
 APK built, not installed (no confirmed free window on the bench).
+
+**The pairing on the bench, 2026-11-15 [author on the phones].** GXV's
+identity restored on MRK from its phrase (the recovery file's line for
+the serial alone; GXV's second identity `feb8843a` left alone). Two
+complete runs, GXV handing, MRK taking. The author's at 20:13: codes read
+in 28 s (103 parts of 25 bytes each way, selfie cameras), link 2 s after
+the pairing, dataset composed in 8 s, 2,563,481 bytes over BLE in 44.3 s
+(5047 packets, none failed, none duplicated), taken on MRK's yes in 2.0 s:
+4 records, 7 contacts, 13 other, 0 refused. The assistant's repeat at
+20:17, driven by adb taps with MRK already level: 2,519,837 bytes in 44.3 s,
+0 taken, as it should. Each holder was asked on their own device both
+times. Noted, not acted on: a repeat hands the whole store again (the
+dataset is "the whole of it"); the shell's diagnostics are in logcat under
+`fueros.diag`, mirrored from `filesDir/diag/<run>.jsonl`.
