@@ -210,7 +210,7 @@ class OfferingActivity : Activity() {
 
     /** The instances this client was told about ([OperatorActivity]). */
     private fun instances(): List<String> =
-        getSharedPreferences("operator-$by", Context.MODE_PRIVATE)
+        OperatorStore.prefs(this, by)
             .getString("instances", "")
             .orEmpty()
             .lineSequence()

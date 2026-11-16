@@ -116,9 +116,15 @@ object Frames {
             allowContentAccess = false
             allowFileAccessFromFileURLs = false
             allowUniversalAccessFromFileURLs = false
-            // loads are the screen's client's to carry or refuse, every
-            // one, so the engine is not told to block them before it asks
-            blockNetworkLoads = false
+            // **loads are the screen's client's to carry or refuse, and
+            // the network is shut behind it as a second wall**: the engine
+            // still offers every load to the client first, the page's own
+            // origin is served from there, and nothing the client did not
+            // answer can reach the network [MediaEgressTest, MRK, WebView
+            // 157, 2026-11-16: media and images to an outside host asked
+            // the client, reached nothing, and the origin's own document
+            // was served with loads blocked]
+            blockNetworkLoads = true
             blockNetworkImage = false
             setGeolocationEnabled(false)
             mediaPlaybackRequiresUserGesture = true

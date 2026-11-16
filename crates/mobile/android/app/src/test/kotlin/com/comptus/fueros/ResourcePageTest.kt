@@ -206,6 +206,7 @@ class ResourcePageTest {
             "allowContentAccess = false",
             "allowFileAccessFromFileURLs = false",
             "allowUniversalAccessFromFileURLs = false",
+            "blockNetworkLoads = true",
             "setGeolocationEnabled(false)",
         )) {
             assertTrue("the frame does not set $setting", src.contains(setting))

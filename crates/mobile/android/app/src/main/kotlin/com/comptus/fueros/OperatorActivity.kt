@@ -77,27 +77,27 @@ class OperatorActivity : Activity() {
     private lateinit var by: String
 
     private fun tokenFor(at: String): String? =
-        getSharedPreferences("operator-$by", MODE_PRIVATE).getString("token:$at", null)
+        OperatorStore.prefs(this, by).getString("token:$at", null)
 
     /** The node address a member was last invited to, where they have
      *  been: what keeps a redrawing of this screen from texting them
      *  again.  Keyed by the member and never by their address, which is
      *  the one thing here that names a person outside this network. */
     private fun invitedTo(who: String): String? =
-        getSharedPreferences("operator-$by", MODE_PRIVATE).getString("invited:$who", null)
+        OperatorStore.prefs(this, by).getString("invited:$who", null)
 
     private fun rememberInvited(who: String, at: String) {
-        getSharedPreferences("operator-$by", MODE_PRIVATE).edit()
+        OperatorStore.prefs(this, by).edit()
             .putString("invited:$who", at).apply()
     }
 
     private fun rememberToken(at: String, token: String) {
-        getSharedPreferences("operator-$by", MODE_PRIVATE).edit()
+        OperatorStore.prefs(this, by).edit()
             .putString("token:$at", token).apply()
     }
 
     private fun instances(): List<Instance> =
-        getSharedPreferences("operator-$by", MODE_PRIVATE)
+        OperatorStore.prefs(this, by)
             .getString("instances", "")!!
             .lines()
             .filter { it.isNotBlank() }
@@ -116,14 +116,14 @@ class OperatorActivity : Activity() {
 
     private fun remember(i: Instance) {
         val kept = instances().filter { it.at != i.at } + i
-        getSharedPreferences("operator-$by", MODE_PRIVATE).edit()
+        OperatorStore.prefs(this, by).edit()
             .putString("instances", kept.joinToString("\n") { line(it) })
             .apply()
     }
 
     private fun forget(at: String) {
         val kept = instances().filter { it.at != at }
-        getSharedPreferences("operator-$by", MODE_PRIVATE).edit()
+        OperatorStore.prefs(this, by).edit()
             .putString("instances", kept.joinToString("\n") { line(it) })
             .apply()
     }

@@ -78,7 +78,7 @@ class NodePageActivity : Activity() {
         // **the token, for the proof every read carries**: the page is
         // this instance's own state, so reading it is an act like any
         // other and proves itself the same way (§8.2)
-        this.token = getSharedPreferences("operator-$by", MODE_PRIVATE)
+        this.token = OperatorStore.prefs(this, by)
             .getString("token:$at", null) ?: ""
 
         val bar = TextView(this).apply {

@@ -22438,3 +22438,36 @@ _prunes_to_three_and_the_dismissed_stands_down` failed one gate in three
 and one local run in five (4 signers where 5 were expected: a kept
 witness's attestation missing at finalisation); not touched by any of
 these changes, reported to the author with the numbers.
+
+**Bench, 2026-11-16, after the install [author's answers of the day].**
+The script declaration stands as the page's own `content-security-policy`
+naming `script-src` [author: "This is acceptable, no need to
+over-complicate it"]. **The Operator screen showed no nodes on GXV**
+[author: "I see no nodes on either GXV or GXV-2"]: not today's install.
+7a647e6 (2026-11-14 07:07) moved the operator records from one file,
+`operator`, to `operator-<id>` and migrated nothing; GXV's `operator.xml`
+(written 04:14 that day) holds two instances — "Mirror Manse"
+64.227.31.70:7449 and "E Two" 167.99.153.102:7449, both answering (admin
+401 without a proof, ssh open) — and their tokens. `OperatorStore.prefs`
+now adopts them into the identity whose subnet each names on first open
+(`OperatorStoreTest`); all eleven openings of the file go through it.
+**Media egress verified on the bench** [author: "Let's verify on the
+bench"]: `MediaEgressTest` on MRK (Android 15, WebView 157.0.8103.38) — the
+control reached a loopback listener with video, audio, `<source>` and
+image; under the frame all four were offered to the client's hook first,
+answered empty, and nothing reached the listener, with network loads
+blocked or not; the origin's own document and image were served through
+the hook with loads blocked. So `blockNetworkLoads = true` is back on the
+resource frame as a second wall, no androidx.webkit dependency.
+**Runner refresh** [author: "Make it an operator act and prompt the
+operator when it is available"]: how it is authenticated is put to the
+author (signature by the control key through the runner, or the client's
+own ssh as root); not built until answered.
+
+**To do, after the bench upgrade issues and the hosting work are settled**
+[author, 2026-11-16]:
+1. Verify the mounted block on a droplet whose volume is ext4 mounted
+   with `prjquota` (a WAN session).
+2. Chase the ceremony flake: `adaptors::ceremony::the_counterparty_prunes
+   _to_three_and_the_dismissed_stands_down`, 4 signers where 5 were
+   expected, one gate in three and one local run in five on 2026-11-16.

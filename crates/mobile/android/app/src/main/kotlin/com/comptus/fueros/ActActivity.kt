@@ -63,7 +63,7 @@ class ActActivity : Activity() {
         at = intent.getStringExtra("at") ?: ""
         val name = intent.getStringExtra("act") ?: ""
         val query = intent.getStringExtra("query")
-        token = getSharedPreferences("operator-$by", Context.MODE_PRIVATE)
+        token = OperatorStore.prefs(this, by)
             .getString("token:$at", null) ?: ""
 
         narration = TextView(this).apply {

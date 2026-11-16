@@ -283,7 +283,7 @@ class FrameIsolationTest {
 
     // acceptance: RSC-58
     @Test
-    fun neither_frame_tells_the_engine_to_block_loads_since_the_client_answers_each() {
+    fun a_resources_frame_shuts_the_network_behind_its_client_and_a_nodes_does_not() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext
         lateinit var resource: Pair<Boolean, Boolean>
         lateinit var node: Pair<Boolean, Boolean>
@@ -295,9 +295,10 @@ class FrameIsolationTest {
         }
         // **every load reaches the screen's client** [author, 2026-11-15],
         // which carries the ones inside the page's own origin through the
-        // kernel and answers the rest with nothing; an engine told to
-        // block loads would never ask
-        assertEquals("a resource's loads are the client's to answer", false to false, resource)
+        // kernel and answers the rest with nothing; and the network is
+        // shut behind it, which leaves the client asked first
+        // ([MediaEgressTest] holds that it still is)
+        assertEquals("a resource's frame blocks network loads behind its client", true to false, resource)
         assertEquals("a node's own pages are served by the instance and must load", false to false, node)
     }
 }

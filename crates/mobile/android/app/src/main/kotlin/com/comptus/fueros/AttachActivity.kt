@@ -190,7 +190,7 @@ class AttachActivity : Activity() {
      * surface this device talks to it over.
      */
     private fun ownInstances(): List<Pair<String, String>> =
-        getSharedPreferences("operator-$by", MODE_PRIVATE)
+        OperatorStore.prefs(this, by)
             .getString("instances", "")!!
             .lines()
             .filter { it.isNotBlank() }
