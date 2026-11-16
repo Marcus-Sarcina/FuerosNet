@@ -5576,15 +5576,35 @@ impl Client {
     /// consented to is taken by the same rule, since the consent names
     /// the selector and the subject is a prior counterparty.
     pub fn take_cold_introduction(&mut self, from: &Keyhash, bytes: &[u8]) -> bool {
-        if self.known.iter().any(|k| k.keyhash == *from) {
-            return false;
-        }
         let Ok(intro) = rhtn_archive::locator::Introduction::parse(bytes) else {
             return false;
         };
         if intro.identity.keyhash != *from {
             tracing::warn!(target: "pay", from = %id8(from), "pay.cold_call.not_theirs");
             return false;
+        }
+        // **a party this client knows and cannot place takes the locator
+        // alone** [2026-11-15]: the material is pinned already, and what a
+        // first message from them needs placed is where they sit, for the
+        // bundle fetch (PAY-021) and for the answer.  A witness started
+        // knowing a participant's material held no locator for it, dropped
+        // the introduction whole, and could ask nobody for the bundle.
+        if self.known.iter().any(|k| k.keyhash == *from) {
+            let held = |c: &Self| c.store.contacts.get(from).and_then(|c| c.locator.clone());
+            let before = held(self);
+            return match self.hold_locator(from, &intro.locator.bytes, false) {
+                // taken where it placed the party anew; a locator already
+                // held, or an older one, is nothing taken
+                Ok(()) if held(self) != before => {
+                    tracing::info!(target: "pay", from = %id8(from), "pay.cold_call.placed");
+                    true
+                }
+                Ok(()) => false,
+                Err(e) => {
+                    tracing::warn!(target: "pay", from = %id8(from), why = ?e, "pay.cold_call.refused");
+                    false
+                }
+            };
         }
         match self.take_introduction(bytes) {
             Ok(_) => {
@@ -7143,6 +7163,42 @@ impl Client {
                 .cloned()
                 .ok_or("no bundle for the peer")?,
         };
+        // **a session the peer opened first stands** [2026-11-15]: the
+        // reply to a key asked for before any session existed can land
+        // after the peer wrote first, and what waited has travelled on
+        // the peer's session already (PAY-026).  Opening another here
+        // replaced the ratchet the peer is still sending on, which is how
+        // a witness lost a proposed body in a ceremony across subnets.
+        // What still waits goes on the session that stands; the one-time
+        // key the node served is spent there and unused here.
+        if self.payload.sessions.has_session_with(&to, &device) {
+            let waiting = self
+                .payload
+                .pending
+                .remove(&(to, device))
+                .unwrap_or_default();
+            let me = self.payload.device;
+            let mut out = Vec::new();
+            for p in &waiting {
+                let r = self
+                    .payload
+                    .sessions
+                    .ratchets
+                    .get_mut(&(to, device))
+                    .ok_or("no session")?;
+                let m = r.encrypt(p)?;
+                out.push(self.route(to, payload::channel_message(&me, &m), device));
+            }
+            tracing::info!(
+                target: "pay",
+                state = "stands",
+                peer = %id8(&to),
+                device = %id8(&device),
+                sent = waiting.len(),
+                "pay.session"
+            );
+            return Ok(out);
+        }
         let one_time = match r.one_time {
             Some(k) => Some(payload::OneTimeKey::decode(&k)?),
             None => None,

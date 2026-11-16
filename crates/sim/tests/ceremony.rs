@@ -246,6 +246,10 @@ fn dump(f: &Fabric, phones: &[&Phone]) -> String {
                 || l.contains("pay.session")
                 || l.contains("pay.error")
                 || l.contains("pay.direct")
+                || l.contains("pay.descent")
+                || l.contains("pay.theirs")
+                || l.contains("pay.prekey")
+                || l.contains("pay.bundle")
             {
                 out.push_str("   ~ ");
                 out.push_str(&l.chars().take(300).collect::<String>());
@@ -349,16 +353,19 @@ async fn a_ceremony_opens_across_two_subnets_and_both_witnesses_attest() {
     drop(f);
 }
 
-/// **The same ceremony to its record** — not reached yet [2026-11-15].
-/// The proposer's body to the far witness is encrypted under the session
-/// the proposer opened, while the witness has meanwhile opened one of its
-/// own back and the crossing kept the other; the body also arrives twice,
-/// by relay and by the direct path, and the relayed copy does not
-/// authenticate, so the far witness never signs.  Reproduce with
-/// `cargo test -p rhtn-sim --test ceremony -- --ignored`; the session log
-/// under the field-test flavour shows `pay.session kept` at the witness
-/// and `pay.error: message does not authenticate` for the 730-byte body.
-#[ignore = "the far witness's crossing session: see the doc comment"]
+/// **The same ceremony to its record**: every signer holds it, each
+/// witness beside the meeting it attested.  What it took, read off the
+/// kernels' own diagnostics once each had a sink of its own
+/// [2026-11-15]: a far witness started knowing a participant's material
+/// dropped the participant's opener whole, locator included, so it could
+/// place nobody and ask nobody for the bundle, and the participant's
+/// messages failed under a session the witness then opened itself; a
+/// one-time-key reply landing after the peer had written first opened a
+/// second session over the one that stood; and an open replaced the
+/// ratchet the peer was still sending on and kept nothing of it.  The
+/// construction's crossing rule (design §22.2) was never the defect.
+// functional: PAY-021
+// functional: PAY-022
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_ceremony_runs_between_two_subnets_that_share_no_node() {
     let f = Arc::new(two_subnets());
@@ -544,10 +551,11 @@ fn drive(f: &Fabric, to_the_record: bool) {
         dump(f, &phones)
     );
     let record = meeting(&alice, "c4").unwrap().record;
+    // each witness with who nominated it; the witness is the first of the pair
     let holds = |p: &Phone| -> Vec<[u8; 32]> {
         p.p.record_witnesses(record.to_vec())
             .into_iter()
-            .flatten()
+            .filter_map(|pair| pair.into_iter().next())
             .filter_map(|w| w.try_into().ok())
             .collect()
     };

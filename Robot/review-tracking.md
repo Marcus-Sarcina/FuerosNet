@@ -22328,3 +22328,22 @@ the pairing, dataset composed in 8 s, 2,563,481 bytes over BLE in 44.3 s
 times. Noted, not acted on: a repeat hands the whole store again (the
 dataset is "the whole of it"); the shell's diagnostics are in logcat under
 `fueros.diag`, mirrored from `filesDir/diag/<run>.jsonl`.
+
+**The crossing session, closed, 2026-11-15 [plan: author].** Not the
+crossing rule. With a diagnostics sink per kernel (`ffi::diag`: a
+registry, a thread-local the actor thread and the runtime's workers
+enter, every facade call entering its participant's) the finalisation
+read off as three defects in the payload path, each fixed where it was:
+(1) `take_cold_introduction` dropped a *known* party's introduction whole,
+so a witness started knowing a participant's material could place nobody
+and fetch no bundle; now the locator is taken alone and "taken" means
+placed anew. (2) `take_prekey_reply` opened a second session on a reply
+that landed after the peer had written first, carrying an empty message;
+now what waits goes on the session that stands (PAY-022, the test fails
+on the old code). (3) `Sessions::open` replaced the ratchet the peer was
+still sending on and kept nothing; now it holds it as the receive side
+holds a displaced one. And the courier's bundle fetch asks the serving
+tab where the horizon holds no node yet (W §7.7.1). The cross-subnet
+ceremony runs to its record in-process (`a_ceremony_runs_between_two_
+subnets_that_share_no_node`, live, 28 s). The test's doc comment had
+blamed the far witness's crossing session: corrected by the run.

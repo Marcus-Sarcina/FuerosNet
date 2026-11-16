@@ -1084,7 +1084,15 @@ impl Sessions {
             one_time = one_time.is_some(),
             "pay.session"
         );
-        self.ratchets.insert((to, their.device), r);
+        // **what this open replaces is held a while** [2026-11-15], as the
+        // receive side of a crossing holds the session it displaces
+        // (design §22.2): the peer may still be sending on it, and a
+        // message encrypted before the peer learned of this open must
+        // still read.  Nothing kept it on this side before, and a witness
+        // lost a proposed body that way.
+        if let Some(old) = self.ratchets.insert((to, their.device), r) {
+            self.keep_previous((to, their.device), old);
+        }
         let msg = InitialMessage {
             ik: keys.ik.public(),
             ek: init.ek,

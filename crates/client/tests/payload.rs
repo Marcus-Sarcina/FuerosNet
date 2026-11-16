@@ -1345,6 +1345,137 @@ fn a_step_queued_before_a_session_travels_when_the_peer_opens_one() {
 /// only move is to open again: the sessions it holds with that peer are
 /// set aside, the next send asks for a one-time key and opens afresh,
 /// and the peer takes the open as it takes any first message.
+/// **The reply to a key asked for before any session lands after the peer
+/// wrote first**: the session the peer opened stands, nothing opens on the
+/// reply, and what the peer sent on that session meanwhile still reads.
+/// Before, the reply opened a second session with an empty message in it,
+/// replacing the ratchet the peer was still sending on and keeping nothing:
+/// the witness that lost a proposed body in the ceremony across subnets
+/// [sim, 2026-11-15].
+// functional: PAY-022
+#[test]
+fn a_key_reply_after_the_peer_opened_first_opens_nothing_and_what_the_peer_sent_still_reads() {
+    let mut n = net(&["bob"], &[("alice", "bob"), ("w1", "bob")]);
+    n.attach("alice");
+    n.attach("w1");
+    n.sweep("alice");
+    n.sweep("w1");
+    // alice asks for w1's one-time key; the reply is held back
+    let msgs =
+        n.s.client("alice")
+            .send_payload(kh("w1"), KIND_APPLICATION, b"from alice, queued")
+            .expect("queued");
+    let req = msgs
+        .iter()
+        .find_map(|m| match m {
+            Msg::PrekeyRequest(b) => Some(b.clone()),
+            _ => None,
+        })
+        .expect("a key asked for");
+    assert!(
+        !msgs
+            .iter()
+            .any(|m| matches!(m, Msg::Payload { .. } | Msg::Relay { .. }))
+    );
+    // w1 writes first: its initial opens the session at alice, and the
+    // queued step travels back on it (PAY-026)
+    n.send("w1", "alice", "from w1, first");
+    let said = |n: &Net, from: &str, to: &str| {
+        n.delivered
+            .iter()
+            .filter(|(f, t, _)| *f == kh(from) && *t == kh(to))
+            .map(|(_, _, d)| d.clone())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(said(&n, "w1", "alice"), vec!["Application(from w1, first)"]);
+    assert_eq!(
+        said(&n, "alice", "w1"),
+        vec!["Application(from alice, queued)"]
+    );
+    // no direct path from w1 now: what it sends waits at bob, encrypted
+    // on the session that stands
+    n.s.handles["w1"].reach.0.set(false);
+    n.send("w1", "alice", "from w1, second");
+    // the reply lands at alice meanwhile: nothing opens on it
+    let now = n.now();
+    let reply = n
+        .nodes
+        .get_mut("bob")
+        .unwrap()
+        .prekeys
+        .answer(&kh("alice"), &req, now)
+        .expect("a reply");
+    let more =
+        n.s.client("alice")
+            .take_prekey_reply(&reply)
+            .expect("taken");
+    assert!(
+        !more
+            .iter()
+            .any(|m| matches!(m, Msg::Payload { .. } | Msg::Relay { .. })),
+        "no second opener: {more:?}"
+    );
+    {
+        let s = &n.s.client("alice").payload.sessions;
+        assert_eq!(s.ratchets.len(), 1, "one session with w1");
+        assert!(s.previous.is_empty(), "nothing displaced");
+    }
+    // what waited at bob reads on the session that stands
+    assert_eq!(n.collect("alice"), vec!["Application(from w1, second)"]);
+    // and both directions go on, on that one session
+    n.s.handles["w1"].reach.0.set(true);
+    n.send("alice", "w1", "from alice, after");
+    assert_eq!(
+        said(&n, "alice", "w1").last().map(String::as_str),
+        Some("Application(from alice, after)")
+    );
+    n.send("w1", "alice", "from w1, after");
+    assert_eq!(
+        said(&n, "w1", "alice").last().map(String::as_str),
+        Some("Application(from w1, after)")
+    );
+}
+
+/// **A party this client knows and cannot place is placed by the
+/// introduction its opener carries** [2026-11-15]: the material stays as
+/// pinned, the locator is taken, and a bundle fetch has somewhere to go.
+/// Before, a known party's cold introduction was dropped whole, and a
+/// witness that knew a participant's material from the start could ask
+/// nobody for its bundle.
+// functional: PAY-021
+#[test]
+fn a_cold_introduction_from_a_known_party_places_it() {
+    let mut n = net(&["bob"], &[("alice", "bob"), ("w1", "bob")]);
+    n.attach("alice");
+    let card =
+        n.s.client("alice")
+            .payload
+            .sessions
+            .card
+            .clone()
+            .expect("alice carries her introduction once attached");
+    // w1 knows alice's material from the start and holds nothing of where she sits
+    n.s.client("w1").store.contacts.remove(&kh("alice"));
+    assert!(
+        matches!(
+            n.s.client("w1").reach_for(&kh("alice")).upstream,
+            rhtn_client::horizon::Upstream::Unknown
+        ),
+        "nothing placed yet"
+    );
+    assert!(
+        n.s.client("w1").take_cold_introduction(&kh("alice"), &card),
+        "taken, though alice is known"
+    );
+    assert!(
+        matches!(
+            n.s.client("w1").reach_for(&kh("alice")).upstream,
+            rhtn_client::horizon::Upstream::Position { .. }
+        ),
+        "placed by the introduction"
+    );
+}
+
 #[test]
 fn a_sender_opens_a_fresh_session_past_a_peer_that_lost_its_half() {
     let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);

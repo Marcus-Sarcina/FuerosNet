@@ -115,39 +115,62 @@ impl Storage for TracedStorage {
 /// renderer is installed once per process; a later start re-points it, so
 /// a shell restarted in one process is the one that hears.  A no-op in a
 /// releasable build.
+/// **One sink per kernel** [2026-11-15]: every participant started in a
+/// process registers its platform's diagnostics object, and a thread says
+/// which kernel it works for ([`enter`]: the kernel's actor thread and its
+/// runtime's workers), so a line is rendered to the sink of the kernel
+/// that emitted it.  A thread that said nothing, the shell's own, gets the
+/// newest.  The tracing subscriber is one per process, as `tracing` has
+/// it; the registry is what makes four kernels in one test readable apart.
 #[cfg(feature = "fieldtest")]
-pub(crate) fn install(sink: Arc<dyn crate::device::Diagnostics>) {
-    use std::sync::{Once, RwLock};
+mod sinks {
+    use std::cell::Cell;
+    use std::sync::{Arc, RwLock};
+    pub static SINKS: RwLock<Vec<Arc<dyn crate::device::Diagnostics>>> = RwLock::new(Vec::new());
+    thread_local! {
+        pub static CURRENT: Cell<Option<usize>> = const { Cell::new(None) };
+    }
+}
+
+/// Register `sink` for the kernel about to start; the id its threads
+/// [`enter`].  The calling thread takes it too, for what the start says.
+#[cfg(feature = "fieldtest")]
+pub(crate) fn install(sink: Arc<dyn crate::device::Diagnostics>) -> usize {
+    use std::sync::Once;
     use tracing_subscriber::layer::SubscriberExt;
 
-    static SINK: RwLock<Option<Arc<dyn crate::device::Diagnostics>>> = RwLock::new(None);
     static ONCE: Once = Once::new();
 
-    // process start, for the `ms` field, is the first start
     let _ = rhtn_client::diag::since_start();
-    if let Ok(mut s) = SINK.write() {
-        *s = Some(sink);
-    }
+    let id = match sinks::SINKS.write() {
+        Ok(mut s) => {
+            s.push(sink);
+            s.len() - 1
+        }
+        Err(_) => 0,
+    };
+    enter(id);
     ONCE.call_once(|| {
         let layer = rhtn_client::diag::json::JsonLines::new(|line: String| {
-            if let Ok(s) = SINK.read()
-                && let Some(d) = s.as_ref()
+            let id = sinks::CURRENT.with(|c| c.get());
+            if let Ok(s) = sinks::SINKS.read()
+                && let Some(d) = id.and_then(|i| s.get(i)).or_else(|| s.last())
             {
                 d.event(line);
             }
         });
-        // another subscriber already set (a test's, say) keeps its place
         let _ = tracing::subscriber::set_global_default(tracing_subscriber::registry().with(layer));
         panic_hook();
     });
+    id
 }
 
-/// The Rust side's crash handler (plan, section 3.6, the `crash` row): a
-/// panic's message and location as one event through the same layer,
-/// before the hook that was there prints it and the process dies.  The
-/// message is what the panicking code wrote, a reason string by the plan's
-/// redaction classes.  Guarded against a panic raised while the sink
-/// itself runs, which would otherwise re-enter this hook without end.
+/// This thread works for the kernel whose sink is `id`.
+#[cfg(feature = "fieldtest")]
+pub(crate) fn enter(id: usize) {
+    sinks::CURRENT.with(|c| c.set(Some(id)));
+}
+
 #[cfg(feature = "fieldtest")]
 fn panic_hook() {
     use std::cell::Cell;
@@ -179,4 +202,9 @@ fn panic_hook() {
 }
 
 #[cfg(not(feature = "fieldtest"))]
-pub(crate) fn install(_: Arc<dyn crate::device::Diagnostics>) {}
+pub(crate) fn install(_: Arc<dyn crate::device::Diagnostics>) -> usize {
+    0
+}
+
+#[cfg(not(feature = "fieldtest"))]
+pub(crate) fn enter(_: usize) {}

@@ -523,9 +523,13 @@ impl Net {
         me: Party,
         pins: Pins,
         nonce: Arc<dyn Fn() -> [u8; 16] + Send + Sync>,
+        sink: usize,
     ) -> Result<Net, Refused> {
         let rt = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
+            // the workers say whose kernel they serve, so what they log
+            // reaches that kernel's diagnostics ([`crate::diag::enter`])
+            .on_thread_start(move || crate::diag::enter(sink))
             .build()
             .map_err(|e| Refused::new(format!("no runtime: {e}")))?;
         // quinn binds inside a runtime, so the endpoint is built in this

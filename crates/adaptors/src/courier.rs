@@ -9,7 +9,7 @@ use crate::verifier::Verifiers;
 use rhtn_archive::Keyhash;
 use rhtn_archive::prekey::{PrekeyRequest, REQUEST_PREKEY};
 use rhtn_client::ceremony::{Dispatched, Msg};
-use rhtn_client::horizon::Upstream;
+use rhtn_client::horizon::{Askable, Upstream};
 use rhtn_client::payload::{KIND_CANDIDATES, KIND_QUERY, KIND_RESPONSE, KIND_RESPONSE_COPY};
 use rhtn_client::query::QueryRequest;
 use rhtn_client::verifier::{Answer, GrantOutcome, QueryOutcome};
@@ -402,7 +402,22 @@ impl Courier {
     /// tab where that node is one, dialled otherwise.
     async fn prekeys_by_reach(&self, subject: Keyhash, body: &[u8]) -> Option<Vec<u8>> {
         let beyond = self.beyond.lock().unwrap().clone()?;
-        let reach = self.handle.with(move |c| c.reach_for(&subject)).await;
+        let mut reach = self.handle.with(move |c| c.reach_for(&subject)).await;
+        // **the serving node resolves where this client holds no node to
+        // ask itself** (`wire-format.md` §7.7.1's default) [2026-11-15]: a
+        // client whose horizon holds no infra endpoints yet, a light
+        // client under a light patron a moment after attaching, puts the
+        // resolution to the tab it holds, which the dialler rides without
+        // an address.
+        if reach.ask.is_empty()
+            && let Some(via) = self.via()
+        {
+            reach.ask.push(Askable {
+                node: via,
+                endpoints: Vec::new(),
+                key_material: None,
+            });
+        }
         tracing::debug!(
             target: "pay",
             subject = %hex4(&subject),
