@@ -15,11 +15,13 @@
 //! stored (`infra-client-requirements.md` §6.1, "do not log doorbells"), so
 //! a failure here is a failure and not a line.
 //!
-//! The two choices the documents leave to an implementation are taken
-//! here and asked of the author [2026-11-15]: the token carries no `sub`
-//! contact claim unless the operator supplies one, nothing being
-//! registered to this project; and a post's `TTL` is a day, or the time to
-//! the endpoint's lapse where that is sooner.
+//! Two choices the documents leave to an implementation are taken here
+//! and are this implementation's, not the design's [author, 2026-11-15:
+//! accepted as such, and deliberately not made a requirement]: the token
+//! carries no `sub` contact claim and nothing configures one, nothing
+//! being registered to this project; and a post's `TTL` is a day, or the
+//! time to the endpoint's lapse where that is sooner.  Either may change
+//! without a document changing.
 
 use aws_lc_rs::{aead, agreement, hkdf, rand, signature};
 use rhtn_node::wake::Endpoint;

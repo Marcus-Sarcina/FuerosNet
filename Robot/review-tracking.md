@@ -22377,8 +22377,9 @@ logged, counted or stored. Tests: the vector, the token under the public
 point, a loopback TLS endpoint under the transport's raw-key profile
 receiving two signed posts whose bodies open to nothing (acceptance
 SUB-14, its stub gone), and the node's rule for when a ring is owed.
-**Assumed, asked of the author**: no `sub` contact claim unless an
-operator supplies one, and no configuration key for it yet; the TTL
-rule. **Not built, stated**: the client half — the Android shell
+**Accepted as implementation choices, not design** [author, 2026-11-15:
+"do not record them as a design requirement"]: no `sub` contact claim
+and nothing to configure one; the TTL rule. Neither is in a document or
+a row, by that ruling. **Not built, stated**: the client half — the Android shell
 registers no wake endpoint, having no push subscription; which service
 is the person's choice, and the registration call exists at the facade.
