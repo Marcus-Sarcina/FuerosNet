@@ -1655,6 +1655,12 @@ fn a_package_is_installed_on_the_hosts_shell_and_the_node_then_hosts_it() {
     assert!(record.contains("block = \"/rhtn-block\""), "{record}");
     let hosting = std::fs::read_to_string(l.dir.join("hosting")).unwrap();
     assert!(hosting.contains("block = \"/rhtn-block\""), "{hosting}");
+    // **and no surface block is left under the state for it**: the re-read
+    // before the start made one, before the host said it would mount
+    assert!(
+        !l.dir.join("state").join("blocks").join(&resource).exists(),
+        "a surface block was left for a block the host mounted"
+    );
     let listed = ask(at, "GET /node/packages HTTP/1.1", b"");
     assert_eq!(field(&listed, "packages").as_deref(), Some("1"), "{listed}");
 

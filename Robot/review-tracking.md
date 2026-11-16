@@ -22466,13 +22466,14 @@ own ssh as root); not built until answered.
 
 **To do, after the bench upgrade issues and the hosting work are settled**
 [author, 2026-11-16]:
-1. Verify the mounted block on a droplet whose volume is ext4 mounted
-   with `prjquota` (a WAN session).
+1. ~~Verify the mounted block on a droplet whose volume is ext4 mounted
+   with `prjquota` (a WAN session).~~ Done 2026-11-16, below.
 2. Chase the ceremony flake: `adaptors::ceremony::the_counterparty_prunes
    _to_three_and_the_dismissed_stands_down`, 4 signers where 5 were
    expected, one gate in three and one local run in five on 2026-11-16;
    failed again on the gate over the signature removal the same day (a
-   re-run passed, 1085 of 1085).
+   re-run passed, 1085 of 1085), and on the gate over the empty surface
+   block fix: three of the day's gates.
 
 **The upgrade act and the signed runner, 2026-11-16 [author: "Option 1
 for the runner, option 4 for federation"].** "Renew its run" on both GXV
@@ -22545,3 +22546,32 @@ surface answering; the node's page came back as the same node — same
 identity, subnet, run (7 credentials, ending 1796066844), 1 subordinate —
 with `attached` 1 → 0 at the restart and back to 1 within 75 s, the
 phone reattaching by itself. Key derived for the run and shredded.
+
+**The mounted block on a WAN droplet, 2026-11-16 [author: "Run the
+mounted block check on a WAN droplet"].** One droplet launched by `rhtn
+node launch` as a throwaway operator (517e5594…), tor1 s-1vcpu-1gb —
+DigitalOcean offered the small sizes only in blr1, lon1, sfo2, sgp1 and
+tor1 that day, refusing nyc3 and nyc1 with 422 before anything was
+created. Host prepared as an operator would: a 256 MB ext4 image with the
+`quota,project` features loop-mounted at `/var/lib/rhtn-blocks` with
+`prjquota`, the `quota` package, and a registry on 127.0.0.1:5000 (the
+test application is not published; pushed from the laptop's Docker
+through an ssh tunnel, podman on the host refusing to convert the
+archive's gzip layers). Installed by `rhtn node install` with
+`block_bytes = 1048576`: the answer said `block /rhtn-block, mounted by
+the host at 1048576 bytes`; the image pulled by digest; the container
+mounting `/var/lib/rhtn-blocks/rhtn-pkg-204035bb…` at `/rhtn-block`, no
+capabilities; project 10001 with `P`, hard limit 1024 KB; `dd` of 2 MiB
+inside the package stopped at 1,044,480 bytes, "Disk quota exceeded";
+`df` inside showing 1024 KB; the hosting entry carrying `block =
+"/rhtn-block"`; the file surviving a restart; removal keeping the block
+and its usage. **Found**: an empty surface block directory under
+`state/blocks/<res>`, made by the re-read before the start (20:46:28.83,
+between pull and start), against PKG-020's "provisions no surface block";
+fixed by removing it, only where empty, once the mounted path is
+recorded, with the install test reproducing it first. **Not observable
+there**: what the package was told on the relationships exchange (neither
+side logs it; the unit test holds it). **The test application ignores
+SIGTERM**: both restart and removal fell back to SIGKILL. Droplet
+620024250 destroyed; the account holds only the two bench droplets; keys,
+token and identity shredded.

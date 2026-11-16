@@ -1069,6 +1069,14 @@ impl Surface {
                     ),
                 );
             }
+            // **and the surface block the first re-read made goes** [found on
+            // a WAN droplet, 2026-11-16]: that re-read ran before the host
+            // had said it would mount one, so it provisioned a directory
+            // under the state for a block nothing will use. Removed only
+            // where empty, so nothing a package wrote there is lost
+            if let Some(root) = self.state.as_deref() {
+                let _ = std::fs::remove_dir(root.join("blocks").join(hex(&want.resource)));
+            }
         }
         tracing::info!(
             target: "daemon",
