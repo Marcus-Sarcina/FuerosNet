@@ -22512,3 +22512,21 @@ field is gone, so a hosting file still carrying one is refused by name as
 an unknown field. Sweep: the remaining hits for "instance key" or a
 signed envelope are statements of absence or the unrelated transaction
 envelope, transport key and operator token.
+
+**Bench relaunch and the runner on a real host, 2026-11-16.** The author
+relaunched both bench droplets from GXV and destroyed the old ones. Mirror
+Manse now at 157.245.242.182, E Two at 167.172.146.119, both on registry
+digest 955af4d2 (`fe35b51d`), runner version 2 byte-identical to the
+repository's (04d211fc…), `ssh-keygen` present, root's `authorized_keys`
+two lines with one restricted; the app recorded runner 2 for both. **Key
+management for test runs is the assistant's** [author: "I expect you to
+handle the key management for the test runs"]: `crates/tools/bench-host-key.py`
+derives a bench identity's host control or runner key from
+`phones-recovery.conf` as the shell derives the identity (BIP-39 entropy,
+HKDF-SHA256 under `fueros identity seeds v1`), checked against both GXV
+identities' keyhashes (703a82c2…, feb8843a…). Driven on Mirror Manse with
+the derived runner key: `version` answered runner 2; a runner signed with
+the runner key refused, nothing changed; the same runner signed with the
+control key by `ssh-keygen -Y sign` taken; `id` refused as no verb. Keys
+shredded after. **Still owed on the phones**: the upgrade act and the
+refresh made through the node from GXV's screens.
