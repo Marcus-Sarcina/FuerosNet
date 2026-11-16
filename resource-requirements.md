@@ -856,7 +856,9 @@ the bindings it imports: **`host`**, the surface versions you tolerate
 package written before the surface had a version; **`[budget]`**, what you ask to be
 bounded at — `block_bytes`, `log_bytes`, `jobs`, `requests_per_minute`,
 `job_seconds_per_day` — each absent where you do not use the binding, each your own
-claim that the host enforces and names when exceeded; and **`fetch`**, the
+claim that the host enforces and names when exceeded (a request past
+`requests_per_minute` your host answers for you, as an HTTP 429 with a
+`retry-after`, and your member reads it as yours [author, 2026-11-15]); and **`fetch`**, the
 destinations you may reach outward, each `https://host` or `https://host:port`
 exactly and nothing with a path, a wildcard or the node's own machine in it —
 delivered with the package so the operator reads it at installation, and replaced

@@ -132,6 +132,13 @@ pub struct Gateway {
     passed: u64,
     /// Handoffs attempted per resource, for a test to count.
     pub attempts: BTreeMap<Keyhash, u64>,
+    /// The minute each resource is in and the requests handed off in it,
+    /// for the package's `requests_per_minute` ([`Budget`]).
+    minutes: BTreeMap<Keyhash, (u64, u64)>,
+    /// Requests answered under that budget rather than handed off, per
+    /// resource: what the operator's surface names as the one exceeded
+    /// (`infra-client-requirements.md` §9.3).
+    throttled: BTreeMap<Keyhash, u64>,
 }
 
 impl Gateway {
@@ -505,14 +512,18 @@ impl Gateway {
     /// owner's Dunbar Org, acknowledged where above the patron level, a
     /// row granting connect, a well-formed message, a running backend;
     /// then one handoff.
+    ///
+    /// `now` is this node's clock in seconds: the minute it names is the
+    /// one a package's `requests_per_minute` is counted in.
     pub fn serve(
         &mut self,
         me: &Keyhash,
         table: &Table,
         requester: &Keyhash,
         body: &[u8],
+        now: u64,
     ) -> ResourceResponse {
-        let response = self.evaluate(me, table, requester, body);
+        let response = self.evaluate(me, table, requester, body, now);
         tracing::debug!(
             target: "node",
             requester8 = %crate::diag::id8(requester),
@@ -522,12 +533,73 @@ impl Gateway {
         response
     }
 
+    /// How many requests a resource has answered under its
+    /// `requests_per_minute` budget rather than handed off, since this
+    /// node started.
+    #[must_use]
+    pub fn throttled(&self, resource: &Keyhash) -> u64 {
+        self.throttled.get(resource).copied().unwrap_or(0)
+    }
+
+    /// **The request-rate budget, spent or not** [author, 2026-11-15]:
+    /// where the package declared `requests_per_minute` and this minute
+    /// has already seen that many handoffs, the answer is composed here
+    /// in the application's shape — an HTTP 429 with the seconds to the
+    /// next minute as `retry-after` — and delivered as status 0, since
+    /// the network delivered it and the ceiling is the package's own
+    /// claim about itself (`wire-format.md` §11;
+    /// `infra-client-requirements.md` §9.3). Otherwise the handoff is
+    /// counted and `None` says to go on.
+    fn over_budget(
+        &mut self,
+        resource: &Keyhash,
+        limit: Option<u64>,
+        now: u64,
+    ) -> Option<ResourceResponse> {
+        let limit = limit?;
+        let minute = now / 60;
+        let entry = self.minutes.entry(*resource).or_insert((minute, 0));
+        if entry.0 != minute {
+            *entry = (minute, 0);
+        }
+        if entry.1 >= limit {
+            *self.throttled.entry(*resource).or_insert(0) += 1;
+            tracing::warn!(
+                target: "node",
+                resource8 = %crate::diag::id8(resource),
+                budget = "requests_per_minute",
+                limit,
+                "node.resource.budget"
+            );
+            let wait = 60 - (now % 60);
+            let composed = crate::http::Response {
+                status: 429,
+                reason: "Too Many Requests".into(),
+                headers: vec![
+                    ("retry-after".into(), wait.to_string()),
+                    ("content-type".into(), "text/plain".into()),
+                ],
+                body: format!(
+                    "this resource takes {limit} requests a minute, and this minute's are spent\n"
+                )
+                .into_bytes(),
+            };
+            return Some(ResourceResponse {
+                status: STATUS_DELIVERED,
+                body: Some(crate::http::serialise_response(&composed)),
+            });
+        }
+        entry.1 += 1;
+        None
+    }
+
     fn evaluate(
         &mut self,
         me: &Keyhash,
         table: &Table,
         requester: &Keyhash,
         body: &[u8],
+        now: u64,
     ) -> ResourceResponse {
         let Ok(req) = ResourceRequest::decode(body) else {
             return ResourceResponse::code(STATUS_MALFORMED);
@@ -576,6 +648,10 @@ impl Gateway {
             return ResourceResponse::code(STATUS_UNAVAILABLE);
         }
         let authority = binding.authority.clone();
+        let limit = binding.declared.budget.requests_per_minute;
+        if let Some(spent) = self.over_budget(&req.resource, limit, now) {
+            return spent;
+        }
         let session = self.session_for(*requester, req.resource);
         let cred = Credential {
             principal: pairwise_principal(&req.resource, requester),

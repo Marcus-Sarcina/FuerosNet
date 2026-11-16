@@ -574,7 +574,7 @@ fn a_resource_that_holds_its_own_port_is_reached_over_a_socket() {
         message: b"GET /things HTTP/1.1\r\nhost: anything\r\nrhtn-roles: admin\r\n\r\n".to_vec(),
     }
     .encode();
-    let reply = g.serve(&owner, &table, &owner, &request);
+    let reply = g.serve(&owner, &table, &owner, &request, 0);
     serving.join().expect("the resource answered");
 
     assert_eq!(0, reply.status, "the request reached the resource");
@@ -1044,7 +1044,7 @@ fn a_directive_crosses_between_two_hosted_instances_and_a_member_cannot_speak_on
         message: b"GET /.rhtn/outbox HTTP/1.1\r\nhost: x\r\n\r\n".to_vec(),
     }
     .encode();
-    let reply = g.serve(&owner, &table, &owner, &request);
+    let reply = g.serve(&owner, &table, &owner, &request, 0);
     assert_eq!(
         reply.status,
         rhtn_archive::catalog::STATUS_REFUSED,
@@ -1058,7 +1058,7 @@ fn a_directive_crosses_between_two_hosted_instances_and_a_member_cannot_speak_on
     // the prefix is `/.rhtn/`, so a path that merely begins with the
     // letters is an ordinary one — this one reaches a server that is gone,
     // which is the unavailable code, not the refusal
-    let reply = g.serve(&owner, &table, &owner, &plain);
+    let reply = g.serve(&owner, &table, &owner, &plain, 0);
     assert_ne!(reply.status, rhtn_archive::catalog::STATUS_REFUSED);
     pj.join().unwrap();
     let _ = pgot;
@@ -1107,7 +1107,7 @@ fn a_package_answering_with_something_that_is_not_a_response_is_unavailable() {
     }
     .encode();
 
-    let reply = g.serve(&owner, &table, &owner, &request);
+    let reply = g.serve(&owner, &table, &owner, &request, 0);
     assert_eq!(
         reply.status, 2,
         "the package ran and answered; what it answered with is not a response, \
@@ -1135,7 +1135,7 @@ fn a_package_answering_with_something_that_is_not_a_response_is_unavailable() {
     )
     .expect("the package binds");
     g2.refresh(&table, &Standing::unknown(), 0);
-    let ok = g2.serve(&owner, &table, &owner, &request);
+    let ok = g2.serve(&owner, &table, &owner, &request, 0);
     assert_eq!(
         ok.status, 0,
         "a package that answers with a response is delivered"

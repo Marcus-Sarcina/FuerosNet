@@ -1038,7 +1038,14 @@ names the block's bytes, the log's bytes, jobs in flight, requests a minute
 and job compute a day; you bound what you have built, name the one exceeded
 on your operator's surface, and treat the rest as the package's own
 accounting above your ceiling. Their first values are the package author's,
-unmeasured, and the field is where they become measured.
+unmeasured, and the field is where they become measured. **A request past
+the minute's `requests_per_minute` you answer for the package, in its own
+shape** [author, 2026-11-15]: an HTTP 429 naming the ceiling, with the
+seconds to the next minute as `retry-after`, delivered as the resource's
+answer (`wire-format.md` §11) — the budget is the package's claim about
+itself, so a refusal under it is the application's and not the network's,
+and the member is told what to do where a bare *unavailable* would not.
+Count what you answered this way beside the resource on your surface.
 
 **An instance's key** — the one its envelopes are signed under
 (`resource-requirements.md` §3.3) — is provisioned per instance at its

@@ -282,7 +282,7 @@ fn what_reaches_a_package_through_the_gateway_is_the_credential_and_the_request(
         message: b"GET /orders HTTP/1.1\r\nhost: ignored\r\naccept: application/json\r\n\r\n"
             .to_vec(),
     };
-    let answer = g.serve(&me, &table, &me, &req.encode());
+    let answer = g.serve(&me, &table, &me, &req.encode(), 0);
     let body = String::from_utf8(answer.body.expect("the package answered")).expect("text");
 
     // the package answers with what it was handed, so this is the whole of

@@ -2219,6 +2219,7 @@ fn resource_views(node: &LiveNode) -> Vec<crate::operator::ResourceView> {
                     .collect(),
                 rows,
                 sessions: g.hosted_sessions(),
+                throttled: g.throttled(&resource),
                 admin: b.declared.admin.clone(),
                 federation: view.federation.plane(&resource).map(|p| {
                     crate::operator::FederationView {

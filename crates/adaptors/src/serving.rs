@@ -372,7 +372,8 @@ impl Serving for LocalNode {
             let mut view = self.node.view.lock().unwrap();
             let me = view.me();
             let table = view.table.clone_for(me);
-            Some(view.resources.serve(&me, &table, &from, body).encode())
+            let now = view.now();
+            Some(view.resources.serve(&me, &table, &from, body, now).encode())
         })
     }
 

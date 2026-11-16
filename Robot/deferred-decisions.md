@@ -103,7 +103,17 @@ over the course of a day or so after loss of on-device storage."
 
 ---
 
-## What a member is told when a package's request-rate budget is spent
+## What a member is told when a package's request-rate budget is spent [answered]
+
+**Answered: option (c)** [author, 2026-11-15, accepting the recommendation
+of the hosting assessment]: the host composes an HTTP 429 inside status 0.
+Built the same day: `Gateway::serve` takes the node's clock, counts
+handoffs per resource per minute against `requests_per_minute`, answers a
+429 with `retry-after` to the next minute and the ceiling named, hands
+nothing to the package, and counts it for the operator's surface
+(`throttled` on the resource tab). `infra-client-requirements.md` §9.3,
+`wire-format.md` §11 and `resource-requirements.md` §8 say so; GAT-043
+holds it. The entry below is as it stood.
 
 **Deferred** [author, 2026-10-31]: the three assumptions of the utility
 build were accepted as they stood, this among them — the budget is

@@ -891,6 +891,10 @@ pub struct ResourceView {
     pub rows: Vec<(Keyhash, Vec<String>, bool)>,
     /// Hosted sessions open against it.
     pub sessions: usize,
+    /// Requests answered under the package's `requests_per_minute` budget
+    /// rather than handed off since this node started: the one exceeded,
+    /// named here (`infra-client-requirements.md` §9.3).
+    pub throttled: u64,
     /// What its package declared it can be asked to do
     /// (`rhtn_node::resources::Operation`).
     pub admin: Vec<rhtn_node::resources::Operation>,
@@ -1012,7 +1016,7 @@ impl ResourceView {
         let mut out = String::new();
         let _ = write!(
             out,
-            "<h2>{}</h2>\n<pre>resource  {}\nowner     {}\nhosting   {}\nsessions  {}\nroles     {}</pre>\n",
+            "<h2>{}</h2>\n<pre>resource  {}\nowner     {}\nhosting   {}\nsessions  {}\nthrottled {}\nroles     {}</pre>\n",
             escape(&self.authority),
             hex(&self.resource),
             hex(&self.owner),
@@ -1022,6 +1026,7 @@ impl ResourceView {
                 "brokered: the traffic goes to a backend elsewhere"
             },
             self.sessions,
+            self.throttled,
             escape(
                 &self
                     .roles

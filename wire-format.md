@@ -5292,7 +5292,11 @@ member entitled to one should not receive the other.
 **The non-zero codes are the node's answers, not the resource's.** A resource
 that returns an application-level error returns it inside field 2 with code 0 —
 **the network delivered it**. Conflating the two would let an application error
-look like a gateway refusal.
+look like a gateway refusal. **One answer the node composes in the resource's
+shape** [author, 2026-11-15]: a request past the package's declared requests a
+minute (`infra-client-requirements.md` §9.3) is delivered as an HTTP 429 with a
+`retry-after`, code 0, because that ceiling is the package's own claim about
+itself and a refusal under it is the application's, not the network's.
 
 **A requester inside the owner's trust horizon gets a specific reason; one outside
 gets `refused` and nothing more.** The membership gate (design §11.2) runs first,

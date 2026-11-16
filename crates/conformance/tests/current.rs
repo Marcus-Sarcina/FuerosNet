@@ -111,7 +111,7 @@ fn r08_reserved_node_roles_must_not_reach_the_backend() {
     // Refusing the reserved role assignment before serving is also conforming.
     if gateway.set_row(resource,owner,Row{connect:true,roles:package.roles}).is_err() { return }
     let request=ResourceRequest{resource,message:b"GET / HTTP/1.1\r\nHost: backend\r\n\r\n".to_vec()}.encode();
-    let reply=gateway.serve(&owner,&Table::with_me(owner),&owner,&request);
+    let reply=gateway.serve(&owner,&Table::with_me(owner),&owner,&request,0);
     assert_eq!(reply.status,0,"control: admitted owner reaches the backend");
     let headers=http::headers_of(&reply.body.unwrap());
     let roles=&headers.iter().find(|(n,_)|n=="rhtn-roles").unwrap().1;

@@ -650,6 +650,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | GAT-040 | C | **Strip the resource's `rhtn-*` headers from its response as the caller's are stripped from the request**, so that an `rhtn-*` header on the member path was written by the node in both directions. Strip rather than reject — a stray header is a package defect for the operator, not a reason to take the resource down — and leave the node's own control exchanges with a resource untouched, they being a different path. Test that none of the namespace travels, that the package's own headers and body do, and that the answer is still delivered. | W §11.2; R §§3.1, 3.3 |
 | GAT-041 | S | **A resource request or response larger than one frame travels as a sequence of frames on the one stream, and the whole is bounded per message.** A `ResourceRequest` may repeat, each portion naming the same resource and carrying the next part of one HTTP message, the requester closing its side when it ends; the node joins the portions before parsing, and a portion naming another resource or failing to decode fails the stream. A delivered response larger than a frame is written as repeated status-0 frames. Either message is bounded at 16 MiB; a request past it is dropped unanswered and a response past it is not read on. Test: a request body and a response body each over the frame bound crossing a real node whole; a portion naming another resource failing the stream; a one-frame request unchanged. | W §§9.2, 11, 11.2 |
 | GAT-042 | C | **The node presents the instance's secret on the hop to a resource on a socket of its own** [author, 2026-11-15]: one secret per instance, established by the host when it starts the instance and handed over as an argument, inserted as `rhtn-secret` among the node's own headers after the caller's namespace is stripped, the same secret the instance presents to the host's surface; kept by the host across its restart; none on the hop to a sandboxed resource, which nothing but the node can call. A resource on a socket reads the node's `rhtn-*` headers behind that secret and nowhere else, answering a request without it as anonymous. Test: the request a socket package receives through the gateway is the node's canonical serialisation with `rhtn-secret` equal to what the package was started with and nothing else added; a request to the socket from another local process carrying `rhtn-principal` and `rhtn-roles` is answered as anonymous; the install's start carries the secret; a second apply over the same state reads the secret back rather than minting one; the surface registers the instance under the same secret. | W §11.2; R §§3.1, 3.3; I §9.3 |
+| GAT-043 | C | **A request past the package's declared requests a minute is answered for it, in its own shape, and delivered** [author, 2026-11-15]: where the manifest declares `requests_per_minute` and the minute has seen that many handoffs, the node composes an HTTP 429 naming the ceiling with the seconds to the next minute as `retry-after`, delivers it as status 0, hands nothing to the package, and counts it beside the resource on the operator's surface; the next minute starts the count again, and a package that declared no such budget is never answered for. Test: a budget of 2, three requests in one minute, the third a 429 delivered with `retry-after` and the backend called twice; the next minute delivered; the count visible; no budget, no refusal. | I §9.3; W §11; R §8 |
 
 ### Package admission, isolation, federation and abuse reporting
 
@@ -1057,7 +1058,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **583 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **584 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -1078,7 +1079,7 @@ This specification contains **583 numbered requirement/test families** across **
 | PAY | 20 |
 | POL | 22 |
 | CAT | 26 |
-| GAT | 42 |
+| GAT | 43 |
 | PKG | 19 |
 | APP | 17 |
 | UX | 31 |

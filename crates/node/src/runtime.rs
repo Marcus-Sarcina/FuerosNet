@@ -722,7 +722,12 @@ impl LiveNode {
                         let mut view = v.lock().unwrap();
                         let me = view.me();
                         let table = view.table.clone_for(me);
-                        Some(view.resources.serve(&me, &table, &peer, &body).encode())
+                        let now = view.now();
+                        Some(
+                            view.resources
+                                .serve(&me, &table, &peer, &body, now)
+                                .encode(),
+                        )
                     }
                     // the four things a client hands the node serving it
                     // (`wire-format.md` §7.10).  Each is about the peer that

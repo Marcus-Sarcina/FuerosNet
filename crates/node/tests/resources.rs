@@ -406,7 +406,8 @@ fn an_entry_whose_scope_cannot_be_computed_is_stored_and_grants_nothing() {
     }
     .encode();
     assert_eq!(
-        g.serve(&kh("alice"), &sc.table, &kh("carol"), &req).status,
+        g.serve(&kh("alice"), &sc.table, &kh("carol"), &req, 0)
+            .status,
         STATUS_NO_ROLE
     );
     g.set_row(
@@ -419,7 +420,8 @@ fn an_entry_whose_scope_cannot_be_computed_is_stored_and_grants_nothing() {
     )
     .unwrap();
     assert_eq!(
-        g.serve(&kh("alice"), &sc.table, &kh("carol"), &req).status,
+        g.serve(&kh("alice"), &sc.table, &kh("carol"), &req, 0)
+            .status,
         STATUS_DELIVERED
     );
 }
@@ -562,13 +564,13 @@ fn a_request_is_evaluated_in_the_normative_order_and_answered_with_the_one_code_
     let me = kh("alice");
     // a stranger
     assert_eq!(
-        g.serve(&me, &sc.table, &kh("w2"), &request(R1, OK_GET))
+        g.serve(&me, &sc.table, &kh("w2"), &request(R1, OK_GET), 0)
             .status,
         STATUS_REFUSED
     );
     // a member lacking a SubtreeAck: w1, adopted under carol
     assert_eq!(
-        g.serve(&me, &sc.table, &kh("w1"), &request(R1, OK_GET))
+        g.serve(&me, &sc.table, &kh("w1"), &request(R1, OK_GET), 0)
             .status,
         STATUS_NO_ACK
     );
@@ -576,7 +578,7 @@ fn a_request_is_evaluated_in_the_normative_order_and_answered_with_the_one_code_
     ack(&mut sc, "w1");
     assert!(sc.table.acks().iter().any(|a| a.node == kh("w1")));
     assert_eq!(
-        g.serve(&me, &sc.table, &kh("w1"), &request(R1, OK_GET))
+        g.serve(&me, &sc.table, &kh("w1"), &request(R1, OK_GET), 0)
             .status,
         STATUS_NO_ROLE
     );
@@ -590,10 +592,10 @@ fn a_request_is_evaluated_in_the_normative_order_and_answered_with_the_one_code_
         },
     )
     .unwrap();
-    assert_eq!(g.serve(&me, &sc.table, &kh("carol"), &request(R1, b"GET / HTTP/1.1\r\ncontent-length: 2\r\ntransfer-encoding: chunked\r\nhost: x\r\n\r\n")).status, STATUS_MALFORMED);
+    assert_eq!(g.serve(&me, &sc.table, &kh("carol"), &request(R1, b"GET / HTTP/1.1\r\ncontent-length: 2\r\ntransfer-encoding: chunked\r\nhost: x\r\n\r\n"), 0).status, STATUS_MALFORMED);
     // well-formed, package stopped
     assert_eq!(
-        g.serve(&me, &sc.table, &kh("carol"), &request(R1, OK_GET))
+        g.serve(&me, &sc.table, &kh("carol"), &request(R1, OK_GET), 0)
             .status,
         STATUS_UNAVAILABLE
     );
@@ -604,7 +606,7 @@ fn a_request_is_evaluated_in_the_normative_order_and_answered_with_the_one_code_
     );
     // running
     backend.running.store(true, Ordering::SeqCst);
-    let r = g.serve(&me, &sc.table, &kh("carol"), &request(R1, OK_GET));
+    let r = g.serve(&me, &sc.table, &kh("carol"), &request(R1, OK_GET), 0);
     assert_eq!(r.status, STATUS_DELIVERED);
     assert!(r.body.unwrap().starts_with(b"HTTP/1.1 200"));
     assert_eq!(
@@ -614,7 +616,7 @@ fn a_request_is_evaluated_in_the_normative_order_and_answered_with_the_one_code_
     );
     // step 0: a body that does not decode
     assert_eq!(
-        g.serve(&me, &sc.table, &kh("carol"), b"\xff\xff").status,
+        g.serve(&me, &sc.table, &kh("carol"), b"\xff\xff", 0).status,
         STATUS_MALFORMED
     );
 }
@@ -626,12 +628,13 @@ fn a_non_member_is_refused_for_everything_existing_or_not() {
     let backend = Arc::new(Fake::new());
     let mut g = gateway_with(&sc, backend.clone());
     let unknown = [0x77; 32];
-    let a = g.serve(&kh("alice"), &sc.table, &kh("w2"), &request(R1, OK_GET));
+    let a = g.serve(&kh("alice"), &sc.table, &kh("w2"), &request(R1, OK_GET), 0);
     let b = g.serve(
         &kh("alice"),
         &sc.table,
         &kh("w2"),
         &request(unknown, OK_GET),
+        0,
     );
     assert_eq!(
         (a.clone(), b.clone()),
@@ -677,7 +680,13 @@ fn a_request_is_decided_from_the_materialised_row_and_a_row_wider_than_64_is_ref
     .unwrap();
     // the predicate would now exclude carol (say carol departed in the
     // operator's view of things); unevaluated, the row stands
-    let r = g.serve(&kh("alice"), &sc.table, &kh("carol"), &request(R1, OK_GET));
+    let r = g.serve(
+        &kh("alice"),
+        &sc.table,
+        &kh("carol"),
+        &request(R1, OK_GET),
+        0,
+    );
     assert_eq!(
         r.status, STATUS_DELIVERED,
         "delivered on the strength of the row"
@@ -764,13 +773,25 @@ fn caller_rhtn_headers_are_stripped_the_nodes_inserted_and_a_session_minted_per_
     }
     let forged = b"GET /x HTTP/1.1\r\nhost: evil\r\nrhtn-roles: admin\r\nrhtn-principal: somebody\r\nx-app: keep\r\n\r\n";
     assert_eq!(
-        g.serve(&kh("alice"), &sc.table, &kh("carol"), &request(R1, forged))
-            .status,
+        g.serve(
+            &kh("alice"),
+            &sc.table,
+            &kh("carol"),
+            &request(R1, forged),
+            0
+        )
+        .status,
         STATUS_DELIVERED
     );
     assert_eq!(
-        g.serve(&kh("alice"), &sc.table, &kh("carol"), &request(R2, forged))
-            .status,
+        g.serve(
+            &kh("alice"),
+            &sc.table,
+            &kh("carol"),
+            &request(R2, forged),
+            0
+        )
+        .status,
         STATUS_DELIVERED
     );
     let h1 = http::headers_of(&b1.seen.lock().unwrap()[0]);
@@ -822,7 +843,13 @@ fn caller_rhtn_headers_are_stripped_the_nodes_inserted_and_a_session_minted_per_
         "pairwise per resource"
     );
     // the same session identifier on the next request to the same resource
-    g.serve(&kh("alice"), &sc.table, &kh("carol"), &request(R1, OK_GET));
+    g.serve(
+        &kh("alice"),
+        &sc.table,
+        &kh("carol"),
+        &request(R1, OK_GET),
+        0,
+    );
     assert_eq!(
         get(
             &http::headers_of(&b1.seen.lock().unwrap()[1]),
@@ -856,7 +883,7 @@ fn ambiguous_messages_are_rejected_and_exactly_one_message_is_emitted() {
     ];
     for c in cases {
         assert_eq!(
-            g.serve(&kh("alice"), &sc.table, &kh("carol"), &request(R1, c))
+            g.serve(&kh("alice"), &sc.table, &kh("carol"), &request(R1, c), 0)
                 .status,
             STATUS_MALFORMED,
             "{:?}",
@@ -872,8 +899,14 @@ fn ambiguous_messages_are_rejected_and_exactly_one_message_is_emitted() {
     let chunked =
         b"POST /p HTTP/1.1\r\nhost: x\r\ntransfer-encoding: chunked\r\n\r\n3\r\nabc\r\n0\r\n\r\n";
     assert_eq!(
-        g.serve(&kh("alice"), &sc.table, &kh("carol"), &request(R1, chunked))
-            .status,
+        g.serve(
+            &kh("alice"),
+            &sc.table,
+            &kh("carol"),
+            &request(R1, chunked),
+            0
+        )
+        .status,
         STATUS_DELIVERED
     );
     let seen = backend.seen.lock().unwrap()[0].clone();
@@ -902,7 +935,13 @@ fn a_failed_handoff_is_never_retried() {
         },
     )
     .unwrap();
-    let r = g.serve(&kh("alice"), &sc.table, &kh("carol"), &request(R1, OK_GET));
+    let r = g.serve(
+        &kh("alice"),
+        &sc.table,
+        &kh("carol"),
+        &request(R1, OK_GET),
+        0,
+    );
     assert_eq!(r.status, STATUS_UNAVAILABLE);
     assert_eq!(
         backend.calls.load(Ordering::SeqCst),
@@ -928,7 +967,13 @@ fn a_role_change_ends_the_hosted_session_and_leaves_the_transport_alone() {
     )
     .unwrap();
     // the in-flight request completes under the state it started with
-    let r = g.serve(&kh("alice"), &sc.table, &kh("carol"), &request(R1, OK_GET));
+    let r = g.serve(
+        &kh("alice"),
+        &sc.table,
+        &kh("carol"),
+        &request(R1, OK_GET),
+        0,
+    );
     assert_eq!(r.status, STATUS_DELIVERED);
     let first = g.session(&kh("carol"), &R1).expect("a hosted session");
     // the operator revokes the grant: the hosted session ends
@@ -947,8 +992,14 @@ fn a_role_change_ends_the_hosted_session_and_leaves_the_transport_alone() {
         "the resource-facing session is dropped"
     );
     assert_eq!(
-        g.serve(&kh("alice"), &sc.table, &kh("carol"), &request(R1, OK_GET))
-            .status,
+        g.serve(
+            &kh("alice"),
+            &sc.table,
+            &kh("carol"),
+            &request(R1, OK_GET),
+            0
+        )
+        .status,
         STATUS_NO_ROLE
     );
     // granted again: a fresh identifier, which is how the resource observes the change
@@ -961,7 +1012,13 @@ fn a_role_change_ends_the_hosted_session_and_leaves_the_transport_alone() {
         },
     )
     .unwrap();
-    g.serve(&kh("alice"), &sc.table, &kh("carol"), &request(R1, OK_GET));
+    g.serve(
+        &kh("alice"),
+        &sc.table,
+        &kh("carol"),
+        &request(R1, OK_GET),
+        0,
+    );
     assert_ne!(g.session(&kh("carol"), &R1), Some(first));
     // nothing here touches the transport: the gateway holds no session object of that kind
     let _ = backend;
@@ -1082,7 +1139,7 @@ fn a_subtree_is_acknowledged_under_policy_without_a_prompt_and_lapses_with_the_r
     )
     .unwrap();
     assert_eq!(
-        g.serve(&kh("alice"), &sc.table, &kh("w1"), &request(R1, OK_GET))
+        g.serve(&kh("alice"), &sc.table, &kh("w1"), &request(R1, OK_GET), 0)
             .status,
         STATUS_DELIVERED
     );
@@ -1098,7 +1155,7 @@ fn a_subtree_is_acknowledged_under_policy_without_a_prompt_and_lapses_with_the_r
     sc.table.apply(&dep, &ids(), &sc.w.store, None).unwrap();
     assert!(sc.table.acks().is_empty(), "lapsed without a revocation");
     assert_eq!(
-        g.serve(&kh("alice"), &sc.table, &kh("w1"), &request(R1, OK_GET))
+        g.serve(&kh("alice"), &sc.table, &kh("w1"), &request(R1, OK_GET), 0)
             .status,
         STATUS_REFUSED,
         "G is no longer in H's Dunbar Org at all"
@@ -1231,7 +1288,7 @@ fn a_header_value_carrying_a_control_character_is_refused_and_writes_no_header_o
     ];
     for c in smuggled {
         assert_eq!(
-            g.serve(&kh("alice"), &sc.table, &kh("carol"), &request(R1, c))
+            g.serve(&kh("alice"), &sc.table, &kh("carol"), &request(R1, c), 0)
                 .status,
             STATUS_MALFORMED,
             "{:?}",
@@ -1247,7 +1304,7 @@ fn a_header_value_carrying_a_control_character_is_refused_and_writes_no_header_o
     // character, so a value carrying one still passes
     let ok = b"GET / HTTP/1.1\r\nhost: x\r\nx-note: a\tb\r\n\r\n";
     assert_eq!(
-        g.serve(&kh("alice"), &sc.table, &kh("carol"), &request(R1, ok))
+        g.serve(&kh("alice"), &sc.table, &kh("carol"), &request(R1, ok), 0)
             .status,
         STATUS_DELIVERED
     );
@@ -1288,7 +1345,8 @@ fn a_chunk_length_larger_than_the_message_is_refused_rather_than_computed_past_i
             &kh("alice"),
             &sc.table,
             &kh("carol"),
-            &request(R1, huge.as_bytes())
+            &request(R1, huge.as_bytes()),
+            0,
         )
         .status,
         STATUS_MALFORMED
@@ -1297,7 +1355,7 @@ fn a_chunk_length_larger_than_the_message_is_refused_rather_than_computed_past_i
     let over =
         b"POST /p HTTP/1.1\r\nhost: x\r\ntransfer-encoding: chunked\r\n\r\nff\r\nabc\r\n0\r\n\r\n";
     assert_eq!(
-        g.serve(&kh("alice"), &sc.table, &kh("carol"), &request(R1, over))
+        g.serve(&kh("alice"), &sc.table, &kh("carol"), &request(R1, over), 0)
             .status,
         STATUS_MALFORMED
     );
@@ -1445,7 +1503,7 @@ fn a_reserved_role_name_is_refused_where_it_is_written_and_never_reaches_a_backe
     .unwrap();
     let msg = b"GET / HTTP/1.1\r\nhost: x\r\n\r\n";
     assert_eq!(
-        g.serve(&kh("alice"), &sc.table, &kh("carol"), &request(R2, msg))
+        g.serve(&kh("alice"), &sc.table, &kh("carol"), &request(R2, msg), 0)
             .status,
         STATUS_DELIVERED
     );
@@ -1920,7 +1978,7 @@ fn a_named_row_for_a_party_outside_the_horizon_grants_nothing() {
     )
     .unwrap();
     assert_eq!(
-        g.serve(&kh("alice"), &sc.table, &kh("w2"), &request(R1, OK_GET))
+        g.serve(&kh("alice"), &sc.table, &kh("w2"), &request(R1, OK_GET), 0)
             .status,
         STATUS_REFUSED,
         "the gate comes before the row"
@@ -2249,7 +2307,8 @@ fn a_member_reaches_no_reserved_path_and_forges_no_control_header() {
                 &kh("alice"),
                 &sc.table,
                 &kh("carol"),
-                &request(R1, &message)
+                &request(R1, &message),
+                0,
             ),
             ResourceResponse::code(STATUS_REFUSED),
             "{target} is the node's own"
@@ -2270,8 +2329,14 @@ fn a_member_reaches_no_reserved_path_and_forges_no_control_header() {
     )
     .into_bytes();
     assert_eq!(
-        g.serve(&kh("alice"), &sc.table, &kh("carol"), &request(R1, &forged))
-            .status,
+        g.serve(
+            &kh("alice"),
+            &sc.table,
+            &kh("carol"),
+            &request(R1, &forged),
+            0
+        )
+        .status,
         STATUS_DELIVERED
     );
     let seen = backend.seen.lock().unwrap();
@@ -2347,7 +2412,7 @@ fn a_package_that_answers_with_two_messages_reaches_nobody() {
     let two = b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\nokHTTP/1.1 200 OK\r\n\
                 content-length: 11\r\n\r\nnot yours\r\n";
     let (mut g, _b) = answering(&sc, two);
-    let r = g.serve(&me, &sc.table, &kh("carol"), &request(R1, OK_GET));
+    let r = g.serve(&me, &sc.table, &kh("carol"), &request(R1, OK_GET), 0);
     assert_eq!(
         r.status, STATUS_UNAVAILABLE,
         "a package whose answer carries a second message is a defect, not an answer"
@@ -2384,7 +2449,7 @@ fn every_ambiguity_no_rewriting_could_settle_is_refused_on_the_response_leg() {
         &b"HTTP/1.1 200 OK\r\nx-note: a\x01b\r\ncontent-length: 0\r\n\r\n"[..],
     ] {
         let (mut g, _b) = answering(&sc, said);
-        let r = g.serve(&me, &sc.table, &kh("carol"), &request(R1, OK_GET));
+        let r = g.serve(&me, &sc.table, &kh("carol"), &request(R1, OK_GET), 0);
         assert_eq!(
             r.status,
             STATUS_UNAVAILABLE,
@@ -2409,7 +2474,7 @@ fn what_rewriting_can_settle_is_taken_and_written_back_canonically() {
         &b"HTTP/1.1 200 OK\r\ncontent-type: text/html\r\n\r\n<p>hi</p>"[..],
     ] {
         let (mut g, _b) = answering(&sc, said);
-        let r = g.serve(&me, &sc.table, &kh("carol"), &request(R1, OK_GET));
+        let r = g.serve(&me, &sc.table, &kh("carol"), &request(R1, OK_GET), 0);
         assert_eq!(
             r.status,
             STATUS_DELIVERED,
@@ -2445,7 +2510,7 @@ fn nothing_about_what_a_package_may_answer_with_is_narrowed() {
     said.extend_from_slice(&body);
 
     let (mut g, _b) = answering(&sc, &said);
-    let r = g.serve(&me, &sc.table, &kh("carol"), &request(R1, OK_GET));
+    let r = g.serve(&me, &sc.table, &kh("carol"), &request(R1, OK_GET), 0);
     assert_eq!(r.status, STATUS_DELIVERED);
     let out = r.body.expect("a body");
     let parsed = http::parse_response(&out).expect("its own output reads");
@@ -2509,7 +2574,7 @@ fn a_package_cannot_speak_in_its_hosts_namespace_on_the_way_out_either() {
                  rhtn-session: CCCC\r\nrhtn-control: node\r\nx-app: kept\r\n\
                  content-length: 2\r\n\r\nok";
     let (mut g, _b) = answering(&sc, said);
-    let r = g.serve(&me, &sc.table, &kh("carol"), &request(R1, OK_GET));
+    let r = g.serve(&me, &sc.table, &kh("carol"), &request(R1, OK_GET), 0);
     assert_eq!(
         r.status, STATUS_DELIVERED,
         "a stray header is a defect in the package, not a reason to take the resource down"
@@ -2691,4 +2756,87 @@ fn a_grant_with_an_expiry_lapses_on_the_pass_and_a_permanent_one_stands() {
     let shown: Vec<String> = g.grants_for(&R1).iter().map(|x| x.to_string()).collect();
     assert!(shown[0].ends_with(" until 1000"), "{}", shown[0]);
     assert!(!shown[1].contains("until"), "{}", shown[1]);
+}
+
+// functional: GAT-043
+#[test]
+fn a_request_past_the_minutes_budget_is_answered_as_the_application_would_and_delivered() {
+    let sc = scene();
+    let backend = Arc::new(Fake::new());
+    let mut g = Gateway::default();
+    g.bind(
+        R1,
+        Binding {
+            owner: kh("alice"),
+            authority: "r1.internal".into(),
+            backend: Some(backend.clone()),
+            declared: Manifest {
+                roles: BTreeSet::from(["reader".to_string()]),
+                budget: rhtn_node::resources::Budget {
+                    requests_per_minute: Some(2),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        },
+    );
+    let me = kh("alice");
+    g.set_row(
+        R1,
+        kh("carol"),
+        Row {
+            roles: BTreeSet::from(["reader".to_string()]),
+            connect: true,
+        },
+    )
+    .unwrap();
+    // minute 30_000_000: two handed off, the third answered here
+    let at = 30_000_000 * 60 + 17;
+    for _ in 0..2 {
+        let r = g.serve(&me, &sc.table, &kh("carol"), &request(R1, OK_GET), at);
+        assert_eq!(r.status, STATUS_DELIVERED);
+        assert!(r.body.unwrap().starts_with(b"HTTP/1.1 200"));
+    }
+    let spent = g.serve(&me, &sc.table, &kh("carol"), &request(R1, OK_GET), at + 1);
+    assert_eq!(spent.status, STATUS_DELIVERED, "the network delivered it");
+    let body = spent.body.expect("a composed answer");
+    let text = String::from_utf8_lossy(&body);
+    assert!(
+        text.starts_with("HTTP/1.1 429 Too Many Requests\r\n"),
+        "{text}"
+    );
+    assert!(
+        text.contains("\r\nretry-after: 42\r\n"),
+        "to the next minute: {text}"
+    );
+    assert!(
+        text.contains("2 requests a minute"),
+        "the ceiling is named: {text}"
+    );
+    assert_eq!(
+        backend.calls.load(Ordering::SeqCst),
+        2,
+        "nothing reached the package"
+    );
+    assert_eq!(g.throttled(&R1), 1, "the operator's surface counts it");
+    // the next minute starts the count again
+    let again = g.serve(&me, &sc.table, &kh("carol"), &request(R1, OK_GET), at + 60);
+    assert!(again.body.unwrap().starts_with(b"HTTP/1.1 200"));
+    assert_eq!(backend.calls.load(Ordering::SeqCst), 3);
+    // and a package that declared no budget is never answered for
+    let mut free = gateway_with(&sc, backend.clone());
+    free.set_row(
+        R1,
+        kh("carol"),
+        Row {
+            roles: BTreeSet::new(),
+            connect: true,
+        },
+    )
+    .unwrap();
+    for i in 0..5 {
+        let r = free.serve(&me, &sc.table, &kh("carol"), &request(R1, OK_GET), at + i);
+        assert!(r.body.unwrap().starts_with(b"HTTP/1.1 200"));
+    }
+    assert_eq!(free.throttled(&R1), 0);
 }
