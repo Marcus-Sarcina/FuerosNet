@@ -53,21 +53,4 @@ object Relocate {
 
     /** The two answers, accepting first. */
     val ANSWERS: Pair<String, String> = "Accept" to "Do not connect"
-
-    /** What the invitation screen says while the new address is dialled. */
-    fun checking(at: String): String =
-        "You already serve from this node, at another address: it says it has moved to ${host(at)}. " +
-            "Checking that it answers there as itself…"
-
-    /** What the invitation screen says once the dial has answered, or not. */
-    fun found(held: Boolean, standing: Standing?): String = when {
-        !held -> "Nothing changes: that is the address you already serve from."
-        standing == Standing.PROVED ->
-            "It answered there as itself. Open Fueros: the subnet it serves is marked, and asks you whether to accept the new server."
-        standing == Standing.UNPROVED ->
-            "Nothing answers as that node at the new address yet. It is tried again, and you are asked once it does."
-        // **a failed check is not the person's** [author, 2026-11-16]: the
-        // operator is told, and the record goes once they have been
-        else -> "Nothing changes."
-    }
 }

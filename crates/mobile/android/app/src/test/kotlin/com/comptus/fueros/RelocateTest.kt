@@ -49,8 +49,6 @@ class RelocateTest {
         for (s in listOf(Standing.PROVED, Standing.DECLINED)) {
             assertTrue("$s blocks", Relocate.blocks(moved(s)))
         }
-        assertEquals("Nothing changes.", Relocate.found(true, Standing.FAILED))
-        assertEquals("Nothing changes.", Relocate.found(true, null))
     }
 
     // functional: UX-033
@@ -80,10 +78,35 @@ class RelocateTest {
             "the question can be dismissed",
             shell.contains("AlertDialog.Builder(this).setCancelable(false)"),
         )
-        // the page is drawn more than once; the question is put once
-        assertTrue(
-            "a second drawing stacks a second question",
-            shell.contains("if (asking) return") && shell.contains(".setOnDismissListener { asking = false }"),
+        // the page is drawn more than once; the question is put once, and
+        // put again only from a model that already holds the answer
+        assertTrue("a second drawing stacks a second question", shell.contains("if (asking) return"))
+        assertFalse(
+            "cleared as the dialog closes, the page is drawn from the copy before the answer",
+            shell.contains(".setOnDismissListener { asking = false }"),
         )
+        assertEquals(
+            "both answers are drawn from a model read after them",
+            2,
+            Regex("""Model\.refreshHere\([^)]*\)\)\s*runOnUiThread \{ asking = false;""").findAll(shell).count(),
+        )
+        assertTrue(
+            "a question posted after the person left its page is put anyway",
+            shell.contains("if (here !is Chrome.Place.Subnet || here.id != subnet.id.hex()) return"),
+        )
+    }
+
+    // functional: UX-033
+    @Test
+    fun a_move_invitation_shows_nothing() {
+        val invite = File("src/main/kotlin/com/comptus/fueros/InviteActivity.kt").readText()
+        val render = invite.substringAfter("private fun render(")
+        // the move is decided before the page is set
+        assertTrue(render.indexOf("relocate(one, read.at") in 0 until render.indexOf("show()"))
+        val relocate = invite.substringAfter("private fun relocate(")
+        assertTrue(relocate.contains("finish()") && !relocate.contains("startActivity"))
+        assertEquals("the page is set only by show()", 1, Regex("setContentView\\(").findAll(invite).count())
+        val manifest = File("src/main/AndroidManifest.xml").readText()
+        assertTrue(manifest.contains("android:name=\".InviteActivity\" android:exported=\"true\"\n            android:theme=\"@style/Fueros.Quiet\""))
     }
 }

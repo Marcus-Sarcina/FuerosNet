@@ -22716,3 +22716,15 @@ page no longer links `runner-refresh` (still declared). Defined "the runner"
 in I §9.3 at the door paragraph; L §10 bullet and OPS-029 restated.
 Untested on the bench: every bench machine is at runner 3, so no refresh
 would fire; a machine at 2 would be needed to see one.
+
+**Relocation popup bench report** [author, 2026-11-17]: popups appear as
+expected; (1) a full-screen landing page (the invitation screen's "It
+answered there as itself…") should go; (2) every answer took two taps.
+(2) cause: `Model.refresh` is asynchronous, so the Accept handler's
+`go(place)` drew the subnet page from the copy before the accept, still
+Proved, and the dismiss listener had already cleared `asking`. Fixed:
+`Model.refreshHere` on the handler's thread, `asking` cleared only after it,
+and a posted question dropped if its page is no longer the place. (1): the
+invite screen is translucent (`Fueros.Quiet`) and sets its page only when it
+has one; a move invite proves behind and opens ShellActivity in the app's
+task. Relocate.checking/found removed.

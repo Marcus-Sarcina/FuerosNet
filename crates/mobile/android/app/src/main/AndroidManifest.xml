@@ -168,7 +168,8 @@
              key is placed against what this device already holds, a key it
              has never met is said to be one, and the tap is the whole
              protection against a node the user did not choose. -->
-        <activity android:name=".InviteActivity" android:exported="true">
+        <activity android:name=".InviteActivity" android:exported="true"
+            android:theme="@style/Fueros.Quiet">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />

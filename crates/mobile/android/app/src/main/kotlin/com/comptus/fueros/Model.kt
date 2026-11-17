@@ -65,25 +65,33 @@ object Model {
      */
     fun refresh(nouns: Set<Noun>) {
         if (nouns.isEmpty()) return
-        Thread({
-            if (Noun.CONTACTS in nouns || Noun.PROFILES in nouns) {
-                val held = Gateway.contactsHeld()
-                contacts = held
-                // **an alias is a name for a party, not for a party under
-                // one identity**: two identities that both know somebody
-                // hold the same alias for them, and a map keyed by party
-                // is what a screen naming one needs
-                aliases = held.mapNotNull { o -> o.row.alias?.let { o.row.keyhash.hex() to it } }
-                    .toMap()
-            }
-            if (Noun.SUBNETS in nouns || Noun.PROFILES in nouns) subnets = Gateway.subnetsHeld()
-            if (Noun.LINES in nouns) lines = Gateway.linesHeld()
-            if (Noun.INSTANCES in nouns) instances = Gateway.instances(Identities.focused())
-            if (Noun.RESOURCES in nouns) resources = Gateway.resourcesHeld()
-            if (Noun.MEETINGS in nouns) meetings = Gateway.meetingsHeld()
-            Diag.event("model.refreshed", "nouns" to nouns.joinToString(",") { it.name.lowercase() })
-            tell(nouns)
-        }, "fueros-model").start()
+        Thread({ refreshHere(nouns) }, "fueros-model").start()
+    }
+
+    /**
+     * **Re-read `nouns` on this thread**, for a caller that must draw what
+     * it just changed: [refresh] returns before the read, so a screen
+     * drawn after it draws the copy from before [bench, 2026-11-17]. Never
+     * on the main thread.
+     */
+    fun refreshHere(nouns: Set<Noun>) {
+        if (Noun.CONTACTS in nouns || Noun.PROFILES in nouns) {
+            val held = Gateway.contactsHeld()
+            contacts = held
+            // **an alias is a name for a party, not for a party under
+            // one identity**: two identities that both know somebody
+            // hold the same alias for them, and a map keyed by party
+            // is what a screen naming one needs
+            aliases = held.mapNotNull { o -> o.row.alias?.let { o.row.keyhash.hex() to it } }
+                .toMap()
+        }
+        if (Noun.SUBNETS in nouns || Noun.PROFILES in nouns) subnets = Gateway.subnetsHeld()
+        if (Noun.LINES in nouns) lines = Gateway.linesHeld()
+        if (Noun.INSTANCES in nouns) instances = Gateway.instances(Identities.focused())
+        if (Noun.RESOURCES in nouns) resources = Gateway.resourcesHeld()
+        if (Noun.MEETINGS in nouns) meetings = Gateway.meetingsHeld()
+        Diag.event("model.refreshed", "nouns" to nouns.joinToString(",") { it.name.lowercase() })
+        tell(nouns)
     }
 
     /** Every noun, which is what a kernel just up calls for. */

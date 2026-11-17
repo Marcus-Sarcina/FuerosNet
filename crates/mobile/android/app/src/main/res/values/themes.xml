@@ -40,4 +40,13 @@
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
     </style>
+
+    <!-- **A screen that may have nothing to show** [author, 2026-11-17]:
+         an invitation is read before anything is drawn, and one that is a
+         move draws nothing at all, so the window is clear until a page is
+         set on it -->
+    <style name="Fueros.Quiet">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+    </style>
 </resources>

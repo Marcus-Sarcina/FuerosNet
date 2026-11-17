@@ -441,6 +441,10 @@ class ShellActivity : Activity() {
         // more than once as the model refreshes, and each drawing posted
         // its own, so the person answered the same question twice
         if (asking) return
+        // **and only over the page it is for**: the question is posted, and
+        // the person may have left that page before it runs
+        val here = place
+        if (here !is Chrome.Place.Subnet || here.id != subnet.id.hex()) return
         asking = true
         val nodeHex = Gateway.hex(r.node)
         // **whose server it is, by name** [author, 2026-11-16]: the name
@@ -453,15 +457,18 @@ class ShellActivity : Activity() {
         val home = { go(Chrome.Place.Home) }
         val dialog = AlertDialog.Builder(this).setCancelable(false)
         val (accept, refuse) = Relocate.ANSWERS
+        // **asked again only once the answer is in the model** [bench,
+        // 2026-11-17]: cleared when the dialog closed, the page drawn from
+        // the copy from before the answer put the same question again, and
+        // every answer took two taps
         dialog.setMessage(Relocate.question(patron, name, r.from.firstOrNull() ?: "", r.to))
-            .setOnDismissListener { asking = false }
             .setPositiveButton(accept) { _, _ ->
                 Thread({
                     val p = Gateway.loaded[by]
                     val to = p?.let { Gateway.call("acceptRelocation", { e -> Gateway.front.note("· not accepted: ${e.reason}"); null }) { it.acceptRelocation(r.node) } }
                     if (to != null) Attachments.attachTo(by, nodeHex, to)
-                    Model.refreshAll()
-                    runOnUiThread { drawFromModel(); go(place) }
+                    Model.refreshHere(uniffi.rhtn_model.Noun.entries.toSet())
+                    runOnUiThread { asking = false; drawFromModel(); go(place) }
                 }, "fueros-relocate").start()
             }
             .setNegativeButton(refuse) { _, _ ->
@@ -471,8 +478,8 @@ class ShellActivity : Activity() {
                             Gateway.call("declineRelocation", { e -> Gateway.front.note("· ${e.reason}") }) { p.declineRelocation(r.node) }
                         }
                     }
-                    Model.refreshAll()
-                    runOnUiThread { drawFromModel(); home() }
+                    Model.refreshHere(uniffi.rhtn_model.Noun.entries.toSet())
+                    runOnUiThread { asking = false; home(); drawFromModel() }
                 }, "fueros-relocate").start()
             }
             .show()

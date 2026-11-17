@@ -60,6 +60,18 @@ class InviteActivity : Activity() {
     }
 
     private lateinit var narration: TextView
+    private lateinit var root: ScrollView
+
+    /**
+     * **The page, set only where there is one to show** [author,
+     * 2026-11-17]: the window is clear until then, and an invitation that
+     * is a move never sets it.
+     */
+    private fun show() {
+        if (root.parent != null) return
+        root.setBackgroundColor(Palette.now.ground)
+        setContentView(root)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -74,14 +86,14 @@ class InviteActivity : Activity() {
             setPadding(g, g, g, g)
             addView(narration)
         }
-        val root = ScrollView(this).apply { addView(body) }
+        root = ScrollView(this).apply { addView(body) }
         Screen.insetting(root)
-        setContentView(root)
 
         // the link as it arrived: a tap on a message, or this screen opened
         // with one in hand by the bench
         val link = intent.data?.toString() ?: intent.getStringExtra("invitation") ?: ""
         if (link.isEmpty()) {
+            show()
             narration.text = "Nothing was opened here. An invitation begins `fueros://attach`."
             return
         }
@@ -90,12 +102,12 @@ class InviteActivity : Activity() {
         // arrived here with no participant and the screen said only "this
         // could not be read" — about a link it had read perfectly well.
         if (!Identities.hasIdentity(this)) {
+            show()
             narration.text =
                 "This device has no identity yet. Open Fueros and make one, then open this " +
                     "invitation again."
             return
         }
-        narration.text = "Reading the invitation…"
         Attachments.start(this)
         // the bring-up runs on its own thread, so this waits for it rather
         // than reading once and calling the absence a bad link
@@ -110,6 +122,7 @@ class InviteActivity : Activity() {
             val r = read
             runOnUiThread {
                 if (r == null) {
+                    show()
                     val why = Gateway.invitationSay(link)
                     narration.text = if (why.isEmpty()) {
                         "The invitation reads correctly, but this device's kernel did not start, " +
@@ -125,6 +138,16 @@ class InviteActivity : Activity() {
     }
 
     private fun render(read: uniffi.rhtn_ffi.Invited, body: LinearLayout) {
+        // **a node this identity already serves from is a move, not a
+        // first invitation** [author, 2026-11-16], and it has no page
+        // [author, 2026-11-17]: it is proved behind, and the subnet's orb
+        // carries the question once it has
+        val one = read.node
+        if (read.why.isEmpty() && one != null && agreed(one)) {
+            relocate(one, read.at, read.asLabel, read.subnet)
+            return
+        }
+        show()
         val said = StringBuilder()
         said.append("An invitation to serve from a node.\n\n")
         read.asLabel?.let {
@@ -164,15 +187,7 @@ class InviteActivity : Activity() {
                 },
             )
         }
-        val one = read.node
         if (one != null) {
-            // **a node this identity already serves from is a move, not a
-            // first invitation** [author, 2026-11-16]: nothing to agree to
-            // here, and nothing changes until it proves itself there
-            if (agreed(one)) {
-                relocate(one, read.at, read.asLabel, read.subnet)
-                return
-            }
             offer(one, "Serve from ${one.take(8)}…'s node")
             return
         }
@@ -197,10 +212,13 @@ class InviteActivity : Activity() {
      * **Held as a relocation and proved at once**: the kernel dials the
      * new address and binds what answers there to the patron before the
      * person is asked anything; the subnet's orb carries the question.
+     * **Nothing is shown** [author, 2026-11-17]: *"the invite should
+     * manifest in the UI only in the notification counter on the subnet
+     * shield"*. This screen goes, the proof carrying on behind it; one cut
+     * short is proved at the next start.
      */
     private fun relocate(nodeHex: String, at: String, label: String?, subnet: String?) {
         val p = Gateway.loaded[by] ?: return
-        narration.text = "${narration.text}\n${Relocate.checking(at)}"
         Thread({
             val node = Gateway.unhex(nodeHex)
             val held = Gateway.call("offerRelocation", { e -> Diag.warn("relocation", "why" to e.reason); false }) {
@@ -211,8 +229,9 @@ class InviteActivity : Activity() {
             } else {
                 null
             }
+            Diag.event("relocation.offered", "node" to nodeHex.take(8), "held" to held, "standing" to r?.standing)
             Model.refreshAll()
-            runOnUiThread { narration.text = "${narration.text}\n\n${Relocate.found(held, r?.standing)}" }
         }, "fueros-relocate").start()
+        finish()
     }
 }
