@@ -234,6 +234,13 @@ class OperatorActivity : Activity() {
         for (i in held) {
             tokenFor(i.at)?.let { t -> assertHorizon(i.at, t, narration) }
         }
+        // **and its records for where it answers now** [bench, 2026-11-17]:
+        // a node that moved, or whose provider changed its address, holds
+        // records naming the old one until this device signs new ones
+        for (i in held) {
+            val t = tokenFor(i.at) ?: continue
+            Thread { readdressIfMoved(i, t) }.start()
+        }
         // **and the invitations the same way**, for the same reason the
         // horizon is caught up here rather than hung off a button. The one
         // difference is that a message is outward and costs its reader
@@ -1136,7 +1143,12 @@ class OperatorActivity : Activity() {
      * enrolled anew is invited the same way, and its members accept it
      * because it is signed by this operator.
      */
-    private fun move(i: Instance, button: Button) {
+    private fun move(drawn: Instance, button: Button) {
+        // **the record as it stands, not as the row was drawn** [bench,
+        // 2026-11-17]: a runner given since the list was drawn is in the
+        // store and not in the row, and the move refused a machine that
+        // had just taken runner 3
+        val i = instances().firstOrNull { it.at == drawn.at } ?: drawn
         val pick = movePick?.invoke() ?: run {
             narration.text = "choose where it goes in the launch section: a provider, a region and a size"
             return
@@ -1187,7 +1199,15 @@ class OperatorActivity : Activity() {
             val key = Gateway.hostRunnerPrivateKey(by) ?: return@Thread stop("this device could not derive the key for the machine; nothing moved")
             said += "sending the node to $ip"; show()
             val sent = Provision.act(i.at, oldToken, "move", listOf("to" to ip, "host" to hostKey.publicLine, "key" to key))
-            if (sent.isFailure) return@Thread stop("the node would not move: ${sent.exceptionOrNull()?.message}; it still serves at ${i.at}")
+            if (sent.isFailure) {
+                // **the machine launched for it goes too**: nothing was sent
+                // to it, and a machine left running is the operator's cost
+                val gone = provider.destroy(cred, id).isSuccess
+                return@Thread stop(
+                    "the node would not move: ${sent.exceptionOrNull()?.message}; it still serves at ${i.at}" +
+                        if (gone) ", and machine $id is destroyed" else ", and machine $id is still running",
+                )
+            }
             // **arrived means answering to its own token**: the state that
             // came carries the token this client already holds for it
             val landed = System.currentTimeMillis() + 10 * 60_000
@@ -1196,7 +1216,12 @@ class OperatorActivity : Activity() {
                 return@Thread stop("the node did not arrive at $ip within ten minutes; if the send failed it is started again at ${i.at}")
             }
             said += "it answers at $ip; signing its records for the new address"; show()
-            said += Gateway.enrol(by, surface, oldToken, 7, "$ip:${Launch.QUIC_PORT}", i.subnet, provider.asn, plan.region)
+            val point = Gateway.point("$ip:${Launch.QUIC_PORT}", provider.asn, plan.region)
+            said += if (point == null) {
+                listOf("$ip is not an address a record can name")
+            } else {
+                Gateway.readdress(by, surface, oldToken, listOf(point), i.subnet)
+            }
             remember(Instance(surface, i.subnet, i.label, provider.name.lowercase(), id, Launch.RUNNER_VERSION))
             rememberToken(surface, oldToken)
             forget(i.at)
@@ -1209,6 +1234,23 @@ class OperatorActivity : Activity() {
             show()
             runOnUiThread { button.isEnabled = true; drawInstances() }
         }.start()
+    }
+
+    /**
+     * **Re-sign an instance's records where they name another address**
+     * than the one it answers at: each point keeps what it was signed
+     * with but the address. Quiet where they agree.
+     */
+    private fun readdressIfMoved(i: Instance, token: String) {
+        val got = Provision.fetch(i.at).getOrNull() ?: return
+        val here = Relocate.host(i.at)
+        val named = got.anchorPoints.mapNotNull { Provision.pointIp(it) }
+        if (named.isEmpty() || here in named) return
+        val points = got.anchorPoints.mapNotNull { Provision.pointAt(it, here) }
+        if (points.isEmpty()) return
+        val said = Gateway.readdress(by, i.at, token, points, i.subnet)
+        Diag.event("operator.readdress", "from" to named.joinToString(","), "to" to here, "said" to said.joinToString(" / "))
+        runOnUiThread { narration.text = "its records named ${named.joinToString()}, and it answers at $here:\n" + said.joinToString("\n") }
     }
 
     /**

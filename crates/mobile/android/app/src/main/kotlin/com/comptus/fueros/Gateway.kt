@@ -170,6 +170,45 @@ object Gateway {
     }
 
     /**
+     * **Sign an instance's records for the address it answers at now**
+     * (`infra-client-requirements.md` §4.4, §9.4; `wire-format.md` §7.6):
+     * a node moved, or a provider changed its address. The endpoint record
+     * and the anchor entry are re-signed over `points`, at the next
+     * counter; no run is signed, the node holding its own.
+     *
+     * **The next counter is the anchor entry's plus one, for both**: the
+     * two are signed together at enrolment at 1 and only the anchor entry
+     * is re-signed since (a renewal, where its subtree moved), so its
+     * counter is never below the endpoint record's, and one past it
+     * advances both. An equal counter over a changed list is the conflict
+     * §7.6 exists to prevent, and the node refuses it [bench, 2026-11-17].
+     */
+    fun readdress(by: String, at: String, tokenHex: String, points: List<ByteArray>, subnet: String?): List<String> {
+        val p = loaded[by] ?: return listOf("the kernel is not running")
+        val token = runCatching { Provision.unhex(tokenHex.trim()) }.getOrNull()
+            ?.takeIf { it.size == 32 } ?: return listOf("the token is 64 lower-case hex digits")
+        val got = Provision.fetch(at).getOrElse { return listOf("${it.message}") }
+        val checks = call("enrolmentProofChecks", { false }) {
+            uniffi.rhtn_ffi.enrolmentProofChecks(token, got.nonce, got.transportKey, got.proof)
+        }
+        if (!checks) {
+            return listOf("the proof did not check: whatever answered at $at does not hold this instance's token. Nothing was signed.")
+        }
+        val line = subnet?.takeIf { it.length == 64 }?.let { unhex(it) }
+        val next = ((got.anchorSeqno ?: 0) + 1).toUInt()
+        val said = mutableListOf<String>()
+        val record = call("endpointRecord", { null }) { p.endpointRecord(line, points, next) }
+            ?: return said + "the endpoint record was not signed"
+        said += "endpoint record at seqno $next: " +
+            Provision.put(at, "/node/endpoint-record", record).fold({ it }, { "${it.message}" })
+        val entry = call("anchorEntry", { null }) { p.anchorEntry(line, points, got.subtree.toULong(), next) }
+            ?: return said + "the anchor entry was not signed"
+        said += "anchor entry at seqno $next: " +
+            Provision.put(at, "/node/anchor-entry", entry).fold({ it }, { "${it.message}" })
+        return said
+    }
+
+    /**
      * **Renew an instance's run before it lapses**
      * (`infra-client-requirements.md` §7): a run is 45 credentials of 48
      * hours, contiguous, and **the next starts where the last ends** —

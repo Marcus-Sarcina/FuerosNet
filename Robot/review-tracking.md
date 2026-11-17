@@ -22686,3 +22686,20 @@ A machine on runner < 3 is told to take the app's runner first (both bench
 hosts are on 2). Not exercised on a live droplet yet. Open: packages are not
 restarted on the receiver (their containers stay on the old host); the push
 service choice (asked).
+
+**The move on the bench, 2026-11-17 [author: "Yes, go ahead"].** Mirror
+Manse (703a82c2) driven from GXV's screens. Runner refresh through the act:
+`runner 3 13e00d04…`. First move refused: the screen's row still said
+runner 2 (drawn before the refresh; the store said 3) — fixed, move re-reads
+the record. Second refused at the act: the old node ran fe35b51d, before
+`move` existed; it left droplet 620151451 running (destroyed by me, 204) —
+fixed, a failed move destroys what it launched. Upgraded in place to
+`latest` (cfa18a18) through the node page (WebView bounds collapse in
+uiautomator after a scroll; tapped by screenshot). Third: **moved** —
+machine 620155473 (nyc1; my tor1 pick did not register, and the pickers draw
+no selected text, dark on dark — noted), "it answers at 165.22.9.217", old
+619999992 destroyed. Found: the re-enrolment signed the endpoint record at
+counter 1 over the held counter-1 record (Conflict) and the anchor entry the
+same, and tried a fresh run (overlaps refused). Fixed: `readdress` signs
+both at the anchor's counter + 1 and no run; the operator list re-signs an
+instance whose records name another address (point bytes kept but the IP).
