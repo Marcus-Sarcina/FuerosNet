@@ -22,10 +22,6 @@ fn a_moved_node_is_asked_about_once_it_proves_itself_and_accepted_replaces_the_a
     let mut s = setup(&["alice", "bob", "witness"]);
     let a = s.client("alice");
     let node = kh("bob");
-    assert!(
-        !a.offer_relocation(node, NEW.into(), None, None),
-        "a node never agreed to is a first invitation, not a move"
-    );
     a.agree_to(node, vec![OLD.into()]);
     assert!(
         !a.offer_relocation(node, OLD.into(), None, None),
@@ -59,6 +55,33 @@ fn a_moved_node_is_asked_about_once_it_proves_itself_and_accepted_replaces_the_a
         a.accept_relocation(&node).is_none(),
         "nothing left to accept"
     );
+}
+
+// functional: SES-021
+/// **A first invitation is held as a move from no address** [author,
+/// 2026-11-17]: proved and put to the person the same way, and accepting
+/// it is the agreement. Nothing is dialled before then.
+#[test]
+fn a_first_invitation_is_held_proved_and_asked_as_a_move_from_nowhere() {
+    let mut s = setup(&["alice", "bob", "witness"]);
+    let a = s.client("alice");
+    let node = kh("bob");
+    assert!(a.offer_relocation(node, NEW.into(), None, Some("Bob".into())));
+    let r = a.relocation(&node).expect("held");
+    assert_eq!(
+        (r.standing, r.from.is_empty(), r.to.as_str()),
+        (Standing::Unproved, true, NEW)
+    );
+    assert!(
+        a.agreed().is_empty(),
+        "nothing agreed before the person answers"
+    );
+    a.relocation_proved(&node, NEW, Found::Proved);
+    assert_eq!(a.relocation(&node).unwrap().standing, Standing::Proved);
+    assert!(a.agreed().is_empty(), "proved is asked, not agreed");
+    assert_eq!(a.accept_relocation(&node).as_deref(), Some(NEW));
+    assert_eq!(a.agreed(), vec![(node, vec![NEW.to_string()])]);
+    assert_eq!(a.dial_order(&node, &[NEW.into()]), vec![NEW]);
 }
 
 // functional: SES-021

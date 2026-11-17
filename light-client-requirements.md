@@ -765,13 +765,20 @@ nothing below reaches across them.
   [author, 2026-11-16]. A node's endpoint record (`wire-format.md` §7.6) at a new
   address reaches your horizon and does not move where you dial it: a move reaches
   the person as an invitation they accept.
+- **An invitation reaches the person as a mark on its subnet's orb and one
+  question, and as nothing else** [author, 2026-11-17]: *"the invite should
+  manifest in the UI only in the notification counter on the subnet
+  shield."* Show no page for it and no account of what serving from a node
+  means. An invitation to a node you do not serve from yet is held, proved
+  and asked as a move is below, from no address, and accepting it is the
+  agreement. What secures it is the adoption it follows — *"what secures it
+  is physical proximity to the Patron"* — and an invitation arriving soon
+  after on that subnet, from that patron's server or their patron's.
 - **An invitation naming a node you already serve from, at another address, says
   the node moved, and you prove it before you tell anyone.** Hold one per node, the
   newest replacing whatever you held. Dial the new address and bind the key it
   presents to the patron, as a session's first frames bind it (`wire-format.md`
-  §§8.2, 9.1), opening no session. **Show nothing for it** [author,
-  2026-11-17]: the proof runs behind, and the person meets the move only as
-  the mark on that subnet and its question. Until it proves itself there, change nothing.
+  §§8.2, 9.1), opening no session. Until it proves itself there, change nothing.
   Once it has, ask the person whether the server at the new address is their home
   for that patron's subnet — **the subnet the invitation names**, where you hold
   it, the question being keyed to it [author, 2026-11-16] — and **use the node at

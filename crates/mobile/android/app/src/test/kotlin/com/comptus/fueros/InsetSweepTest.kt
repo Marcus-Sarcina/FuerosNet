@@ -54,7 +54,9 @@ class InsetSweepTest {
     @Test
     fun every_screen_insets_its_own_frame() {
         val without = activities(module())
-            .filter { !it.readText().contains("Screen.insetting(") }
+            // one that sets no view draws nothing to hold clear (an
+            // invitation is taken in behind a window that goes at once)
+            .filter { it.readText().let { t -> t.contains("setContentView") && !t.contains("Screen.insetting(") } }
             .map { it.name }
         assertTrue(
             "these draw a screen and never hold it clear of the system bars: $without",

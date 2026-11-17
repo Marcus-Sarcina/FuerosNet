@@ -163,11 +163,11 @@
         <activity android:name=".ActActivity" android:exported="false" />
         <!-- An invitation to serve from a node, opened from a link.
              **Exported, because that is the point**: a patron sends one
-             string by whatever reaches the person, and "open with Fueros"
-             is how a member agrees the once. It authorises nothing - the
-             key is placed against what this device already holds, a key it
-             has never met is said to be one, and the tap is the whole
-             protection against a node the user did not choose. -->
+             string by whatever reaches the person. It authorises nothing
+             and shows nothing - the key is placed against what this device
+             already holds, and what it places is held, proved and put to
+             the person as one question on that subnet's orb, whose answer
+             is the tap that agrees. -->
         <activity android:name=".InviteActivity" android:exported="true"
             android:theme="@style/Fueros.Quiet">
             <intent-filter>

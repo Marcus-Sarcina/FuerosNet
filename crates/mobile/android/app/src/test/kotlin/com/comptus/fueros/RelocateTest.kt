@@ -98,14 +98,21 @@ class RelocateTest {
 
     // functional: UX-033
     @Test
-    fun a_move_invitation_shows_nothing() {
+    fun a_first_invitation_is_asked_as_a_move_from_nowhere() {
+        assertEquals(
+            "Mirror has invited you to their server for Mirror's Manse at 167.172.146.119.\n" +
+                "Do you accept the server at 167.172.146.119 as your home for Mirror's Manse?",
+            Relocate.question("Mirror", "Manse", "", "167.172.146.119:7431"),
+        )
+    }
+
+    // functional: UX-033
+    @Test
+    fun an_invitation_shows_nothing() {
         val invite = File("src/main/kotlin/com/comptus/fueros/InviteActivity.kt").readText()
-        val render = invite.substringAfter("private fun render(")
-        // the move is decided before the page is set
-        assertTrue(render.indexOf("relocate(one, read.at") in 0 until render.indexOf("show()"))
-        val relocate = invite.substringAfter("private fun relocate(")
-        assertTrue(relocate.contains("finish()") && !relocate.contains("startActivity"))
-        assertEquals("the page is set only by show()", 1, Regex("setContentView\\(").findAll(invite).count())
+        assertFalse("an invitation draws a page", invite.contains("setContentView"))
+        assertTrue("an invitation opens something", !invite.contains("startActivity"))
+        assertTrue("the window goes before anything is read", invite.indexOf("finish()") < invite.indexOf("Thread("))
         val manifest = File("src/main/AndroidManifest.xml").readText()
         assertTrue(manifest.contains("android:name=\".InviteActivity\" android:exported=\"true\"\n            android:theme=\"@style/Fueros.Quiet\""))
     }

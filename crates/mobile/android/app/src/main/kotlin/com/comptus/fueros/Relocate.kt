@@ -45,11 +45,18 @@ object Relocate {
     /**
      * **The question, in the author's words** [author, 2026-11-16]: who
      * moved it, which of their subnets, from where to where, and whether
-     * the new one is home.
+     * the new one is home. **A first invitation is a move from nowhere**
+     * [author, 2026-11-17], asked in the same shape without the old
+     * address — wording drafted to his pattern, owed his ruling.
      */
     fun question(patron: String, subnet: String, from: String, to: String): String =
-        "$patron has relocated their server for $patron's $subnet from ${host(from)} to ${host(to)}.\n" +
-            "Do you accept the server at ${host(to)} as your new home for $patron's $subnet?"
+        if (from.isEmpty()) {
+            "$patron has invited you to their server for $patron's $subnet at ${host(to)}.\n" +
+                "Do you accept the server at ${host(to)} as your home for $patron's $subnet?"
+        } else {
+            "$patron has relocated their server for $patron's $subnet from ${host(from)} to ${host(to)}.\n" +
+                "Do you accept the server at ${host(to)} as your new home for $patron's $subnet?"
+        }
 
     /** The two answers, accepting first. */
     val ANSWERS: Pair<String, String> = "Accept" to "Do not connect"

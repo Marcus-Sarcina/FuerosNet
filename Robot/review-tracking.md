@@ -22728,3 +22728,15 @@ and a posted question dropped if its page is no longer the place. (1): the
 invite screen is translucent (`Fueros.Quiet`) and sets its page only when it
 has one; a move invite proves behind and opens ShellActivity in the app's
 task. Relocate.checking/found removed.
+
+**No invitation screen at all** [author, 2026-11-17]: "There should be no
+'invite screen', the invite should manifest in the UI only in the
+notification counter on the subnet shield." And on first invitations: the
+long security text is the failure, convergence of adoption, orb and invite
+in time and namespace is the security (memory: no-verbose-security-warnings).
+Built: `offer_relocation` holds a node never agreed to as a move from no
+address; InviteActivity finishes in onCreate and reads/holds/proves behind;
+`Relocate.question` with no old address uses a drafted first-invitation
+wording (owed his ruling); a legacy link naming no patron goes to the log.
+Asked: the wording, and whether "Do not connect" on a first invitation keeps
+the page blocked as for a move (assumed: same as a move).

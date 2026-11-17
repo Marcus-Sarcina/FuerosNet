@@ -8,6 +8,14 @@
 //! should have the option to not trust a new node, but they can not keep
 //! interacting with the old node as if it were active."*
 //!
+//! **A first invitation is held the same way** [author, 2026-11-17]: a
+//! move from no address. *"The invite should manifest in the UI only in
+//! the notification counter on the subnet shield"*, so an invitation to a
+//! node never agreed to is proved and put to the person as a move is,
+//! and accepting it is the agreement. What secures it is the adoption it
+//! follows, not a screen: *"what secures it is physical proximity to the
+//! Patron."*
+//!
 //! So it is held here, one per node, the newest replacing whatever came
 //! before, and it goes through four standings:
 //!
@@ -68,13 +76,13 @@ pub enum Found {
 }
 
 impl Client {
-    /// **An invitation for a node already agreed to**: held as a
-    /// relocation where it names an address the agreement does not, or
-    /// where one is already held — the newest invitation replacing it,
-    /// which is how a patron resolves a declined one.
-    /// Whether it was held; false for a node never agreed to, whose
-    /// invitation is a first one, and for one naming the address already
-    /// agreed with nothing held.
+    /// **An invitation, held to be proved and put to the person**: for a
+    /// node already agreed to, where it names an address the agreement
+    /// does not, or where one is already held — the newest invitation
+    /// replacing it, which is how a patron resolves a declined one; and
+    /// for a node never agreed to, as a first invitation [author,
+    /// 2026-11-17]. Whether it was held; false for one naming the address
+    /// already agreed with nothing held.
     pub fn offer_relocation(
         &mut self,
         node: Keyhash,
@@ -82,10 +90,13 @@ impl Client {
         subnet: Option<rhtn_archive::Txid>,
         label: Option<String>,
     ) -> bool {
-        let Some(agreed) = self.payload.agreed.get(&node) else {
-            return false;
-        };
-        if agreed.contains(&to) && !self.payload.relocations.contains_key(&node) {
+        if self
+            .payload
+            .agreed
+            .get(&node)
+            .is_some_and(|agreed| agreed.contains(&to))
+            && !self.payload.relocations.contains_key(&node)
+        {
             return false;
         }
         tracing::info!(
@@ -137,7 +148,8 @@ impl Client {
     }
 
     /// **The person accepted the new address**: the agreement is that
-    /// address from now on and the relocation is gone. The address, where
+    /// address from now on, a first invitation's being the first, and the
+    /// relocation is gone. The address, where
     /// a proved relocation was held, or one they had declined and come
     /// back to; nothing is changed otherwise.
     pub fn accept_relocation(&mut self, node: &Keyhash) -> Option<String> {

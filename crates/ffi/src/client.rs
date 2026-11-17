@@ -2454,10 +2454,11 @@ impl Participant {
         })
     }
 
-    /// **An invitation naming a node already agreed to, at `to`**
+    /// **An invitation naming a node, at `to`**
     /// (`rhtn_client::relocation`): held as a relocation, the newest
-    /// replacing what was held. Whether it was one; false for a node never
-    /// agreed to, whose invitation is a first one.
+    /// replacing what was held; a node never agreed to is held as a first
+    /// invitation, a move from no address [author, 2026-11-17]. Whether it
+    /// was held; false for the address already agreed with nothing held.
     pub fn offer_relocation(
         &self,
         node: Id,
