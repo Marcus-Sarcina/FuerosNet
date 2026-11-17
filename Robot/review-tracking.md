@@ -22597,3 +22597,24 @@ first by 1 s: 6/6 failed before the fix, every one finalising with **2**
 signers (witnessless, both witnesses having agreed); 6/6 pass after. The
 prune test 96/96 after. No document states the count; the APK needs a
 rebuild to carry it to the bench.
+
+**"The window could not open: NotActive", GXV with MRK, 2026-11-16.**
+Both phones stopped at the window with `NotActive` 3 ms after a
+`converse_open` that had answered `Waiting(the counterparty's keep)`, and
+`abandon` 5 ms later found the ceremony active. Cause in the shell's
+`Attachments.bringUp`: `p` was taken for the identity active at that
+moment, and `Identities.activeId` read again ~20 s later (after the held
+identities' attaches timed out) for the held-loop filter and for
+`runLoop(p, id)`. The person chose an identity in between (GXV 703a82c2
+at 8.3 s over saved feb8843a; MRK 31c2d23f at 15.7 s over saved
+703a82c2), so a loop ran one identity's kernel under the other's name and
+the other identity had no loop at all. That loop's tick matched the
+meeting's identity and called `converse_open` on the kernel holding no
+ceremony. Logs: MRK two `kernel.loop entered who=31c2d23f` 1 ms apart;
+its attach logged `"attempt":0`, the held path, for the identity it then
+focused. Fixed: the identity read once (`up`) and used for every later
+read in `bringUp` (peer, tab scope, tab attach event, reattach, held
+filter, loop). Not mine to have caused (the progress fix touched neither
+path), but the install restarted the apps, which is what put a choice
+inside bring-up. MRK also never attached in this run: both its tabs'
+dials timed out at every attempt (separate; noted).

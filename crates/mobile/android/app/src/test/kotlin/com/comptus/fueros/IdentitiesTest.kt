@@ -362,7 +362,18 @@ class IdentitiesTest {
         assertTrue(
             "an identity out of focus is not attached and run for itself",
             loopSource.contains("fun launchHeld(id: String, p: Participant, scope: String?)") &&
-                loopSource.contains("if (hid != Identities.activeId) launchHeld(hid, hp, index.firstOrNull { it.id == hid }?.scope)"),
+                loopSource.contains("if (hid != up) launchHeld(hid, hp, index.firstOrNull { it.id == hid }?.scope)"),
+        )
+        // **the focus is read once in bring-up** [bench, 2026-11-16]: read
+        // again after the held identities' attaches, a choice made in
+        // between named one identity's loop over another's kernel, and
+        // that loop drove a meeting through a kernel holding no ceremony
+        val upAt = loopSource.indexOf("val up = Identities.activeId")
+        val upEnd = loopSource.indexOf("runLoop(p, up)")
+        assertTrue(
+            "bring-up reads the focus again after taking its participant",
+            upAt >= 0 && upEnd > upAt &&
+                !loopSource.substring(upAt + "val up = Identities.activeId".length, upEnd).contains("Identities.activeId"),
         )
         assertTrue(
             "an identity added while the kernel is up gets no loop of its own",

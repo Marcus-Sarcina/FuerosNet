@@ -588,7 +588,15 @@ object Attachments {
         // process that died between the Ceremony.adoption() and the departure left
         // the mark behind ([concludeRotation])
         Identities.concludeRotation()
-        val p = Identities.activeId?.let { Gateway.loaded[it] } ?: run {
+        // **the identity this bring-up acts for, read once**: focus can
+        // move while this runs — a person choosing on the nameplate while
+        // the held identities' attaches wait out their timeouts — and a
+        // second read named the newly focused identity over this one's
+        // kernel, so a loop drove a meeting through a kernel holding no
+        // ceremony and the window would not open [bench, 2026-11-16]
+        val up = Identities.activeId
+        val p = up?.let { Gateway.loaded[it] }
+        if (up == null || p == null) {
             Gateway.front.setStatus("no identity on this device came up")
             return
         }
@@ -651,7 +659,7 @@ object Attachments {
             ?.let { a -> (0 until a.length()).map { Gateway.unhex(a.getString(it)) } }
             ?: listOf()
         peerKey = to?.let { Gateway.hex(it) }
-        Identities.activeId?.let { by -> peerKey?.let { Gateway.front.peerKnown(by, it, peerName) } }
+        peerKey?.let { Gateway.front.peerKnown(up, it, peerName) }
         // **a provision may name no node, and then this device stays
         // detached** (design §6.4): a pair can Ceremony.meet() with nothing reachable
         // but each other, and what they form is the witnessless shape —
@@ -699,7 +707,7 @@ object Attachments {
         // each attached beside the provision's node, a second node while
         // one is held being a tab rather than a replacement
         run {
-            val scope = Identities.activeId?.let { id -> index.firstOrNull { it.id == id }?.scope }
+            val scope = index.firstOrNull { it.id == up }?.scope
             var missed = 0
             for (t in Gateway.call("agreed", { emptyList() }) { p.agreed() }) {
                 val hex = t.serving.hex()
@@ -708,12 +716,12 @@ object Attachments {
                     p.attach(t.serving, t.addresses, listOfNotNull(to))
                 }
                 if (a == null) missed += 1
-                Diag.event("identity.attach", "who" to (Identities.activeId ?: "").take(8), "node" to hex.take(8), "attached" to (a != null), "tab" to true)
+                Diag.event("identity.attach", "who" to up.take(8), "node" to hex.take(8), "attached" to (a != null), "tab" to true)
             }
             // **and tried again where one did not answer** [bench, 2026-11-13:
             // the focused identity's attach timed out at start and nothing
             // retried it — the held identities' path did]
-            if (missed > 0) Identities.activeId?.let { reattachLater(it, p, scope, 1) }
+            if (missed > 0) reattachLater(up, p, scope, 1)
         }
         // **every other identity attaches and receives for itself** — step
         // 3 of the browser model [author, 2026-11-11]: the one in focus
@@ -744,9 +752,9 @@ object Attachments {
             Gateway.front.loader = { by, peer, before, pending -> storeOf(by)?.page(peer, before, Threads.PAGE, pending) }
         }
         for ((hid, hp) in Gateway.loaded) {
-            if (hid != Identities.activeId) launchHeld(hid, hp, index.firstOrNull { it.id == hid }?.scope)
+            if (hid != up) launchHeld(hid, hp, index.firstOrNull { it.id == hid }?.scope)
         }
-        runLoop(p, Identities.activeId ?: "")
+        runLoop(p, up)
     }
 
     /**
