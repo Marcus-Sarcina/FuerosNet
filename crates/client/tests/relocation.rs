@@ -23,15 +23,15 @@ fn a_moved_node_is_asked_about_once_it_proves_itself_and_accepted_replaces_the_a
     let a = s.client("alice");
     let node = kh("bob");
     assert!(
-        !a.offer_relocation(node, NEW.into(), None),
+        !a.offer_relocation(node, NEW.into(), None, None),
         "a node never agreed to is a first invitation, not a move"
     );
     a.agree_to(node, vec![OLD.into()]);
     assert!(
-        !a.offer_relocation(node, OLD.into(), None),
+        !a.offer_relocation(node, OLD.into(), None, None),
         "the address already agreed is no move"
     );
-    assert!(a.offer_relocation(node, NEW.into(), Some("Bob".into())));
+    assert!(a.offer_relocation(node, NEW.into(), None, Some("Bob".into())));
     let r = a.relocation(&node).expect("held");
     assert_eq!(
         (r.standing, r.from.clone(), r.to.as_str()),
@@ -71,7 +71,7 @@ fn a_declined_move_keeps_the_old_agreement_unused_until_another_invitation() {
     let a = s.client("alice");
     let node = kh("bob");
     a.agree_to(node, vec![OLD.into()]);
-    a.offer_relocation(node, NEW.into(), None);
+    a.offer_relocation(node, NEW.into(), None, None);
     assert!(
         !a.decline_relocation(&node),
         "an unproved move is not put to the person, so not declined"
@@ -85,7 +85,7 @@ fn a_declined_move_keeps_the_old_agreement_unused_until_another_invitation() {
     // the question stays put: still a move the person may accept
     assert_eq!(a.relocation(&node).unwrap().to, NEW);
     // a new invitation replaces it, even naming the old address
-    assert!(a.offer_relocation(node, OLD.into(), None));
+    assert!(a.offer_relocation(node, OLD.into(), None, None));
     assert_eq!(a.relocation(&node).unwrap().standing, Standing::Unproved);
     assert!(a.node_usable(&node));
 }
@@ -99,7 +99,7 @@ fn a_declined_move_may_still_be_accepted() {
     let a = s.client("alice");
     let node = kh("bob");
     a.agree_to(node, vec![OLD.into()]);
-    a.offer_relocation(node, NEW.into(), None);
+    a.offer_relocation(node, NEW.into(), None, None);
     a.relocation_proved(&node, NEW, Found::Proved);
     assert!(a.decline_relocation(&node));
     assert!(!a.decline_relocation(&node), "declined once");
@@ -118,7 +118,7 @@ fn an_address_answering_as_someone_else_changes_nothing_and_waits_to_be_reported
     let a = s.client("alice");
     let node = kh("bob");
     a.agree_to(node, vec![OLD.into()]);
-    a.offer_relocation(node, NEW.into(), None);
+    a.offer_relocation(node, NEW.into(), None, None);
     a.relocation_proved(
         &node,
         NEW,
@@ -137,7 +137,7 @@ fn an_address_answering_as_someone_else_changes_nothing_and_waits_to_be_reported
     assert!(a.relocation(&node).is_none());
     assert!(!a.failure_reported(&node), "nothing left to report");
     // a proved move is not a failure to report
-    a.offer_relocation(node, NEW.into(), None);
+    a.offer_relocation(node, NEW.into(), None, None);
     a.relocation_proved(&node, NEW, Found::Proved);
     assert!(!a.failure_reported(&node));
 }
@@ -150,9 +150,9 @@ fn a_newer_invitation_replaces_the_one_held() {
     let a = s.client("alice");
     let node = kh("bob");
     a.agree_to(node, vec![OLD.into()]);
-    a.offer_relocation(node, NEW.into(), None);
+    a.offer_relocation(node, NEW.into(), None, None);
     a.relocation_proved(&node, NEW, Found::Proved);
-    assert!(a.offer_relocation(node, "10.0.0.9:7431".into(), None));
+    assert!(a.offer_relocation(node, "10.0.0.9:7431".into(), None, None));
     let r = a.relocation(&node).unwrap();
     assert_eq!(
         (r.to.as_str(), r.standing),
@@ -186,6 +186,7 @@ fn relocations_round_trip_and_the_eleven_field_form_still_reads() {
                 standing,
                 why: (standing == Standing::Failed).then(|| "not the node".to_string()),
                 label: (i == 1).then(|| "Bob".to_string()),
+                subnet: (i == 2).then_some([9u8; 32]),
             },
         );
     }
@@ -224,7 +225,7 @@ fn a_subnet_carries_its_patron_and_the_move_held_for_its_node() {
     assert_eq!(row.patron, Some(kh("bob")));
     assert!(row.relocation.is_none());
     a.agree_to(kh("bob"), vec![OLD.into()]);
-    a.offer_relocation(kh("bob"), NEW.into(), Some("Bob".into()));
+    a.offer_relocation(kh("bob"), NEW.into(), None, Some("Bob".into()));
     a.relocation_proved(&kh("bob"), NEW, Found::Proved);
     let held = a.subnets_held();
     let row = held.iter().find(|r| r.patron == Some(kh("bob"))).unwrap();
@@ -265,7 +266,7 @@ fn a_node_two_levels_up_is_invited_by_name_and_its_move_rides_the_subnet_it_serv
         .unwrap();
     let anchor = row.position.as_ref().unwrap().anchor;
     a.serve_at(anchor, far);
-    a.offer_relocation(far, NEW.into(), None);
+    a.offer_relocation(far, NEW.into(), None, None);
     a.relocation_proved(&far, NEW, Found::Proved);
     let row = a
         .subnets_held()
@@ -278,4 +279,37 @@ fn a_node_two_levels_up_is_invited_by_name_and_its_move_rides_the_subnet_it_serv
         Some(far),
         "the move of the node serving it"
     );
+}
+
+// functional: SES-021
+/// **A move rides the subnet its invitation named** [author, 2026-11-16:
+/// "The notifications should be keyed to the subnet"], whatever node the
+/// attach recorded there; a subnet this client does not hold names
+/// nothing, and the move falls back to the node serving.
+#[test]
+fn a_move_rides_the_subnet_its_invitation_named() {
+    let mut s = setup(&["alice", "bob", "carol", "witness"]);
+    s.adopted("alice", "bob", "witness", 1);
+    s.adopted("alice", "carol", "witness", 2);
+    let a = s.client("alice");
+    let rows = a.subnets_held();
+    let under = |p: &str| rows.iter().find(|r| r.patron == Some(kh(p))).unwrap().id;
+    let (bobs, carols) = (under("bob"), under("carol"));
+    a.agree_to(kh("bob"), vec![OLD.into()]);
+    // carol's node moves, and the invitation names bob's subnet: it is
+    // the subnet that carries it, not carol's
+    a.agree_to(kh("carol"), vec![OLD.into()]);
+    a.offer_relocation(kh("carol"), NEW.into(), Some(bobs), None);
+    a.relocation_proved(&kh("carol"), NEW, Found::Proved);
+    let now = a.subnets_held();
+    let at = |id| now.iter().find(|r| r.id == id).unwrap().relocation.clone();
+    assert_eq!(at(bobs).map(|r| r.node), Some(kh("carol")));
+    assert!(at(carols).is_none(), "named elsewhere, so not guessed here");
+    // a subnet not held names nothing: the node serving carries it
+    a.offer_relocation(kh("carol"), NEW.into(), Some([7; 32]), None);
+    a.relocation_proved(&kh("carol"), NEW, Found::Proved);
+    let now = a.subnets_held();
+    let at = |id| now.iter().find(|r| r.id == id).unwrap().relocation.clone();
+    assert_eq!(at(carols).map(|r| r.node), Some(kh("carol")));
+    assert!(at(bobs).is_none());
 }

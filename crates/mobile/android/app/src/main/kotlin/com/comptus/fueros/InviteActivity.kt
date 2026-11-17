@@ -155,7 +155,7 @@ class InviteActivity : Activity() {
                     setOnClickListener {
                         isEnabled = false
                         if (agreed(node)) {
-                            relocate(node, read.at, read.asLabel)
+                            relocate(node, read.at, read.asLabel, read.subnet)
                         } else {
                             narration.text = "${narration.text}\nattaching to ${read.at}…"
                             Attachments.serveFrom(by, this@InviteActivity, node, read.at)
@@ -170,7 +170,7 @@ class InviteActivity : Activity() {
             // first invitation** [author, 2026-11-16]: nothing to agree to
             // here, and nothing changes until it proves itself there
             if (agreed(one)) {
-                relocate(one, read.at, read.asLabel)
+                relocate(one, read.at, read.asLabel, read.subnet)
                 return
             }
             offer(one, "Serve from ${one.take(8)}…'s node")
@@ -198,13 +198,13 @@ class InviteActivity : Activity() {
      * new address and binds what answers there to the patron before the
      * person is asked anything; the subnet's orb carries the question.
      */
-    private fun relocate(nodeHex: String, at: String, label: String?) {
+    private fun relocate(nodeHex: String, at: String, label: String?, subnet: String?) {
         val p = Gateway.loaded[by] ?: return
         narration.text = "${narration.text}\n${Relocate.checking(at)}"
         Thread({
             val node = Gateway.unhex(nodeHex)
             val held = Gateway.call("offerRelocation", { e -> Diag.warn("relocation", "why" to e.reason); false }) {
-                p.offerRelocation(node, at, label)
+                p.offerRelocation(node, at, subnet?.let { Gateway.unhex(it) }, label)
             }
             val r = if (held) {
                 Gateway.call("proveRelocation", { e -> Diag.warn("relocation", "why" to e.reason); null }) { p.proveRelocation(node) }

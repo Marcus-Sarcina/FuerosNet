@@ -1516,7 +1516,7 @@ impl PayloadState {
         }
         emit_array_head(&mut out, self.relocations.len());
         for (node, h) in &self.relocations {
-            emit_array_head(&mut out, 5);
+            emit_array_head(&mut out, 6);
             emit_bstr(&mut out, node);
             emit_tstr(&mut out, &h.to);
             emit_uint(&mut out, standing_code(h.standing));
@@ -1526,6 +1526,10 @@ impl PayloadState {
             }
             match &h.label {
                 Some(l) => emit_tstr(&mut out, l),
+                None => emit_null(&mut out),
+            }
+            match &h.subnet {
+                Some(s) => emit_bstr(&mut out, s),
                 None => emit_null(&mut out),
             }
         }
@@ -1601,8 +1605,15 @@ impl PayloadState {
             Some(it) => array(it)?
                 .iter()
                 .map(|p| {
-                    let [node, to, standing, why, label] = array(p)?.as_slice() else {
-                        return None;
+                    // six since the subnet; the five of before read with none
+                    let fields = array(p)?;
+                    let (node, to, standing, why, label) = match fields.as_slice() {
+                        [n, t, s, w, l] | [n, t, s, w, l, _] => (n, t, s, w, l),
+                        _ => return None,
+                    };
+                    let subnet = match fields.get(5) {
+                        None | Some(rhtn_codec::cbor::Item::Null) => None,
+                        Some(it) => Some(fixed::<32>(b, it)?),
                     };
                     Some((
                         fixed::<32>(b, node)?,
@@ -1611,6 +1622,7 @@ impl PayloadState {
                             standing: standing_of(uint(standing)?)?,
                             why: opt_text(why)?,
                             label: opt_text(label)?,
+                            subnet,
                         },
                     ))
                 })

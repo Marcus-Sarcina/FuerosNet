@@ -771,8 +771,9 @@ nothing below reaches across them.
   presents to the patron, as a session's first frames bind it (`wire-format.md`
   §§8.2, 9.1), opening no session. Until it proves itself there, change nothing.
   Once it has, ask the person whether the server at the new address is their home
-  for that patron's subnet, and **use the node at neither address until they
-  answer**: *"someone might hijack a device or identity to launch an alternate node
+  for that patron's subnet — **the subnet the invitation names**, where you hold
+  it, the question being keyed to it [author, 2026-11-16] — and **use the node at
+  neither address until they answer**: *"someone might hijack a device or identity to launch an alternate node
   and so the user should have the option to not trust a new node, but they can not
   keep interacting with the old node as if it were active."* Accepting makes the new
   address the agreement. Declining leaves the agreement as it was and the node

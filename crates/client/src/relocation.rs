@@ -50,6 +50,10 @@ pub struct Held {
     pub why: Option<String>,
     /// The inviter's own label, for the screen alone.
     pub label: Option<String>,
+    /// **The subnet the invitation named**, where this client holds it:
+    /// the one whose orb carries the question [author, 2026-11-16: "The
+    /// notifications should be keyed to the subnet"].
+    pub subnet: Option<rhtn_archive::Txid>,
 }
 
 /// What a dial of the new address found, as the caller reports it.
@@ -71,7 +75,13 @@ impl Client {
     /// Whether it was held; false for a node never agreed to, whose
     /// invitation is a first one, and for one naming the address already
     /// agreed with nothing held.
-    pub fn offer_relocation(&mut self, node: Keyhash, to: String, label: Option<String>) -> bool {
+    pub fn offer_relocation(
+        &mut self,
+        node: Keyhash,
+        to: String,
+        subnet: Option<rhtn_archive::Txid>,
+        label: Option<String>,
+    ) -> bool {
         let Some(agreed) = self.payload.agreed.get(&node) else {
             return false;
         };
@@ -83,6 +93,8 @@ impl Client {
             node = %crate::diag::id8(&node),
             "relocation.offered"
         );
+        // a subnet this client does not hold names nothing here
+        let subnet = subnet.filter(|s| self.subnets().contains(s));
         self.payload.relocations.insert(
             node,
             Held {
@@ -90,6 +102,7 @@ impl Client {
                 standing: Standing::Unproved,
                 why: None,
                 label,
+                subnet,
             },
         );
         self.changed.insert(rhtn_model::Noun::Subnets);
@@ -201,6 +214,27 @@ impl Client {
             .keys()
             .filter_map(|n| self.relocation(n))
             .collect()
+    }
+
+    /// **The move a subnet's orb carries**: the one whose invitation named
+    /// this subnet, else — for an invitation that named none — the one
+    /// held for the node serving it here.
+    #[must_use]
+    pub fn relocation_in(&self, subnet: &rhtn_archive::Txid) -> Option<rhtn_model::Relocation> {
+        if let Some((n, _)) = self
+            .payload
+            .relocations
+            .iter()
+            .find(|(_, h)| h.subnet == Some(*subnet))
+        {
+            return self.relocation(n);
+        }
+        let n = self.serving_in(subnet)?;
+        self.payload
+            .relocations
+            .get(&n)
+            .filter(|h| h.subnet.is_none())?;
+        self.relocation(&n)
     }
 
     /// **The node serving this client in `subnet`**: the one its attach

@@ -169,8 +169,8 @@ class OperatorActivity : Activity() {
      * grant as the only action — a denial leaves them waiting rather than
      * turning each into a tap.
      */
-    private fun sendInvitations(at: String) {
-        val owed = Gateway.invitations(by, at).filter { invitedTo(it.who) != at }
+    private fun sendInvitations(at: String, subnet: String?) {
+        val owed = Gateway.invitations(by, at, subnet).filter { invitedTo(it.who) != at }
         if (owed.isEmpty()) return
         if (checkSelfPermission(android.Manifest.permission.SEND_SMS) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -243,7 +243,9 @@ class OperatorActivity : Activity() {
         // surface (`:7449`), and an invitation naming that sent members to
         // a port that speaks no protocol; the operator's own attach is at
         // the protocol port, and so is theirs
-        held.forEach { sendInvitations("${Relocate.host(it.at)}:${Launch.QUIC_PORT}") }
+        // **keyed to the subnet the instance serves** [author, 2026-11-16],
+        // so a member's question lands on that subnet's orb
+        held.forEach { sendInvitations("${Relocate.host(it.at)}:${Launch.QUIC_PORT}", it.subnet) }
         if (held.isEmpty()) {
             roll.addView(
                 TextView(this).apply {

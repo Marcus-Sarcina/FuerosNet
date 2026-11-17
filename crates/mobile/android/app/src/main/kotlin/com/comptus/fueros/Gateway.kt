@@ -830,9 +830,9 @@ object Gateway {
      * where to send each and the link to send. Reading is also what drops
      * an address past its subject's window.
      */
-    fun invitations(by: String, at: String): List<uniffi.rhtn_ffi.Invite> {
+    fun invitations(by: String, at: String, subnet: String? = null): List<uniffi.rhtn_ffi.Invite> {
         val p = loaded[by] ?: return emptyList()
-        return call("invitations", { emptyList() }) { p.invitations(at) }
+        return call("invitations", { emptyList() }) { p.invitations(at, subnet?.let { unhex(it) }) }
     }
 
     /** The subnets this device roots and could bring under a patron. */

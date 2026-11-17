@@ -2462,15 +2462,17 @@ impl Participant {
         &self,
         node: Id,
         to: String,
+        subnet: Option<Id>,
         label: Option<String>,
     ) -> Result<bool, Refused> {
         self.call("offer_relocation", || {
             let node = keyhash(&node).ok_or_else(|| Refused::new("a node is 32 bytes"))?;
+            let subnet = subnet.as_deref().and_then(keyhash);
             to.parse::<SocketAddr>()
                 .map_err(|_| Refused::new(format!("{to} is not an address")))?;
             let held = self
                 .handle
-                .with_blocking(move |c| c.offer_relocation(node, to, label));
+                .with_blocking(move |c| c.offer_relocation(node, to, subnet, label));
             self.save()?;
             Ok(held)
         })
@@ -3655,7 +3657,8 @@ impl Participant {
     ///
     /// Reading is also what collects: an address past its subject's window
     /// is dropped rather than returned (`Client::reaches`).
-    pub fn invitations(&self, at: String) -> Vec<Invite> {
+    pub fn invitations(&self, at: String, subnet: Option<Id>) -> Vec<Invite> {
+        let subnet = subnet.as_deref().and_then(keyhash);
         self.call_plain("invitations", || {
             let me = self.handle.me();
             self.handle.with_blocking(move |c| {
@@ -3668,7 +3671,7 @@ impl Participant {
                             &rhtn_client::invitation::Invitation {
                                 at: at.clone(),
                                 patron: Some(me),
-                                subnet: None,
+                                subnet,
                                 member: Some(k),
                                 as_label: None,
                             },
@@ -3730,6 +3733,7 @@ impl Participant {
                 node,
                 choose,
                 why,
+                subnet: i.subnet.map(|s| hex(&s)),
             })
         })
     }
@@ -4508,6 +4512,9 @@ pub struct Invited {
     /// running here, or no patron at all. Empty where [`Invited::node`] or
     /// [`Invited::choose`] is the answer.
     pub why: String,
+    /// The subnet the invitation named, hex: a hint, checked against what
+    /// this device holds where it is used.
+    pub subnet: Option<String>,
 }
 
 /// **Read an invitation**, or refuse it in the words the person is told.
