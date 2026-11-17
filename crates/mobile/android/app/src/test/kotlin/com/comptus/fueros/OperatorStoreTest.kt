@@ -1,6 +1,8 @@
 package com.comptus.fueros
 
+import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -30,16 +32,26 @@ class OperatorStoreTest {
 
     // functional: OPS-029
     @Test
-    fun the_operator_is_told_of_a_newer_runner_only_where_the_machine_is_behind() {
-        assertEquals(null, OperatorStore.runnerPrompt(0, 2))
-        assertEquals(null, OperatorStore.runnerPrompt(2, 2))
-        assertEquals(null, OperatorStore.runnerPrompt(3, 2))
-        val (old, canOld) = OperatorStore.runnerPrompt(1, 2)!!
-        assertEquals(false, canOld)
-        assertTrue(old, old.contains("relaunch"))
-        val (behind, can) = OperatorStore.runnerPrompt(2, 3)!!
-        assertEquals(true, can)
-        assertTrue(behind, behind.contains("version 2") && behind.contains("carries 3"))
+    fun a_machine_behind_this_app_is_brought_up_unasked_and_never_one_that_cannot_take_it() {
+        assertTrue("not known: tried", Runner.behind(0, 3))
+        assertTrue("behind", Runner.behind(2, 3))
+        assertFalse("current", Runner.behind(3, 3))
+        assertFalse("newer than this app", Runner.behind(4, 3))
+        assertFalse("predates refreshing", Runner.behind(1, 3))
+        val key = "a".repeat(64)
+        assertEquals(3, OperatorStore.runnerIn("1.2.3.4:7432\t$key\tMirror\tdigitalocean\t42\t3"))
+        assertEquals("launched before any was recorded", 1, OperatorStore.runnerIn("1.2.3.4:7432\t\tMirror\tdigitalocean\t42\t"))
+        assertEquals("not launched here", 0, OperatorStore.runnerIn("1.2.3.4:7432\t\tMirror\t\t\t"))
+        // **nothing on the Operator screen names it** [author, 2026-11-17]
+        val screen = File("src/main/kotlin/com/comptus/fueros/OperatorActivity.kt").readText()
+        for (said in listOf("app's runner", "runner is version", "runner-refresh")) {
+            assertFalse(said, screen.contains(said))
+        }
+        val store = File("src/main/kotlin/com/comptus/fueros/OperatorStore.kt").readText()
+        assertFalse(store.contains("newer runner is available"))
+        assertTrue(screen.contains("Runner.bring(this, by, i.at, oldToken)"))
+        val act = File("src/main/kotlin/com/comptus/fueros/ActActivity.kt").readText()
+        assertTrue(act.contains("Runner.bring(this, by, at, token)"))
         assertEquals(3, OperatorStore.runnerSaid("runner 3 ${"a".repeat(64)}\n"))
         assertEquals(null, OperatorStore.runnerSaid("rhtn-package-runner: no such verb: runner-refresh"))
     }

@@ -22703,3 +22703,16 @@ counter 1 over the held counter-1 record (Conflict) and the anchor entry the
 same, and tried a fresh run (overlaps refused). Fixed: `readdress` signs
 both at the anchor's counter + 1 and no run; the operator list re-signs an
 instance whose records name another address (point bytes kept but the IP).
+
+**The runner hidden, refreshed unasked** [author, 2026-11-17: "Option 1,
+hide it and refresh automatically"]. He asked what "runner" meant: my coinage
+(4962b4e, 2026-11-02), used in the root documents without a definition.
+Now: `Runner.bring` gives a machine whose recorded runner is behind or not
+known this app's signed runner before any HOST_KEY act (ActActivity) and
+before a move launches anything; version 1 is never tried and gets
+`Runner.EARLIER` (a fresh node is the remedy) if its act fails. The Operator
+screen's prompt and "Give it this app's runner" button are gone, and the node
+page no longer links `runner-refresh` (still declared). Defined "the runner"
+in I §9.3 at the door paragraph; L §10 bullet and OPS-029 restated.
+Untested on the bench: every bench machine is at runner 3, so no refresh
+would fire; a machine at 2 would be needed to see one.

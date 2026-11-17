@@ -1325,10 +1325,13 @@ fn node_controls(status: &StatusView) -> String {
     // **a move is the operator screen's, not a control here** [2026-11-16]:
     // it launches the machine it goes to and mints that machine's host
     // key, so a form asking a person to type a host key would be plumbing
-    // in front of them. Declared all the same, for the client that drives it
+    // in front of them. **Nor is giving the machine a runner** [author,
+    // 2026-11-17]: the client does that by itself before an act that asks
+    // the machine, and an operator has no reason to know the runner.
+    // Declared all the same, for the client that drives them
     for a in crate::acts::node_acts(status.acknowledging)
         .into_iter()
-        .filter(|a| a.operation.name != "move")
+        .filter(|a| !matches!(a.operation.name.as_str(), "move" | "runner-refresh"))
     {
         let _ = writeln!(out, "<h3>{}</h3>", escape(&a.operation.label));
         if !a.operation.help.is_empty() {

@@ -114,8 +114,7 @@ class OperatorActivity : Activity() {
                     parts.getOrElse(2) { parts[0] },
                     parts.getOrElse(3) { "" },
                     parts.getOrElse(4) { "" },
-                    parts.getOrNull(5)?.toIntOrNull()
-                        ?: if (parts.getOrElse(3) { "" }.isNotEmpty()) 1 else 0,
+                    OperatorStore.runnerIn(line),
                 )
             }
 
@@ -320,32 +319,6 @@ class OperatorActivity : Activity() {
                     }
                 },
             )
-            // **a newer runner, where this client carries one** [author,
-            // 2026-11-16]: said here, with the act beside it where the
-            // machine can take one
-            OperatorStore.runnerPrompt(i.runner, Launch.RUNNER_VERSION)?.let { (says, can) ->
-                roll.addView(
-                    TextView(this).apply {
-                        textSize = 13f
-                        setTextColor(Palette.now.sub)
-                        text = says
-                    },
-                )
-                if (can && i.at.isNotEmpty()) {
-                    roll.addView(
-                        Button(this).apply {
-                            text = "Give it this app's runner"
-                            setOnClickListener {
-                                startActivity(
-                                    Intent(this@OperatorActivity, ActActivity::class.java).putExtra("by", by)
-                                        .putExtra("at", i.at)
-                                        .putExtra("act", "runner-refresh"),
-                                )
-                            }
-                        },
-                    )
-                }
-            }
             roll.addView(
                 Button(this).apply {
                     text = "Forget it here"
@@ -1158,8 +1131,11 @@ class OperatorActivity : Activity() {
             narration.text = "no ${provider.name} credential is held; paste it in the launch section first"
             return
         }
-        if (i.runner in 1 until 3) {
-            narration.text = "this machine's runner is version ${i.runner}, and a move needs 3: give it this app's runner first"
+        // **a machine launched before moves existed cannot be brought up to
+        // one** [author, 2026-11-17]: what it can do instead is a fresh node,
+        // whose members accept it because this operator signed it
+        if (i.runner == 1) {
+            narration.text = Runner.EARLIER
             return
         }
         val oldToken = tokenFor(i.at) ?: run { narration.text = "no administration token is held for ${i.at}"; return }
@@ -1171,6 +1147,12 @@ class OperatorActivity : Activity() {
             val said = mutableListOf<String>()
             fun show() = runOnUiThread { narration.text = said.joinToString("\n") }
             fun stop(why: String) { said += why; show(); runOnUiThread { button.isEnabled = true; drawInstances() } }
+            // **the machine being left is brought up to a move first**,
+            // before anything is launched, and nothing names that to the
+            // operator unless it fails
+            Runner.bring(this, by, i.at, oldToken)?.let { why ->
+                return@Thread stop("the machine at ${i.at} could not be readied to move: $why; nothing moved")
+            }
             val hostKey = uniffi.rhtn_ffi.launchHostKey()
             val fresh = Launch.token()
             val launched = provider.launch(

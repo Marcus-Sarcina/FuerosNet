@@ -2223,6 +2223,15 @@ fn a_runner_reaches_the_host_only_with_a_signature_and_the_node_carries_it_unrea
     let (l, d, at) = enrolled_with("runner-refresh", 37468, |l| {
         l.ssh_client = Some(recorder(&l.dir, "none"));
     });
+    // declared for the client that brings it, and never a control on the
+    // page: the operator is not asked to give a runner [author, 2026-11-17]
+    let acts = ask(at, "GET /node/acts HTTP/1.1", b"");
+    assert!(acts.contains("\"runner-refresh\""), "{acts}");
+    let page = ask(at, "GET / HTTP/1.1", b"");
+    assert!(
+        page.contains("rhtn-act:upgrade") && !page.contains("rhtn-act:runner-refresh"),
+        "{page}"
+    );
     let key = RUNNER_KEY.replace('\n', "%0A");
     let enc = |s: &str| {
         s.bytes()

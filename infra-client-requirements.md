@@ -927,7 +927,7 @@ over as an argument, present it as `rhtn-secret` on every request you relay to
 its socket, and take it on its requests to your surface** [author,
 2026-11-15]: one secret both ways (`resource-requirements.md` §§3.1, 3.3;
 `wire-format.md` §11.2), kept where only you read it and surviving your
-restart, since the runner restarts the instance with the arguments it was
+restart, since the runner (below) restarts the instance with the arguments it was
 started with. **You tell it where its block and its log are, and
 what it may fill them to, on the relationships exchange**
 (`resource-requirements.md` §3.3): `rhtn-host` with the versions you offer,
@@ -1019,7 +1019,9 @@ host. What you have instead is a door your operator opens per act. Their
 client hands you an ssh key with a request and you use it over the
 loopback you share with the host; **what an instance may ask of its host
 is one program's vocabulary**, because the host's own `authorized_keys`
-binds that key to that program and shuts every other ssh door. Start a
+binds that key to that program and shuts every other ssh door. That program
+is **the runner**: it runs for one request and exits, and nothing keeps it
+running. Start a
 package, stop one, list them, read one's log, fetch an image, restart
 yourself: that is the list, it is written on the host where it can be
 read, and a package is named by the program rather than by the asker, so
@@ -1167,7 +1169,9 @@ that opens a shell, which is never handed to you — and the machine checks
 that signature, and refuses a runner older than its own or one that does not
 parse, before it writes anything. You carry the bytes and cannot forge them.
 A machine whose runner predates the check cannot take one, and a relaunch
-gives it the current runner.
+gives it the current runner. **Your operator is never asked to give one**
+[author, 2026-11-17]: their client gives the machine its own before an act
+that asks the machine, so this act is not a control on your page.
 
 **Moving to another of your operator's machines is an act of the same kind**
 [author, 2026-11-16: *"a deliberate re-homing of the node"*]. Your state and

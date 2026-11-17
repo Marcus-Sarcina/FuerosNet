@@ -56,8 +56,8 @@ object OperatorStore {
 
     /**
      * **Record the runner a machine now has** against its instance, in the
-     * record's sixth field, so the Operator page can say when this client
-     * carries a newer one.
+     * record's sixth field, so [Runner] knows when this client carries a
+     * newer one.
      */
     fun recordRunner(context: Context, by: String, at: String, version: Int) {
         val mine = context.getSharedPreferences("operator-$by", Context.MODE_PRIVATE)
@@ -77,20 +77,21 @@ object OperatorStore {
         Regex("""(?m)^runner (\d+) [0-9a-f]{64}$""").find(text)?.groupValues?.get(1)?.toIntOrNull()
 
     /**
-     * **What the Operator page says of a machine's runner**, and whether
-     * the act is offered: nothing where the machine's is unknown or not
-     * behind this client's; the act where it is behind and can take one;
-     * the remedy where it predates refreshing. Pure, for a JVM test.
+     * **The runner a record says its machine has**: the sixth field; else
+     * 1 for a machine this client launched before it recorded one, which
+     * is the runner those were given; else 0, not known. Pure, for a JVM
+     * test.
      */
-    fun runnerPrompt(machine: Int, mine: Int): Pair<String, Boolean>? = when {
-        machine <= 0 || machine >= mine -> null
-        machine == 1 ->
-            "This machine's runner predates refreshing (version 1; this app carries $mine), so " +
-                "it cannot take a newer one: a relaunch gives it the current runner." to false
-        else ->
-            "A newer runner is available for this machine: it has version $machine and this " +
-                "app carries $mine." to true
+    fun runnerIn(line: String): Int {
+        val parts = line.split('\t')
+        return parts.getOrNull(5)?.toIntOrNull() ?: if (parts.getOrElse(3) { "" }.isNotEmpty()) 1 else 0
     }
+
+    /** The runner the record for the instance at `at` says, or 0. */
+    fun runnerOf(context: Context, by: String, at: String): Int =
+        prefs(context, by).getString("instances", "").orEmpty().lines()
+            .firstOrNull { it.split('\t').firstOrNull() == at }
+            ?.let { runnerIn(it) } ?: 0
 
     /**
      * **Which old records are this identity's**: those whose subnet (the

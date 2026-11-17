@@ -156,10 +156,9 @@ class ActActivity : Activity() {
         if (a.brings == Acts.Brings.SIGNED_RUNNER) {
             fields.addView(
                 label(
-                    "This act gives the machine the runner this app carries, version " +
-                        "${Launch.RUNNER_VERSION}, signed here with your own key for the machine. " +
-                        "The instance carries it and cannot change it; the machine checks the " +
-                        "signature before it takes it, and refuses a runner older than its own.",
+                    "This act updates the program on the machine that limits what this node " +
+                        "may ask of it, signed here with your own key, which the node never holds. " +
+                        "This app does it by itself before any act that needs it.",
                 ),
             )
         }
@@ -305,6 +304,10 @@ class ActActivity : Activity() {
         button.isEnabled = false
         answer.text = "asking $at…"
         Thread {
+            // **a machine behind this app is brought up first** [author,
+            // 2026-11-17], unasked and unnamed: why it was not is said only
+            // if the act fails too
+            val brought = if (a.brings == Acts.Brings.HOST_KEY) Runner.bring(this, by, at, token) else null
             // **the credential, derived for this act and held no longer**:
             // the kernel holds the seed, and nothing of the key is written
             // down here or there
@@ -339,7 +342,10 @@ class ActActivity : Activity() {
                 OperatorStore.runnerSaid(text)?.let { v -> OperatorStore.recordRunner(this, by, at, v) }
             }
             runOnUiThread {
-                answer.text = said.fold({ it.trim() }, { "${it.message}" })
+                answer.text = said.fold(
+                    { it.trim() },
+                    { "${it.message}" + (brought?.let { why -> "\n($why)" } ?: "") },
+                )
                 button.isEnabled = true
             }
         }.start()
