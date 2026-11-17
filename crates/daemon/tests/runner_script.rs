@@ -150,14 +150,18 @@ fn a_runner_is_taken_only_signed_by_the_operators_key_and_never_older() {
         ),
     )
     .unwrap();
+    // the version the script names, so the test holds the rule and not
+    // the number of the day
+    let v = rhtn_launch::runner_version();
     let (code, out, _) = h.ask("version");
     assert_eq!(code, 0);
-    assert!(out.starts_with("runner 2 "), "{out}");
+    assert!(out.starts_with(&format!("runner {v} ")), "{out}");
     let before = std::fs::read(h.dir.join("runner")).unwrap();
+    let at = format!("RUNNER_VERSION={v}");
 
     let newer = String::from_utf8(before.clone())
         .unwrap()
-        .replace("RUNNER_VERSION=2", "RUNNER_VERSION=3");
+        .replace(&at, &format!("RUNNER_VERSION={}", v + 1));
     let ns = rhtn_crypto::ssh::RUNNER_NAMESPACE;
     // signed by the runner key, which an instance holds: refused, nothing written
     let forged = rhtn_crypto::ssh::sshsig(&[6u8; 32], ns, newer.as_bytes());
@@ -183,7 +187,7 @@ fn a_runner_is_taken_only_signed_by_the_operators_key_and_never_older() {
     // older: refused even signed
     let older = String::from_utf8(before.clone())
         .unwrap()
-        .replace("RUNNER_VERSION=2", "RUNNER_VERSION=1");
+        .replace(&at, &format!("RUNNER_VERSION={}", v - 1));
     let sig = rhtn_crypto::ssh::sshsig(&[5u8; 32], ns, older.as_bytes());
     let (code, _, err) = h.ask_with("runner-refresh", format!("{sig}{older}").as_bytes());
     assert_eq!(code, 2, "{err}");
@@ -193,11 +197,240 @@ fn a_runner_is_taken_only_signed_by_the_operators_key_and_never_older() {
     let sig = rhtn_crypto::ssh::sshsig(&[5u8; 32], ns, newer.as_bytes());
     let (code, out, err) = h.ask_with("runner-refresh", format!("{sig}{newer}").as_bytes());
     assert_eq!(code, 0, "{err}");
-    assert!(out.starts_with("runner 3 "), "{out}");
+    assert!(out.starts_with(&format!("runner {} ", v + 1)), "{out}");
     assert_eq!(
         std::fs::read_to_string(h.dir.join("runner")).unwrap(),
         newer
     );
     let (_, out, _) = h.ask("version");
-    assert!(out.starts_with("runner 3 "), "{out}");
+    assert!(out.starts_with(&format!("runner {} ", v + 1)), "{out}");
+}
+
+/// **A host for the move**: an engine that writes what it was asked to a
+/// log and answers `inspect` with an image, an ssh that keeps its
+/// arguments and what came on its standard input, and a root holding a
+/// node's state where a machine keeps it.
+struct Moving {
+    dir: PathBuf,
+}
+
+impl Moving {
+    fn new(name: &str) -> Moving {
+        let dir = std::env::temp_dir().join(format!("rhtn-move-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let root = dir.join("root");
+        std::fs::create_dir_all(root.join("var/lib/rhtn")).unwrap();
+        std::fs::create_dir_all(root.join("var/lib/rhtn-blocks/res1")).unwrap();
+        std::fs::write(root.join("var/lib/rhtn/rhtnd.conf"), "token = \"old\"\n").unwrap();
+        std::fs::write(root.join("var/lib/rhtn-blocks/res1/data"), "kept").unwrap();
+        let engine = dir.join("engine");
+        std::fs::write(
+            &engine,
+            format!(
+                "#!/bin/sh\necho \"$*\" >> {log}\n[ \"$1\" = inspect ] && echo sha256:img\nexit 0\n",
+                log = dir.join("engine.log").display()
+            ),
+        )
+        .unwrap();
+        let ssh = dir.join("ssh");
+        std::fs::write(
+            &ssh,
+            format!(
+                "#!/bin/sh\necho \"$*\" > {args}\ncat > {sent}\n[ -e {fail} ] && {{ echo refused; exit 1; }}\necho received\n",
+                args = dir.join("ssh.args").display(),
+                sent = dir.join("sent.tar").display(),
+                fail = dir.join("ssh.fail").display()
+            ),
+        )
+        .unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            for f in [&engine, &ssh] {
+                std::fs::set_permissions(f, std::fs::Permissions::from_mode(0o755)).unwrap();
+            }
+        }
+        Moving { dir }
+    }
+
+    fn ask(&self, request: &str, input: &[u8]) -> (i32, String, String) {
+        use std::io::Write;
+        let me = self.dir.join("runner");
+        if !me.exists() {
+            std::fs::copy(runner(), &me).unwrap();
+        }
+        let uid = String::from_utf8(Command::new("id").arg("-u").output().unwrap().stdout).unwrap();
+        let mut child = Command::new("sh")
+            .arg(&me)
+            .env("SSH_ORIGINAL_COMMAND", request)
+            .env("RHTN_ENGINE", self.dir.join("engine"))
+            .env("RHTN_SSH", self.dir.join("ssh"))
+            .env("RHTN_ROOT", self.dir.join("root"))
+            .env("RHTN_BLOCKS", self.dir.join("root/var/lib/rhtn-blocks"))
+            .env("RHTN_UID", uid.trim())
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .expect("sh runs the runner");
+        child.stdin.take().unwrap().write_all(input).unwrap();
+        let out = child.wait_with_output().expect("the runner ends");
+        (
+            out.status.code().unwrap_or(-1),
+            String::from_utf8_lossy(&out.stdout).to_string(),
+            String::from_utf8_lossy(&out.stderr).to_string(),
+        )
+    }
+
+    fn engine(&self) -> String {
+        std::fs::read_to_string(self.dir.join("engine.log")).unwrap_or_default()
+    }
+
+    /// Wait for the detached send to finish: the engine's last word on the
+    /// node, `rm` where it went and `start` where it did not.
+    fn settled(&self) -> String {
+        for _ in 0..100 {
+            let e = self.engine();
+            if e.contains("rm -f rhtnd") || e.contains("start rhtnd") {
+                return e;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        self.engine()
+    }
+}
+
+impl Drop for Moving {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
+const RUNNER_KEY: &str = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA\n-----END OPENSSH PRIVATE KEY-----\n";
+const RECEIVER: &str = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBzsS0bOBhbs";
+
+// functional: OPS-030
+/// **The node goes to the one machine pinned, in one stream, and stops
+/// here**: the receiver's host key is the only one accepted, the state and
+/// the blocks travel together, and the node here is removed once it has
+/// landed — started again where it did not.
+#[test]
+fn a_node_is_sent_only_to_the_receiver_pinned_and_stops_here_once_it_lands() {
+    let h = Moving::new("send");
+    // no pin, no send: nothing is stopped
+    let (code, _, err) = h.ask("node-send 203.0.113.7", RUNNER_KEY.as_bytes());
+    assert_eq!(code, 2, "{err}");
+    assert!(err.contains("pinned or not sent to"), "{err}");
+    assert!(h.engine().is_empty(), "nothing touched: {}", h.engine());
+    for bad in [
+        "node-send",
+        "node-send 203.0.113.7 extra",
+        "node-send host.example",
+    ] {
+        let (code, _, err) = h.ask(bad, format!("{RUNNER_KEY}{RECEIVER}\n").as_bytes());
+        assert_eq!(code, 2, "{bad}: {err}");
+    }
+    assert!(h.engine().is_empty());
+
+    let (code, out, err) = h.ask(
+        "node-send 203.0.113.7",
+        format!("{RUNNER_KEY}{RECEIVER}\n").as_bytes(),
+    );
+    assert_eq!(code, 0, "{err}");
+    assert!(out.contains("sending the node to 203.0.113.7"), "{out}");
+    let e = h.settled();
+    assert!(e.starts_with("stop rhtnd\n"), "the node stops first: {e}");
+    assert!(e.contains("rm -f rhtnd"), "and is removed once sent: {e}");
+    let args = std::fs::read_to_string(h.dir.join("ssh.args")).unwrap();
+    assert!(args.contains("-o StrictHostKeyChecking=yes"), "{args}");
+    assert!(args.contains("-o IdentitiesOnly=yes"), "{args}");
+    assert!(args.ends_with("root@203.0.113.7 node-receive\n"), "{args}");
+    // the stream holds the state and the blocks under a machine's names
+    let listed = Command::new("tar")
+        .arg("-tf")
+        .arg(h.dir.join("sent.tar"))
+        .output()
+        .unwrap();
+    let listed = String::from_utf8_lossy(&listed.stdout).to_string();
+    assert!(listed.contains("var/lib/rhtn/rhtnd.conf"), "{listed}");
+    assert!(listed.contains("var/lib/rhtn-blocks/res1/data"), "{listed}");
+
+    // a send that does not land puts the node back
+    let h = Moving::new("send-fails");
+    std::fs::write(h.dir.join("ssh.fail"), "").unwrap();
+    let (code, _, err) = h.ask(
+        "node-send 203.0.113.7",
+        format!("{RUNNER_KEY}{RECEIVER}\n").as_bytes(),
+    );
+    assert_eq!(code, 0, "{err}");
+    let e = h.settled();
+    assert!(e.contains("start rhtnd"), "started again: {e}");
+    assert!(!e.contains("rm -f rhtnd"), "and not removed: {e}");
+}
+
+// functional: OPS-030
+/// **A node received takes the place of the one serving, on this
+/// machine's image**, what it replaced kept beside it; what is not a
+/// node's state changes nothing.
+#[test]
+fn a_node_received_replaces_the_one_serving_and_keeps_what_it_replaced() {
+    // the arrival, made as a sender makes it
+    let from = Moving::new("arrival");
+    std::fs::write(
+        from.dir.join("root/var/lib/rhtn/rhtnd.conf"),
+        "token = \"moved\"\n",
+    )
+    .unwrap();
+    let tar = Command::new("tar")
+        .arg("-C")
+        .arg(from.dir.join("root"))
+        .args(["-cf", "-", "var/lib/rhtn", "var/lib/rhtn-blocks"])
+        .output()
+        .unwrap()
+        .stdout;
+
+    let h = Moving::new("receive");
+    let (code, _, err) = h.ask("node-receive", b"not a tar");
+    assert_eq!(code, 2, "{err}");
+    assert!(
+        h.engine().lines().all(|l| !l.starts_with("rm")),
+        "{}",
+        h.engine()
+    );
+    let state = h.dir.join("root/var/lib/rhtn");
+    assert_eq!(
+        std::fs::read_to_string(state.join("rhtnd.conf")).unwrap(),
+        "token = \"old\"\n"
+    );
+
+    let (code, out, err) = h.ask("node-receive", &tar);
+    assert_eq!(code, 0, "{err}");
+    assert!(out.contains("received the node"), "{out}");
+    assert_eq!(
+        std::fs::read_to_string(state.join("rhtnd.conf")).unwrap(),
+        "token = \"moved\"\n",
+        "the arrival serves"
+    );
+    let e = h.engine();
+    assert!(e.contains("rm -f rhtnd"), "{e}");
+    assert!(
+        e.contains("run -d --name rhtnd --restart=always --network=host"),
+        "{e}"
+    );
+    assert!(
+        e.trim_end().ends_with("sha256:img"),
+        "on this machine's image: {e}"
+    );
+    let kept: Vec<String> = std::fs::read_dir(h.dir.join("root/var/lib"))
+        .unwrap()
+        .map(|d| d.unwrap().file_name().to_string_lossy().to_string())
+        .collect();
+    assert!(
+        kept.iter().any(|n| n.starts_with("rhtn.replaced-")),
+        "what it replaced is kept: {kept:?}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(h.dir.join("root/var/lib/rhtn-blocks/res1/data")).unwrap(),
+        "kept"
+    );
 }

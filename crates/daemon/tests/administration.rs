@@ -2264,3 +2264,62 @@ fn a_runner_reaches_the_host_only_with_a_signature_and_the_node_carries_it_unrea
     d.stop();
     let _ = std::fs::remove_dir_all(&l.dir);
 }
+
+// functional: OPS-030
+/// **A move is asked of the host with the receiver pinned**: one request,
+/// `node-send` and the address, and on its input the key the host opens
+/// the receiver with and the host key it pins; an address that is not
+/// one, or a receiver unpinned, asks nothing.
+#[test]
+fn a_move_is_asked_of_the_host_with_the_receiver_pinned_and_nothing_without_it() {
+    let (l, d, at) = enrolled_with("move", 37469, |l| {
+        let at = l.dir.join("ssh-keeper");
+        std::fs::write(
+            &at,
+            format!(
+                "#!/bin/sh\nfor a in \"$@\"; do last=\"$a\"; done\nprintf '%s\\n' \"$last\" >> '{}'\ncat > '{}'\necho \"sending the node\"\n",
+                l.dir.join("asked").display(),
+                l.dir.join("input").display()
+            ),
+        )
+        .unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&at, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        l.ssh_client = Some(at);
+    });
+    let key = RUNNER_KEY.replace('\n', "%0A");
+    let host = "ssh-ed25519%20AAAAC3NzaC1lZDI1NTE5AAAAIBzsS0bOBhbs";
+    for bad in [
+        format!("key={key}&to=host.example&host={host}"),
+        format!("key={key}&to=203.0.113.7&host=nothing"),
+        format!("key={key}&to=203.0.113.7"),
+    ] {
+        let said = ask(at, "POST /node/act/move HTTP/1.1", bad.as_bytes());
+        assert!(said.starts_with("HTTP/1.1 400"), "{bad}: {said}");
+    }
+    assert!(asked_of_host(&l.dir).is_empty(), "nothing asked");
+    let said = ask(
+        at,
+        "POST /node/act/move HTTP/1.1",
+        format!("key={key}&to=203.0.113.7&host={host}").as_bytes(),
+    );
+    assert!(said.starts_with("HTTP/1.1 202"), "{said}");
+    assert_eq!(
+        asked_of_host(&l.dir),
+        vec!["node-send 203.0.113.7".to_string()]
+    );
+    let input = std::fs::read_to_string(l.dir.join("input")).unwrap();
+    assert!(
+        input.starts_with("-----BEGIN OPENSSH PRIVATE KEY-----"),
+        "{input}"
+    );
+    assert!(
+        input.ends_with("\nssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBzsS0bOBhbs\n"),
+        "{input}"
+    );
+    d.stop();
+    let _ = std::fs::remove_dir_all(&l.dir);
+}

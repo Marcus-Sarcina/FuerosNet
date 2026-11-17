@@ -283,6 +283,27 @@ pub fn node_acts(acknowledging: bool) -> Vec<Act> {
             )],
         ),
         act(
+            "move",
+            "Move this node to another of your machines",
+            "Sends this node, its state and its blocks, to the machine at that address, pinned \
+             to the host key your client launched it with. It stops here; it answers there \
+             when it is up.",
+            About::Node,
+            Brings::HostKey,
+            vec![
+                p(
+                    "to",
+                    "the address of the machine to move to",
+                    Kind::Text { max: 15 },
+                ),
+                p(
+                    "host",
+                    "that machine's host key, as your client minted it",
+                    Kind::Text { max: 128 },
+                ),
+            ],
+        ),
+        act(
             "runner-refresh",
             "Give the machine this client's runner",
             "The runner limits what this node may ask its host, so this node cannot rewrite \
@@ -554,6 +575,7 @@ mod tests {
         assert_eq!(brings("install"), Brings::HostKey);
         assert_eq!(brings("upgrade"), Brings::HostKey);
         assert_eq!(brings("runner-refresh"), Brings::SignedRunner);
+        assert_eq!(brings("move"), Brings::HostKey);
         assert_eq!(brings("running"), Brings::HostKey);
         assert_eq!(brings("reload"), Brings::Nothing);
         assert_eq!(brings("stop"), Brings::Nothing);

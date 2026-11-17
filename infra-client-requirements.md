@@ -1169,6 +1169,23 @@ parse, before it writes anything. You carry the bytes and cannot forge them.
 A machine whose runner predates the check cannot take one, and a relaunch
 gives it the current runner.
 
+**Moving to another of your operator's machines is an act of the same kind**
+[author, 2026-11-16: *"a deliberate re-homing of the node"*]. Your state and
+your packages' blocks go machine to machine in one stream: declare the act,
+bring the host key, and ask your host to send you to the address you are given,
+**pinned to the host key you are given with it** — the receiving machine's,
+minted by your operator's client and handed to that machine at its launch, so
+the machine you leave knows before the first byte that what answers is the one
+your operator launched. The stream carries your transport key, which is why
+nothing unpinned is ever sent to. The receiving machine takes you in place of
+the node it was running, on its own image, and keeps what it replaced; the
+machine you leave removes you once you have landed and starts you again where
+the send failed. You arrive answering to the token you had, so your operator
+signs your records for the new address and invites your members there
+(`light-client-requirements.md` §4). **A node launched fresh after an outage,
+a shutdown or a lost machine needs none of this**: its members accept it
+because it is signed by the operator, and its packages are installed anew.
+
 ## 10. Role assignment and hosted-session lifecycle
 
 **The node evaluates access and presents the result as a credential**

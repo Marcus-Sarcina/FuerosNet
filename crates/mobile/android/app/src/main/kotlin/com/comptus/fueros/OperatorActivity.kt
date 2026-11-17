@@ -348,6 +348,12 @@ class OperatorActivity : Activity() {
             if (i.remoteId.isNotEmpty()) {
                 roll.addView(
                     Button(this).apply {
+                        text = "Move it to a new machine"
+                        setOnClickListener { move(i, this) }
+                    },
+                )
+                roll.addView(
+                    Button(this).apply {
                         text = "Destroy the machine at ${i.provider}"
                         setOnClickListener { destroy(i) }
                     },
@@ -753,6 +759,19 @@ class OperatorActivity : Activity() {
         val sizes = android.widget.Spinner(this)
         var regionRows: List<Launch.Region> = listOf()
         var sizeRows: List<Launch.Size> = listOf()
+        movePick = {
+            val region = regionRows.getOrNull(regions.selectedItemPosition)
+            val size = sizeRows.getOrNull(sizes.selectedItemPosition)
+            if (region == null || size == null) {
+                null
+            } else {
+                Triple(
+                    provider,
+                    Launch.Plan(region.slug, size.slug, registry = registry.text.toString().trim(), tag = tag.text.toString().trim()),
+                    credential.text.toString().trim(),
+                )
+            }
+        }
         // everything the provider offers, before either picker narrows it
         var allRegions: List<Launch.Region> = listOf()
         var allSizes: List<Launch.Size> = listOf()
@@ -1099,6 +1118,101 @@ class OperatorActivity : Activity() {
      * the credential held there: the one lifecycle act beyond enrol and
      * renew that H1 gives an operator, and only for what H1 launched.
      */
+    /**
+     * **Move a node to a new machine, its state and its blocks with it**
+     * (`infra-client-requirements.md` §9.4) [author, 2026-11-16: "a
+     * deliberate re-homing of the node"]: launch the machine the launch
+     * section below is set to, with a host key minted here; ask the node
+     * to send itself there, pinned to that key; wait for the new machine
+     * to answer to the node's own token; sign its records for the new
+     * address; then let the old machine go. The members are invited at
+     * the new address when the list is drawn, as for any new address.
+     *
+     * **A fresh node after an outage is not this**: a machine launched and
+     * enrolled anew is invited the same way, and its members accept it
+     * because it is signed by this operator.
+     */
+    private fun move(i: Instance, button: Button) {
+        val pick = movePick?.invoke() ?: run {
+            narration.text = "choose where it goes in the launch section: a provider, a region and a size"
+            return
+        }
+        val (provider, plan, cred) = pick
+        if (cred.isEmpty()) {
+            narration.text = "no ${provider.name} credential is held; paste it in the launch section first"
+            return
+        }
+        if (i.runner in 1 until 3) {
+            narration.text = "this machine's runner is version ${i.runner}, and a move needs 3: give it this app's runner first"
+            return
+        }
+        val oldToken = tokenFor(i.at) ?: run { narration.text = "no administration token is held for ${i.at}"; return }
+        val oldCred = Gateway.providerCredentials(by)[i.provider]
+        val oldProvider = Launch.providers().firstOrNull { it.name.lowercase() == i.provider }
+        val material = Gateway.materialHex(by) ?: run { narration.text = "the kernel is not running"; return }
+        button.isEnabled = false
+        Thread {
+            val said = mutableListOf<String>()
+            fun show() = runOnUiThread { narration.text = said.joinToString("\n") }
+            fun stop(why: String) { said += why; show(); runOnUiThread { button.isEnabled = true; drawInstances() } }
+            val hostKey = uniffi.rhtn_ffi.launchHostKey()
+            val fresh = Launch.token()
+            val launched = provider.launch(
+                cred,
+                plan,
+                "rhtn-${fresh.take(8)}",
+                Launch.userData(by, material, fresh, plan.registry, plan.tag, hostKey = hostKey),
+            )
+            val id = launched.getOrElse { return@Thread stop("launch refused: ${it.message}; nothing moved") }.id
+            said += "${provider.name} created machine $id in ${plan.region}; waiting for its address"; show()
+            var ip: String? = null
+            val deadline = System.currentTimeMillis() + 5 * 60_000
+            while (ip == null && System.currentTimeMillis() < deadline) {
+                Thread.sleep(5_000)
+                val st = provider.standing(cred, id).getOrNull() ?: continue
+                if (st.status == "active" && st.ipv4 != null) ip = st.ipv4
+            }
+            if (ip == null) return@Thread stop("no address within five minutes; machine $id is running at ${provider.name} and nothing moved")
+            val surface = "$ip:${Launch.ADMIN_PORT}"
+            said += "address $ip; waiting for it to install"; show()
+            // **its own fresh node answering is what says it is ready to
+            // receive**: the engine is in, the runner is written
+            val up = System.currentTimeMillis() + 8 * 60_000
+            while (Provision.fetch(surface).isFailure && System.currentTimeMillis() < up) Thread.sleep(10_000)
+            if (Provision.fetch(surface).isFailure) return@Thread stop("$surface never answered; nothing moved, and machine $id can be destroyed")
+            val key = Gateway.hostRunnerPrivateKey(by) ?: return@Thread stop("this device could not derive the key for the machine; nothing moved")
+            said += "sending the node to $ip"; show()
+            val sent = Provision.act(i.at, oldToken, "move", listOf("to" to ip, "host" to hostKey.publicLine, "key" to key))
+            if (sent.isFailure) return@Thread stop("the node would not move: ${sent.exceptionOrNull()?.message}; it still serves at ${i.at}")
+            // **arrived means answering to its own token**: the state that
+            // came carries the token this client already holds for it
+            val landed = System.currentTimeMillis() + 10 * 60_000
+            while (Provision.acts(surface, oldToken).isFailure && System.currentTimeMillis() < landed) Thread.sleep(10_000)
+            if (Provision.acts(surface, oldToken).isFailure) {
+                return@Thread stop("the node did not arrive at $ip within ten minutes; if the send failed it is started again at ${i.at}")
+            }
+            said += "it answers at $ip; signing its records for the new address"; show()
+            said += Gateway.enrol(by, surface, oldToken, 7, "$ip:${Launch.QUIC_PORT}", i.subnet, provider.asn, plan.region)
+            remember(Instance(surface, i.subnet, i.label, provider.name.lowercase(), id, Launch.RUNNER_VERSION))
+            rememberToken(surface, oldToken)
+            forget(i.at)
+            Gateway.keyhash(by)?.let { me -> Attachments.serveFrom(by, this@OperatorActivity, me, "$ip:${Launch.QUIC_PORT}") }
+            if (oldProvider != null && oldCred != null) {
+                val gone = oldProvider.destroy(oldCred, i.remoteId)
+                said += gone.fold({ "the old machine ${i.remoteId} is destroyed" }, { "the old machine ${i.remoteId} was not destroyed: ${it.message}" })
+            }
+            said += "moved. Your members are invited at $ip."
+            show()
+            runOnUiThread { button.isEnabled = true; drawInstances() }
+        }.start()
+    }
+
+    /**
+     * Where a move goes: the provider, the plan and its credential as the
+     * launch section is set now, read when the move begins.
+     */
+    private var movePick: (() -> Triple<Launch.Provider, Launch.Plan, String>?)? = null
+
     private fun destroy(i: Instance) {
         val provider = Launch.providers().firstOrNull { it.name.lowercase() == i.provider } ?: return
         val cred = Gateway.providerCredentials(by)[i.provider] ?: run {

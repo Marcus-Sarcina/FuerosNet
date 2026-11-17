@@ -30,6 +30,25 @@
 #    version                                     which runner this is
 #    runner-refresh                              take a newer runner, signed by
 #                                                the operator, on standard input
+#    node-send <address>                         move the node, its state and
+#                                                its blocks, to the operator's
+#                                                machine at that address
+#    node-receive                                take a node sent here, on
+#                                                standard input, in place of
+#                                                the one serving
+#
+#  **Why a node moves at all** [author, 2026-11-16]: "We need to support
+#  both cases, a deliberate re-homing of the node and the launch of a fresh
+#  node after an outage."  The second needs nothing here; the first is
+#  `node-send` on the machine being left and `node-receive` on the one
+#  taking it, machine to machine, so a state of any size goes in one
+#  stream and through no client.  **The receiver is pinned before a byte
+#  goes**: the stream carries the node's transport key, so `node-send`
+#  takes the receiver's host key on standard input -- minted by the
+#  operator's client and handed to that machine at its launch -- and sends
+#  to no machine presenting any other.  It is the operator's runner key
+#  that opens the receiver, which root's authorized_keys binds to this
+#  program there too, so the far side can do nothing but receive.
 #
 #  **Why `node-upgrade` exists at all** [author, 2026-11-04]: "the node
 #  operators do not own their address space and are taking a randomly
@@ -81,7 +100,7 @@ set -eu
 
 # **which runner this is**: a client compares it with the one it carries
 # and tells its operator when a newer one is available
-RUNNER_VERSION=2
+RUNNER_VERSION=3
 RUNNER_SELF="${RHTN_RUNNER_SELF:-/usr/local/bin/rhtn-package-runner}"
 AUTHORIZED="${RHTN_AUTHORIZED_KEYS:-/root/.ssh/authorized_keys}"
 NAMESPACE=rhtn-runner@1
@@ -177,7 +196,8 @@ block_for() {
   dir="$BLOCKS/$1"
   mkdir -p "$dir"
   id="$(project_id "$1")"
-  if ! chattr -p "$id" +P "$dir" 2>/dev/null; then echo "block none the project could not be set on $dir"; return 0; fi
+  # recursively, so a block that arrived with a moved node is counted whole
+  if ! chattr -R -p "$id" +P "$dir" 2>/dev/null; then echo "block none the project could not be set on $dir"; return 0; fi
   kb=$(( (bytes + 1023) / 1024 ))
   if ! setquota -P "$id" 0 "$kb" 0 0 "$mnt" 2>/dev/null; then echo "block none the quota could not be set on $mnt"; return 0; fi
   chmod 0777 "$dir"
@@ -306,6 +326,103 @@ case "$verb" in
       || refuse "the runner could not be written; nothing changed"
     say "runner-refresh $new"
     printf 'runner %s %s\n' "$new" "$(sha256sum "$RUNNER_SELF" | cut -c1-64)"
+    ;;
+  node-send)
+    to="${1:-}"
+    shift || true
+    [ $# -eq 0 ] || refuse "node-send takes one address; the runner key and the receiver's host key come on standard input"
+    case "$to" in ''|*[!0-9.]*) refuse "node-send takes an IPv4 address" ;; esac
+    case "$BLOCKS" in *[!A-Za-z0-9/._-]*) refuse "RHTN_BLOCKS carries unexpected characters" ;; esac
+    command -v ssh > /dev/null 2>&1 || refuse "ssh is wanted to send the node and this host has none; nothing changed"
+    work="$(mktemp -d)" || refuse "there is no room to stage a send; nothing changed"
+    chmod 0700 "$work"
+    head -c 16384 > "$work/in"
+    sed -n '/^-----BEGIN OPENSSH PRIVATE KEY-----$/,/^-----END OPENSSH PRIVATE KEY-----$/p' "$work/in" > "$work/key"
+    grep -m1 '^ssh-ed25519 [A-Za-z0-9+/=]*$' "$work/in" > "$work/host" || true
+    rm -f "$work/in"
+    if [ ! -s "$work/key" ] || [ ! -s "$work/host" ]; then
+      rm -rf "$work"
+      refuse "standard input carries the runner key and then the receiver's host key, and a receiver is pinned or not sent to; nothing changed"
+    fi
+    chmod 0600 "$work/key"
+    printf '%s %s\n' "$to" "$(cat "$work/host")" > "$work/known"
+    say "node-send $to"
+    # **detached, because this stops the node that asked** (as
+    # node-upgrade): its ssh session dies with its container.  On a send
+    # that lands, the node here is removed and its state left on disk; on
+    # one that does not, it is started again.  Values go through the
+    # environment, so nothing is interpolated into the script.
+    # the state and the blocks travel under the names a machine keeps them
+    # at, from the root they hang off (a test's own directory, else /)
+    root="${RHTN_ROOT:-/}"
+    blocks=""
+    [ -d "$BLOCKS" ] && blocks="${BLOCKS#"${root%/}"/}"
+    RHTN_MV_ENGINE="$ENGINE" RHTN_MV_NODE="$NODE" RHTN_MV_TO="$to" RHTN_MV_WORK="$work" \
+      RHTN_MV_ROOT="$root" RHTN_MV_BLOCKS="$blocks" RHTN_MV_LOG="$LOG" RHTN_MV_SSH="${RHTN_SSH:-ssh}" setsid sh -c '
+      "$RHTN_MV_ENGINE" stop "$RHTN_MV_NODE" > /dev/null 2>&1 || true
+      # shellcheck disable=SC2086
+      if tar -C "$RHTN_MV_ROOT" -cf - var/lib/rhtn $RHTN_MV_BLOCKS | "$RHTN_MV_SSH" -i "$RHTN_MV_WORK/key" \
+          -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20 \
+          -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RHTN_MV_WORK/known" \
+          "root@$RHTN_MV_TO" node-receive > "$RHTN_MV_WORK/said" 2>&1; then
+        "$RHTN_MV_ENGINE" rm -f "$RHTN_MV_NODE" > /dev/null 2>&1 || true
+        what="sent to $RHTN_MV_TO"
+      else
+        "$RHTN_MV_ENGINE" start "$RHTN_MV_NODE" > /dev/null 2>&1 || true
+        what="not sent to $RHTN_MV_TO: $(tail -n 1 "$RHTN_MV_WORK/said" 2> /dev/null); the node here is started again"
+      fi
+      { printf "%s rhtn-package-runner: node-send %s\n" "$(date -Is)" "$what" >> "$RHTN_MV_LOG"; } 2> /dev/null || true
+      rm -rf "$RHTN_MV_WORK"
+    ' < /dev/null > /dev/null 2>&1 &
+    echo "sending the node to $to; it stops here now, and answers there when it is up"
+    ;;
+  node-receive)
+    [ $# -eq 0 ] || refuse "node-receive takes nothing; the node comes on standard input"
+    case "$BLOCKS" in *[!A-Za-z0-9/._-]*) refuse "RHTN_BLOCKS carries unexpected characters" ;; esac
+    state="${RHTN_ROOT:-}/var/lib/rhtn"
+    state="${state#//}"
+    case "$state" in /*) ;; *) state="/$state" ;; esac
+    incoming="$state.incoming"
+    rm -rf "$incoming"
+    mkdir -p "$incoming" && chmod 0700 "$incoming" || refuse "there is no room to take a node; nothing changed"
+    if ! tar -C "$incoming" -xf -; then
+      rm -rf "$incoming"
+      refuse "what arrived is not a node's state; nothing changed"
+    fi
+    if [ ! -f "$incoming/var/lib/rhtn/rhtnd.conf" ]; then
+      rm -rf "$incoming"
+      refuse "what arrived carries no node configuration; nothing changed"
+    fi
+    # the image serving here now: the state moves, the image stays this
+    # machine's own
+    image="$("$ENGINE" inspect --format '{{.Image}}' "$NODE" 2> /dev/null || true)"
+    if [ -z "$image" ]; then
+      rm -rf "$incoming"
+      refuse "no node runs here for the one arriving to replace; nothing changed"
+    fi
+    stamp="$(date +%s)"
+    "$ENGINE" rm -f "$NODE" > /dev/null 2>&1 || true
+    mv "$state" "$state.replaced-$stamp"
+    mv "$incoming/var/lib/rhtn" "$state"
+    if [ -d "$incoming/var/lib/rhtn-blocks" ]; then
+      [ -d "$BLOCKS" ] && mv "$BLOCKS" "$BLOCKS.replaced-$stamp"
+      mv "$incoming/var/lib/rhtn-blocks" "$BLOCKS"
+    fi
+    rm -rf "$incoming"
+    # the image's own uid (packaging/Containerfile), which the state is
+    # chowned to as the launch chowns it
+    uid="${RHTN_UID:-10001}"
+    chown -R "$uid:$uid" "$state"
+    chmod 0700 "$state"
+    if ! "$ENGINE" run -d --name "$NODE" --restart=always --network=host -v "$state:/var/lib/rhtn" "$image" > /dev/null 2>&1; then
+      # **what was serving goes back** where the arrival will not start
+      rm -rf "$state"
+      mv "$state.replaced-$stamp" "$state"
+      "$ENGINE" run -d --name "$NODE" --restart=always --network=host -v "$state:/var/lib/rhtn" "$image" > /dev/null 2>&1 || true
+      refuse "the node that arrived would not start; the one that was here is back"
+    fi
+    say "node-receive"
+    echo "received the node; it is starting here"
     ;;
   *)
     refuse "no such verb: $verb"

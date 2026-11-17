@@ -124,6 +124,8 @@ object Launch {
         tag: String = TAG_DEFAULT,
         sshPublicLine: String? = Gateway.hostControlPublicKey(by),
         runnerRestrictedLine: String? = Gateway.hostRunnerAuthorizedLine(by),
+        /** The machine's own host key, where a node is moved to it. */
+        hostKey: uniffi.rhtn_ffi.HostKey? = null,
     ): String = launchUserData(
         operatorMaterialHex,
         token,
@@ -131,6 +133,7 @@ object Launch {
         tag,
         sshPublicLine,
         runnerRestrictedLine,
+        hostKey,
     )
 
     /** What to launch: where, how big, from which registry. */

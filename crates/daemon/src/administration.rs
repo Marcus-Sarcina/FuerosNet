@@ -814,6 +814,7 @@ impl Surface {
             "logs" => self.package_said(body, true),
             "upgrade" => self.node_upgrade(body),
             "runner-refresh" => self.runner_refresh(body),
+            "move" => self.node_move(body),
             other => (
                 404,
                 format!(
@@ -1317,6 +1318,63 @@ impl Surface {
                 ),
             ),
             Err(why) => (502, format!("the host did not take the upgrade: {why}\n")),
+        }
+    }
+
+    /// **Move this node to another of the operator's machines**
+    /// (`infra-client-requirements.md` §9.4) [author, 2026-11-16]: the
+    /// host sends the state and the blocks, machine to machine, to the one
+    /// whose host key the operator's client minted at its launch. The key
+    /// goes on standard input with that host key, so the host can open
+    /// the receiver with it and pin what answers; this node keeps neither.
+    fn node_move(&self, body: &[u8]) -> (u16, String) {
+        let shell = match self.shell() {
+            Ok(s) => s,
+            Err(e) => return e,
+        };
+        let f = form(body);
+        let key = match runner_key(&f) {
+            Ok(k) => k,
+            Err(e) => return e,
+        };
+        let to = field(&f, "to").trim();
+        if to.parse::<std::net::Ipv4Addr>().is_err() {
+            return (
+                400,
+                "`to` is the IPv4 address of the machine to move to\n".into(),
+            );
+        }
+        let host = field(&f, "host").trim();
+        let well_formed = host.strip_prefix("ssh-ed25519 ").is_some_and(|b| {
+            !b.is_empty()
+                && b.bytes()
+                    .all(|c| c.is_ascii_alphanumeric() || b"+/=".contains(&c))
+        });
+        if !well_formed {
+            return (
+                400,
+                "`host` is the receiving machine's host key, `ssh-ed25519 <base64>`: the node \
+                 goes to a machine pinned or to none\n"
+                    .into(),
+            );
+        }
+        tracing::info!(
+            target: "daemon",
+            step = "surface_act",
+            act = "move",
+            to = %to,
+            "daemon.lifecycle"
+        );
+        let input = zeroize::Zeroizing::new(format!("{}\n{host}\n", key.trim_end()));
+        match shell.ask_with(&key, &["node-send", to], Some(input.as_bytes())) {
+            Ok(said) => (
+                202,
+                format!(
+                    "{}\nthis node is leaving for {to}; its page answers there when it is up\n",
+                    said.trim()
+                ),
+            ),
+            Err(why) => (502, format!("the host did not take the move: {why}\n")),
         }
     }
 

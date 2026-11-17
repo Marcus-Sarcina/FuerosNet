@@ -172,6 +172,10 @@ pub fn launch_runner_version() -> u32 {
 /// binds to the package runner and nothing else, so an operator installs
 /// a resource through their client rather than a shell. Given none, the
 /// machine carries neither that key nor the runner.
+///
+/// **`host_key` is the machine's own ssh host key** ([`launch_host_key`]),
+/// for a machine a node is being moved to: the one its sender pins.
+/// Given none, the machine makes its own.
 #[uniffi::export]
 pub fn launch_user_data(
     material_hex: String,
@@ -180,9 +184,10 @@ pub fn launch_user_data(
     tag: String,
     ssh_public_line: Option<String>,
     runner_restricted_line: Option<String>,
+    host_key: Option<HostKey>,
 ) -> String {
     let image = rhtn_launch::Image { registry, tag };
-    rhtn_launch::user_data(
+    let mut script = rhtn_launch::user_data(
         &material_hex,
         &token_hex,
         &image,
@@ -190,7 +195,46 @@ pub fn launch_user_data(
         rhtn_launch::ADMIN_PORT,
         ssh_public_line.as_deref(),
         runner_restricted_line.as_deref(),
-    )
+    );
+    if let Some(k) = host_key {
+        script.push_str(&rhtn_launch::host_key_section(
+            &k.private_key,
+            &k.public_line,
+        ));
+    }
+    script
+}
+
+/// **A machine's ssh host key, minted here** for a machine a node is
+/// moved to (`rhtn_launch::host_key_section`): the private half goes into
+/// that machine's script and nowhere else, and the public line is what
+/// the machine the node leaves pins.
+#[derive(Clone, PartialEq, Eq, uniffi::Record)]
+pub struct HostKey {
+    /// The OpenSSH private key, for the machine's script alone.
+    pub private_key: String,
+    /// `ssh-ed25519 <base64>`, for the sender to pin.
+    pub public_line: String,
+}
+
+impl std::fmt::Debug for HostKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HostKey")
+            .field("public_line", &self.public_line)
+            .finish_non_exhaustive()
+    }
+}
+
+/// A fresh host key ([`HostKey`]).
+#[uniffi::export]
+#[must_use]
+pub fn launch_host_key() -> HostKey {
+    let seed = zeroize::Zeroizing::new(rhtn_transport::tls::random_bytes::<32>());
+    let k = rhtn_crypto::ssh::HostControlKey::from_seed_named(&seed, "rhtn-host");
+    HostKey {
+        private_key: k.private_key.to_string(),
+        public_line: rhtn_crypto::ssh::public_line_bare(&k.public_bytes),
+    }
 }
 
 fn provider_named(provider: &str) -> Result<Box<dyn rhtn_launch::Provider>, Refused> {

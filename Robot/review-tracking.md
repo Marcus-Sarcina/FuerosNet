@@ -22664,3 +22664,25 @@ loss, whose invites are accepted so long as correctly signed — which the
 proof already does (delegation bound to the patron's identity, no comparison
 with any earlier key). Push: the Android push service is the author's to
 choose (UnifiedPush or FCM); asked 2026-11-16.
+
+**Node migration built, 2026-11-16 [author: "Yes, build it"; "both cases"].**
+The admin surface takes 64 KB a request and the phone has no ssh client, so
+the state goes host to host: runner 3's `node-send <ip>` (key and the
+receiver's host key on stdin; refuses unpinned; detached; stops the node,
+tars var/lib/rhtn and the blocks, ssh with StrictHostKeyChecking=yes to the
+one known key, rm on success, start again on failure) and `node-receive`
+(staging dir, refuses what is not a node's state, swap keeping
+`.replaced-<ts>`, own image, puts the old back if the arrival will not
+start). The receiver's host key is minted by the client
+(`launch_host_key`) and set through cloud-init `ssh_keys`
+(`host_key_section`), so the sender pins before the first byte. Daemon act
+`move` (to, host; HostKey), kept off the node page's controls. Operator
+screen "Move it to a new machine": launch per the launch section's
+choices, wait for the fresh node, act, wait for the node to answer to its
+old token at the new surface, enrol (re-signs records for the new
+address), records moved, operator attaches, old machine destroyed, members
+invited when the list draws. Blocks now chattr -R so moved data is counted.
+A machine on runner < 3 is told to take the app's runner first (both bench
+hosts are on 2). Not exercised on a live droplet yet. Open: packages are not
+restarted on the receiver (their containers stay on the old host); the push
+service choice (asked).

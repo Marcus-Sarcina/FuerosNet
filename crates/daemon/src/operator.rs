@@ -1322,7 +1322,14 @@ fn owed(status: &StatusView) -> String {
 /// [`ACT_SCHEME`] and the client makes the act.
 fn node_controls(status: &StatusView) -> String {
     let mut out = String::from("<h2>Acts</h2>\n");
-    for a in crate::acts::node_acts(status.acknowledging) {
+    // **a move is the operator screen's, not a control here** [2026-11-16]:
+    // it launches the machine it goes to and mints that machine's host
+    // key, so a form asking a person to type a host key would be plumbing
+    // in front of them. Declared all the same, for the client that drives it
+    for a in crate::acts::node_acts(status.acknowledging)
+        .into_iter()
+        .filter(|a| a.operation.name != "move")
+    {
         let _ = writeln!(out, "<h3>{}</h3>", escape(&a.operation.label));
         if !a.operation.help.is_empty() {
             let _ = writeln!(out, "<p class=\"sub\">{}</p>", escape(&a.operation.help));

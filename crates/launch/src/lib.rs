@@ -406,6 +406,34 @@ pub fn user_data(
     )
 }
 
+/// **The machine's own ssh host key, chosen by the operator's client**
+/// rather than by the machine: the section `cloud-init` takes it from,
+/// appended after [`user_data`]'s script, whose top-level keys may come in
+/// any order.
+///
+/// **Why the client chooses it** [2026-11-16]: a node moved to this
+/// machine arrives over ssh from the machine it is leaving, carrying its
+/// transport key (`infra-client-requirements.md` §9.4), and the sender
+/// must know the receiver is this machine and not whatever answered the
+/// address. A key the client minted and handed over is one the sender can
+/// pin before the first byte, where a key the machine generated could
+/// only be trusted on first use. The provider sees it in the script, as
+/// it sees the machine.
+pub fn host_key_section(private_key: &str, public_line: &str) -> String {
+    let private: String = private_key
+        .lines()
+        .map(|l| format!("\x20   {l}\n"))
+        .collect();
+    format!(
+        "ssh_deletekeys: true\n\
+         ssh_genkeytypes: []\n\
+         ssh_keys:\n\
+         \x20 ed25519_private: |\n{private}\
+         \x20 ed25519_public: {}\n",
+        public_line.trim()
+    )
+}
+
 /// One HTTP exchange, as the platform makes it: the method, the full URL,
 /// the headers to send, the body where there is one; back come the status
 /// and the body's text.  A transport failure is a string in the caller's
@@ -1095,6 +1123,56 @@ mod tests {
     }
 
     // acceptance: PRT-08
+    // functional: OPS-030
+    /// **The machine a node moves to takes the host key its operator's
+    /// client minted**, and makes none of its own: the sender pins that
+    /// key, so a key generated on first boot would be one it refuses.
+    #[test]
+    fn a_minted_host_key_is_what_the_machine_takes() {
+        let k = rhtn_crypto::ssh::HostControlKey::from_seed_named(&[8u8; 32], "rhtn-host");
+        let public = rhtn_crypto::ssh::public_line_bare(&k.public_bytes);
+        let section = host_key_section(&k.private_key, &public);
+        assert!(
+            section.starts_with("ssh_deletekeys: true\nssh_genkeytypes: []\nssh_keys:\n"),
+            "{section}"
+        );
+        assert!(
+            section.contains("  ed25519_private: |\n    -----BEGIN OPENSSH PRIVATE KEY-----\n"),
+            "{section}"
+        );
+        assert!(
+            section.contains("    -----END OPENSSH PRIVATE KEY-----\n"),
+            "{section}"
+        );
+        assert!(
+            section.ends_with(&format!("  ed25519_public: {public}\n")),
+            "{section}"
+        );
+        // every private line is inside the block, none at the margin
+        let block: Vec<&str> = section
+            .lines()
+            .skip_while(|l| !l.starts_with("  ed25519_private"))
+            .skip(1)
+            .take_while(|l| !l.starts_with("  ed25519_public"))
+            .collect();
+        assert!(
+            !block.is_empty() && block.iter().all(|l| l.starts_with("    ")),
+            "{block:?}"
+        );
+        // and it follows the script as a top-level key
+        let script = user_data(
+            "82a301",
+            "tok",
+            &Image::default(),
+            QUIC_PORT,
+            ADMIN_PORT,
+            None,
+            None,
+        ) + &section;
+        assert!(script.starts_with("#cloud-config\n"));
+        assert_eq!(script.matches("\nssh_keys:\n").count(), 1);
+    }
+
     #[test]
     fn the_configuration_and_the_script_carry_what_the_instance_needs_and_no_seed() {
         let token = "ab".repeat(32);
