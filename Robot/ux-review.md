@@ -21,9 +21,12 @@ not be treated as anchors to design around."*
 - **Flag:** every string he gave verbatim carries a `// AUTHOR COPY
   [author, date]` comment in the shell. `grep -rn "AUTHOR COPY"
   crates/mobile/android` lists them. Unflagged text is mine.
-- **When a change invalidates one** (what it states moves, an answer
-  changes meaning, the screen it sits on goes), say so in the output and
-  ask him for the words. Do not rewrite it.
+- **Never engineer around it** [author, 2026-11-17]: *"You don't re-write
+  it, but more importantly, you don't engineer around it. Raise the issue
+  to me if there's a conflict."* A mechanism is never shaped to keep his
+  sentence true. Where the design and his copy conflict, decide the design
+  on its merits and raise the conflict with him in the output. Do not
+  rewrite the copy either.
 - **Not in the requirements:** root documents and `functional_tests.md`
   rows describe what text must convey and never quote his copy as the
   requirement. UX-033 was restated this way on 2026-11-17, and it was the
