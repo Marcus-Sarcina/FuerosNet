@@ -761,6 +761,30 @@ nothing below reaches across them.
 
 - **Dial the serving infra node**, which is the nearest infrastructure node on the
   patron chain and not necessarily the patron (design §14.1.2).
+- **Serve from a node at an address the person agreed to, and nowhere else**
+  [author, 2026-11-16]. A node's endpoint record (`wire-format.md` §7.6) at a new
+  address reaches your horizon and does not move where you dial it: a move reaches
+  the person as an invitation they accept.
+- **An invitation naming a node you already serve from, at another address, says
+  the node moved, and you prove it before you tell anyone.** Hold one per node, the
+  newest replacing whatever you held. Dial the new address and bind the key it
+  presents to the patron, as a session's first frames bind it (`wire-format.md`
+  §§8.2, 9.1), opening no session. Until it proves itself there, change nothing.
+  Once it has, ask the person whether the server at the new address is their home
+  for that patron's subnet, and **use the node at neither address until they
+  answer**: *"someone might hijack a device or identity to launch an alternate node
+  and so the user should have the option to not trust a new node, but they can not
+  keep interacting with the old node as if it were active."* Accepting makes the new
+  address the agreement. Declining leaves the agreement as it was and the node
+  unused, with the question still standing, until they accept it or a newer
+  invitation replaces it.
+- **Something answering for the node that is not the node shuts the node**
+  [author, 2026-11-16]: *"Any irregularity around the node identity should shut
+  down user activity on that node until the patron resolves it, usually by some
+  out-of-band communication."* At the new address or the agreed one, a key that
+  does not bind to the patron stops the node's use until the patron's next
+  invitation is proved and accepted. A delegation outside its window is the node's
+  own lapse, its operator's to renew, and not this.
 - **Treat a sibling whose `KeyMaterial` you lack as unusable**, not as one to dial
   unauthenticated (`wire-format.md` §8). There is no fetch path: the party that
   would serve one is the node that is down.

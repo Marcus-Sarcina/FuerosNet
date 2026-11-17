@@ -2708,12 +2708,76 @@ pub async fn connect_request_only(
     target: [u8; 32],
     addr: std::net::SocketAddr,
 ) -> Result<(Connection, Bound), String> {
+    dial_bound(cfg, endpoint, target, addr)
+        .await
+        .map_err(|f| match f {
+            Dialled::Unreached(e) => e,
+            Dialled::Refused(_, detail) => format!("unbound: {detail}"),
+        })
+}
+
+/// **Whether `target` answers at `addr` as itself**, and nothing else: the
+/// dial [`connect_request_only`] makes, closed once the key is bound. What
+/// a client asks of an address an invitation named before it treats the
+/// node as being there.
+pub async fn prove_at(
+    cfg: &ClientConfig,
+    endpoint: &quinn::Endpoint,
+    target: [u8; 32],
+    addr: std::net::SocketAddr,
+) -> Proof {
+    match dial_bound(cfg, endpoint, target, addr).await {
+        Ok((conn, _)) => {
+            conn.close(VarInt::from_u32(0), b"proved");
+            Proof::Proved
+        }
+        Err(Dialled::Unreached(e)) => Proof::Unreached(e),
+        Err(Dialled::Refused(why, _)) => Proof::Refused(why),
+    }
+}
+
+/// What [`prove_at`] found at an address.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Proof {
+    /// The key presented there binds to the identity sought.
+    Proved,
+    /// Nothing answered as anybody: no route, no handshake, no pin to
+    /// check a key against.
+    Unreached(String),
+    /// Something answered and did not prove itself the identity sought.
+    Refused(Refusal),
+}
+
+/// Why a bound dial did not land: the address, or the binding.
+enum Dialled {
+    Unreached(String),
+    Refused(Refusal, String),
+}
+
+impl From<String> for Dialled {
+    fn from(e: String) -> Self {
+        Dialled::Unreached(e)
+    }
+}
+
+impl From<&str> for Dialled {
+    fn from(e: &str) -> Self {
+        Dialled::Unreached(e.to_string())
+    }
+}
+
+async fn dial_bound(
+    cfg: &ClientConfig,
+    endpoint: &quinn::Endpoint,
+    target: [u8; 32],
+    addr: std::net::SocketAddr,
+) -> Result<(Connection, Bound), Dialled> {
     let tls_cfg = cfg.tls_for(&target).ok_or("NotPinned")?;
     let connecting = tls::dial_with(endpoint, tls_cfg, addr).map_err(|e| format!("{e:?}"))?;
     let conn = match tokio::time::timeout(cfg.connect_timeout, connecting).await {
         Ok(Ok(c)) => c,
-        Ok(Err(e)) => return Err(e.to_string()),
-        Err(_) => return Err("dial timed out".into()),
+        Ok(Err(e)) => return Err(e.to_string().into()),
+        Err(_) => return Err(Dialled::Unreached("dial timed out".into())),
     };
     // recorded into the caller's log: there is no session to carry one
     let log = cfg.log.clone();
@@ -2779,10 +2843,10 @@ pub async fn connect_request_only(
     Ok((conn, how))
 }
 
-fn refuse<T>(conn: &Connection, log: &Log, why: Refusal, detail: String) -> Result<T, String> {
-    log.push(Event::Unbound { why });
+fn refuse<T>(conn: &Connection, log: &Log, why: Refusal, detail: String) -> Result<T, Dialled> {
+    log.push(Event::Unbound { why: why.clone() });
     conn.close(VarInt::from_u32(CLOSE_REFUSED), b"unbound");
-    Err(format!("unbound: {detail}"))
+    Err(Dialled::Refused(why, detail))
 }
 
 /// A fresh attach: the client's actual serving node first, and its cached

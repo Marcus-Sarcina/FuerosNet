@@ -65,6 +65,8 @@ impl Client {
                     path: l.path.clone(),
                     nibbles: l.nibbles,
                 }),
+                patron: self.patron_in(&id),
+                relocation: self.patron_in(&id).and_then(|p| self.relocation(&p)),
             })
             .collect()
     }

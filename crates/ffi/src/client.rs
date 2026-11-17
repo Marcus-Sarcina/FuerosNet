@@ -2132,6 +2132,13 @@ impl Participant {
             let order = self
                 .handle
                 .with_blocking(move |c| c.dial_order(&node, &given));
+            // **a node whose move is being settled is not used at either
+            // address** [author, 2026-11-16]
+            if order.is_empty() {
+                return Err(Refused::new(
+                    "this node is not in use until its relocation is settled",
+                ));
+            }
             let addrs: Vec<SocketAddr> = order.iter().filter_map(|a| a.parse().ok()).collect();
             let a = self.net.attach(&self.handle, node, &addrs, pop)?;
             self.save()?;
@@ -2414,6 +2421,103 @@ impl Participant {
                     })
                     .collect()
             })
+        })
+    }
+
+    /// **An invitation naming a node already agreed to, at `to`**
+    /// (`rhtn_client::relocation`): held as a relocation, the newest
+    /// replacing what was held. Whether it was one; false for a node never
+    /// agreed to, whose invitation is a first one.
+    pub fn offer_relocation(
+        &self,
+        node: Id,
+        to: String,
+        label: Option<String>,
+    ) -> Result<bool, Refused> {
+        self.call("offer_relocation", || {
+            let node = keyhash(&node).ok_or_else(|| Refused::new("a node is 32 bytes"))?;
+            to.parse::<SocketAddr>()
+                .map_err(|_| Refused::new(format!("{to} is not an address")))?;
+            let held = self
+                .handle
+                .with_blocking(move |c| c.offer_relocation(node, to, label));
+            self.save()?;
+            Ok(held)
+        })
+    }
+
+    /// **Dial the address a relocation names and say what answered**: the
+    /// node as itself, nothing yet, or something that is not the node. The
+    /// relocation as it now stands; none where nothing is held. Only an
+    /// unproved one is dialled.
+    pub fn prove_relocation(&self, node: Id) -> Result<Option<rhtn_model::Relocation>, Refused> {
+        self.call("prove_relocation", || {
+            use rhtn_client::relocation::Found;
+            use rhtn_transport::bind::Refusal;
+            use rhtn_transport::session::Proof;
+            let node = keyhash(&node).ok_or_else(|| Refused::new("a node is 32 bytes"))?;
+            let Some(r) = self.handle.with_blocking(move |c| c.relocation(&node)) else {
+                return Ok(None);
+            };
+            if r.standing != rhtn_model::Standing::Unproved {
+                return Ok(Some(r));
+            }
+            let addr: SocketAddr =
+                r.to.parse()
+                    .map_err(|_| Refused::new(format!("{} is not an address", r.to)))?;
+            // a lapsed run is the node's own, asked again later, and not
+            // an irregularity
+            let found = match self.net.prove(node, addr) {
+                Proof::Proved => Found::Proved,
+                Proof::Unreached(_) | Proof::Refused(Refusal::Window) => Found::Unreached,
+                Proof::Refused(why) => Found::Irregular(why.to_string()),
+            };
+            let to = r.to.clone();
+            let now = self.handle.with_blocking(move |c| {
+                c.relocation_proved(&node, &to, found);
+                c.relocation(&node)
+            });
+            self.save()?;
+            Ok(now)
+        })
+    }
+
+    /// **The person accepted the relocation**: the new address is the
+    /// agreement from now on. The address, for the shell to attach at.
+    pub fn accept_relocation(&self, node: Id) -> Result<String, Refused> {
+        self.call("accept_relocation", || {
+            let node = keyhash(&node).ok_or_else(|| Refused::new("a node is 32 bytes"))?;
+            let to = self
+                .handle
+                .with_blocking(move |c| c.accept_relocation(&node))
+                .ok_or_else(|| {
+                    Refused::new("no relocation the person can accept is held for that node")
+                })?;
+            self.save()?;
+            Ok(to)
+        })
+    }
+
+    /// **The person would not connect there**: the agreement stands, and
+    /// the node stays unused until another invitation.
+    pub fn decline_relocation(&self, node: Id) -> Result<(), Refused> {
+        self.call("decline_relocation", || {
+            let node = keyhash(&node).ok_or_else(|| Refused::new("a node is 32 bytes"))?;
+            if !self
+                .handle
+                .with_blocking(move |c| c.decline_relocation(&node))
+            {
+                return Err(Refused::new("no proved relocation is held for that node"));
+            }
+            self.save()
+        })
+    }
+
+    /// Every relocation held (`rhtn_model::Relocation`).
+    #[must_use]
+    pub fn relocations(&self) -> Vec<rhtn_model::Relocation> {
+        self.call_plain("relocations", || {
+            self.handle.with_blocking(|c| c.relocations())
         })
     }
 

@@ -154,14 +154,25 @@ class InviteActivity : Activity() {
                     text = label
                     setOnClickListener {
                         isEnabled = false
-                        narration.text = "${narration.text}\nattaching to ${read.at}…"
-                        Attachments.serveFrom(by, this@InviteActivity, node, read.at)
+                        if (agreed(node)) {
+                            relocate(node, read.at, read.asLabel)
+                        } else {
+                            narration.text = "${narration.text}\nattaching to ${read.at}…"
+                            Attachments.serveFrom(by, this@InviteActivity, node, read.at)
+                        }
                     }
                 },
             )
         }
         val one = read.node
         if (one != null) {
+            // **a node this identity already serves from is a move, not a
+            // first invitation** [author, 2026-11-16]: nothing to agree to
+            // here, and nothing changes until it proves itself there
+            if (agreed(one)) {
+                relocate(one, read.at, read.asLabel)
+                return
+            }
             offer(one, "Serve from ${one.take(8)}…'s node")
             return
         }
@@ -174,5 +185,34 @@ class InviteActivity : Activity() {
             offer(k, "${k.take(8)}…")
         }
         return
+    }
+
+    /** Whether this identity already agreed to serve from `nodeHex`. */
+    private fun agreed(nodeHex: String): Boolean =
+        Gateway.loaded[by]?.let { p ->
+            runCatching { p.agreed().any { Gateway.hex(it.serving) == nodeHex } }.getOrDefault(false)
+        } ?: false
+
+    /**
+     * **Held as a relocation and proved at once**: the kernel dials the
+     * new address and binds what answers there to the patron before the
+     * person is asked anything; the subnet's orb carries the question.
+     */
+    private fun relocate(nodeHex: String, at: String, label: String?) {
+        val p = Gateway.loaded[by] ?: return
+        narration.text = "${narration.text}\n${Relocate.checking(at)}"
+        Thread({
+            val node = Gateway.unhex(nodeHex)
+            val held = Gateway.call("offerRelocation", { e -> Diag.warn("relocation", "why" to e.reason); false }) {
+                p.offerRelocation(node, at, label)
+            }
+            val r = if (held) {
+                Gateway.call("proveRelocation", { e -> Diag.warn("relocation", "why" to e.reason); null }) { p.proveRelocation(node) }
+            } else {
+                null
+            }
+            Model.refreshAll()
+            runOnUiThread { narration.text = "${narration.text}\n\n${Relocate.found(held, r?.standing)}" }
+        }, "fueros-relocate").start()
     }
 }

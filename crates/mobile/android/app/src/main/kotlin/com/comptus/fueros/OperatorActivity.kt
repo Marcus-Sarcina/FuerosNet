@@ -238,7 +238,12 @@ class OperatorActivity : Activity() {
         // is a new invitation — which is the case that prompted the
         // feature, an operator not owning their address space [author,
         // 2026-11-04].
-        held.forEach { sendInvitations(it.at) }
+        // **at the address members dial, not the one this screen
+        // administers** [2026-11-16]: an instance is held by its operator's
+        // surface (`:7449`), and an invitation naming that sent members to
+        // a port that speaks no protocol; the operator's own attach is at
+        // the protocol port, and so is theirs
+        held.forEach { sendInvitations("${Relocate.host(it.at)}:${Launch.QUIC_PORT}") }
         if (held.isEmpty()) {
             roll.addView(
                 TextView(this).apply {

@@ -262,7 +262,9 @@ class ShellActivity : Activity() {
                 Chrome.Rung.Subnet(
                     id = o.row.id.hex(),
                     alias = o.row.alias,
-                    unseen = 0,
+                    // **a move of its node to answer marks the orb**
+                    // [author, 2026-11-16]; nothing else counts here yet
+                    unseen = if (Relocate.blocks(o.row.relocation)) 1 else 0,
                     by = o.by,
                     crown = Chrome.crown(
                         root = o.row.rank.root,
@@ -423,6 +425,51 @@ class ShellActivity : Activity() {
                 } else {
                     Gateway.front.note("· that identity is not open on this device")
                 }
+            }
+            .show()
+    }
+
+    /**
+     * **The question a moved node puts to the person, over its subnet's
+     * page** [author, 2026-11-16]. Not dismissable: the page behind it is
+     * not reached until it is answered, and "Do not connect" goes back
+     * Home with the question still standing. Accepting makes the new
+     * address the agreement and attaches there.
+     */
+    private fun relocation(by: String, subnet: uniffi.rhtn_model.Subnet, r: uniffi.rhtn_model.Relocation) {
+        val nodeHex = Gateway.hex(r.node)
+        val patron = subnet.patron?.let { Gateway.aliasOfHeld(by, Gateway.hex(it)) }
+            ?: r.label ?: "Your patron"
+        val name = subnet.alias ?: "subnet"
+        val home = { go(Chrome.Place.Home) }
+        val dialog = AlertDialog.Builder(this).setCancelable(false)
+        if (!Relocate.asks(r)) {
+            dialog.setMessage(Relocate.irregular(patron, name, r.to))
+                .setPositiveButton("Back") { _, _ -> home() }
+                .show()
+            return
+        }
+        val (accept, refuse) = Relocate.ANSWERS
+        dialog.setMessage(Relocate.question(patron, name, r.from.firstOrNull() ?: "", r.to))
+            .setPositiveButton(accept) { _, _ ->
+                Thread({
+                    val p = Gateway.loaded[by]
+                    val to = p?.let { Gateway.call("acceptRelocation", { e -> Gateway.front.note("· not accepted: ${e.reason}"); null }) { it.acceptRelocation(r.node) } }
+                    if (to != null) Attachments.attachTo(by, nodeHex, to)
+                    Model.refreshAll()
+                    runOnUiThread { drawFromModel(); go(place) }
+                }, "fueros-relocate").start()
+            }
+            .setNegativeButton(refuse) { _, _ ->
+                Thread({
+                    Gateway.loaded[by]?.let { p ->
+                        if (r.standing == uniffi.rhtn_model.Standing.PROVED) {
+                            Gateway.call("declineRelocation", { e -> Gateway.front.note("· ${e.reason}") }) { p.declineRelocation(r.node) }
+                        }
+                    }
+                    Model.refreshAll()
+                    runOnUiThread { drawFromModel(); home() }
+                }, "fueros-relocate").start()
             }
             .show()
     }
@@ -650,7 +697,14 @@ class ShellActivity : Activity() {
                 secondPatronPrompt()?.let { column.addView(it) }
             }
             is Chrome.Place.Subnet -> {
-                val scope = scopes.firstOrNull { it.row.id.hex() == where.id }?.row
+                val owned = scopes.firstOrNull { it.row.id.hex() == where.id }
+                val scope = owned?.row
+                // **the page waits behind the question** [author,
+                // 2026-11-16]: a subnet whose node moved, or was answered
+                // for by something else, is not reached until it is settled
+                scope?.relocation?.takeIf { Relocate.blocks(it) }?.let { r ->
+                    content.post { relocation(owned.by, scope, r) }
+                }
                 column.addView(
                     bar(scope?.alias ?: "subnet ${where.id.take(8)}…", back = null) {
                         go(Chrome.Place.SubnetOptions(where.id))

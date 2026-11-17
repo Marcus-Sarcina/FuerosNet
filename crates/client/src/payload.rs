@@ -1384,6 +1384,9 @@ pub struct PayloadState {
     /// agreement is an invitation taken, an instance enrolled, or a node
     /// launched; an attach the bench's provision drove is not one.
     pub agreed: BTreeMap<Keyhash, Vec<String>>,
+    /// **A move said of a node agreed to, while it stands**
+    /// ([`crate::relocation`]): one per node, the newest invitation's.
+    pub relocations: BTreeMap<Keyhash, crate::relocation::Held>,
     /// This device, by the key it presents (`wire-format.md` §7.8): what
     /// its bundle names and what its messages say they are from.  The
     /// identity's classical member until a device says otherwise.
@@ -1426,6 +1429,29 @@ pub struct PayloadState {
     pub wanted: BTreeSet<Keyhash>,
 }
 
+/// A relocation's standing as the state writes it.
+fn standing_code(s: rhtn_model::Standing) -> u64 {
+    use rhtn_model::Standing::*;
+    match s {
+        Unproved => 0,
+        Proved => 1,
+        Declined => 2,
+        Irregular => 3,
+    }
+}
+
+/// The standing a written code names; none for a code no writer uses.
+fn standing_of(n: u64) -> Option<rhtn_model::Standing> {
+    use rhtn_model::Standing::*;
+    Some(match n {
+        0 => Unproved,
+        1 => Proved,
+        2 => Declined,
+        3 => Irregular,
+        _ => return None,
+    })
+}
+
 impl PayloadState {
     /// Everything of this state that a restart would otherwise lose: the
     /// material, the sessions, the device, the signed bundle, what waits
@@ -1435,9 +1461,9 @@ impl PayloadState {
     pub fn encode(&self) -> Vec<u8> {
         use crate::durable::*;
         let mut out = Vec::new();
-        // eleven fields since the agreed nodes; the ten- and seven-field
-        // forms still read, the fields they lack as empty
-        emit_array_head(&mut out, 11);
+        // twelve fields since the relocations; the eleven-, ten- and
+        // seven-field forms still read, the fields they lack as empty
+        emit_array_head(&mut out, 12);
         emit_bstr(&mut out, &self.keys.encode());
         emit_bstr(&mut out, &self.sessions.encode());
         // slot 2 held "the serving node" until restructure step 1
@@ -1488,6 +1514,21 @@ impl PayloadState {
                 emit_tstr(&mut out, a);
             }
         }
+        emit_array_head(&mut out, self.relocations.len());
+        for (node, h) in &self.relocations {
+            emit_array_head(&mut out, 5);
+            emit_bstr(&mut out, node);
+            emit_tstr(&mut out, &h.to);
+            emit_uint(&mut out, standing_code(h.standing));
+            match &h.why {
+                Some(w) => emit_tstr(&mut out, w),
+                None => emit_null(&mut out),
+            }
+            match &h.label {
+                Some(l) => emit_tstr(&mut out, l),
+                None => emit_null(&mut out),
+            }
+        }
         out
     }
 
@@ -1495,7 +1536,8 @@ impl PayloadState {
     pub fn decode(cfg: PayloadConfig, b: &[u8]) -> Option<PayloadState> {
         use crate::durable::*;
         // the seven-field form predates the address model and still reads
-        let (_, f) = parse_array(b, 11)
+        let (_, f) = parse_array(b, 12)
+            .or_else(|| parse_array(b, 11))
             .or_else(|| parse_array(b, 10))
             .or_else(|| parse_array(b, 7))?;
         let keyhashes = |it: &rhtn_codec::cbor::Item| -> Option<Vec<Keyhash>> {
@@ -1545,6 +1587,36 @@ impl PayloadState {
                 .collect::<Option<_>>()?,
             None => BTreeMap::new(),
         };
+        let text = |it: &rhtn_codec::cbor::Item| match it {
+            rhtn_codec::cbor::Item::Text(r) => {
+                std::str::from_utf8(&b[r.clone()]).ok().map(str::to_string)
+            }
+            _ => None,
+        };
+        let opt_text = |it: &rhtn_codec::cbor::Item| match it {
+            rhtn_codec::cbor::Item::Null => Some(None),
+            it => text(it).map(Some),
+        };
+        let relocations: BTreeMap<Keyhash, crate::relocation::Held> = match f.get(11) {
+            Some(it) => array(it)?
+                .iter()
+                .map(|p| {
+                    let [node, to, standing, why, label] = array(p)?.as_slice() else {
+                        return None;
+                    };
+                    Some((
+                        fixed::<32>(b, node)?,
+                        crate::relocation::Held {
+                            to: text(to)?,
+                            standing: standing_of(uint(standing)?)?,
+                            why: opt_text(why)?,
+                            label: opt_text(label)?,
+                        },
+                    ))
+                })
+                .collect::<Option<_>>()?,
+            None => BTreeMap::new(),
+        };
         let signed_bundle = match &f[4] {
             rhtn_codec::cbor::Item::Null => None,
             it => {
@@ -1573,6 +1645,7 @@ impl PayloadState {
             serving_at,
             last_from,
             agreed,
+            relocations,
             device: fixed::<32>(b, &f[3])?,
             signed_bundle,
             pending,
@@ -1595,6 +1668,7 @@ impl PayloadState {
             serving_at: BTreeMap::new(),
             last_from: BTreeMap::new(),
             agreed: BTreeMap::new(),
+            relocations: BTreeMap::new(),
             device: [0; 32],
             signed_bundle: None,
             pending: BTreeMap::new(),

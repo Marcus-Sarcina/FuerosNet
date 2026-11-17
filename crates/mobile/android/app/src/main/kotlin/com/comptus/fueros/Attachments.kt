@@ -469,11 +469,26 @@ object Attachments {
     }
 
     /**
+     * **A move not yet proved is dialled again** [author, 2026-11-16]: the
+     * new address may not have been answering when the invitation came,
+     * and the person is asked only once the node answers there as itself.
+     * Every attach round asks, so the reattach backoff paces it.
+     */
+    internal fun proveMoves(p: Participant) {
+        val waiting = Gateway.call("relocations", { emptyList() }) { p.relocations() }
+            .filter { it.standing == uniffi.rhtn_model.Standing.UNPROVED }
+        for (r in waiting) {
+            Gateway.call("proveRelocation", { e -> Diag.warn("relocation", "why" to e.reason); null }) { p.proveRelocation(r.node) }
+        }
+    }
+
+    /**
      * **Every tab the identity agreed to, attached** — the first attach the
      * session, each further one a tab on it; the connection shown is the
      * first's. Where one did not answer, [reattachLater] tries again.
      */
     internal fun attachTabs(id: String, p: Participant, scope: String?, attempt: Int) {
+        proveMoves(p)
         val tabs = Gateway.call("agreed", { emptyList() }) { p.agreed() }
         if (tabs.isEmpty()) {
             Diag.event("identity.attach", "who" to id.take(8), "node" to "none")
@@ -709,6 +724,7 @@ object Attachments {
         run {
             val scope = index.firstOrNull { it.id == up }?.scope
             var missed = 0
+            proveMoves(p)
             for (t in Gateway.call("agreed", { emptyList() }) { p.agreed() }) {
                 val hex = t.serving.hex()
                 if (hex == nodeHex) continue

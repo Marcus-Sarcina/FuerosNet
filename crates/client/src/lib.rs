@@ -85,6 +85,7 @@ pub mod payload;
 pub mod query;
 pub mod ratchet;
 pub mod record;
+pub mod relocation;
 pub mod resource;
 pub mod rotation;
 pub mod sealed;

@@ -53,7 +53,7 @@ fn the_address_state_round_trips_and_the_older_form_still_reads() {
     assert_eq!(back.serving_at, p.serving_at);
     assert_eq!(back.last_from, p.last_from);
     assert_eq!(back.agreed, p.agreed, "the agreement and its addresses");
-    assert_eq!(bytes[0], 0x8b, "eleven fields");
+    assert_eq!(bytes[0], 0x8c, "twelve fields");
 }
 
 // functional: SES-017
@@ -105,11 +105,13 @@ fn a_node_agreed_to_is_kept_with_its_addresses_until_withdrawn() {
     assert_eq!(a.agreed().len(), 1);
 }
 
-/// **A node is dialled where the horizon says it is now, then where the
-/// agreement said** (review 2026-11-13): an endpoint record at a new
-/// address outranks the address an invitation named.
+// functional: SES-021
+/// **A node is dialled where the agreement says, and an endpoint record at
+/// a new address does not move it** [author, 2026-11-16: "Verify, then
+/// wait"]: the record reaches the horizon, and the dial is still the
+/// address the person agreed to until an invitation they accept.
 #[test]
-fn a_node_is_dialled_where_its_endpoint_record_says_before_where_the_agreement_said() {
+fn an_endpoint_record_at_a_new_address_does_not_move_the_dial() {
     let mut s = setup(&["alice", "bob", "witness"]);
     // bob adopted under alice: a binding in her horizon, which is what proves
     // an endpoint record of his (series 1) — a node she places
@@ -139,10 +141,19 @@ fn a_node_is_dialled_where_its_endpoint_record_says_before_where_the_agreement_s
         "bob is alice's patron in her horizon"
     );
     a.horizon.ingest_endpoint(&rec, &ids());
-    assert_eq!(a.addresses_for(&kh("bob")), vec!["192.168.0.9:7431"]);
+    assert!(
+        !a.horizon.endpoints_of(&kh("bob")).is_empty(),
+        "the record reached the horizon"
+    );
     assert_eq!(
-        a.dial_order(&kh("bob"), &["192.168.0.8:7431".to_string()]),
-        vec!["192.168.0.9:7431", "192.168.0.8:7431"],
-        "the horizon's address first, the agreement's after, neither twice"
+        a.dial_order(
+            &kh("bob"),
+            &[
+                "192.168.0.8:7431".to_string(),
+                "192.168.0.8:7431".to_string()
+            ]
+        ),
+        vec!["192.168.0.8:7431"],
+        "the agreement's address alone, once"
     );
 }

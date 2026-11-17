@@ -642,7 +642,6 @@ fn enrolled_with(
     for c in issue_run(&bob, &key, now(), 1) {
         assert_eq!(200, status(&ask(at, "PUT /node/run HTTP/1.1", &c)));
     }
-    let said = d.lines();
     // **and whether the process is still there** [2026-11-07]: `serving`
     // blocks on stdout and answers `None` on EOF, so a daemon that died
     // and a daemon that is slow read the same from here. Under a full
@@ -651,6 +650,13 @@ fn enrolled_with(
     // tells them apart, so the message carries it.
     let serving = d.serving();
     let gone = d.gone();
+    // **what it said is read after it stopped saying it** [2026-11-16]:
+    // read before the wait, a daemon that died panicking left its exit
+    // status here and its reason on the far side of the snapshot
+    if serving.is_none() {
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    let said = d.lines();
     assert!(
         serving.is_some(),
         "it serves once enrolled; the daemon said {said:?} and its process was {}",

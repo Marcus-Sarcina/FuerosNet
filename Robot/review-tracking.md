@@ -22618,3 +22618,34 @@ filter, loop). Not mine to have caused (the progress fix touched neither
 path), but the install restarted the apps, which is what put a choice
 inside bring-up. MRK also never attached in this run: both its tabs'
 dials timed out at every attempt (separate; noted).
+
+**Node relocation, 2026-11-16 [author: "Option 1, through the app" and the
+answers that followed].** Decided: the operator's device has the new node by
+launching it or by pairing with the device that did; subordinates get a push
+as for a new node, the app connects and verifies the node is signed by the
+patron before notifying; the orb carries a superscript; the subnet page is
+blocked behind *"[patron] has relocated their server for [patron]'s [subnet]
+from [old ip] to [new ip]. Do you accept the server at [new ip] as your new
+home for [patron]'s [subnet]?"* with Accept / Do not connect. Delivery:
+**relaunch keeps state** (registrations included) and the node invite
+notification carries the new IP ("it's one piece of information"). Before
+Accept: **verify, then wait** (dial_order's silent horizon preference of
+review 2026-11-13 retired). Decline: old agreement stands, notice does not
+clear, subnet unreachable until accepted or replaced by a newer invite; any
+identity irregularity shuts the node until the patron resolves it out of band.
+Premise corrected to the author: no push to subordinates existed (the app
+posts only resource asks and the foreground notice; nothing calls `wake`).
+**Phase 1 built** (the invite link as carrier): `rhtn_client::relocation`
+(Unproved/Proved/Declined/Irregular, payload field 12), `prove_at` in the
+transport (a bound dial, no session, typed refusal), ffi offer/prove/accept/
+decline/relocations, attach halting on an identity refusal (not Window),
+dial_order agreed-only, `Subnet.patron`/`Subnet.relocation`, shell orb badge,
+non-dismissable popup, InviteActivity routing an agreed node to the move,
+unproved moves re-proved every attach round. Docs: L §4 three bullets; rows
+SES-021, SES-022, UX-033 (UX-027 was taken; 591 families). **Phase 2 owed**:
+a relaunch that moves the node's state, wake registrations included.
+**Phase 3 owed**: Android doorbell registration (needs the push service
+chosen), the moved node ringing its registrations with the invite, and D
+§14.1.5 / MAIL-020 amended for an invite doorbell carrying the address.
+Irregular-popup wording is mine (author gave none). A forged link can halt a
+working node (anyone who can deliver a link to a member) — flagged.

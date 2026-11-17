@@ -6695,23 +6695,20 @@ impl Client {
             .collect()
     }
 
-    /// **Where the horizon says a node answers now**, as `host:port` — its
-    /// endpoint records (`wire-format.md` §7.6), which a node that moved
-    /// renews through its operator. Empty where the horizon holds none.
-    pub fn addresses_for(&self, node: &Keyhash) -> Vec<String> {
-        self.horizon
-            .endpoints_of(node)
-            .iter()
-            .filter_map(|p| point_address(p))
-            .collect()
-    }
-
-    /// **The order to dial a node in**: where the horizon says it answers
-    /// now, then where the agreement said it did [review, 2026-11-13: a
-    /// node that moved was unreachable until a fresh invitation, though its
-    /// own endpoint record had reached the client]. No address twice.
+    /// **The addresses to dial a node at**: the ones given, no address
+    /// twice, and **none for a node this client may not use**
+    /// ([`Client::node_usable`]).
+    ///
+    /// **Not where the horizon says it answers now** [author, 2026-11-16:
+    /// "Verify, then wait"]: a node is served from at an address the
+    /// person agreed to, and a move reaches them as an invitation they
+    /// accept ([`crate::relocation`]). An endpoint record at a new address
+    /// moved the dial before this, unasked.
     pub fn dial_order(&self, node: &Keyhash, agreed: &[String]) -> Vec<String> {
-        let mut out = self.addresses_for(node);
+        if !self.node_usable(node) {
+            return Vec::new();
+        }
+        let mut out: Vec<String> = Vec::new();
         for a in agreed {
             if !out.contains(a) {
                 out.push(a.clone());
@@ -8205,29 +8202,14 @@ impl Harness {
     }
 }
 
-/// The `host:port` a `NetworkPoint` names (`wire-format.md` §7.6: key 1 the
-/// four octets, key 3 the port), read with the codec alone so the kernel
-/// needs no transport crate for it; `None` where either is absent.
 /// The port a `NetworkPoint` means when it names none (`wire-format.md`
 /// §7.6; the transport's `NetworkPoint::socket` reads it the same way).
 const DEFAULT_QUIC_PORT: u64 = 7431;
 
-fn point_address(bytes: &[u8]) -> Option<String> {
-    use rhtn_codec::cbor::{Item, as_uint, map_get, parse_all};
-    let item = parse_all(bytes).ok()?;
-    let Item::Map(m) = &item else { return None };
-    let ip: [u8; 4] = match map_get(m, 1) {
-        Some(Item::Bytes(r)) => bytes[r.clone()].try_into().ok()?,
-        _ => return None,
-    };
-    // key 3 is omitted at the default port, as the transport's decoder reads it
-    let port = map_get(m, 3).and_then(as_uint).unwrap_or(DEFAULT_QUIC_PORT);
-    Some(format!("{}.{}.{}.{}:{}", ip[0], ip[1], ip[2], ip[3], port))
-}
-
 /// The `NetworkPoint` a `host:port` names, as `wire-format.md` §7.6 encodes
 /// one: key 1 the four octets, key 3 the port, absent at the default
-/// (§4.4), written with the codec alone as [`point_address`] reads it.
+/// (§4.4), written with the codec alone so the kernel needs no transport
+/// crate for it.
 /// `None` for anything but a v4 address.
 fn point_bytes(address: &str) -> Option<Vec<u8>> {
     use rhtn_codec::encode::*;

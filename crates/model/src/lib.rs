@@ -136,6 +136,50 @@ pub struct Subnet {
     pub rank: Rank,
     /// None for the root of a subnet whose own position is the self-anchor.
     pub position: Option<Position>,
+    /// **Whose node serves this client here**: the patron of its line in
+    /// this subnet, whose node a member's is. None for a root.
+    pub patron: Option<Keyhash>,
+    /// **A move of that node this client has been told of**, while it
+    /// stands: the subnet is not used until the person settles it.
+    pub relocation: Option<Relocation>,
+}
+
+/// **An invitation naming a node this client already serves from, at an
+/// address it did not agree to** (`light-client-requirements.md` §4): the
+/// node moved, or something claims it did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "ffi", derive(uniffi::Record))]
+pub struct Relocation {
+    /// The node, which is the patron's.
+    pub node: Keyhash,
+    /// Where the agreement says it answers.
+    pub from: Vec<String>,
+    /// Where the invitation says it answers now.
+    pub to: String,
+    pub standing: Standing,
+    /// What the node at `to` did instead of proving itself, where it did
+    /// not.
+    pub why: Option<String>,
+    /// What the inviter called themselves, for the screen alone. A claim.
+    pub label: Option<String>,
+}
+
+/// **Where a relocation stands.**
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "ffi", derive(uniffi::Enum))]
+pub enum Standing {
+    /// Nothing at the new address has answered as the node yet; the
+    /// person is not told, and the agreement goes on being used.
+    Unproved,
+    /// The node answered there as itself, and the person is asked.
+    Proved,
+    /// The person would not connect there. The old address is not used
+    /// either until another invitation replaces this one.
+    Declined,
+    /// Something answered for the node and did not prove itself the
+    /// node. Nothing of it is used until the patron sends another
+    /// invitation.
+    Irregular,
 }
 
 /// **Where another node sits**, as this client can resolve it
