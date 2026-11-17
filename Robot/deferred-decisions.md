@@ -419,3 +419,52 @@ administration surface is the place — the same channel that already takes the 
 and the two signed records at enrolment — so the bundle arrives after the machine
 is up, bounded by what the surface takes, and a node whose operator provisions
 nothing is unchanged.
+
+## Which push server an embedded UnifiedPush distributor uses by default [deferred 2026-11-17]
+
+**Deferred by the author** [2026-11-17]: *"I will open discussion of the
+push server again once the invite handling discussion is fully closed
+out."* Not asked again until he reopens it.
+
+**What prompted it.** A member learns of a new node, or a moved one, only
+when an invitation link reaches them. The design's answer is a push: the
+node's doorbell (`crates/daemon` `doorbell::Bell`, RFC 8291 aes128gcm with
+an empty body, verified against the RFC's vector) rings each registration
+it holds, and the invitation the ring announces carries the server's
+address [author, 2026-11-16: "The node invite notification was intended to
+carry the new server IP as it's one piece of information"]. What is not
+built is the Android end: registering for pushes, handing the registration
+to the node, and turning a ring into an invitation the kernel holds. Without
+it, invitations travel by link, which still works.
+
+**Already chosen** [author, 2026-11-16]: UnifiedPush, not FCM. He then
+asked what manual steps it costs, counting anything scriptable into another
+transaction (install, launch, adoption) as no cost. My answer:
+
+- Standard UnifiedPush needs a distributor app installed on every phone (for
+  example ntfy), plus a battery-optimisation exemption for it. Both are
+  manual steps for every member.
+- **Fueros as its own distributor** (recommended): the app subscribes to a
+  push-server topic from its own foreground service. That costs zero manual
+  steps, since the subscription is made at install or adoption.
+
+**The open question**: which push server that embedded distributor uses by
+default.
+
+1. **ntfy.sh**, the free public instance. Nothing to run. A third party
+   sees topic names and timing, though not content, because the bodies are
+   encrypted to the device and empty anyway.
+2. **A server of the author's choosing**, changeable by the person.
+3. **No default**, which leaves the person a manual step.
+
+Not on a node: a push server must be reachable while the person's own
+subnet's node is the thing that moved or failed.
+
+**Meanwhile**: nothing for push is built. Invitations reach members by link,
+and the app re-proves held invitations every time it starts and attaches.
+
+**What changes with each answer**: option 1 or 2 means Phase 3 can be built
+(Android registration, the node ringing its registrations with the invite,
+and D §14.1.5 / MAIL-020 amended for an invite doorbell carrying the
+address). Option 3 adds a setup step to the first-run flow, which runs
+against the author's no-manual-steps measure.

@@ -46,8 +46,8 @@ object Relocate {
      * **The question, in the author's words** [author, 2026-11-16]: who
      * moved it, which of their subnets, from where to where, and whether
      * the new one is home. **A first invitation is a move from nowhere**
-     * [author, 2026-11-17], asked in the same shape without the old
-     * address — wording drafted to his pattern, owed his ruling.
+     * [author, 2026-11-17: "The wording is correct"], asked in the same
+     * shape without the old address.
      */
     fun question(patron: String, subnet: String, from: String, to: String): String =
         if (from.isEmpty()) {

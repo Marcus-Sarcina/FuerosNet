@@ -22740,3 +22740,9 @@ address; InviteActivity finishes in onCreate and reads/holds/proves behind;
 wording (owed his ruling); a legacy link naming no patron goes to the log.
 Asked: the wording, and whether "Do not connect" on a first invitation keeps
 the page blocked as for a move (assumed: same as a move).
+
+**Answered 2026-11-17**: the first-invitation wording "is correct";
+"Do not connect" on a first invitation keeps the page behind the question,
+"because the user accepts no content from any server in that subnet". Push
+server: deferred by him until the invite discussion is closed, entry in
+`Robot/deferred-decisions.md`; not re-asked meanwhile.

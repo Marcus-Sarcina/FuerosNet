@@ -771,7 +771,9 @@ nothing below reaches across them.
   shield."* Show no page for it and no account of what serving from a node
   means. An invitation to a node you do not serve from yet is held, proved
   and asked as a move is below, from no address, and accepting it is the
-  agreement. What secures it is the adoption it follows — *"what secures it
+  agreement; declining it leaves the subnet's page behind the question as a
+  declined move does, the person taking content from no server there until
+  they accept. What secures it is the adoption it follows — *"what secures it
   is physical proximity to the Patron"* — and an invitation arriving soon
   after on that subnet, from that patron's server or their patron's.
 - **An invitation naming a node you already serve from, at another address, says
