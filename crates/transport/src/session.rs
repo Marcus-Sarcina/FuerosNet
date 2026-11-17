@@ -2438,6 +2438,14 @@ async fn attach_on(
                     });
                     return AttachOutcome::Unbound(Refusal::Window);
                 }
+                // **the node's reason, named** [bench, 2026-11-17]: a member
+                // the node had no row for read as a bare refusal, and its
+                // `unbound` was in the quinn trace alone
+                tracing::info!(
+                    target: "transport",
+                    reason = %String::from_utf8_lossy(close_reason(&e).unwrap_or_default()),
+                    "transport.refused"
+                );
                 log.push(Event::Refused);
                 return AttachOutcome::Refused;
             }

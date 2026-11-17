@@ -22766,3 +22766,27 @@ attach after Accept met the dead network and was never retried. attachTo
 called no backoff, so the identity sat detached until a restart. Fixed:
 attachTo's failure joins reattachLater. "Do not connect" was not exercised
 on the bench.
+
+**Fresh-node "Do not connect" bench, 2026-11-17**: GXV launched a second
+Mirror Manse node at 157.245.85.18 (620367357), and MRK, ZU8 and 4VC proved
+it as a move. 4VC declined at 15:08:10 and accepted at 15:08:37. Its attach
+was then refused `unbound`: the new node held member rows for MRK and ZU8
+only (the operator's direct rows), and 4VC sits under ZU8. ZU8 accepted at
+15:51:09 and attached at about 15:52:15; 4VC's 300 s retry got in at
+15:52:28, and the node then held `45dd5196` under `317f6094`.
+**Ruled** [author, 2026-11-17]: a member's member is served once its own
+patron has moved, with no new mechanism ("Simpler and aligned with network
+conventions"). wire-format §7.12 already states it: an attached client
+asserts only rows "whose patron is that client or sits beneath it". No
+document change. The old node 620350469 (178.128.147.47) was destroyed from
+GXV's Operator screen once nothing depended on it. Its Destroy took one tap
+and asked nothing.
+Open: (1) "two cycles of accept" on 4VC. He saw the "1" stay after the
+first accept and the question come back on reopen, and the second Accept
+cleared it. The phone kept one accept only (256 KiB buffer, about 4 min at
+trace), so the second tap's record, if it made one, is gone. Laptop-side
+capture is now at FuerosNet-output/runs/2026-11-17-relocation-capture.
+(2) MRK: the capture holds a decline at 15:50:45 and nothing since; the orb
+still shows "1". (3) Client diag: a refused attach logs "the serving node
+refused this client" and drops the node's close reason (`unbound`), which
+only the quinn trace shows.
