@@ -437,15 +437,24 @@ class ShellActivity : Activity() {
      * address the agreement and attaches there.
      */
     private fun relocation(by: String, subnet: uniffi.rhtn_model.Subnet, r: uniffi.rhtn_model.Relocation) {
+        // **one question at a time** [bench, 2026-11-16]: the page is drawn
+        // more than once as the model refreshes, and each drawing posted
+        // its own, so the person answered the same question twice
+        if (asking) return
+        asking = true
         val nodeHex = Gateway.hex(r.node)
-        // **whose server it is**: the node's owner, which two levels down
-        // is not the patron this line is under
-        val patron = Gateway.aliasOfHeld(by, nodeHex) ?: r.label ?: "Your patron"
+        // **whose server it is, by name** [author, 2026-11-16]: the name
+        // this identity's records hold, else the one the invitation
+        // carried, else the key — never "your patron", which says nothing
+        // to someone under several. Two levels down it is the node's
+        // owner, not the patron this line is under
+        val patron = Relocate.owner(Gateway.aliasOfHeld(by, nodeHex), r.label, nodeHex)
         val name = subnet.alias ?: "subnet"
         val home = { go(Chrome.Place.Home) }
         val dialog = AlertDialog.Builder(this).setCancelable(false)
         val (accept, refuse) = Relocate.ANSWERS
         dialog.setMessage(Relocate.question(patron, name, r.from.firstOrNull() ?: "", r.to))
+            .setOnDismissListener { asking = false }
             .setPositiveButton(accept) { _, _ ->
                 Thread({
                     val p = Gateway.loaded[by]
@@ -468,6 +477,9 @@ class ShellActivity : Activity() {
             }
             .show()
     }
+
+    /** Whether a relocation's question is up now. */
+    private var asking = false
 
     /**
      * **Which way to add one** [author, 2026-11-10]: the picker's last row

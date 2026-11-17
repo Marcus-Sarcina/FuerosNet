@@ -170,7 +170,11 @@ class OperatorActivity : Activity() {
      * turning each into a tap.
      */
     private fun sendInvitations(at: String, subnet: String?) {
-        val owed = Gateway.invitations(by, at, subnet).filter { invitedTo(it.who) != at }
+        // **the operator's own name rides in the invitation** [author,
+        // 2026-11-16]: a member who has fetched nothing of this operator
+        // still knows whose server it is, which "the patron" does not say
+        // to one under several
+        val owed = Gateway.invitations(by, at, subnet, Gateway.defaultAlias(by)?.take(120)).filter { invitedTo(it.who) != at }
         if (owed.isEmpty()) return
         if (checkSelfPermission(android.Manifest.permission.SEND_SMS) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED

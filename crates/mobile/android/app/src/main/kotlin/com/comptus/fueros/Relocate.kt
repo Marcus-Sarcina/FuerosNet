@@ -30,6 +30,15 @@ object Relocate {
         Standing.UNPROVED, Standing.FAILED, null -> false
     }
 
+    /**
+     * **Whose server it is, as the question names them**: the name held
+     * for them, else the one their invitation carried, else their key's
+     * first eight characters. Never a role, which is ambiguous to someone
+     * under several operators.
+     */
+    fun owner(held: String?, label: String?, keyHex: String): String =
+        held?.takeIf { it.isNotBlank() } ?: label?.takeIf { it.isNotBlank() } ?: "${keyHex.take(8)}…"
+
     /** The address without its port: what a person reads as the server's IP. */
     fun host(address: String): String = address.substringBeforeLast(':', address)
 

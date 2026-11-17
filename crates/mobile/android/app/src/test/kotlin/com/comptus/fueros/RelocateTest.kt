@@ -55,6 +55,17 @@ class RelocateTest {
 
     // functional: UX-033
     @Test
+    fun the_question_names_the_owner_and_never_a_role() {
+        assertEquals("Mirror", Relocate.owner("Mirror", "GXV", "703a82c2ffff"))
+        assertEquals("GXV", Relocate.owner(null, "GXV", "703a82c2ffff"))
+        assertEquals("GXV", Relocate.owner(" ", "GXV", "703a82c2ffff"))
+        assertEquals("703a82c2…", Relocate.owner(null, null, "703a82c2ffff"))
+        val shell = File("src/main/kotlin/com/comptus/fueros/ShellActivity.kt").readText()
+        assertFalse("a role stands in for a name", shell.contains("\"Your patron\""))
+    }
+
+    // functional: UX-033
+    @Test
     fun the_orb_and_the_subnet_page_consult_the_move() {
         val shell = File("src/main/kotlin/com/comptus/fueros/ShellActivity.kt").readText()
         assertTrue(
@@ -68,6 +79,11 @@ class RelocateTest {
         assertTrue(
             "the question can be dismissed",
             shell.contains("AlertDialog.Builder(this).setCancelable(false)"),
+        )
+        // the page is drawn more than once; the question is put once
+        assertTrue(
+            "a second drawing stacks a second question",
+            shell.contains("if (asking) return") && shell.contains(".setOnDismissListener { asking = false }"),
         )
     }
 }

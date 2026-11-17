@@ -3657,7 +3657,12 @@ impl Participant {
     ///
     /// Reading is also what collects: an address past its subject's window
     /// is dropped rather than returned (`Client::reaches`).
-    pub fn invitations(&self, at: String, subnet: Option<Id>) -> Vec<Invite> {
+    pub fn invitations(
+        &self,
+        at: String,
+        subnet: Option<Id>,
+        as_label: Option<String>,
+    ) -> Vec<Invite> {
         let subnet = subnet.as_deref().and_then(keyhash);
         self.call_plain("invitations", || {
             let me = self.handle.me();
@@ -3673,7 +3678,7 @@ impl Participant {
                                 patron: Some(me),
                                 subnet,
                                 member: Some(k),
-                                as_label: None,
+                                as_label: as_label.clone(),
                             },
                         ),
                     })
