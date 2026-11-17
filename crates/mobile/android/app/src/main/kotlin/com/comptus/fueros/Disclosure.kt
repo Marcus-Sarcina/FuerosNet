@@ -189,6 +189,7 @@ object Disclosure {
         )
 
         // ---- the words themselves, [author, 2026-11-05] ---------------
+        // AUTHOR COPY: every sentence in a Says.Here below
 
         Topic.ADOPTION_UPWARD -> Says.Here(
             listOf(

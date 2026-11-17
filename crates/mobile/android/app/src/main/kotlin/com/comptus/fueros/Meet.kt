@@ -283,6 +283,7 @@ class Meet(
         fun label(counterpartyName: String): String {
             val who = patronAlias ?: counterpartyName
             return when {
+                // AUTHOR COPY [author, 2026-10-15]: the pattern
                 subnetAlias != null -> "$who's $subnetAlias"
                 subnet != null -> "$who's subnet ${subnet.take(8)}…"
                 else -> "a new subnet under $who"

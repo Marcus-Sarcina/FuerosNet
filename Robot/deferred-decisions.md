@@ -465,6 +465,6 @@ and the app re-proves held invitations every time it starts and attaches.
 
 **What changes with each answer**: option 1 or 2 means Phase 3 can be built
 (Android registration, the node ringing its registrations with the invite,
-and D §14.1.5 / MAIL-020 amended for an invite doorbell carrying the
+and design §14.1.5 / MAIL-020 amended for an invite doorbell carrying the
 address). Option 3 adds a setup step to the first-run flow, which runs
 against the author's no-manual-steps measure.

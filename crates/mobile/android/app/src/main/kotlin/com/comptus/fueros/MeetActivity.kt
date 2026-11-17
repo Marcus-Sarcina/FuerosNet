@@ -739,14 +739,14 @@ class MeetActivity : Activity() {
     private fun choice(m: Meet, c: Meet.Choice) {
         when (c) {
             Meet.Choice.ADOPT_INTO -> {
-                heading("Adopt into which scope?")
+                heading("Adopt into which scope?") // AUTHOR COPY [author, 2026-10-15]
                 para("${m.counterpartyName} will sit one hop below you. Which of your subnets do they join?")
                 (Gateway.subnets(by).map(Meet.Scope::of) + Meet.Scope.OWN).forEach { s ->
                     button(s.label()) { m.chooseScope(s) }
                 }
             }
             Meet.Choice.SUBMIT_AS -> {
-                heading("Submit as which scope?")
+                heading("Submit as which scope?") // AUTHOR COPY [author, 2026-10-15]
                 para("${m.counterpartyName} will be your patron. Do you bring a scope you root with you — everyone in it coming to sit in their subnet — or join as an individual, your scopes standing as they are?")
                 Gateway.subnetsRooted(by).map(Meet.Scope::of).forEach { s ->
                     button("Bring ${s.label()}") { m.chooseCarrying(s) }

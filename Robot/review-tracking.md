@@ -22746,3 +22746,12 @@ the page blocked as for a move (assumed: same as a move).
 "because the user accepts no content from any server in that subnet". Push
 server: deferred by him until the invite discussion is closed, entry in
 `Robot/deferred-decisions.md`; not re-asked meanwhile.
+
+**UX review planned; his copy flagged** [author, 2026-11-17]: the interface
+text will be reworded, mostly in his verbatim words, and the screens
+reorganised, after the functionality is debugged. His copy is not a
+requirement and not an anchor: flagged `AUTHOR COPY` (7 flags), inventoried
+in `Robot/ux-review.md`; UX-033 restated to describe the question rather than
+quote it. Correction to my own observation: the Home backup prompt and the
+Operator screen's provider paragraph are his copy (Disclosure, 2026-11-05),
+not mine.

@@ -49,6 +49,7 @@ object Relocate {
      * [author, 2026-11-17: "The wording is correct"], asked in the same
      * shape without the old address.
      */
+    // AUTHOR COPY [author, 2026-11-16; 2026-11-17]: both questions
     fun question(patron: String, subnet: String, from: String, to: String): String =
         if (from.isEmpty()) {
             "$patron has invited you to their server for $patron's $subnet at ${host(to)}.\n" +
@@ -59,5 +60,6 @@ object Relocate {
         }
 
     /** The two answers, accepting first. */
+    // AUTHOR COPY [author, 2026-11-16]
     val ANSWERS: Pair<String, String> = "Accept" to "Do not connect"
 }

@@ -300,6 +300,7 @@ object Identities {
      * nothing opened, and nothing anywhere reached [Gateway.createIdentity]
      * past the first run.
      */
+    // AUTHOR COPY [author, 2026-11-09]
     const val ANOTHER = "<New Identity>"
 
     /**
