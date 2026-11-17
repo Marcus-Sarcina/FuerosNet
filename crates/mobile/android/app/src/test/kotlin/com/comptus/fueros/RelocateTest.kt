@@ -44,13 +44,13 @@ class RelocateTest {
     fun only_a_move_the_person_must_answer_marks_the_orb_and_blocks_the_page() {
         assertFalse("no move", Relocate.blocks(null))
         assertFalse("nothing has answered there yet", Relocate.blocks(moved(Standing.UNPROVED)))
-        for (s in listOf(Standing.PROVED, Standing.DECLINED, Standing.IRREGULAR)) {
+        assertFalse("a failed check is the operator's, not the person's", Relocate.blocks(moved(Standing.FAILED)))
+        // declined still asks: the notice does not clear
+        for (s in listOf(Standing.PROVED, Standing.DECLINED)) {
             assertTrue("$s blocks", Relocate.blocks(moved(s)))
         }
-        // declined still asks: the notice does not clear
-        assertTrue(Relocate.asks(moved(Standing.PROVED)))
-        assertTrue(Relocate.asks(moved(Standing.DECLINED)))
-        assertFalse("an irregular one is told, not asked", Relocate.asks(moved(Standing.IRREGULAR)))
+        assertEquals("Nothing changes.", Relocate.found(true, Standing.FAILED))
+        assertEquals("Nothing changes.", Relocate.found(true, null))
     }
 
     // functional: UX-033

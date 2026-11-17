@@ -19,14 +19,16 @@ import uniffi.rhtn_model.Standing
  */
 object Relocate {
 
-    /** Whether `r` stands between the person and the subnet. */
+    /**
+     * Whether `r` stands between the person and the subnet: a move that
+     * proved itself, asked and not yet accepted. **A failed one is never
+     * the person's** [author, 2026-11-16]: the operator is told, and
+     * nothing changes here.
+     */
     fun blocks(r: Relocation?): Boolean = when (r?.standing) {
-        Standing.PROVED, Standing.DECLINED, Standing.IRREGULAR -> true
-        Standing.UNPROVED, null -> false
+        Standing.PROVED, Standing.DECLINED -> true
+        Standing.UNPROVED, Standing.FAILED, null -> false
     }
-
-    /** Whether the person is asked to accept it, rather than told it cannot be used. */
-    fun asks(r: Relocation): Boolean = r.standing == Standing.PROVED || r.standing == Standing.DECLINED
 
     /** The address without its port: what a person reads as the server's IP. */
     fun host(address: String): String = address.substringBeforeLast(':', address)
@@ -53,18 +55,10 @@ object Relocate {
         !held -> "Nothing changes: that is the address you already serve from."
         standing == Standing.PROVED ->
             "It answered there as itself. Open Fueros: the subnet it serves is marked, and asks you whether to accept the new server."
-        standing == Standing.IRREGULAR ->
-            "Something answered there that is not your patron's server. Nothing in that subnet is used until your patron sends you a new invitation."
-        else ->
+        standing == Standing.UNPROVED ->
             "Nothing answers as that node at the new address yet. It is tried again, and you are asked once it does."
+        // **a failed check is not the person's** [author, 2026-11-16]: the
+        // operator is told, and the record goes once they have been
+        else -> "Nothing changes."
     }
-
-    /**
-     * **What is said where something answered for the node and was not
-     * it**: the subnet is shut until the patron sends another invitation,
-     * which is usually arranged with them some other way.
-     */
-    fun irregular(patron: String, subnet: String, at: String): String =
-        "Something at ${host(at)} answered for $patron's server for $patron's $subnet, and it is not $patron's.\n" +
-            "Nothing in $patron's $subnet is used until $patron sends you a new invitation."
 }

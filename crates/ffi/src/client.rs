@@ -1040,6 +1040,36 @@ impl Participant {
 }
 
 impl Participant {
+    /// The failed invitation, said to the operator as a message; the
+    /// record dropped once it went, kept for the next call where it could
+    /// not.
+    fn report_failed(
+        &self,
+        node: Keyhash,
+        r: rhtn_model::Relocation,
+    ) -> Result<Option<rhtn_model::Relocation>, Refused> {
+        let text = format!(
+            "An invitation to serve from your node at {} reached me, and what answered there did not prove itself your node ({}). I have not connected to it.",
+            r.to,
+            r.why.as_deref().unwrap_or("no reason given")
+        );
+        if self
+            .net
+            .send(
+                node,
+                rhtn_client::payload::KIND_APPLICATION,
+                text.into_bytes(),
+            )
+            .is_err()
+        {
+            return Ok(Some(r));
+        }
+        self.handle
+            .with_blocking(move |c| c.failure_reported(&node));
+        self.save()?;
+        Ok(None)
+    }
+
     /// Start the kernel's own maintenance clock ([`MAINTAIN_EVERY`]).
     fn schedule(&self) {
         let (h, st, one, written) = (
@@ -2450,6 +2480,11 @@ impl Participant {
     /// node as itself, nothing yet, or something that is not the node. The
     /// relocation as it now stands; none where nothing is held. Only an
     /// unproved one is dialled.
+    ///
+    /// **A failed one is told to the operator and to nobody else**
+    /// [author, 2026-11-16]: a message to the patron naming the address
+    /// and what answered there, and the record goes once it is sent. One
+    /// that cannot be sent yet is sent at the next call.
     pub fn prove_relocation(&self, node: Id) -> Result<Option<rhtn_model::Relocation>, Refused> {
         self.call("prove_relocation", || {
             use rhtn_client::relocation::Found;
@@ -2459,6 +2494,9 @@ impl Participant {
             let Some(r) = self.handle.with_blocking(move |c| c.relocation(&node)) else {
                 return Ok(None);
             };
+            if r.standing == rhtn_model::Standing::Failed {
+                return self.report_failed(node, r);
+            }
             if r.standing != rhtn_model::Standing::Unproved {
                 return Ok(Some(r));
             }
@@ -2470,7 +2508,7 @@ impl Participant {
             let found = match self.net.prove(node, addr) {
                 Proof::Proved => Found::Proved,
                 Proof::Unreached(_) | Proof::Refused(Refusal::Window) => Found::Unreached,
-                Proof::Refused(why) => Found::Irregular(why.to_string()),
+                Proof::Refused(why) => Found::Failed(why.to_string()),
             };
             let to = r.to.clone();
             let now = self.handle.with_blocking(move |c| {
@@ -2478,7 +2516,12 @@ impl Participant {
                 c.relocation(&node)
             });
             self.save()?;
-            Ok(now)
+            match now {
+                Some(r) if r.standing == rhtn_model::Standing::Failed => {
+                    self.report_failed(node, r)
+                }
+                other => Ok(other),
+            }
         })
     }
 

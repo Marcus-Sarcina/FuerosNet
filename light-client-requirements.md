@@ -778,13 +778,15 @@ nothing below reaches across them.
   address the agreement. Declining leaves the agreement as it was and the node
   unused, with the question still standing, until they accept it or a newer
   invitation replaces it.
-- **Something answering for the node that is not the node shuts the node**
-  [author, 2026-11-16]: *"Any irregularity around the node identity should shut
-  down user activity on that node until the patron resolves it, usually by some
-  out-of-band communication."* At the new address or the agreed one, a key that
-  does not bind to the patron stops the node's use until the patron's next
-  invitation is proved and accepted. A delegation outside its window is the node's
-  own lapse, its operator's to renew, and not this.
+- **An invitation whose address answers as someone else is the operator's to
+  hear about, not the person's** [author, 2026-11-16]: *"No notification on a
+  failed check to the user. User sends notification of the failed invite to the
+  operator."* Change nothing, say nothing to the person, and tell the patron which
+  address the invitation named and what answered there. So a link alone shuts
+  nothing: the person is asked only about a server that proved itself the
+  operator's, and an attacker would have to impersonate the operator and run a
+  node that verifies as them. A delegation outside its window is the node's own
+  lapse, its operator's to renew, and leaves the invitation waiting to be proved.
 - **Treat a sibling whose `KeyMaterial` you lack as unusable**, not as one to dial
   unauthenticated (`wire-format.md` §8). There is no fetch path: the party that
   would serve one is the node that is down.

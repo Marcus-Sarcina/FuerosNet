@@ -157,8 +157,7 @@ pub struct Relocation {
     /// Where the invitation says it answers now.
     pub to: String,
     pub standing: Standing,
-    /// What the node at `to` did instead of proving itself, where it did
-    /// not.
+    /// What answered at `to` instead of the node, where something did.
     pub why: Option<String>,
     /// What the inviter called themselves, for the screen alone. A claim.
     pub label: Option<String>,
@@ -176,10 +175,10 @@ pub enum Standing {
     /// The person would not connect there. The old address is not used
     /// either until another invitation replaces this one.
     Declined,
-    /// Something answered for the node and did not prove itself the
-    /// node. Nothing of it is used until the patron sends another
-    /// invitation.
-    Irregular,
+    /// Something answered there and did not prove itself the node. The
+    /// person is not told and nothing changes for them; the operator is
+    /// owed word of the failed invitation.
+    Failed,
 }
 
 /// **Where another node sits**, as this client can resolve it

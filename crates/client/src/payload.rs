@@ -1436,7 +1436,7 @@ fn standing_code(s: rhtn_model::Standing) -> u64 {
         Unproved => 0,
         Proved => 1,
         Declined => 2,
-        Irregular => 3,
+        Failed => 3,
     }
 }
 
@@ -1447,7 +1447,7 @@ fn standing_of(n: u64) -> Option<rhtn_model::Standing> {
         0 => Unproved,
         1 => Proved,
         2 => Declined,
-        3 => Irregular,
+        3 => Failed,
         _ => return None,
     })
 }

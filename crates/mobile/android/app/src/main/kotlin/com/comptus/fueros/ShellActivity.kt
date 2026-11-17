@@ -443,12 +443,6 @@ class ShellActivity : Activity() {
         val name = subnet.alias ?: "subnet"
         val home = { go(Chrome.Place.Home) }
         val dialog = AlertDialog.Builder(this).setCancelable(false)
-        if (!Relocate.asks(r)) {
-            dialog.setMessage(Relocate.irregular(patron, name, r.to))
-                .setPositiveButton("Back") { _, _ -> home() }
-                .show()
-            return
-        }
         val (accept, refuse) = Relocate.ANSWERS
         dialog.setMessage(Relocate.question(patron, name, r.from.firstOrNull() ?: "", r.to))
             .setPositiveButton(accept) { _, _ ->

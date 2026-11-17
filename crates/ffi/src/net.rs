@@ -19,7 +19,6 @@ use rhtn_adaptors::direct::{Direct, Gate, LightDirect, Reachable};
 use rhtn_archive::Keyhash;
 use rhtn_archive::submission::WakeEndpoint;
 use rhtn_client::ceremony::Dispatched;
-use rhtn_transport::bind::Refusal;
 use rhtn_transport::session::{
     AttachOutcome, ClientConfig, Log, Proof, Reachability, Session, attach_any,
     decode_sibling_update, encode_sibling_update, prove_at,
@@ -1002,18 +1001,6 @@ impl Net {
                     return Err(Refused::new("the serving node refused this client"));
                 }
                 AttachOutcome::Unbound(why) => {
-                    // **something answered for the node and was not the
-                    // node** (`light-client-requirements.md` §4) [author,
-                    // 2026-11-16]: its use stops until the patron sends
-                    // another invitation. A lapsed run is the node's own
-                    // and not an irregularity
-                    if why != Refusal::Window {
-                        let at = addrs.first().map(|a| a.to_string()).unwrap_or_default();
-                        let said = why.to_string();
-                        handle_for_task
-                            .with(move |c| c.node_irregular(node, at, said))
-                            .await;
-                    }
                     return Err(Refused::new(format!("no session: {why}")));
                 }
                 AttachOutcome::EndpointFailure(e) => match try_siblings(&cfg, &ep).await {

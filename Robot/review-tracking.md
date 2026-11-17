@@ -22649,3 +22649,18 @@ chosen), the moved node ringing its registrations with the invite, and D
 §14.1.5 / MAIL-020 amended for an invite doorbell carrying the address.
 Irregular-popup wording is mine (author gave none). A forged link can halt a
 working node (anyone who can deliver a link to a member) — flagged.
+
+**Relocation revised, 2026-11-16 [author].** "This should only happen if the
+link leads to a server signed by the node operator… the attacker would have
+to impersonate the node operator AND have a node that verifies as the
+operator." "No notification on a failed check to the user. User sends
+notification of the failed invite to the operator." So Irregular became
+**Failed**: nothing changes for the member, the patron is sent a plain
+message (KIND_APPLICATION) naming the address and what answered, the record
+dropped once sent. The attach-time halt is removed (a recycled IP held by a
+stranger would otherwise shut a subnet). "Both cases": a deliberate re-homing
+(state moves; to build) and a fresh node after an outage, shutdown or key
+loss, whose invites are accepted so long as correctly signed — which the
+proof already does (delegation bound to the patron's identity, no comparison
+with any earlier key). Push: the Android push service is the author's to
+choose (UnifiedPush or FCM); asked 2026-11-16.

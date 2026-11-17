@@ -21,11 +21,15 @@
 //!   the old address and the node stays unused: the person waits for an
 //!   invitation they trust. The question stays put to them, and they may
 //!   still accept it.
-//! - **Irregular** where something answered for the node and did not
-//!   prove itself the node, at the new address or at the agreed one.
-//!   *"Any irregularity around the node identity should shut down user
-//!   activity on that node until the patron resolves it"*, which is
-//!   another invitation.
+//! - **Failed** where something answered there and did not prove itself
+//!   the node. **The person is not told and nothing changes for them**
+//!   [author, 2026-11-16]: *"No notification on a failed check to the
+//!   user. User sends notification of the failed invite to the
+//!   operator."* So a link can shut nothing: *"the attacker would have to
+//!   impersonate the node operator AND have a node that verifies as the
+//!   operator"*, and a node that verifies as the operator is a proved move
+//!   the person answers. The record stands until the operator has been
+//!   told ([`Client::failure_reported`]).
 //!
 //! **Proving is not this module's**: it holds no transport, and the
 //! caller dials and says what it found ([`Client::relocation_proved`]).
@@ -56,14 +60,14 @@ pub enum Found {
     /// Nothing answered as anybody; asked again later.
     Unreached,
     /// Something answered and did not prove itself the node.
-    Irregular(String),
+    Failed(String),
 }
 
 impl Client {
     /// **An invitation for a node already agreed to**: held as a
     /// relocation where it names an address the agreement does not, or
     /// where one is already held — the newest invitation replacing it,
-    /// which is how a patron resolves a declined or irregular one.
+    /// which is how a patron resolves a declined one.
     /// Whether it was held; false for a node never agreed to, whose
     /// invitation is a first one, and for one naming the address already
     /// agreed with nothing held.
@@ -105,8 +109,8 @@ impl Client {
         match found {
             Found::Proved => h.standing = Standing::Proved,
             Found::Unreached => return,
-            Found::Irregular(why) => {
-                h.standing = Standing::Irregular;
+            Found::Failed(why) => {
+                h.standing = Standing::Failed;
                 h.why = Some(why);
             }
         }
@@ -149,44 +153,30 @@ impl Client {
         }
     }
 
-    /// **The agreed node did not prove itself at its own address**: held
-    /// as irregular there, which stops its use until another invitation.
-    /// An irregularity already held is kept as it was.
-    pub fn node_irregular(&mut self, node: Keyhash, at: String, why: String) {
+    /// **The operator has been told of a failed invitation**: its record
+    /// goes. Whether a failed one was held.
+    pub fn failure_reported(&mut self, node: &Keyhash) -> bool {
         if self
             .payload
             .relocations
-            .get(&node)
-            .is_some_and(|h| h.standing == Standing::Irregular)
+            .get(node)
+            .is_some_and(|h| h.standing == Standing::Failed)
         {
-            return;
+            self.payload.relocations.remove(node);
+            return true;
         }
-        tracing::warn!(
-            target: "pay",
-            node = %crate::diag::id8(&node),
-            "relocation.irregular"
-        );
-        self.payload.relocations.insert(
-            node,
-            Held {
-                to: at,
-                standing: Standing::Irregular,
-                why: Some(why),
-                label: None,
-            },
-        );
-        self.changed.insert(rhtn_model::Noun::Subnets);
+        false
     }
 
-    /// **Whether this client may use `node`**: not while a relocation for
-    /// it is proved, declined or irregular. An unproved one changes
-    /// nothing.
+    /// **Whether this client may use `node`**: not while a move of it is
+    /// put to the person, proved or declined. An unproved or failed one
+    /// changes nothing.
     #[must_use]
     pub fn node_usable(&self, node: &Keyhash) -> bool {
         self.payload
             .relocations
             .get(node)
-            .is_none_or(|h| h.standing == Standing::Unproved)
+            .is_none_or(|h| matches!(h.standing, Standing::Unproved | Standing::Failed))
     }
 
     /// The relocation held for `node`, as the model reads it.

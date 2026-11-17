@@ -109,11 +109,11 @@ fn a_declined_move_may_still_be_accepted() {
 }
 
 // functional: SES-022
-/// **Something answering for the node that is not the node stops its
-/// use**, at the new address or the agreed one, until the patron sends
-/// another invitation.
+/// **An address that answers as someone else changes nothing for the
+/// person**: the node goes on being used, nothing is put to them, and the
+/// failed invitation waits only until the operator has been told.
 #[test]
-fn an_address_answering_as_someone_else_stops_the_node_until_another_invitation() {
+fn an_address_answering_as_someone_else_changes_nothing_and_waits_to_be_reported() {
     let mut s = setup(&["alice", "bob", "witness"]);
     let a = s.client("alice");
     let node = kh("bob");
@@ -122,26 +122,24 @@ fn an_address_answering_as_someone_else_stops_the_node_until_another_invitation(
     a.relocation_proved(
         &node,
         NEW,
-        Found::Irregular("delegation by another identity than the one sought".into()),
+        Found::Failed("delegation by another identity than the one sought".into()),
     );
     let r = a.relocation(&node).unwrap();
-    assert_eq!(r.standing, Standing::Irregular);
+    assert_eq!(r.standing, Standing::Failed);
     assert!(r.why.is_some());
-    assert!(!a.node_usable(&node));
+    assert!(a.node_usable(&node), "a link shuts nothing");
+    assert_eq!(a.dial_order(&node, &[OLD.into()]), vec![OLD]);
     assert!(a.accept_relocation(&node).is_none());
     assert!(!a.decline_relocation(&node));
-
-    // at the agreed address itself, with no invitation at all
-    let other = kh("witness");
-    a.agree_to(other, vec![OLD.into()]);
-    a.node_irregular(other, OLD.into(), "delegation does not verify".into());
-    assert!(!a.node_usable(&other));
-    assert_eq!(a.relocation(&other).unwrap().to, OLD);
-    // and it is the patron's next invitation that resolves it
-    assert!(a.offer_relocation(other, OLD.into(), None));
-    a.relocation_proved(&other, OLD, Found::Proved);
-    assert_eq!(a.accept_relocation(&other).as_deref(), Some(OLD));
-    assert!(a.node_usable(&other));
+    assert_eq!(a.agreed(), vec![(node, vec![OLD.to_string()])]);
+    // told, and gone
+    assert!(a.failure_reported(&node));
+    assert!(a.relocation(&node).is_none());
+    assert!(!a.failure_reported(&node), "nothing left to report");
+    // a proved move is not a failure to report
+    a.offer_relocation(node, NEW.into(), None);
+    a.relocation_proved(&node, NEW, Found::Proved);
+    assert!(!a.failure_reported(&node));
 }
 
 // functional: SES-021
@@ -176,7 +174,7 @@ fn relocations_round_trip_and_the_eleven_field_form_still_reads() {
         Standing::Unproved,
         Standing::Proved,
         Standing::Declined,
-        Standing::Irregular,
+        Standing::Failed,
     ]
     .into_iter()
     .enumerate()
@@ -186,7 +184,7 @@ fn relocations_round_trip_and_the_eleven_field_form_still_reads() {
             rhtn_client::relocation::Held {
                 to: NEW.to_string(),
                 standing,
-                why: (standing == Standing::Irregular).then(|| "not the node".to_string()),
+                why: (standing == Standing::Failed).then(|| "not the node".to_string()),
                 label: (i == 1).then(|| "Bob".to_string()),
             },
         );
