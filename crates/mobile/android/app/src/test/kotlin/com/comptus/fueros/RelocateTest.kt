@@ -108,6 +108,16 @@ class RelocateTest {
 
     // functional: UX-033
     @Test
+    fun an_accepted_server_that_does_not_answer_is_tried_again() {
+        val attach = File("src/main/kotlin/com/comptus/fueros/Attachments.kt").readText()
+            .substringAfter("fun attachTo(").substringBefore("\n    }\n")
+        assertTrue(attach.contains("reattachLater(by, p, scope, 1)"))
+        val shell = File("src/main/kotlin/com/comptus/fueros/ShellActivity.kt").readText()
+        assertTrue("accepting attaches through it", shell.contains("Attachments.attachTo(by, nodeHex, to)"))
+    }
+
+    // functional: UX-033
+    @Test
     fun an_invitation_shows_nothing() {
         val invite = File("src/main/kotlin/com/comptus/fueros/InviteActivity.kt").readText()
         assertFalse("an invitation draws a page", invite.contains("setContentView"))

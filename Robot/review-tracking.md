@@ -22755,3 +22755,14 @@ in `Robot/ux-review.md`; UX-033 restated to describe the question rather than
 quote it. Correction to my own observation: the Home backup prompt and the
 Operator screen's provider paragraph are his copy (Disclosure, 2026-11-05),
 not mine.
+
+**Mirror Manse move bench, 2026-11-17**: GXV moved it to 178.128.147.47
+(620350469; 620155473 destroyed), no runner refresh (already 3). MRK and 4VC
+proved first time. ZU8's Wi-Fi lost even the router twice (svc wifi cycle
+restored it; lossy at all sizes meanwhile), so its proof stayed Unproved,
+nothing shown, until a retry proved it. The author accepted on all three in
+one tap: one ok accept each and no refused second accept. Found: ZU8's
+attach after Accept met the dead network and was never retried. attachTo
+called no backoff, so the identity sat detached until a restart. Fixed:
+attachTo's failure joins reattachLater. "Do not connect" was not exercised
+on the bench.

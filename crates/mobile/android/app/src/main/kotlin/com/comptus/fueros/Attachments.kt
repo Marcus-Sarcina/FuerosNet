@@ -189,6 +189,11 @@ object Attachments {
                 // it is on the provision's path: the loop goes on running
                 Gateway.front.note("· $at did not answer: this device stays detached.")
                 show(p, Connection.Detached)
+                // **and it is tried again, as the start's attach is** [bench,
+                // 2026-11-17]: an accepted move whose first dial met a dead
+                // network stayed detached until the app was restarted
+                val scope = Gateway.appContext?.let { c -> Identities.identities(c).firstOrNull { it.id == by }?.scope }
+                reattachLater(by, p, scope, 1)
             } else {
                 // **not the provision's flag**: that one says a blob was
                 // read, and this attach is the person's own
