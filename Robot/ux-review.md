@@ -61,6 +61,10 @@ trace to no quote of his, so they are mine and are not flagged.
   are mine.
 - The region and size pickers draw no selected text (dark on dark). That
   is a bug rather than wording, but the screen is in the review anyway.
+- Destroy on the Operator screen now asks once [author, 2026-11-17: "Add
+  a confirmation pop-up to Destroy now"]. The wording is mine ("Destroy the
+  <subnet> machine at <ip>? Everything on it is gone and cannot be brought
+  back." / Destroy / Keep it).
 - His rule against verbose security text [2026-11-17]: invitations are now
   a counter on the orb plus one question. Other screens that explain security at length
   are candidates.

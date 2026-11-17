@@ -55,4 +55,14 @@ class OperatorStoreTest {
         assertEquals(3, OperatorStore.runnerSaid("runner 3 ${"a".repeat(64)}\n"))
         assertEquals(null, OperatorStore.runnerSaid("rhtn-package-runner: no such verb: runner-refresh"))
     }
+
+    @Test
+    fun a_machine_is_destroyed_only_after_the_operator_confirms() {
+        // **asked once before it goes** [author, 2026-11-17]
+        val screen = File("src/main/kotlin/com/comptus/fueros/OperatorActivity.kt").readText()
+        assertTrue(screen.contains("setOnClickListener { confirmDestroy(i) }"))
+        assertFalse("a control that destroys unasked", screen.contains("setOnClickListener { destroy(i) }"))
+        assertTrue(screen.contains(".setPositiveButton(\"Destroy\") { _, _ -> destroy(i) }"))
+        assertEquals("destroy(i) is reached from the confirmation alone", 1, Regex("""\bdestroy\(i\)""").findAll(screen).count())
+    }
 }

@@ -339,7 +339,7 @@ class OperatorActivity : Activity() {
                 roll.addView(
                     Button(this).apply {
                         text = "Destroy the machine at ${i.provider}"
-                        setOnClickListener { destroy(i) }
+                        setOnClickListener { confirmDestroy(i) }
                     },
                 )
             }
@@ -1240,6 +1240,21 @@ class OperatorActivity : Activity() {
      * launch section is set now, read when the move begins.
      */
     private var movePick: (() -> Triple<Launch.Provider, Launch.Plan, String>?)? = null
+
+    /**
+     * **Asked once before it goes** [author, 2026-11-17]: one tap destroyed
+     * a machine, and nothing at the provider brings one back.
+     */
+    private fun confirmDestroy(i: Instance) {
+        AlertDialog.Builder(this)
+            .setMessage(
+                "Destroy the ${i.label} machine at ${i.at.substringBefore(':')}? " +
+                    "Everything on it is gone and cannot be brought back.",
+            )
+            .setPositiveButton("Destroy") { _, _ -> destroy(i) }
+            .setNegativeButton("Keep it", null)
+            .show()
+    }
 
     private fun destroy(i: Instance) {
         val provider = Launch.providers().firstOrNull { it.name.lowercase() == i.provider } ?: return
