@@ -203,7 +203,22 @@ impl Client {
             .collect()
     }
 
-    /// **Whose node serves this client in `subnet`**: the patron of the
+    /// **The node serving this client in `subnet`**: the one its attach
+    /// there recorded, else its patron's — a member's node is its
+    /// patron's, and a light client two levels down is served by its
+    /// patron's patron (SES-002), which only the attach can say. None for
+    /// a root with nothing recorded.
+    #[must_use]
+    pub fn serving_in(&self, subnet: &rhtn_archive::Txid) -> Option<Keyhash> {
+        let at = self.position_in(subnet)?;
+        self.payload
+            .serving_at
+            .get(&at.anchor)
+            .copied()
+            .or_else(|| self.patron_in(subnet))
+    }
+
+    /// **Whose line this client holds in `subnet`**: the patron of the
     /// line whose position is the one held there. None for a root, whose
     /// position no adoption gave.
     #[must_use]

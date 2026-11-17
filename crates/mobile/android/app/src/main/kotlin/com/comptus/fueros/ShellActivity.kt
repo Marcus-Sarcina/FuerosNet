@@ -438,8 +438,9 @@ class ShellActivity : Activity() {
      */
     private fun relocation(by: String, subnet: uniffi.rhtn_model.Subnet, r: uniffi.rhtn_model.Relocation) {
         val nodeHex = Gateway.hex(r.node)
-        val patron = subnet.patron?.let { Gateway.aliasOfHeld(by, Gateway.hex(it)) }
-            ?: r.label ?: "Your patron"
+        // **whose server it is**: the node's owner, which two levels down
+        // is not the patron this line is under
+        val patron = Gateway.aliasOfHeld(by, nodeHex) ?: r.label ?: "Your patron"
         val name = subnet.alias ?: "subnet"
         val home = { go(Chrome.Place.Home) }
         val dialog = AlertDialog.Builder(this).setCancelable(false)

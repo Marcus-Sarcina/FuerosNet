@@ -66,7 +66,7 @@ impl Client {
                     nibbles: l.nibbles,
                 }),
                 patron: self.patron_in(&id),
-                relocation: self.patron_in(&id).and_then(|p| self.relocation(&p)),
+                relocation: self.serving_in(&id).and_then(|n| self.relocation(&n)),
             })
             .collect()
     }

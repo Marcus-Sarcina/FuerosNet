@@ -231,3 +231,51 @@ fn a_subnet_carries_its_patron_and_the_move_held_for_its_node() {
     let r = row.relocation.as_ref().expect("the move rides the subnet");
     assert_eq!((r.standing, r.to.as_str()), (Standing::Proved, NEW));
 }
+
+// functional: SES-021
+/// **A node serving this client two levels down is invited by name, and
+/// its move rides the subnet it serves** (SES-002): an invitation naming
+/// an agreed node that is not this client's patron is placed as that node,
+/// and the subnet whose address that node serves carries the move.
+#[test]
+fn a_node_two_levels_up_is_invited_by_name_and_its_move_rides_the_subnet_it_serves() {
+    use rhtn_client::invitation::{Invitation, Placed};
+    let mut s = setup(&["alice", "bob", "witness"]);
+    s.adopted("alice", "bob", "witness", 1);
+    let a = s.client("alice");
+    let far = kh("witness");
+    let named = Invitation {
+        at: NEW.into(),
+        patron: Some(far),
+        subnet: None,
+        member: None,
+        as_label: None,
+    };
+    assert_eq!(
+        a.place_invitation(&named),
+        Placed::NotAPatron(far),
+        "a party never agreed to is not introduced"
+    );
+    a.agree_to(far, vec![OLD.into()]);
+    assert_eq!(a.place_invitation(&named), Placed::Node(far));
+    let row = a
+        .subnets_held()
+        .into_iter()
+        .find(|r| r.patron.is_some())
+        .unwrap();
+    let anchor = row.position.as_ref().unwrap().anchor;
+    a.serve_at(anchor, far);
+    a.offer_relocation(far, NEW.into(), None);
+    a.relocation_proved(&far, NEW, Found::Proved);
+    let row = a
+        .subnets_held()
+        .into_iter()
+        .find(|r| r.id == row.id)
+        .unwrap();
+    assert_eq!(row.patron, Some(kh("bob")), "the line is still bob's");
+    assert_eq!(
+        row.relocation.map(|r| r.node),
+        Some(far),
+        "the move of the node serving it"
+    );
+}

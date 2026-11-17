@@ -428,7 +428,13 @@ impl crate::ceremony::Client {
             return Placed::NotThisMember(m);
         }
         match i.patron {
-            Some(named) if patrons.contains(&named) => Placed::Node(named),
+            // **or a node this identity already serves from** [2026-11-16]:
+            // a light client two levels down is served by its patron's
+            // patron (SES-002), and a move of that node is invited by name.
+            // The agreement is the relationship, so nothing is introduced
+            Some(named) if patrons.contains(&named) || self.payload.agreed.contains_key(&named) => {
+                Placed::Node(named)
+            }
             Some(named) => Placed::NotAPatron(named),
             None => match patrons.len() {
                 0 => Placed::NoPatron,
