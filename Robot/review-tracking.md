@@ -22883,3 +22883,21 @@ addresses neither alone:
    (`node/tests/peering.rs`, `sim/tests/live.rs`, `sim/tests/traversal.rs`).
 
 Put to the author 2026-11-18.
+
+## Desktop participant client: rulings so far (2026-11-18)
+
+- A Rust window over the system web view (wry/tao, as `crates/desktop`),
+  the participant kernel linked directly; Linux first, `.deb` and AppImage.
+- **Pairs from the phone**: the desktop is a delegated device (design
+  §23.3) — it mints its transport key and its own payload key material, and
+  the phone signs a run of 48-hour credentials over them. The phone already
+  does this for an instance it launches (`Gateway.kt`, `p.delegate`, sent
+  over HTTP behind a one-time token); the desktop reuses that path: it
+  shows a code with its LAN address, a one-time token and its transport
+  key, and the phone sends the run there.
+- **Renewal: (b)** [author, 2026-11-18] — the phone sends the next run over
+  its own session while online, before the current one ends. Owed to
+  design §23.3 when the pairing lands.
+- Look: `crates/brand/tokens.toml` → `crates/desktop/ui/tokens.css`; Geist
+  and Geist Mono (OFL-1.1, acceptable [author, 2026-11-18]) under
+  `crates/brand/res/font/`.

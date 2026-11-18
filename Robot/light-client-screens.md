@@ -293,10 +293,18 @@ named by him, the rest asked in the output of 2026-10-28:
 **Who reads a post** [author, 2026-11-18]: `+0/-0` is a note to self;
 `+0/-1` goes to the writer's direct subordinates; `+1/-0` to the patron and
 the writer's siblings. **Propagation distances are along the subnet tree.**
-My reading, put to him the same day: `+n/-m` reaches the subtree of the
-writer's n-th ancestor, down to n+m levels below that ancestor — which is
-what makes the re-expression rule hold (the writer's `+1/-0` is the
-patron's `+0/-1`).
+**Not the n-th ancestor's subtree** [author, 2026-11-18], which was my
+reading: *"both measures are relative to the viewer. Counting down from the
+highest tier would lead to drastic fan out."* The board is **a practical
+coordinating mechanism, dozens to low hundreds of recipients per message**,
+not broadcast. **Wide distribution is a patron's act**: a higher patron sees
+a `+4/-3` post and may repost it as `-7` — curating and setting priority is
+part of their authority and their service to the subnet's mission.
+
+My second reading, put to him the same day: upward, each ancestor up to
+`n` together with that ancestor's direct subordinates (which is how
+`+1/-0` reaches the siblings) and nothing further down their branches;
+downward, the writer's own subtree to `m` levels.
 
 **The named scopes** (*this subnet*, *and below*, *and above*): possibly
 loose wording [author, 2026-11-18] — "subnet" is the whole tree, and he has

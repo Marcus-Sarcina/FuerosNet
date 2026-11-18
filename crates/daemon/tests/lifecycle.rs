@@ -956,3 +956,88 @@ async fn a_member_a_record_introduces_is_pinned_on_arrival_and_again_after_a_res
     );
     let _ = std::fs::remove_dir_all(&l.dir);
 }
+
+// functional: SES-018
+/// **A sibling's member is learned from a push by any node in this node's
+/// horizon, and pinned once its record is stored**
+/// (`infra-client-requirements.md` §4.4) [author, 2026-11-18: "All
+/// identities within the trust horizon are trusted"]: bob and alice are
+/// both pat's, alice adopts carol, and pat's node relays the adoption to
+/// bob. carol is two edges from bob — a sibling edge and an adoption — so
+/// the record is within bob's horizon, and carol may fail over to bob
+/// when alice's node stops answering. The same record from a node outside
+/// the horizon introduces nobody.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_siblings_member_relayed_by_the_patron_is_pinned_and_a_stranger_introduces_nobody() {
+    use rhtn_daemon::config::Config;
+    use rhtn_daemon::service::Service;
+    use rhtn_node::store::KIND_TRANSACTION;
+    let l = layout("sibling-introduced");
+    std::fs::write(
+        &l.peers,
+        ["pat", "witness"]
+            .map(|n| format!("{}\n", hex(&test_identity(n).public.key_material())))
+            .concat(),
+    )
+    .unwrap();
+    let cfg = Config::read(&l.config).unwrap();
+    let s = Service::start(&cfg, &l.peers).await.expect("starts");
+    let pins = s.node.node.cfg.pins.clone();
+    let on_control = s
+        .node
+        .node
+        .cfg
+        .on_control
+        .clone()
+        .expect("a control handler");
+    let me = s.node.view.lock().unwrap().me();
+    let push = |from: [u8; 32], (pop, adoption): (Vec<u8>, Vec<u8>)| {
+        {
+            let mut view = s.node.view.lock().unwrap();
+            let pop_id = rhtn_archive::record::Record::parse(&pop).unwrap().txid;
+            view.store.keep_presence(pop_id, pop);
+        }
+        on_control(
+            from,
+            5,
+            rhtn_archive::topology::encode_push(KIND_TRANSACTION, &adoption),
+        );
+    };
+    let held = |who: &str| {
+        s.node
+            .view
+            .lock()
+            .unwrap()
+            .store
+            .transactions()
+            .any(|r| r.carried_identity().is_some_and(|id| id.keyhash == kh(who)))
+    };
+    // the operator's replay places bob and his sibling under pat
+    push(me, adoption_under_slot_carrying("pat", "bob", 0, true));
+    push(me, adoption_under_slot_carrying("pat", "alice", 1, true));
+    assert!(held("alice"), "the sibling is in the table");
+
+    // a node outside the horizon relays alice's adoption of carol
+    let stranger = kh("mallory");
+    push(
+        stranger,
+        adoption_under_slot_carrying("alice", "carol", 0, true),
+    );
+    assert!(!held("carol"), "a stranger's push is not stored");
+    assert!(
+        pins.classical_key(&kh("carol")).is_none(),
+        "and introduces nobody"
+    );
+
+    // pat's node relays the same adoption
+    push(
+        kh("pat"),
+        adoption_under_slot_carrying("alice", "carol", 0, true),
+    );
+    assert!(
+        held("carol"),
+        "the sibling's member is within two edges and stored"
+    );
+    assert!(pins.classical_key(&kh("carol")).is_some(), "and pinned");
+    let _ = std::fs::remove_dir_all(&l.dir);
+}

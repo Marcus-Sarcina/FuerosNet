@@ -335,7 +335,7 @@ of them, and **refuses the attach of every client that would have taught
 it**. The subnet then cannot survive a change of hosting, which §4.4
 requires it to.
 
-#### Learn key material from your operator's replay
+#### Learn key material from pushes within your horizon
 
 **A record is unverifiable until every signer's identity is known, and a
 subnet's records are signed by the members they introduce** [author,
@@ -352,9 +352,18 @@ carry *the adopted node's* key material. Read it, and keep it.
   an identity **under its own hash and under no other**, and a liar
   registers a key nobody will ever look up — which is why reading it
   unverified costs nothing.
-- **Only from your operator's own replay**, by the same rule as above: the
-  sender bound as your own keyhash. A push from any other peer introduces
-  nobody.
+- **From a sender within your horizon** [author, 2026-11-18]: *"All
+  identities within the trust horizon are trusted."* Your operator's
+  replay is the first case — the sender bound as your own keyhash. A
+  patron's node relaying a sibling's adoption is another, and the one
+  failover needs: the sibling's member is two edges from you, one of them
+  the sibling edge, so its record is yours to store, and the member may
+  attach to you when its own node stops answering (design §14.1.2). A push
+  from a sender outside your horizon introduces nobody.
+- **Pin what you learn** so the member it names can attach: at once from
+  your operator, and from anyone else once the record carrying it is
+  stored — the condition every record you hold is pinned under at start
+  (§1).
 - **A key learned is an arrival.** Settle the held set afterwards as you
   would after a store: a missing signer is exactly what a held object was
   waiting for, and the record that introduces them is often the next one

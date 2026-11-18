@@ -6117,7 +6117,14 @@ same (`wire-format.md` §11.1).
    replication set as its serving node, which holds the replicated state but not
    the authority to countersign: a sibling of the serving infra node (§3.4) —
    siblings of the serving node, not of the patron, where those differ — in the
-   order of the cached list. Where none attaches, the serving node's own serving
+   order of the cached list. **A sibling admits the members the serving node's
+   operator adopted** [author, 2026-11-18]: they are two edges from it, one of
+   them the sibling edge, so their adoptions are within its horizon and reach
+   it relayed by the patron's node (`infra-client-requirements.md` §4.4). **A
+   client further down waits for its own node** [author, 2026-11-18]: three
+   edges from a sibling and from the node above alike, it is in neither's
+   horizon, and nothing is replicated to put it there.
+   Where none attaches, the serving node's own serving
    node, the next infrastructure node up the patron chain, found in the client's
    own view of its horizon; it holds what replication brings it, and it does not
    countersign for the patron either. **The node answering determines the

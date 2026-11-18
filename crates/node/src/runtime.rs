@@ -392,16 +392,25 @@ impl LiveNode {
                     // known, and a subnet's records are signed by the
                     // members they introduce.
                     //
-                    // **Only from this node's own identity**, which is
-                    // its operator on another device (§4.4): the sender
-                    // bound as this keyhash, which the session proved.
-                    // **And only what certifies itself** —
+                    // **From a node in this node's horizon** [author,
+                    // 2026-11-18: "All identities within the trust horizon
+                    // are trusted"]: its operator on another device (§4.4)
+                    // above all, and a patron relaying a sibling's member,
+                    // who fails over here. The sender is the one the
+                    // session proved. **Pinned at once from the operator,
+                    // and from anyone else once the record is stored** —
+                    // the condition every held record is pinned under at
+                    // start. **And only what certifies itself** —
                     // `Record::carried_identity` accepts the material
                     // only where it hashes to the keyhash the record
                     // names, so a record introduces an identity under its
                     // own hash and under no other.
                     let mut ids = ids;
-                    let carried = (peer == view.me())
+                    let own = peer == view.me();
+                    let in_horizon = own
+                        || view.attached.contains(&peer)
+                        || view.table.distance(&view.me(), &peer, 2).is_some();
+                    let carried = in_horizon
                         .then(|| decode_push(&body).ok())
                         .flatten()
                         .filter(|(kind, _)| *kind == KIND_TRANSACTION)
@@ -422,11 +431,13 @@ impl LiveNode {
                             // §1) — learned into the verifying set alone, a node
                             // refused an invited member Unbound [bench,
                             // 2026-11-12]
-                            pins.pin_identity(&id);
-                            ids.push(id);
-                            true
+                            if own {
+                                pins.pin_identity(&id);
+                            }
+                            ids.push(id.clone());
+                            Some(id)
                         }
-                        _ => false,
+                        _ => None,
                     };
                     let stored = view.receive_push(&a, &peer, &body, &*ids) == Decision::Stored;
                     if stored && let Ok((kind, object)) = decode_push(&body) {
@@ -439,8 +450,18 @@ impl LiveNode {
                     // all (`Propagation::settle`). A key learned counts as
                     // an arrival too: it is exactly what a held object was
                     // waiting for.
-                    if stored || learned {
+                    if stored || learned.is_some() {
                         view.settle(&a, &*ids);
+                    }
+                    if !own
+                        && let Some(id) = learned
+                        && view
+                            .store
+                            .introduced()
+                            .iter()
+                            .any(|k| k.keyhash == id.keyhash)
+                    {
+                        pins.pin_identity(&id);
                     }
                 }
                 6 => {
