@@ -64,6 +64,11 @@ pub struct Member {
     /// Whether it serves sessions and answers resolutions.  A light member
     /// is served by its nearest infra ancestor and attaches there.
     pub infra: bool,
+    /// **Adopted after the fabric stands**: its records are signed and
+    /// held back, no node is provisioned knowing it, and a test pushes
+    /// them as its patron's operator would ([`Subnet::late`]).  Light
+    /// only.
+    pub late: bool,
 }
 
 /// A subnet as a scenario describes it: its anchor, which is its root and
@@ -95,6 +100,7 @@ impl Plan {
             patron,
             index,
             infra: true,
+            late: false,
         });
         self
     }
@@ -107,6 +113,22 @@ impl Plan {
             patron,
             index,
             infra: false,
+            late: false,
+        });
+        self
+    }
+
+    /// A light member under `patron` at `index` **whose adoption no node
+    /// is provisioned with**: signed after every other record, carrying its
+    /// key material as a real adoption does, and held in [`Subnet::late`]
+    /// for a test to push.  Nothing in the fabric knows its key until then.
+    pub fn late(mut self, name: &'static str, patron: &'static str, index: u8) -> Plan {
+        self.members.push(Member {
+            name,
+            patron,
+            index,
+            infra: false,
+            late: true,
         });
         self
     }
@@ -152,6 +174,10 @@ pub struct Subnet {
     /// by name: what a client takes to have somewhere to start a descent
     /// from (design §12.3 Case 1).
     pub endpoint_records: BTreeMap<&'static str, Vec<u8>>,
+    /// **The records of the late members**, each one's presence then its
+    /// adoption, in signing order: what no node was given, for a test to
+    /// push as the patron's operator does.
+    pub late: Vec<Record>,
 }
 
 impl Subnet {
@@ -277,6 +303,11 @@ pub struct Fabric {
 /// `c2`, `c4` a light client of `c3` and `c5` a light client under `c4`,
 /// so `c3` serves its whole light subtree.  One plan for every harness,
 /// so a claim proved in-process is the claim rerun on rented machines.
+///
+/// **`c6` is `c3`'s sibling under `c2`, and `c7` a light client of `c3`
+/// adopted late**: no node starts knowing `c7`, so the sibling `c6` admits
+/// it only with the key it learned from the push (design §14.1.2 step 4,
+/// `infra-client-requirements.md` §4.4).
 pub fn wan_plans() -> Vec<Plan> {
     vec![
         Plan::new("alice2")
@@ -287,7 +318,9 @@ pub fn wan_plans() -> Vec<Plan> {
             .infra("c2", "c1", 4)
             .infra("c3", "c2", 2)
             .light("c4", "c3", 1)
-            .light("c5", "c4", 3),
+            .light("c5", "c4", 3)
+            .infra("c6", "c2", 3)
+            .late("c7", "c3", 2),
     ]
 }
 
@@ -308,6 +341,8 @@ type Entries = (Vec<u8>, BTreeMap<&'static str, Vec<u8>>);
 struct Signed {
     built: Vec<Planned>,
     names: Vec<&'static str>,
+    /// The names a node is provisioned knowing: every one but the late.
+    known: Vec<&'static str>,
     store: BTreeMap<Txid, Vec<u8>>,
     /// Each party's own signed history: what a daemon reads its own
     /// position from after a restart (`adopt_own_position`), since the
@@ -343,6 +378,7 @@ struct Planned {
     subnet: [u8; 32],
     paths: BTreeMap<&'static str, Vec<u8>>,
     records: Vec<Record>,
+    late: Vec<Record>,
 }
 
 /// Records as the parties would sign them, each signer's archive advancing.
@@ -403,7 +439,10 @@ impl Signing {
     }
 
     /// `node` adopted under `patron` at `path` in the subnet `anchor`
-    /// roots, on presence between them.
+    /// roots, on presence between them: the presence record and the
+    /// adoption.  `carried` puts the node's key material in the adoption
+    /// (`wire-format.md` §4.1), which is how a node that never met it
+    /// learns its key.
     fn adopt(
         &mut self,
         node: &str,
@@ -411,7 +450,8 @@ impl Signing {
         anchor: &str,
         path: &[u8],
         subnet: [u8; 32],
-    ) -> Record {
+        carried: bool,
+    ) -> (Record, Record) {
         let pop = self.meet(patron, node);
         let t = self.tick();
         let (bn, bp) = (self.back(node), self.back(patron));
@@ -430,13 +470,14 @@ impl Signing {
                 subnet: Some(subnet),
             },
             timestamp: t,
-            key_material: None,
+            key_material: carried.then(|| material(node)),
             evidence: Evidence::Presence(pop.txid),
             presented_head: None,
             back: [&bn, &bp],
             carrying: None,
         };
-        self.commit(TYPE_ADOPTION, &adoption_body(&a), &[node, patron])
+        let adoption = self.commit(TYPE_ADOPTION, &adoption_body(&a), &[node, patron]);
+        (pop, adoption)
     }
 }
 
@@ -459,7 +500,8 @@ impl Fabric {
             clock: epoch,
         };
         let mut built: Vec<Planned> = Vec::new();
-        for plan in plans {
+        let mut held: Vec<(usize, &'static str, &'static str, Vec<u8>)> = Vec::new();
+        for (i, plan) in plans.into_iter().enumerate() {
             let subnet = rhtn_codec::cose::sha256(format!("subnet:{}", plan.anchor).as_bytes());
             let mut paths: BTreeMap<&'static str, Vec<u8>> = BTreeMap::new();
             paths.insert(plan.anchor, Vec::new());
@@ -482,21 +524,50 @@ impl Fabric {
                     );
                 }
                 paths.insert(m.name, path.clone());
-                records.push(signing.adopt(m.name, m.patron, plan.anchor, &path, subnet));
+                if m.late {
+                    assert!(!m.infra, "{} is late and runs infrastructure", m.name);
+                    held.push((i, m.name, m.patron, path));
+                    continue;
+                }
+                let (_, adoption) =
+                    signing.adopt(m.name, m.patron, plan.anchor, &path, subnet, false);
+                records.push(adoption);
             }
             built.push(Planned {
                 plan,
                 subnet,
                 paths,
                 records,
+                late: Vec::new(),
             });
         }
+        // what the nodes are provisioned with stops here: the late
+        // adoptions advance their signers' chains after it, and no store
+        // or archive a node starts from holds them.  The clock is after
+        // them, so they do not arrive from a node's future
+        let (store, archives) = (signing.store.clone(), signing.archives.clone());
+        for (i, name, patron, path) in held {
+            let (anchor, subnet) = (built[i].plan.anchor, built[i].subnet);
+            let (pop, adoption) = signing.adopt(name, patron, anchor, &path, subnet, true);
+            built[i].late.extend([pop, adoption]);
+        }
+        let clock = signing.clock + 60;
+        let late: BTreeSet<&str> = built
+            .iter()
+            .flat_map(|p| p.plan.members.iter().filter(|m| m.late).map(|m| m.name))
+            .collect();
+        let known = names
+            .iter()
+            .copied()
+            .filter(|n| !late.contains(n))
+            .collect();
         Signed {
             built,
             names,
-            clock: signing.clock + 60,
-            store: signing.store,
-            archives: signing.archives,
+            known,
+            clock,
+            store,
+            archives,
         }
     }
 
@@ -513,6 +584,7 @@ impl Fabric {
             records: Vec::new(),
             entry: Vec::new(),
             endpoint_records: BTreeMap::new(),
+            late: Vec::new(),
         }
     }
 
@@ -546,10 +618,10 @@ impl Fabric {
         let mut view = NodeView::new(Arc::new(id(n)), tmp.locator(n));
         view.table = table;
         view.set_now(clock);
-        for m in p.plan.members.iter().filter(|m| m.patron == n) {
+        for m in p.plan.members.iter().filter(|m| m.patron == n && !m.late) {
             view.set_slot(m.index as u64, Some(kh(m.name)), clock);
         }
-        for m in p.plan.members.iter().filter(|m| !m.infra) {
+        for m in p.plan.members.iter().filter(|m| !m.infra && !m.late) {
             if tmp.serving_node_of(m.name) == n {
                 view.attached.insert(kh(m.name));
             }
@@ -618,13 +690,14 @@ impl Fabric {
         let Signed {
             built,
             names,
+            known,
             store,
             clock,
             archives: _,
         } = Self::sign(plans, EPOCH);
-        let ids: Vec<Identity> = names.iter().map(|n| id(n).public).collect();
+        let ids: Vec<Identity> = known.iter().map(|n| id(n).public).collect();
         let pins = Pins::new();
-        for n in &names {
+        for n in &known {
             pins.pin_identity(&id(n).public);
         }
         let mut subnets = Vec::new();
@@ -669,6 +742,7 @@ impl Fabric {
                 subnet,
                 paths,
                 records,
+                late,
             } = p;
             subnets.push(Subnet {
                 anchor: plan.anchor,
@@ -680,6 +754,7 @@ impl Fabric {
                 records,
                 entry,
                 endpoint_records,
+                late,
             });
         }
         Fabric {
@@ -722,13 +797,14 @@ impl Fabric {
         let epoch = now - 86_400;
         let Signed {
             built,
-            names,
+            names: _,
+            known,
             store,
             clock,
             mut archives,
         } = Self::sign(plans, epoch);
-        let ids: Vec<Identity> = names.iter().map(|n| id(n).public).collect();
-        let peers: String = names
+        let ids: Vec<Identity> = known.iter().map(|n| id(n).public).collect();
+        let peers: String = known
             .iter()
             .map(|n| format!("{}\n", crate::daemons::hex(&material(n))))
             .collect();
@@ -814,6 +890,14 @@ impl Fabric {
                     .into(),
             );
             sub.insert("entry".into(), crate::daemons::hex(entry).into());
+            sub.insert(
+                "late".into(),
+                p.late
+                    .iter()
+                    .map(|r| serde_json::Value::from(crate::daemons::hex(&r.bytes)))
+                    .collect::<Vec<_>>()
+                    .into(),
+            );
             sub.insert(
                 "endpoint_records".into(),
                 endpoint_records
@@ -941,6 +1025,14 @@ impl Fabric {
                     )
                 })
                 .collect();
+            let late = sub["late"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .map(|r| Record::parse(&unhex(r.as_str().expect("hex"))).expect("a record"))
+                        .collect()
+                })
+                .unwrap_or_default();
             subnets.push(Subnet {
                 anchor: plan.anchor,
                 id: subnet,
@@ -951,6 +1043,7 @@ impl Fabric {
                 records,
                 entry: unhex(sub["entry"].as_str().expect("entry")),
                 endpoint_records,
+                late,
             });
         }
         let store = m["store"]
@@ -1063,20 +1156,54 @@ impl Fabric {
     /// Attach `name` to the node that serves it, as a light client does
     /// (design §14.1.2), and hand back the session it collects on.
     pub async fn attach(&self, name: &str) -> Session {
-        let subnet = self.subnet_of(name);
-        let serving = subnet.serving_node_of(name);
-        let addr = subnet.addr_of(serving);
+        let serving = self.subnet_of(name).serving_node_of(name);
+        match self.attach_at(name, serving).await {
+            AttachOutcome::Attached(s) => s,
+            other => panic!("{name} attaches to {serving}: {other:?}"),
+        }
+    }
+
+    /// `name` attaching to the node called `node`, whichever that is: its
+    /// own, or a sibling of its own in failover.  The outcome, whatever it
+    /// is.
+    pub async fn attach_at(&self, name: &str, node: &str) -> AttachOutcome {
+        let addr = self.subnet_of(node).addr_of(node);
         let cfg = self.client_cfg(name);
         cfg.addresses
             .lock()
             .unwrap()
-            .entry(kh(serving))
+            .entry(kh(node))
             .or_default()
             .push(addr);
-        match attach(&cfg, &self.client_endpoint(), kh(serving), addr, false).await {
-            AttachOutcome::Attached(s) => s,
-            other => panic!("{name} attaches to {serving}: {other:?}"),
+        attach(&cfg, &self.client_endpoint(), kh(node), addr, false).await
+    }
+
+    /// **The patron's operator tells its own node of a late adoption**:
+    /// attached as the patron, it pushes the records `name`'s adoption
+    /// rests on, presence first, as a light client replays its archive.
+    /// The session is handed back, since frames on one that closes at once
+    /// may not land.
+    pub async fn adopt_late(&self, name: &str) -> Session {
+        let subnet = self.subnet_of(name);
+        let patron = subnet
+            .patron_of(name)
+            .unwrap_or_else(|| panic!("{name} has no patron"));
+        let s = self.attach(patron).await;
+        let records: Vec<&Record> = subnet
+            .late
+            .iter()
+            .filter(|r| r.signers.contains(&kh(name)))
+            .collect();
+        assert_eq!(records.len(), 2, "{name}'s presence and adoption are held");
+        for r in records {
+            let push =
+                rhtn_archive::topology::encode_push(rhtn_node::store::KIND_TRANSACTION, &r.bytes);
+            assert!(
+                s.send_control(rhtn_archive::topology::FRAME_TOPOLOGY_PUSH, &push),
+                "{patron}'s session takes the push"
+            );
         }
+        s
     }
 
     /// Hand the anchor entry of subnet `foreign` to the node called

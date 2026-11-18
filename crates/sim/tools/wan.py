@@ -19,6 +19,12 @@ manifest `provision` writes through `RHTN_WAN_MANIFEST`:
     RHTN_WAN_MANIFEST=<out>/state/manifest.json \\
         cargo test -p rhtn-sim --test ceremony --test subnets -- --nocapture
 
+and the sibling admission, which wants a freshly provisioned fabric
+because it adopts a member no node has met:
+
+    RHTN_WAN_MANIFEST=<out>/state/manifest.json \\
+        cargo test -p rhtn-daemon --test fabric a_sibling -- --nocapture
+
 Credential: a DigitalOcean token the operator made at the provider's own
 console, in a file named by --token-file or $RHTN_DO_TOKEN_FILE.  Nothing
 here is registered to the project (no shipped provider secrets).
@@ -56,6 +62,7 @@ REGIONS = {
     "c1": ["ams3", "lon1"],
     "c2": ["sgp1", "blr1", "syd1"],
     "c3": ["fra1", "lon1", "blr1", "tor1"],
+    "c6": ["tor1", "blr1", "syd1", "nyc3"],
 }
 
 

@@ -134,6 +134,92 @@ impl Adjacency for LiveAdjacency {
 /// or reissue ends the old credential's sessions and queue at the transport
 /// as it does in the table.  Anything but a verified transaction of those
 /// two kinds carries nothing.
+/// **A `TopologyPush` from `peer`, on a session either side dialled**:
+/// the key material it carries learned first, then the storage decision,
+/// then whatever was held for it.  One path for a peer that dialled this
+/// node and for the node above on the session this node dialled, so the
+/// two cannot learn differently.
+///
+/// **Key material before anything is verified** [author, 2026-11-03],
+/// because verification is what wants it: a record is `Unverifiable`
+/// until every signer's identity is known, and a subnet's records are
+/// signed by the members they introduce.
+///
+/// **From a node in this node's horizon** [author, 2026-11-18: "All
+/// identities within the trust horizon are trusted"]: its operator on
+/// another device (§4.4) above all, and a patron relaying a sibling's
+/// member, who fails over here. The sender is the one the session
+/// proved. **Pinned at once from the operator, and from anyone else once
+/// the record is stored** — the condition every held record is pinned
+/// under at start. **And only what certifies itself** —
+/// `Record::carried_identity` accepts the material only where it hashes
+/// to the keyhash the record names, so a record introduces an identity
+/// under its own hash and under no other.  Whether it was stored.
+fn take_push(
+    view: &mut NodeView,
+    ids: &mut Vec<Identity>,
+    pins: &rhtn_transport::tls::Pins,
+    a: &dyn crate::Adjacency,
+    slot: &Arc<Mutex<Option<Arc<Node>>>>,
+    peer: &Keyhash,
+    body: &[u8],
+) -> bool {
+    let own = *peer == view.me();
+    let in_horizon =
+        own || view.attached.contains(peer) || view.table.distance(&view.me(), peer, 2).is_some();
+    let carried = in_horizon
+        .then(|| decode_push(body).ok())
+        .flatten()
+        .filter(|(kind, _)| *kind == KIND_TRANSACTION)
+        .and_then(|(_, object)| {
+            rhtn_archive::record::Record::parse(&object)
+                .ok()
+                .and_then(|r| r.carried_identity())
+        });
+    let learned = match carried {
+        Some(id) if !ids.iter().any(|k| k.keyhash == id.keyhash) => {
+            tracing::debug!(
+                target: "node",
+                who8 = %crate::diag::id8(&id.keyhash),
+                "node.learned"
+            );
+            // **and pinned**: a member a record introduces may attach
+            // from now on (`infra-client-requirements.md` §1) — learned
+            // into the verifying set alone, a node refused an invited
+            // member Unbound [bench, 2026-11-12]
+            if own {
+                pins.pin_identity(&id);
+            }
+            ids.push(id.clone());
+            Some(id)
+        }
+        _ => None,
+    };
+    let stored = view.receive_push(a, peer, body, &*ids) == Decision::Stored;
+    if stored && let Ok((kind, object)) = decode_push(body) {
+        carry_supersession(slot, ids, kind, &object);
+    }
+    // **what was held for this may now be ready** [2026-11-03]: an
+    // object's arrival is the only thing that makes a prerequisite come
+    // good, and before this nothing in a running node drained the held
+    // set at all (`Propagation::settle`). A key learned counts as an
+    // arrival too: it is exactly what a held object was waiting for.
+    if stored || learned.is_some() {
+        view.settle(a, &*ids);
+    }
+    if !own
+        && let Some(id) = learned
+        && view
+            .store
+            .introduced()
+            .iter()
+            .any(|k| k.keyhash == id.keyhash)
+    {
+        pins.pin_identity(&id);
+    }
+    stored
+}
+
 fn carry_supersession(
     node: &Arc<Mutex<Option<Arc<Node>>>>,
     ids: &[Identity],
@@ -385,84 +471,8 @@ impl LiveNode {
             let ids = i.lock().unwrap();
             match ft {
                 5 => {
-                    // **key material from this node's own replay**
-                    // [author, 2026-11-03], before anything is verified,
-                    // because verification is what wants it: a record is
-                    // `Unverifiable` until every signer's identity is
-                    // known, and a subnet's records are signed by the
-                    // members they introduce.
-                    //
-                    // **From a node in this node's horizon** [author,
-                    // 2026-11-18: "All identities within the trust horizon
-                    // are trusted"]: its operator on another device (§4.4)
-                    // above all, and a patron relaying a sibling's member,
-                    // who fails over here. The sender is the one the
-                    // session proved. **Pinned at once from the operator,
-                    // and from anyone else once the record is stored** —
-                    // the condition every held record is pinned under at
-                    // start. **And only what certifies itself** —
-                    // `Record::carried_identity` accepts the material
-                    // only where it hashes to the keyhash the record
-                    // names, so a record introduces an identity under its
-                    // own hash and under no other.
                     let mut ids = ids;
-                    let own = peer == view.me();
-                    let in_horizon = own
-                        || view.attached.contains(&peer)
-                        || view.table.distance(&view.me(), &peer, 2).is_some();
-                    let carried = in_horizon
-                        .then(|| decode_push(&body).ok())
-                        .flatten()
-                        .filter(|(kind, _)| *kind == KIND_TRANSACTION)
-                        .and_then(|(_, object)| {
-                            rhtn_archive::record::Record::parse(&object)
-                                .ok()
-                                .and_then(|r| r.carried_identity())
-                        });
-                    let learned = match carried {
-                        Some(id) if !ids.iter().any(|k| k.keyhash == id.keyhash) => {
-                            tracing::debug!(
-                                target: "node",
-                                who8 = %crate::diag::id8(&id.keyhash),
-                                "node.learned"
-                            );
-                            // **and pinned**: a member a record introduces may
-                            // attach from now on (`infra-client-requirements.md`
-                            // §1) — learned into the verifying set alone, a node
-                            // refused an invited member Unbound [bench,
-                            // 2026-11-12]
-                            if own {
-                                pins.pin_identity(&id);
-                            }
-                            ids.push(id.clone());
-                            Some(id)
-                        }
-                        _ => None,
-                    };
-                    let stored = view.receive_push(&a, &peer, &body, &*ids) == Decision::Stored;
-                    if stored && let Ok((kind, object)) = decode_push(&body) {
-                        carry_supersession(&s, &ids, kind, &object);
-                    }
-                    // **what was held for this may now be ready**
-                    // [2026-11-03]: an object's arrival is the only thing
-                    // that makes a prerequisite come good, and before this
-                    // nothing in a running node drained the held set at
-                    // all (`Propagation::settle`). A key learned counts as
-                    // an arrival too: it is exactly what a held object was
-                    // waiting for.
-                    if stored || learned.is_some() {
-                        view.settle(&a, &*ids);
-                    }
-                    if !own
-                        && let Some(id) = learned
-                        && view
-                            .store
-                            .introduced()
-                            .iter()
-                            .any(|k| k.keyhash == id.keyhash)
-                    {
-                        pins.pin_identity(&id);
-                    }
+                    take_push(&mut view, &mut ids, &pins, &a, &s, &peer, &body);
                 }
                 6 => {
                     view.receive_memo(&a, &peer, &body);
@@ -943,23 +953,25 @@ impl LiveNode {
                 }
                 let (_, dummy) = mpsc::unbounded_channel();
                 let mut frames = std::mem::replace(&mut session.frames, dummy);
-                let (v, i, a, s) = (
+                let (v, i, a, s, pins) = (
                     self.view.clone(),
                     self.ids.clone(),
                     self.adjacency.clone(),
                     self.adjacency.node.clone(),
+                    self.node.cfg.pins.clone(),
                 );
                 tokio::spawn(async move {
                     while let Some((ft, body)) = frames.recv().await {
                         let mut view = v.lock().unwrap();
-                        let ids = i.lock().unwrap();
+                        let mut ids = i.lock().unwrap();
                         match ft {
+                            // **the node above relays as any horizon
+                            // peer does** [bench, 2026-11-18]: this pump
+                            // stored without learning, so a sibling's
+                            // member its patron relayed was held here
+                            // for a key the record itself carried
                             5 => {
-                                if view.receive_push(&a, &serving, &body, &*ids) == Decision::Stored
-                                    && let Ok((kind, object)) = decode_push(&body)
-                                {
-                                    carry_supersession(&s, &ids, kind, &object);
-                                }
+                                take_push(&mut view, &mut ids, &pins, &a, &s, &serving, &body);
                             }
                             6 => {
                                 view.receive_memo(&a, &serving, &body);

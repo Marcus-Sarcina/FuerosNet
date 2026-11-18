@@ -5,7 +5,7 @@
 //!     provision --out DIR [--root /var/lib/rhtn] [--listen 0.0.0.0:7447 | --listen-own] NAME=IP:PORT ...
 //!
 //! One `NAME=IP:PORT` per infra node of `rhtn_sim::subnets::wan_plans()`
-//! (`alice2`, `bob`, `c1`, `c2`, `c3`), the address the node is reached
+//! (`alice2`, `bob`, `c1`, `c2`, `c3`, `c6`), the address the node is reached
 //! at from outside.  `--root` is where the directory will sit on the
 //! machine that runs it, which the configuration's paths are written
 //! against; `--listen` the bind, or `--listen-own` to bind each node to

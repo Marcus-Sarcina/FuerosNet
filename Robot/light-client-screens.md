@@ -195,15 +195,10 @@ resources and a scrolling view of its chat — **a BBS-style single board**,
 one board per subnet, with message propagation along subnet-hierarchical
 scope.
 
-**Every post says how far it travels** [author, 2026-10-27], in one of four
-forms:
-
-| Scope | Where it goes |
-|---|---|
-| *this subnet* | Here and nowhere else |
-| *and below* | Here and every subnet beneath this one |
-| *and above* | Here and up the line of patronage |
-| *+3/-5* | A count each way: three levels up and five levels down |
+**Every post says how far it travels** [author, 2026-10-27], as a count
+each way: `+3/-5` is three levels up and five levels down. **The named
+scopes are dropped** [author, 2026-11-18]: *this subnet*, *and below* and
+*and above* are gone, and `+n/-n` is the only form.
 
 **The default is `+2/-2`** [author, 2026-10-27], and the selector adds or
 removes a level on either side. **The thread then carries the original
@@ -215,9 +210,7 @@ rather than offering it.
 `+4/-2` to their subordinates: a step up takes one off the top and adds one
 to the bottom, a step down does the reverse. **The band of subnets it
 reaches never moves; only the coordinates do**, which is why two people
-quoting one thread read different numbers and are both right. The named
-forms are the ones with no number to move: *this subnet* is `+0/-0` and
-stays it, and *and below* reaches a whole subtree from wherever it is read.
+quoting one thread read different numbers and are both right.
 
 **The board is this shell's own, not an application** [author,
 2026-10-28], which reverses what this sheet said while the question was
@@ -301,14 +294,11 @@ not broadcast. **Wide distribution is a patron's act**: a higher patron sees
 a `+4/-3` post and may repost it as `-7` — curating and setting priority is
 part of their authority and their service to the subnet's mission.
 
-My second reading, put to him the same day: upward, each ancestor up to
-`n` together with that ancestor's direct subordinates (which is how
-`+1/-0` reaches the siblings) and nothing further down their branches;
-downward, the writer's own subtree to `m` levels.
-
-**The named scopes** (*this subnet*, *and below*, *and above*): possibly
-loose wording [author, 2026-11-18] — "subnet" is the whole tree, and he has
-used it at times for the trust horizon within one. Open: whether they go.
+**Reach, confirmed** [author, 2026-11-18]: upward, each ancestor up to `n`
+together with that ancestor's direct subordinates (which is how `+1/-0`
+reaches the siblings) and nothing further down their branches; downward,
+the writer's own subtree to `m` levels. Each patron's node uses its `-1`
+list for its own team.
 
 **Storage** [author, 2026-11-18]: a limit and no time component. The node
 drops first-in-first-out, as packets arrive; the light client drops

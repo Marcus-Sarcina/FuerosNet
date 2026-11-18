@@ -3,7 +3,7 @@
 //! what the daemon an operator runs starts from, and a client descends
 //! the far subnet through three of them.  This is the local half of the
 //! WAN harness (`crates/sim/tools/wan.py`): the same directories, copied
-//! to rented machines in five regions, are the other half, and a claim
+//! to rented machines in six regions, are the other half, and a claim
 //! that fails here fails there for a cheaper reason.
 //!
 //! What the in-process fabric cannot show and this does: that the daemon
@@ -21,7 +21,7 @@ use rhtn_adaptors::beyond::{Beyond, Beyonder};
 use rhtn_archive::submission::unrelayed;
 use rhtn_client::horizon::{Askable, Reach, Upstream};
 use rhtn_sim::subnets::{Fabric, kh, material, wan_plans};
-use rhtn_transport::session::NetworkPoint;
+use rhtn_transport::session::{AttachOutcome, NetworkPoint, Session};
 use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader};
 use std::net::SocketAddr;
@@ -243,6 +243,109 @@ async fn the_provisioned_fabric_runs_as_daemons_and_a_client_descends_it() {
         let (from, what, _) = unrelayed(&d).expect("a relayed payload");
         assert_eq!((from, what), (kh("w1"), expect), "{who}'s delivery");
     }
+    drop(running);
+    let _ = std::fs::remove_dir_all(&out);
+}
+
+/// Attach `name` at `node` until it is admitted, for up to `secs`: the
+/// session and how long the admission took to arrive.
+async fn admitted(f: &Fabric, name: &str, node: &str, secs: u64) -> (Session, Duration) {
+    let began = std::time::Instant::now();
+    let mut last = None;
+    while began.elapsed() < Duration::from_secs(secs) {
+        match f.attach_at(name, node).await {
+            AttachOutcome::Attached(s) => return (s, began.elapsed()),
+            other => last = Some(other),
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    panic!("{node} did not admit {name} within {secs}s: {last:?}");
+}
+
+// functional: SES-018
+/// **A sibling admits a member adopted after it started** [author,
+/// 2026-11-18]: no node of the far subnet is provisioned knowing `c7`.
+/// `c3`'s operator pushes `c7`'s presence and adoption to its own node,
+/// which carries `c7`'s key; `c3` passes them to its patron `c2`, and `c2`
+/// to `c6`, `c3`'s sibling, which learns the key from a push within its
+/// horizon and admits `c7` in failover (design §14.1.2 step 4,
+/// `infra-client-requirements.md` §4.4).  Here as `rhtnd` processes, or on
+/// the rented machines a manifest in `RHTN_WAN_MANIFEST` names, which must
+/// be freshly provisioned: a used fabric knows `c7` already.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_sibling_admits_a_member_adopted_after_it_started() {
+    let said = Arc::new(Mutex::new(Vec::new()));
+    let mut running = Running {
+        children: Vec::new(),
+    };
+    let out = std::env::temp_dir().join(format!("rhtn-sibling-{}", std::process::id()));
+    let f = match std::env::var_os("RHTN_WAN_MANIFEST") {
+        Some(m) => Fabric::remote(wan_plans(), std::path::Path::new(&m)),
+        None => {
+            let _ = std::fs::remove_dir_all(&out);
+            std::fs::create_dir_all(&out).expect("a directory");
+            let plans = wan_plans();
+            let infra: Vec<&'static str> = plans
+                .iter()
+                .flat_map(|p| {
+                    std::iter::once(p.anchor)
+                        .chain(p.members.iter().filter(|m| m.infra).map(|m| m.name))
+                })
+                .collect();
+            let addrs: BTreeMap<&'static str, SocketAddr> = infra
+                .iter()
+                .map(|n| (*n, SocketAddr::from(([127, 0, 0, 1], free_port()))))
+                .collect();
+            let p = Fabric::provision(
+                plans,
+                &addrs,
+                &[],
+                &out,
+                |n| out.join(n).display().to_string(),
+                |n| addrs[n].to_string(),
+            );
+            // the far subnet alone, patrons first
+            for n in ["c1", "c2", "c3", "c6"] {
+                let (_, child) = start(n, &p.dirs[n], &said);
+                running.children.push((n.to_string(), child));
+            }
+            Fabric::remote(wan_plans(), &p.manifest)
+        }
+    };
+    let log = || said.lock().unwrap().join("\n");
+
+    // nothing knows c7 yet: its sibling-to-be refuses it
+    let before = f.attach_at("c7", "c6").await;
+    assert!(
+        !matches!(before, AttachOutcome::Attached(_)),
+        "c6 admitted c7 before any node was told of it: is the fabric fresh?"
+    );
+
+    let _operator = f.adopt_late("c7").await;
+    let (own, took) = admitted(&f, "c7", "c3", 60).await;
+    println!("c3 admitted c7 {took:?} after the push");
+    assert_eq!(own.ack.mode, 0, "c3 serves c7 as its own");
+    assert!(
+        own.ack.siblings.iter().any(|s| s.keyhash == kh("c6")),
+        "c3's ack names c6 as a sibling: {:?}\n{}",
+        own.ack
+            .siblings
+            .iter()
+            .map(|s| {
+                s.keyhash[..4]
+                    .iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>(),
+        log()
+    );
+    let (sib, took) = admitted(&f, "c7", "c6", 60).await;
+    println!("c6 admitted c7 {took:?} after c3 did");
+    assert_eq!(
+        sib.ack.mode, 1,
+        "c6 admits its sibling's client in failover"
+    );
     drop(running);
     let _ = std::fs::remove_dir_all(&out);
 }

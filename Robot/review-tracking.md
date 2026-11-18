@@ -22882,7 +22882,27 @@ addresses neither alone:
    replicate: `replication_payload` is called only from tests
    (`node/tests/peering.rs`, `sim/tests/live.rs`, `sim/tests/traversal.rs`).
 
-Put to the author 2026-11-18.
+Put to the author 2026-11-18. **Ruled**: in-horizon identities are
+trusted; §4.4 now learns from any sender within the horizon (`ecef369`).
+Cause 2 was wrong: the horizon walk counts sibling edges, so a sibling's
+member is two edges away and inside h_store.
+
+**The `ecef369` fix was half applied** (found on 2026-11-18 by the new
+daemon fabric test `a_sibling_admits_a_member_adopted_after_it_started`):
+it learned on the accepted-session control handler only. A sibling hears
+its patron on the session it dialled upstream, whose pump in
+`LiveNode::attach_upstream` called `receive_push` without learning, so
+`c6` held `c7`'s adoption (`Held(transaction)`, no `node.learned`) for 60 s
+and refused `c7`. The lifecycle test missed it by pushing on a session the
+test opened to the node. Fixed by one `take_push` both pumps call; local
+`rhtnd` run: c3 admitted c7 0.27 s after the push, c6 0.27 s after that,
+mode 1. `pump_client` (a light client's own view) is unchanged.
+
+The WAN plan gained `c6` (c3's sibling under c2) and `c7`, a late light
+client of c3: its adoption carries its key, is signed after the
+provisioned snapshot, is in no node's store, archive or peers file, and
+is pushed by c3's operator in the test (`Plan::late`, `Subnet::late`,
+`Fabric::adopt_late`).
 
 ## Desktop participant client: rulings so far (2026-11-18)
 
