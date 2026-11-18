@@ -2,7 +2,8 @@
 # =============================================================================
 #  check.sh -- the code gate for the RHTN workspace.
 #
-#  0. The specification pins: the code's and the vectors', non-mutating.
+#  0. The specification pins: the code's and the vectors', non-mutating;
+#     and the brand tokens' generated copies, current and above the floor.
 #  1. The acceptance catalogue: fields, ids, citations, verbatim quotes,
 #     gap coverage (tools/check.py; exit 1 on any flag).
 #  1b. Counts and citations stated in the documents, and model results
@@ -79,6 +80,10 @@ echo "=== 0. Specification pins ==="
 # once the gate passes against the changed documents; the vector pin is
 # generate.py's alone.
 if python3 "$HERE/tools/pincheck.py"; then :; else fail=1; fi
+# The look every client draws from one file (brand/tokens.toml): a copy
+# edited by hand, or a colour pair under the contrast floor, fails here
+# rather than on one platform's screen [2026-11-18].
+if python3 "$HERE/brand/generate.py" --check; then :; else fail=1; fi
 
 echo "=== 1. Acceptance catalogue ==="
 if python3 "$HERE/acceptance/tools/check.py"; then :; else fail=1; fi

@@ -17,6 +17,10 @@ package com.comptus.fueros
  * it is a proposal to be redrawn rather than a design — it exists because
  * the ruling says the option must.
  *
+ * **The values are `crates/brand/tokens.toml`'s** [author, 2026-11-18], by
+ * way of the generated [Tokens], so the desktop and this shell draw from
+ * one file; this object keeps the names, the modes and the arithmetic.
+ *
  * **The floor is checked rather than asserted** ([PaletteTest]): every
  * token meant for text clears 4.5:1 against the surfaces it is drawn on.
  * That test found the one token that cannot — see [RULE_ONLY].
@@ -41,7 +45,7 @@ object Palette {
      * third grey for text, only two, and this is what is left for rules
      * and for marks that say nothing.
      */
-    const val RULE_ONLY = 0xFF6E757E.toInt()
+    const val RULE_ONLY = Tokens.Rail.RULE_ONLY
 
     /** The colours of one mode. */
     data class Set(
@@ -74,59 +78,59 @@ object Palette {
 
     /** Sampled from the canvas artboards. */
     val DARK = Set(
-        ground = 0xFF1C1F24.toInt(),
-        chrome = 0xFF15171A.toInt(),
-        sunken = 0xFF101215.toInt(),
-        control = 0xFF2E3540.toInt(),
-        ink = 0xFFE8EAED.toInt(),
-        muted = 0xFF9AA1AA.toInt(),
-        sub = 0xFF808891.toInt(),
-        rule = 0xFF23272E.toInt(),
-        accent = 0xFF5FB3A1.toInt(),
-        onAccent = 0xFF10211E.toInt(),
-        warn = 0xFFD08A3E.toInt(),
-        avatar = 0xFF2E3540.toInt(),
+        ground = Tokens.Dark.GROUND,
+        chrome = Tokens.Dark.CHROME,
+        sunken = Tokens.Dark.SUNKEN,
+        control = Tokens.Dark.CONTROL,
+        ink = Tokens.Dark.INK,
+        muted = Tokens.Dark.MUTED,
+        sub = Tokens.Dark.SUB,
+        rule = Tokens.Dark.RULE,
+        accent = Tokens.Dark.ACCENT,
+        onAccent = Tokens.Dark.ON_ACCENT,
+        warn = Tokens.Dark.WARN,
+        avatar = Tokens.Dark.AVATAR,
     )
 
     /** Derived, not drawn: the same hues on a light ground. */
     val LIGHT = Set(
-        ground = 0xFFF4F3F8.toInt(),
-        chrome = 0xFFE6E5EE.toInt(),
-        sunken = 0xFFFFFFFF.toInt(),
-        control = 0xFFE0DFE9.toInt(),
-        ink = 0xFF15171A.toInt(),
-        muted = 0xFF4A5059.toInt(),
-        sub = 0xFF5B626B.toInt(),
-        rule = 0xFFD2D1DC.toInt(),
-        accent = 0xFF246D5C.toInt(),
-        onAccent = 0xFFFFFFFF.toInt(),
-        warn = 0xFF8A4A08.toInt(),
-        avatar = 0xFFD8D7E2.toInt(),
+        ground = Tokens.Light.GROUND,
+        chrome = Tokens.Light.CHROME,
+        sunken = Tokens.Light.SUNKEN,
+        control = Tokens.Light.CONTROL,
+        ink = Tokens.Light.INK,
+        muted = Tokens.Light.MUTED,
+        sub = Tokens.Light.SUB,
+        rule = Tokens.Light.RULE,
+        accent = Tokens.Light.ACCENT,
+        onAccent = Tokens.Light.ON_ACCENT,
+        warn = Tokens.Light.WARN,
+        avatar = Tokens.Light.AVATAR,
     )
 
     // ---- the rail, which is the mark and not a surface ----------------
 
     /** The russet field the crown sits on [author, 2026-10-27]. */
-    const val RAIL = 0xFF6B2F2B.toInt()
+    const val RAIL = Tokens.Rail.RAIL
 
     /** An orb with no picture of its own. */
-    const val RAIL_ORB = 0xFF532320.toInt()
+    const val RAIL_ORB = Tokens.Rail.ORB
 
     /** Ink on the rail, warm against the russet. */
-    const val RAIL_INK = 0xFFF0E2D6.toInt()
+    const val RAIL_INK = Tokens.Rail.INK
 
     /** The divider between what is pinned and what scrolls. */
-    const val RAIL_DIVIDER = 0xFF8A4238.toInt()
+    const val RAIL_DIVIDER = Tokens.Rail.DIVIDER
 
     /** An unseen count's own ground, on an orb. */
-    const val COUNT = 0xFF3E1A17.toInt()
+    const val COUNT = Tokens.Rail.COUNT
 
     /** A golden circlet: a subnet where this person runs a node, and the
      *  full crown where they are its root. */
-    const val GOLD = 0xFFD9A441.toInt()
+    const val GOLD = Tokens.Rail.GOLD
 
     /** A silver circlet: a subnet where they have a subordinate. */
-    const val SILVER = 0xFFC2C8CF.toInt()
+    const val SILVER = Tokens.Rail.SILVER
 
     /**
      * **An identity's colours** [author, 2026-11-12]: what the nameplate,
@@ -136,16 +140,7 @@ object Palette {
      * first one no identity on the device uses. Every one carries
      * [RAIL_INK] above the floor.
      */
-    val IDENTITY: List<Pair<String, Int>> = listOf(
-        "Red" to 0xFFB3362F.toInt(),
-        "Green" to 0xFF287047.toInt(),
-        "Purple" to 0xFF6A3FA0.toInt(),
-        "Blue" to 0xFF2F5FB3.toInt(),
-        "Orange" to 0xFF944C16.toInt(),
-        "Teal" to 0xFF1B6D6D.toInt(),
-        "Pink" to 0xFFA8356E.toInt(),
-        "Slate" to 0xFF4F5B66.toInt(),
-    )
+    val IDENTITY: List<Pair<String, Int>> = Tokens.IDENTITY
 
     // ---- what is in force ---------------------------------------------
 
@@ -161,7 +156,7 @@ object Palette {
     val now: Set get() = if (mode == Mode.DARK) DARK else LIGHT
 
     /** The contrast floor for anything that must be read (WCAG AA). */
-    const val FLOOR = 4.5
+    const val FLOOR = Tokens.FLOOR
 
     /**
      * **Which ink goes on which surface, declared** [found 2026-10-28].
@@ -178,35 +173,7 @@ object Palette {
      * checked**, which is what [PaletteTest] holds. Add the pair here
      * when a screen needs it, and the test will say whether it reads.
      */
-    val DRAWN: List<Pair<String, String>> = listOf(
-        // the page
-        "ink" to "ground",
-        "muted" to "ground",
-        "sub" to "ground",
-        "accent" to "ground",
-        "warn" to "ground",
-        // the head of a screen, and the foot
-        "ink" to "chrome",
-        "muted" to "chrome",
-        "sub" to "chrome",
-        "accent" to "chrome",
-        // the foot's own well, and a code block
-        "ink" to "sunken",
-        "muted" to "sunken",
-        "sub" to "sunken",
-        "accent" to "sunken",
-        // a control: a button, a field, an avatar with no picture.
-        // **`sub` and `warn` are absent deliberately**: `sub` cannot work
-        // on a raised surface at all, and the amber is 4.35:1 there — the
-        // drawing uses it as ink on the page and as a filled button, never
-        // as a label on a control, so the pair is undeclared rather than a
-        // lighter amber invented for a case nothing asks for. A screen
-        // that wants one adds the pair here and the test says what it
-        // costs.
-        "ink" to "control",
-        "muted" to "control",
-        "accent" to "control",
-    )
+    val DRAWN: List<Pair<String, String>> = Tokens.DRAWN
 
     /** One named colour out of a set. */
     fun of(set: Set, name: String): Int = when (name) {

@@ -22846,3 +22846,40 @@ invitation, routine notifications over the session, and the shell narrowing
 SMS to first invitations and a root's moves (it still texts every move, the
 only carrier until the rest lands). Running droplets keep heartbeat 30 until
 relaunched.
+
+**Deployed 2026-11-17**: a0ff448 (documents) and dc1d2b2 (code) pushed;
+image dc1d2b2b published and both droplets upgraded in place through the
+runner (Mirror Manse 157.245.85.18, E Two 134.209.216.67); all four phones
+on the matching APK, every one reattaching by itself to Mirror Manse within
+78-106 s of its restart. Derived keys shredded.
+**ZU8's node under Mirror Manse: skipped by the author** [2026-11-17: "We'll
+skip this testing until a better solution is available again"]. The launch
+needs the DigitalOcean token on ZU8, which only GXV can mint, and I do not
+enter a live provider credential. The bench test owed when it resumes:
+4VC on ZU8's node; ZU8's node stopped or moved; 4VC fails over to Mirror
+Manse as the node above, degraded; the moved node's record reaches 4VC
+there and is held, proved and asked with no message sent. ZU8 has no SIM,
+so its first invitation to 4VC goes by an adb link.
+
+## Sibling failover cannot admit a sibling's member (2026-11-18)
+
+Reproduced in a daemon test (since reverted): a node handed, on its
+control path from a known peer other than its own operator, an adoption
+introducing that peer's member refuses to store it, so the member stays
+unpinned. Two causes, and Option A (pin from records stored from siblings)
+addresses neither alone:
+
+1. `infra-client-requirements.md` §4.4, "Learn key material from your
+   operator's replay": *"A push from any other peer
+   introduces nobody"* (author-ruled source, commit 5a854da; pinned in
+   acceptance.json). So the carried key is never learned and the record is
+   unverifiable.
+2. A sibling's member is three edges away (sibling–patron–sibling–member),
+   outside the node's two-edge storage horizon (`propagation.rs`
+   `HorizonSnapshot.balls` 0..=2), so it would be `OutOfStore` anyway.
+   Design §3.4's floor (topology replicates on the nearest infra node and
+   its siblings) is what would put it there, and the running node does not
+   replicate: `replication_payload` is called only from tests
+   (`node/tests/peering.rs`, `sim/tests/live.rs`, `sim/tests/traversal.rs`).
+
+Put to the author 2026-11-18.

@@ -1,0 +1,116 @@
+# The shell's look, named once for every client [author, 2026-11-18]:
+# colours, the two typefaces, and the pairs of colours a screen draws one on
+# the other. `generate.py` writes each platform's copy from this file and
+# the gate refuses a copy that has drifted from it, so a colour is changed
+# here and nowhere else.
+#
+# **The dark set is the drawing's own**, sampled from the canvas artboards.
+# **The light set is derived**, the same hues carried onto a light ground:
+# there are no light artboards, so it is a proposal to be redrawn rather
+# than a design [author, 2026-10-27: dark by default, light an option].
+
+[type]
+# **A sans for people's words, a mono for the machine's** [author,
+# 2026-11-18]: the sans carries user content and the fixed navigation and
+# headings; the mono carries system messages, logs, tooltips and anything
+# that is the voice of the computer. Geist and Geist Mono (OFL-1.1); a
+# script they do not cover falls back to the system's own sans and mono.
+sans = "Geist"
+mono = "Geist Mono"
+
+# The contrast floor for anything that must be read (WCAG AA).
+[contrast]
+floor = 4.5
+
+# **Which ink goes on which surface, declared.** Not every ink works on every
+# surface and no tuning makes it so: `sub` is the dimmest text the floor
+# allows on the ground, so any raised surface is already too close to it.
+# A pair a screen draws and this list does not name is a pair nothing
+# checked; add it here and the generator says whether it reads, in both
+# modes.
+#
+# On a control, `sub` and `warn` are absent deliberately: `sub` cannot work
+# on a raised surface at all, and the amber is 4.35:1 there. The drawing
+# uses it as ink on the page and as a filled button, never as a label on a
+# control.
+drawn = [
+  # the page
+  ["ink", "ground"], ["muted", "ground"], ["sub", "ground"],
+  ["accent", "ground"], ["warn", "ground"],
+  # the head of a screen, and the foot
+  ["ink", "chrome"], ["muted", "chrome"], ["sub", "chrome"], ["accent", "chrome"],
+  # the foot's own well, and a code block
+  ["ink", "sunken"], ["muted", "sunken"], ["sub", "sunken"], ["accent", "sunken"],
+  # a control: a button, a field, an avatar with no picture
+  ["ink", "control"], ["muted", "control"], ["accent", "control"],
+]
+
+[dark]
+ground = "#1C1F24"   # the page behind everything
+chrome = "#15171A"   # the bar at the head of a screen, and the foot
+sunken = "#101215"   # a raised surface: a field, a code block, a well
+control = "#2E3540"  # a control's own ground
+ink = "#E8EAED"      # body text and anything that must be read
+muted = "#9AA1AA"    # secondary text: a subtitle, a value, a label
+sub = "#808891"      # the dimmest text the floor allows, on the ground alone
+rule = "#23272E"     # a hairline between rows
+accent = "#5FB3A1"   # the one accent, for what a person may act on
+onAccent = "#10211E" # on the accent, where it is a filled button
+warn = "#D08A3E"     # what wants attention without alarm
+avatar = "#2E3540"   # a field for an avatar with no picture
+
+[light]
+ground = "#F4F3F8"
+chrome = "#E6E5EE"
+sunken = "#FFFFFF"
+control = "#E0DFE9"
+ink = "#15171A"
+muted = "#4A5059"
+sub = "#5B626B"
+rule = "#D2D1DC"
+accent = "#246D5C"
+onAccent = "#FFFFFF"
+warn = "#8A4A08"
+avatar = "#D8D7E2"
+
+# **The rail keeps its own colours in both modes.** The russet field and the
+# crown on it are the network's mark, not a themed surface.
+[rail]
+rail = "#6B2F2B"      # the russet field the crown sits on [author, 2026-10-27]
+orb = "#532320"       # an orb with no picture of its own
+ink = "#F0E2D6"       # ink on the rail, warm against the russet
+divider = "#8A4238"   # between what is pinned and what scrolls
+count = "#3E1A17"     # an unseen count's own ground, on an orb
+gold = "#D9A441"      # a golden circlet: a node run here, the full crown a root
+silver = "#C2C8CF"    # a silver circlet: a subordinate held here
+# The one grey that cannot carry text: 3.55:1 on the dark ground, kept so
+# the drawing's hairlines and disabled strokes have a name.
+ruleOnly = "#6E757E"
+
+# **An identity's colours** [author, 2026-11-12], in the order a new
+# identity takes the first one unused. Every one carries the rail's ink
+# above the floor.
+[[identity]]
+name = "Red"
+colour = "#B3362F"
+[[identity]]
+name = "Green"
+colour = "#287047"
+[[identity]]
+name = "Purple"
+colour = "#6A3FA0"
+[[identity]]
+name = "Blue"
+colour = "#2F5FB3"
+[[identity]]
+name = "Orange"
+colour = "#944C16"
+[[identity]]
+name = "Teal"
+colour = "#1B6D6D"
+[[identity]]
+name = "Pink"
+colour = "#A8356E"
+[[identity]]
+name = "Slate"
+colour = "#4F5B66"

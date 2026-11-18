@@ -268,6 +268,49 @@ named by him, the rest asked in the output of 2026-10-28:
 3. **How long a node keeps one**, and whether a reader's own copy outlives
    the node's.
 
+**Answered 2026-11-18** [author]:
+
+- **The forwarding decision is the node's.** The board application is
+  presentation over a bundle of messages tagged to boards, topics and
+  timestamps.
+- **Upward always goes on**: every node above within `+n` gets the post,
+  because each node's owner is attached to their own node. No analysis.
+- **Downward is per node, from its downline**: which downline nodes must
+  receive a post so that every user in scope is reached, users attaching
+  to their nearest node. **Computed once per change in horizon
+  composition** (adoption, departure, node launch, node closure), not per
+  message. **Three lists, for `-1`, `-2` and `-3`**: `-0` is trivial and
+  anything deeper is `-3`'s list. (My reading, unconfirmed: the list is
+  chosen by `min(k, 3)` but the count carried on is the real one, so a
+  `-5` post still reaches `-5`.)
+- **A post is signed, not encrypted.**
+- **The node holds a storage-limited FIFO queue; the light client a
+  storage-limited, timestamp-pruned pool, one per subnet.** A returning
+  client fetches what it missed as it fetches its mailbox.
+- **A node serves one subnet** (design §3.1's existing rule), so it holds
+  one board queue.
+
+**Who reads a post** [author, 2026-11-18]: `+0/-0` is a note to self;
+`+0/-1` goes to the writer's direct subordinates; `+1/-0` to the patron and
+the writer's siblings. **Propagation distances are along the subnet tree.**
+My reading, put to him the same day: `+n/-m` reaches the subtree of the
+writer's n-th ancestor, down to n+m levels below that ancestor — which is
+what makes the re-expression rule hold (the writer's `+1/-0` is the
+patron's `+0/-1`).
+
+**The named scopes** (*this subnet*, *and below*, *and above*): possibly
+loose wording [author, 2026-11-18] — "subnet" is the whole tree, and he has
+used it at times for the trust horizon within one. Open: whether they go.
+
+**Storage** [author, 2026-11-18]: a limit and no time component. The node
+drops first-in-first-out, as packets arrive; the light client drops
+**oldest first by the post's own timestamp**, because it reads content
+rather than arrival order. Provisional figures: 100 MB per node, 50 MB per
+subnet on the phone.
+
+**`min(k, 3)` with the real count carried on** is right **for the downward
+leg only** [author, 2026-11-18].
+
 **Navigating into a subnet is the only way to its resources** [author,
 2026-10-27], for the reason the notice line carries its context: a resource
 named out of its subnet is a name that several subnets will share. So the
