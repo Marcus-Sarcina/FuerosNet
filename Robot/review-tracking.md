@@ -22790,3 +22790,29 @@ capture is now at FuerosNet-output/runs/2026-11-17-relocation-capture.
 still shows "1". (3) Client diag: a refused attach logs "the serving node
 refused this client" and drops the node's close reason (`unbound`), which
 only the quinn trace shows.
+**Closed by the author, 2026-11-17**: "Relocation work is closed". MRK
+accepted in one tap and attached in 7.2 s. Destroy now asks first (76c71ca;
+my wording, in `Robot/ux-review.md`). The 4VC double accept was left
+unexplained: it appeared only where the attach after accepting was refused,
+and the capture (82 MB in FuerosNet-output/runs/2026-11-17-relocation-capture)
+was stopped.
+
+## Push and the invitation carriers, decided 2026-11-17
+
+The author's ruling is in `Robot/deferred-decisions.md` (push server entry,
+answered). Landed: the Operator screen hands each owed invitation to the
+messaging app's composer, one at a time, the next on returning; `SEND_SMS` is
+gone from the manifest and the permission review; marked invited once handed,
+since the composer reports nothing back. Android unit tests 400 run, 0 failed.
+Not yet in the documents: the node's push service, registration with the
+patron's, grandpatron's and patron's siblings' nodes, one live connection with
+failover in succession, and SMS narrowed to the first invitation and a root
+patron's move. Until push is built, SMS still carries every move.
+**Answered by the author, 2026-11-17** ("1 yes, 3 yes, 4 yes; failover after
+three minutes"): (1) the on-node notification service is the session the
+client already keeps (light-client §4.1, SES-020); Web Push stays for where
+that standing is refused. (2) A leaf goes to the grandpatron's and the
+patron's siblings' nodes after three minutes without its patron's node.
+(3) Siblings in the order the client's own horizon view lists them. (4) On
+iOS, recovery happens when the app is next opened; the iOS exception
+paragraph stays.

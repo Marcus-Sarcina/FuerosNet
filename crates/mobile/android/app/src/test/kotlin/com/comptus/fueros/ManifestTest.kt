@@ -97,10 +97,9 @@ class ManifestTest {
      *
      * The manifest is where a permission is declared and this is where it
      * is reviewed: adding one means editing this list, which is the whole
-     * point. `SEND_SMS` is the restricted one — a patron sends a member
-     * the invitation to its node [author, 2026-11-05], chosen over the
-     * system composer because the invitation carries out a decision taken
-     * at the adoption and a composer would put a tap on each one.
+     * point. `SEND_SMS` is not among them [author, 2026-11-17]: a patron's
+     * invitation to its node goes through the messaging app's composer and
+     * the operator sends it, the same on both platforms.
      *
      * **`READ_PHONE_NUMBERS`** [author, 2026-11-10]: the number this
      * handset reports for itself crosses to the counterparty at a meeting,
@@ -136,7 +135,6 @@ class ManifestTest {
             "FOREGROUND_SERVICE",
             "FOREGROUND_SERVICE_REMOTE_MESSAGING",
             "READ_PHONE_NUMBERS",
-            "SEND_SMS",
             "VIBRATE",
         )
         assertEquals(

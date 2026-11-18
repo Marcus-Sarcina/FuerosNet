@@ -420,7 +420,20 @@ and the two signed records at enrolment — so the bundle arrives after the mach
 is up, bounded by what the surface takes, and a node whose operator provisions
 nothing is unchanged.
 
-## Which push server an embedded UnifiedPush distributor uses by default [deferred 2026-11-17]
+## Which push server an embedded UnifiedPush distributor uses by default [deferred 2026-11-17, answered 2026-11-17]
+
+**Answered by the author, 2026-11-17**: *"Use the on-node notification service
+for routine notifications (Messages, scheduled events, etc). Use a single
+failover at a time as the first-line recovery route. Leaf registers with
+patron, grandpatron, patron's siblings, but maintains a live connection with
+only one at a time. When the patron node becomes unavailable for some period of
+time, they attempt to connect to the grandpatron and sibling nodes in
+succession. This becomes the recovery path in most cases. SMS path remains for
+initial invitation and fallback invitation path for a patron who is root."* The
+SMS goes through the messaging app's composer and the operator sends it, the
+same on Android and iOS (landed in the shell 2026-11-17). In-horizon nodes need
+no choosing step: the horizon is the trust decision. The entry below is kept as
+the record of what was weighed.
 
 **Deferred by the author** [2026-11-17]: *"I will open discussion of the
 push server again once the invite handling discussion is fully closed

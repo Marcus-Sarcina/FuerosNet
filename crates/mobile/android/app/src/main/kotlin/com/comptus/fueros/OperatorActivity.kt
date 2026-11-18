@@ -136,88 +136,79 @@ class OperatorActivity : Activity() {
     }
 
     private companion object {
-        /** The one request code this screen asks a permission under. */
-        const val SMS_REQUEST = 7447
+        /** The one request code this screen opens another app under. */
+        const val COMPOSE_REQUEST = 7447
     }
 
     /**
-     * **The invitations this node owes its members, sent** (`Invite`,
+     * **The invitations this node owes its members, handed to the
+     * messaging app for the operator to send** (`Invite`,
      * `light-client-requirements.md` §1.5).
      *
-     * **It sends without asking, which is the ruling and not an
-     * oversight** [author, 2026-11-03]: *"I want the required
-     * click-throughs and exposure of network plumbing to be minimized… If
-     * the patron has adopted people into a subnet then he has decided to
-     * give those people access to his node that serves that subnet."* The
-     * decision was taken at the adoption; a confirmation here would be
-     * that decision asked again.
+     * **The composer, and the operator sends** [author, 2026-11-17]: *"The
+     * SMS solution should be the same for Android and iOS which means that
+     * the light client formats the message in the default messaging app
+     * but relies on the user to send it. This is acceptable because in most
+     * cases it will be a single click-through upon adoption and in the
+     * recovery case it will be at most 10 such click-throughs."* So no
+     * `SEND_SMS`, and the number goes from this app to the system's
+     * composer and no further.
      *
-     * **So `SEND_SMS` rather than the composer** [author, 2026-11-05]. The
-     * cost is named rather than hidden: the permission is restricted, and
-     * it routes the number through this application where the composer
-     * would have kept it in the system's hands. The number still reaches
-     * nothing off the device but the message itself.
+     * **One at a time.** Each opens the composer over this screen, and the
+     * next opens when the operator comes back from it, so an operator with
+     * three owed sends three without being asked anything here.
      *
-     * **Once per node address.** A member already invited to this address
-     * is not texted again however often this screen is drawn; a node at a
-     * new address owes a new invitation, which is the whole case for
-     * holding an address at all.
-     *
-     * **Asked for once, and never per invite.** Where the permission is
-     * not held the invitations wait and the screen says how many, with the
-     * grant as the only action — a denial leaves them waiting rather than
-     * turning each into a tap.
+     * **Once per node address, and marked when handed over.** What the
+     * operator does in the composer is not reported back, so an invitation
+     * counts as given once the composer has it; one marked at an address
+     * is not offered again however often this screen is drawn, and a node
+     * at a new address owes a new invitation.
      */
-    private fun sendInvitations(at: String, subnet: String?) {
-        // **the operator's own name rides in the invitation** [author,
-        // 2026-11-16]: a member who has fetched nothing of this operator
-        // still knows whose server it is, which "the patron" does not say
-        // to one under several
-        val owed = Gateway.invitations(by, at, subnet, Gateway.defaultAlias(by)?.take(120)).filter { invitedTo(it.who) != at }
-        if (owed.isEmpty()) return
-        if (checkSelfPermission(android.Manifest.permission.SEND_SMS) !=
-            android.content.pm.PackageManager.PERMISSION_GRANTED
-        ) {
-            narration.text = "${owed.size} invitation${if (owed.size == 1) "" else "s"} " +
-                "to send for $at. This phone needs permission to send them as messages; " +
-                "nothing of the numbers leaves it."
-            requestPermissions(arrayOf(android.Manifest.permission.SEND_SMS), SMS_REQUEST)
-            return
-        }
-        val sms = getSystemService(android.telephony.SmsManager::class.java) ?: return
-        var sent = 0
-        for (i in owed) {
+    private fun sendInvitations() {
+        if (composing) return
+        for (inst in instances()) {
+            // **at the address members dial, not the one this screen
+            // administers** [2026-11-16], and **keyed to the subnet the
+            // instance serves** [author, 2026-11-16], so a member's
+            // question lands on that subnet's orb
+            val at = "${Relocate.host(inst.at)}:${Launch.QUIC_PORT}"
+            // **the operator's own name rides in the invitation** [author,
+            // 2026-11-16]: a member who has fetched nothing of this operator
+            // still knows whose server it is, which "the patron" does not
+            // say to one under several
+            val owed = Gateway.invitations(by, at, inst.subnet, Gateway.defaultAlias(by)?.take(120))
+                .filter { invitedTo(it.who) != at }
+            val i = owed.firstOrNull() ?: continue
+            val compose = Intent(Intent.ACTION_SENDTO, android.net.Uri.parse("smsto:" + android.net.Uri.encode(i.to)))
+                .putExtra("sms_body", i.link)
             try {
-                sms.sendTextMessage(i.to, null, i.link, null, null)
-                rememberInvited(i.who, at)
-                sent += 1
-            } catch (e: Exception) {
-                // **a number that will not take a message is not a reason
-                // to stop**: the rest are owed too, and the mark is only
-                // written for one that went
-                Diag.warn("operator.invite", "state" to "refused", "why" to (e.message ?: "unsaid"))
+                @Suppress("DEPRECATION")
+                startActivityForResult(compose, COMPOSE_REQUEST)
+            } catch (e: android.content.ActivityNotFoundException) {
+                // **nothing is marked for an invitation no app took**: they
+                // stay owed, and a code at the next meeting still carries one
+                Diag.warn("operator.invite", "state" to "no-composer")
+                narration.text = "${owed.size} invitation${if (owed.size == 1) "" else "s"} " +
+                    "to send for $at, and this phone has no messaging app to send them from."
+                return
             }
-        }
-        Diag.event("operator.invite", "sent" to sent, "owed" to owed.size)
-        if (sent > 0) {
-            narration.text = "$sent invitation${if (sent == 1) "" else "s"} sent for $at."
+            composing = true
+            rememberInvited(i.who, at)
+            Diag.event("operator.invite", "handed" to 1, "owed" to owed.size)
+            return
         }
     }
 
-    override fun onRequestPermissionsResult(
-        code: Int,
-        permissions: Array<out String>,
-        granted: IntArray,
-    ) {
-        super.onRequestPermissionsResult(code, permissions, granted)
-        if (code != SMS_REQUEST) return
-        if (granted.firstOrNull() == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            drawInstances()
-        } else {
-            narration.text = "The invitations are waiting: without permission to send a " +
-                "message this phone cannot deliver them, and your members can still scan a " +
-                "code at your next meeting."
-        }
+    /** A composer is open over this screen: one invitation at a time. */
+    private var composing = false
+
+    @Deprecated("the shell is on startActivityForResult throughout")
+    override fun onActivityResult(request: Int, result: Int, data: Intent?) {
+        @Suppress("DEPRECATION")
+        super.onActivityResult(request, result, data)
+        if (request != COMPOSE_REQUEST) return
+        composing = false
+        sendInvitations()
     }
 
     private fun drawInstances() {
@@ -244,18 +235,10 @@ class OperatorActivity : Activity() {
         // horizon is caught up here rather than hung off a button. The one
         // difference is that a message is outward and costs its reader
         // something, so it goes **once per node address** and not once per
-        // drawing: [invite] keeps that mark, and a node at a new address
-        // is a new invitation — which is the case that prompted the
-        // feature, an operator not owning their address space [author,
-        // 2026-11-04].
-        // **at the address members dial, not the one this screen
-        // administers** [2026-11-16]: an instance is held by its operator's
-        // surface (`:7449`), and an invitation naming that sent members to
-        // a port that speaks no protocol; the operator's own attach is at
-        // the protocol port, and so is theirs
-        // **keyed to the subnet the instance serves** [author, 2026-11-16],
-        // so a member's question lands on that subnet's orb
-        held.forEach { sendInvitations("${Relocate.host(it.at)}:${Launch.QUIC_PORT}", it.subnet) }
+        // drawing, and a node at a new address is a new invitation — which
+        // is the case that prompted the feature, an operator not owning
+        // their address space [author, 2026-11-04].
+        sendInvitations()
         if (held.isEmpty()) {
             roll.addView(
                 TextView(this).apply {

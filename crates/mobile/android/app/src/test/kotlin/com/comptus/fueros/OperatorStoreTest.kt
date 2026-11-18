@@ -65,4 +65,18 @@ class OperatorStoreTest {
         assertTrue(screen.contains(".setPositiveButton(\"Destroy\") { _, _ -> destroy(i) }"))
         assertEquals("destroy(i) is reached from the confirmation alone", 1, Regex("""\bdestroy\(i\)""").findAll(screen).count())
     }
+
+    @Test
+    fun an_invitation_is_handed_to_the_composer_and_the_operator_sends_it() {
+        // **the same on both platforms** [author, 2026-11-17]
+        val screen = File("src/main/kotlin/com/comptus/fueros/OperatorActivity.kt").readText()
+        assertTrue(screen.contains("Intent.ACTION_SENDTO"))
+        assertTrue(screen.contains("\"smsto:\""))
+        for (sent in listOf("SmsManager", "sendTextMessage", "permission.SEND_SMS")) {
+            assertFalse("a message sent without the operator: $sent", screen.contains(sent))
+        }
+        // one composer at a time, the next on coming back from it
+        assertTrue(screen.contains("if (composing) return"))
+        assertTrue(screen.contains("composing = false\n        sendInvitations()"))
+    }
 }
