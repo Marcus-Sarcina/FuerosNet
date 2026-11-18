@@ -1003,11 +1003,11 @@ impl Net {
                 AttachOutcome::Unbound(why) => {
                     return Err(Refused::new(format!("no session: {why}")));
                 }
-                AttachOutcome::EndpointFailure(e) => match try_siblings(&cfg, &ep).await {
+                AttachOutcome::EndpointFailure(e) => match try_failover(&cfg, &ep, &handle_for_task, node).await {
                     Ok(landed) => landed,
                     Err(last) => {
                         return Err(Refused::new(format!(
-                            "no session: the serving node is unreachable ({e}) and no cached sibling answered ({last})"
+                            "no session: the serving node is unreachable ({e}) and no failover answered ({last})"
                         )));
                     }
                 },
@@ -1427,6 +1427,57 @@ async fn try_siblings(
     Err(last)
 }
 
+/// **Siblings first, then the node above** (design §14.1.2) [author,
+/// 2026-11-17]: the cached siblings in order, and where none attaches the
+/// serving node's own serving node, which the client finds in its own
+/// horizon because nobody can be asked while `home` is dark. The first that
+/// attaches, or why the last did not.
+async fn try_failover(
+    cfg: &ClientConfig,
+    ep: &quinn::Endpoint,
+    handle: &Handle,
+    home: Keyhash,
+) -> Result<(Keyhash, Session), String> {
+    let siblings = match try_siblings(cfg, ep).await {
+        Ok(landed) => return Ok(landed),
+        Err(last) => last,
+    };
+    let Some(rhtn_client::horizon::Upstream::Known {
+        node: above,
+        endpoints: points,
+        key_material: material,
+    }) = handle.with(move |c| c.node_above(&home)).await
+    else {
+        return Err(format!("{siblings}; no node above"));
+    };
+    if let Some(km) = &material {
+        let _ = cfg.pins.pin(above, km);
+    }
+    let mut addrs = cfg
+        .addresses
+        .lock()
+        .unwrap()
+        .get(&above)
+        .cloned()
+        .unwrap_or_default();
+    for p in points
+        .iter()
+        .filter_map(|p| rhtn_transport::session::NetworkPoint::decode_bytes(p).ok())
+    {
+        let a = p.socket();
+        if !addrs.contains(&a) {
+            addrs.push(a);
+        }
+    }
+    tracing::info!(target: "pay", above = %hex4(&above), "pay.failover.above");
+    match attach_any(cfg, ep, above, &addrs, false).await {
+        AttachOutcome::Attached(sess) => Ok((above, sess)),
+        AttachOutcome::Refused => Err(format!("{siblings}; {} refused", hex4(&above))),
+        AttachOutcome::Unbound(why) => Err(format!("{siblings}; {}: {why}", hex4(&above))),
+        AttachOutcome::EndpointFailure(e) => Err(format!("{siblings}; {}: {e}", hex4(&above))),
+    }
+}
+
 /// A session's two readers: deliveries, and the control frames beyond the
 /// session's own.
 type Readers = (
@@ -1576,7 +1627,7 @@ async fn watch(
         tell(Status::Reconnecting { from: peer });
         session.conn.close(quinn::VarInt::from_u32(0), b"failover");
         *current.lock().unwrap() = None;
-        let landed = try_siblings(&cfg, &ep).await;
+        let landed = try_failover(&cfg, &ep, &handle, home).await;
         let (to, mut sess) = match landed {
             Ok(l) => l,
             Err(last) => {
@@ -1609,7 +1660,7 @@ async fn watch(
                         tracing::info!(target: "pay", attempt, "pay.reattach.landed");
                         break (home, s);
                     }
-                    if let Ok(l) = try_siblings(&cfg, &ep).await {
+                    if let Ok(l) = try_failover(&cfg, &ep, &handle, home).await {
                         tracing::info!(target: "pay", attempt, "pay.reattach.landed");
                         break l;
                     }

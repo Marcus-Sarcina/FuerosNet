@@ -336,3 +336,56 @@ fn a_move_rides_the_subnet_its_invitation_named() {
     assert_eq!(at(carols).map(|r| r.node), Some(kh("carol")));
     assert!(at(bobs).is_none());
 }
+
+// functional: SES-025
+/// **An endpoint record for the node serving this client, at an address it
+/// has not agreed, is an invitation** [author, 2026-11-17]: held unproved,
+/// and no replay of it undoes a proof or a refusal.
+#[test]
+fn a_record_naming_the_serving_node_elsewhere_is_held_as_an_invitation() {
+    let mut s = setup(&["alice", "bob", "carol", "witness"]);
+    let a = s.client("alice");
+    let node = kh("bob");
+    assert!(
+        !a.record_moved(node, vec![NEW.into()]),
+        "a node never agreed to: a first invitation is the patron's to send"
+    );
+    a.agree_to(node, vec![OLD.into()]);
+    assert!(
+        !a.record_moved(node, vec![OLD.into()]),
+        "the agreed address is no move"
+    );
+    assert!(
+        !a.record_moved(node, vec![NEW.into(), OLD.into()]),
+        "a record still listing the agreed address is no move"
+    );
+    assert!(!a.record_moved(node, vec![]), "a record naming nowhere");
+    assert!(
+        !a.record_moved(kh("carol"), vec![NEW.into()]),
+        "another node's record"
+    );
+    let me = a.public.keyhash;
+    a.agree_to(me, vec![OLD.into()]);
+    assert!(
+        !a.record_moved(me, vec![NEW.into()]),
+        "this client's own instance"
+    );
+
+    assert!(a.record_moved(node, vec![NEW.into()]));
+    let r = a.relocation(&node).expect("held");
+    assert_eq!((r.standing, r.to.as_str()), (Standing::Unproved, NEW));
+    assert!(a.node_usable(&node), "unproved changes nothing");
+    a.relocation_proved(&node, NEW, Found::Proved);
+    assert!(
+        !a.record_moved(node, vec![NEW.into()]),
+        "a replay is no new invitation"
+    );
+    assert_eq!(a.relocation(&node).unwrap().standing, Standing::Proved);
+    assert!(a.decline_relocation(&node));
+    assert!(!a.record_moved(node, vec![NEW.into()]));
+    assert_eq!(
+        a.relocation(&node).unwrap().standing,
+        Standing::Declined,
+        "and does not undo a refusal"
+    );
+}

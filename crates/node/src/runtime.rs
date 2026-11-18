@@ -542,30 +542,18 @@ impl LiveNode {
         // none, which is the wire agreeing that a failover target nobody
         // can reach is not one.
         // **the mode is this node's determination from its own topology**
-        // (`wire-format.md` §8.2): a client is in failover iff it is not in
-        // this node's subtree.  In it: a slot's occupant, this node itself,
-        // or a party whose patron chain in the table reaches this node.
+        // (`wire-format.md` §8.2): a client is in failover unless this node
+        // is the nearest infrastructure node on its patron chain [author,
+        // 2026-11-17].  Primary: this node itself, a slot's occupant, or a
+        // party whose patron chain in the table reaches this node before
+        // any other infrastructure.  A chain that meets another node first
+        // is that node's client failing over here — the node above's case,
+        // where the subtree test alone would have answered primary.
         let iv = view.clone();
         cfg.in_subtree = Arc::new(move |k| {
             let v = iv.lock().unwrap();
             let me = v.me();
-            if *k == me || v.slot_of(k).is_some() {
-                return true;
-            }
-            let mut frontier: Vec<Keyhash> = vec![*k];
-            let mut seen = std::collections::BTreeSet::new();
-            while let Some(n) = frontier.pop() {
-                if !seen.insert(n) {
-                    continue;
-                }
-                for p in v.table.patrons(&n) {
-                    if p == me {
-                        return true;
-                    }
-                    frontier.push(p);
-                }
-            }
-            false
+            *k == me || v.slot_of(k).is_some() || v.table.nearest_infra_is(&me, k)
         });
         let (sv, si) = (view.clone(), ids.clone());
         cfg.siblings = Arc::new(move || {

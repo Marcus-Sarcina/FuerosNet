@@ -1581,3 +1581,34 @@ fn an_upstream_can_be_held_to_one_address_and_listed_for_all() {
     assert_eq!(all[0].0, kh("bob"));
     assert_eq!(all[0].1, h.upstream_of(&kh("w2")));
 }
+
+// functional: SES-023
+/// **The node above a client's serving node, from the client's own copy**
+/// [author, 2026-11-17]: the nearest ancestor of that node with an address,
+/// never the node itself, and nothing where it has none.
+#[test]
+fn the_node_above_a_serving_node_is_its_nearest_infrastructure_ancestor() {
+    // bob roots the subnet, carol under it, alice and w2 under carol
+    let mut w = World::new();
+    let recs = vec![
+        adopt(&mut w, "carol", "bob", vec![0x10], 1),
+        adopt(&mut w, "alice", "carol", vec![0x11], 2),
+        adopt(&mut w, "w2", "carol", vec![0x12], 2),
+    ];
+    let mut h = fed("alice", &recs);
+    let (sib, _) = endpoints("carol", 7102, 1, 1);
+    assert_eq!(h.ingest_endpoint(&sib, &ids()), Took::Applied);
+    assert_eq!(
+        h.above(&kh("carol")),
+        None,
+        "a serving node with no infrastructure above it"
+    );
+    let (root, at_bob) = endpoints("bob", 7101, 1, 1);
+    assert_eq!(h.ingest_endpoint(&root, &ids()), Took::Applied);
+    assert_eq!(
+        h.above(&kh("carol")),
+        Some((kh("bob"), vec![at_bob.encode_bytes()])),
+        "the node above carol's, and not carol's own"
+    );
+    assert_eq!(h.above(&kh("bob")), None, "a root has no node above it");
+}

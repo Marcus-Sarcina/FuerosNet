@@ -673,3 +673,45 @@ fn top_44_a_running_node_issues_and_takes_acknowledgements_under_its_standing_po
         assert_eq!(v.store.acks_held(), 0, "and gone from the store");
     }
 }
+
+// functional: SES-024
+/// **Primary only at the nearest infrastructure on the client's chain**
+/// [author, 2026-11-17]: G (alice) over P (bob) over N (carol), G and P
+/// both infra. N's own node is P, so G answers N in failover however far
+/// down its subtree N sits; a sibling of P (w1), whose subtree N is not
+/// in, does the same.
+#[test]
+fn a_session_is_primary_only_at_the_clients_nearest_infrastructure() {
+    let mut w = World::new();
+    let (a_p, _) = w.adopt("bob", "alice", 1);
+    let (a_n, _) = w.adopt("carol", "bob", 2);
+    let mut g = Table::with_me(kh("alice"));
+    g.mark_infra(kh("alice"));
+    g.mark_infra(kh("bob"));
+    g.apply(&a_p, &ids(), &w.store, None).unwrap();
+    g.apply(&a_n, &ids(), &w.store, None).unwrap();
+    assert!(
+        g.nearest_infra_is(&kh("alice"), &kh("bob")),
+        "P's own node is G"
+    );
+    assert!(
+        !g.nearest_infra_is(&kh("alice"), &kh("carol")),
+        "N's chain meets P first: failover at G"
+    );
+    assert!(
+        g.downline_contains(&kh("alice"), &kh("carol")),
+        "though N is in G's subtree"
+    );
+    let s = sibling_table(&w, &[a_p.clone(), a_n.clone()]);
+    assert!(
+        !s.nearest_infra_is(&kh("w1"), &kh("carol")),
+        "a sibling answers failover"
+    );
+
+    // P not infrastructure: G is the nearest on N's chain, and primary
+    let mut lc = Table::with_me(kh("alice"));
+    lc.mark_infra(kh("alice"));
+    lc.apply(&a_p, &ids(), &w.store, None).unwrap();
+    lc.apply(&a_n, &ids(), &w.store, None).unwrap();
+    assert!(lc.nearest_infra_is(&kh("alice"), &kh("carol")));
+}

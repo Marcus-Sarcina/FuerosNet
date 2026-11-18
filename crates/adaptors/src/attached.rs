@@ -326,8 +326,26 @@ pub fn follow(
                     let known = c.known.clone();
                     match kind {
                         rhtn_node::store::KIND_TRANSACTION => c.horizon.ingest(&object, &known),
+                        // **and one for the node serving this client, at an
+                        // address it has not agreed, is an invitation**
+                        // [author, 2026-11-17]: proved and asked as a link's
                         rhtn_node::store::KIND_ENDPOINT_RECORD => {
-                            c.horizon.ingest_endpoint(&object, &known)
+                            let took = c.horizon.ingest_endpoint(&object, &known);
+                            if took == rhtn_client::horizon::Took::Applied
+                                && let Ok(er) =
+                                    rhtn_archive::endpoint::EndpointRecord::parse(&object)
+                            {
+                                let at = er
+                                    .endpoints
+                                    .iter()
+                                    .filter_map(|p| {
+                                        rhtn_transport::session::NetworkPoint::decode_bytes(p).ok()
+                                    })
+                                    .map(|p| p.socket().to_string())
+                                    .collect();
+                                c.record_moved(er.node, at);
+                            }
+                            took
                         }
                         // and the delegations of the parties in it, which
                         // bind a delegated peer on a direct path with no

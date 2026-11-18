@@ -176,8 +176,14 @@ class OperatorActivity : Activity() {
             // 2026-11-16]: a member who has fetched nothing of this operator
             // still knows whose server it is, which "the patron" does not
             // say to one under several
+            // **a first invitation, or a root's move** [author, 2026-11-17]:
+            // any other member learns of a move on its failover session,
+            // from the node's own record. A subnet this screen cannot place
+            // is treated as a root's, so nobody is left with no carrier
+            val rooted = inst.subnet == null ||
+                Gateway.subnets(by).firstOrNull { it.id.hex() == inst.subnet }?.patron == null
             val owed = Gateway.invitations(by, at, inst.subnet, Gateway.defaultAlias(by)?.take(120))
-                .filter { invitedTo(it.who) != at }
+                .filter { val prior = invitedTo(it.who); prior != at && (prior == null || rooted) }
             val i = owed.firstOrNull() ?: continue
             val compose = Intent(Intent.ACTION_SENDTO, android.net.Uri.parse("smsto:" + android.net.Uri.encode(i.to)))
                 .putExtra("sms_body", i.link)

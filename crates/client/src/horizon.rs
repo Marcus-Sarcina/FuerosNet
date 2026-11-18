@@ -654,18 +654,25 @@ impl Horizon {
     /// has an address, else the deepest known node with one on any of
     /// those paths, else the first place as a position to ask a
     /// resolution about, else nothing.
-    fn upstream_among(&self, peer: &Keyhash, places: &[&Place]) -> Upstream {
-        let own = self.endpoints_of(peer);
-        if !own.is_empty() {
-            return Upstream::Known {
-                node: *peer,
-                endpoints: own,
-                key_material: None,
-            };
-        }
-        // the longest proper prefix wins: the nearest ancestor, not any
-        // ancestor.  An anchor sits at the empty path, so it is the last
-        // candidate rather than a special case
+    /// **The node above `node`** (design §14.1.2) [author, 2026-11-17]:
+    /// the nearest ancestor in a subnet this client can place `node` in
+    /// that has published an endpoint record, `node` itself excluded, with
+    /// where it answers. What a client fails over to once its serving
+    /// node's siblings have not answered; found here because the client
+    /// cannot ask anyone where it is when its own node is the one dark.
+    pub fn above(&self, node: &Keyhash) -> Option<(Keyhash, Vec<Vec<u8>>)> {
+        self.nearest_infra_above(node, &self.places_of(node))
+    }
+
+    /// The longest proper prefix of `peer`'s places held by a party with
+    /// an endpoint record: the nearest ancestor, not any ancestor.  An
+    /// anchor sits at the empty path, so it is the last candidate rather
+    /// than a special case.
+    fn nearest_infra_above(
+        &self,
+        peer: &Keyhash,
+        places: &[&Place],
+    ) -> Option<(Keyhash, Vec<Vec<u8>>)> {
         let mut best: Option<(u64, Keyhash, Vec<Vec<u8>>)> = None;
         for p in places {
             let theirs = nibbles_of(&p.path, p.nibbles);
@@ -686,7 +693,19 @@ impl Horizon {
                 }
             }
         }
-        if let Some((_, node, endpoints)) = best {
+        best.map(|(_, node, endpoints)| (node, endpoints))
+    }
+
+    fn upstream_among(&self, peer: &Keyhash, places: &[&Place]) -> Upstream {
+        let own = self.endpoints_of(peer);
+        if !own.is_empty() {
+            return Upstream::Known {
+                node: *peer,
+                endpoints: own,
+                key_material: None,
+            };
+        }
+        if let Some((node, endpoints)) = self.nearest_infra_above(peer, places) {
             return Upstream::Known {
                 node,
                 endpoints,

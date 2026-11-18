@@ -68,3 +68,7 @@ trace to no quote of his, so they are mine and are not flagged.
 - His rule against verbose security text [2026-11-17]: invitations are now
   a counter on the orb plus one question. Other screens that explain security at length
   are candidates.
+- A message arriving while no screen shows it posts a notification
+  [author, 2026-11-17: routine notifications over the kept session]. The
+  wording is mine: the sender's name as the title, "A message" as the line,
+  and a channel named "Messages" (`Arrived.kt`).

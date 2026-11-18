@@ -78,5 +78,8 @@ class OperatorStoreTest {
         // one composer at a time, the next on coming back from it
         assertTrue(screen.contains("if (composing) return"))
         assertTrue(screen.contains("composing = false\n        sendInvitations()"))
+        // **a first invitation, or a root's move** [author, 2026-11-17]
+        assertTrue(screen.contains("prior != at && (prior == null || rooted)"))
+        assertTrue(screen.contains("?.patron == null"))
     }
 }

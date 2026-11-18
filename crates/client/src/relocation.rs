@@ -120,6 +120,48 @@ impl Client {
         true
     }
 
+    /// **An endpoint record for a node this client serves from, at an
+    /// address its agreement does not hold, is an invitation**
+    /// (`light-client-requirements.md` §4) [author, 2026-11-17]: held as a
+    /// relocation to the record's first address, on the subnet that node
+    /// serves this client in, and proved and asked as a link's is. It is
+    /// how a member failed over to a sibling or the node above learns of a
+    /// move. `at` is the record's addresses in its publisher's order.
+    ///
+    /// Nothing for the node this client is itself (an operator's instance
+    /// runs as its operator), for one never agreed to (a first invitation
+    /// is the patron's to send), for a record naming an address already
+    /// agreed, or for the address already held, whatever its standing: a
+    /// replayed record must not undo a proof or a refusal. Whether one was
+    /// held.
+    pub fn record_moved(&mut self, node: Keyhash, at: Vec<String>) -> bool {
+        if node == self.public.keyhash {
+            return false;
+        }
+        let Some(agreed) = self.payload.agreed.get(&node) else {
+            return false;
+        };
+        if at.iter().any(|a| agreed.contains(a)) {
+            return false;
+        }
+        let Some(to) = at.into_iter().next() else {
+            return false;
+        };
+        if self
+            .payload
+            .relocations
+            .get(&node)
+            .is_some_and(|h| h.to == to)
+        {
+            return false;
+        }
+        let subnet = self
+            .subnets()
+            .into_iter()
+            .find(|s| self.serving_in(s) == Some(node));
+        self.offer_relocation(node, to, subnet, None)
+    }
+
     /// **What a dial of the new address found**, for the relocation held
     /// for `node` at `to`. Only an unproved one moves: a proof arriving
     /// for an address since replaced is about nothing held.

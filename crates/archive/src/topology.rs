@@ -608,6 +608,32 @@ impl Table {
         false
     }
 
+    /// **Whether `node` is the nearest infrastructure on `x`'s patron
+    /// chain** (design §14.1.2) [author, 2026-11-17]: a walk up `x`'s
+    /// patrons reaching `node` before any other party marked infra. What
+    /// makes a session primary rather than failover, so that a sibling's
+    /// client (whose chain never reaches `node`) and the client of a
+    /// subordinate node failing over to it (whose chain meets that node
+    /// first) are both answered failover. `x` itself is not a stop, since
+    /// a node attaching upward is the client of the node above it.
+    pub fn nearest_infra_is(&self, node: &Keyhash, x: &Keyhash) -> bool {
+        let mut seen = BTreeSet::new();
+        let mut frontier: Vec<Keyhash> = self.patrons(x).into_iter().collect();
+        while let Some(n) = frontier.pop() {
+            if !seen.insert(n) {
+                continue;
+            }
+            if n == *node {
+                return true;
+            }
+            if self.is_infra(&n) {
+                continue;
+            }
+            frontier.extend(self.patrons(&n));
+        }
+        false
+    }
+
     /// The cycle check a node runs on its own proposed adoption (design
     /// §6.2.5): refuse only where local topology places the proposed patron
     /// at or below this node, never for absence of knowledge.

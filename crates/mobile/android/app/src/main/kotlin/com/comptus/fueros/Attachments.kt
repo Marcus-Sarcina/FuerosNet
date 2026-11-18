@@ -423,6 +423,9 @@ object Attachments {
                         val from = Gateway.hex(e.from)
                         val who = if (from == peerKey) peerName else from.take(16)
                         Gateway.front.incoming(id, from, who, String(e.bytes))
+                        // **told in the shade where no screen shows it**
+                        // [author, 2026-11-17]: it came over the session kept
+                        Gateway.appContext?.let { if (!Arrived.onScreen()) Arrived.post(it, who, from) }
                     }
                     is Event.Connection -> {
                         // every identity's connection is recorded for itself
@@ -432,7 +435,14 @@ object Attachments {
                     // **the nouns the kernel changed**: the shell's copy is
                     // refreshed for exactly those, and the screens watching
                     // them redraw
-                    is Event.Changed -> Model.refresh(e.nouns.toSet())
+                    is Event.Changed -> {
+                        Model.refresh(e.nouns.toSet())
+                        // **a move told by a node's own record is proved as it
+                        // arrives** [author, 2026-11-17]: it came on a
+                        // failover session, and the next attach round may be
+                        // a long way off. Off this loop, since a proof dials
+                        if (uniffi.rhtn_model.Noun.SUBNETS in e.nouns) Thread { proveMoves(p) }.start()
+                    }
                     // between peers (design §6.3): what a locator, a deposit, a
                     // request or a return came to, in the kernel's words
                     is Event.Peer -> {

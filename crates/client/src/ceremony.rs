@@ -6731,6 +6731,25 @@ impl Client {
             .collect()
     }
 
+    /// **The node above `node`, ready to dial** (design §14.1.2) [author,
+    /// 2026-11-17]: the horizon's [`crate::horizon::Horizon::above`], with
+    /// the key material that binds it where this client holds the
+    /// identity. What a failover tries once the serving node's siblings
+    /// have not answered.
+    pub fn node_above(&self, node: &Keyhash) -> Option<Upstream> {
+        let (above, endpoints) = self.horizon.above(node)?;
+        let key_material = self
+            .known
+            .iter()
+            .find(|i| i.keyhash == above)
+            .map(|i| i.key_material());
+        Some(Upstream::Known {
+            node: above,
+            endpoints,
+            key_material,
+        })
+    }
+
     /// The anchor of the subnet the last message from `peer` came by.
     pub fn last_from(&self, peer: &Keyhash) -> Option<Keyhash> {
         self.payload.last_from.get(peer).copied()
