@@ -14,12 +14,21 @@ The in-process fabric (`rhtn_sim::subnets::Fabric::build`) is the
 automated test; this is the same plan on real machines, so that whatever
 the in-process nodes let a test get away with -- one clock, one host, no
 latency, a table reached into -- shows up here.  The tests read the
-manifest `provision` writes through `RHTN_WAN_MANIFEST`:
+manifest `provision` writes through `RHTN_WAN_MANIFEST`.
+
+**One ceremony test per provision.**  In process each test builds its own
+fabric; here every test shares the machines and the fixed identities, so
+two ceremonies run at once (cargo's default) collide and both fail with
+no witness asked, and a second run meets the first one's state.  The
+subnets suite shares nothing and runs whole:
 
     RHTN_WAN_MANIFEST=<out>/state/manifest.json \\
-        cargo test -p rhtn-sim --test ceremony --test subnets -- --nocapture
+        cargo test -p rhtn-sim --test subnets
+    wan.py provision   # then, for each ceremony test in turn:
+    RHTN_WAN_MANIFEST=<out>/state/manifest.json \\
+        cargo test -p rhtn-sim --test ceremony -- <test> --nocapture
 
-and the sibling admission, which wants a freshly provisioned fabric
+and the sibling admission, which also wants a freshly provisioned fabric
 because it adopts a member no node has met:
 
     RHTN_WAN_MANIFEST=<out>/state/manifest.json \\

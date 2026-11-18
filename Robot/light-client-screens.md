@@ -300,6 +300,41 @@ reaches the siblings) and nothing further down their branches; downward,
 the writer's own subtree to `m` levels. Each patron's node uses its `-1`
 list for its own team.
 
+**Upward reach is earned by downline depth** [author, 2026-11-18],
+enforced by the first node a post reaches: everyone may post `+2` (patron,
+grandpatron, the patron's siblings, one's own siblings); each level of
+downline adds one, so direct subordinates allow `+3`, grandsubordinates
+`+4`, and so on. *"This is to prevent upper levels of the heirarchy from
+being spammed with messages from weakly attached, low prestige members."*
+**How the node knows** [author, 2026-11-18]: it keeps downline depth for
+the members in its trust horizon and holds **transmission authority** as an
+attribute of each, which filters what they post. First stated as a tally
+from adoptions observed and resolutions intermediated; **then narrowed to
+the rootward memos alone** (`wire-format.md` §10.2), which also lower it:
+a departure or disavowal empties its slot. **Kept as a positional table of the downline, persisted** [author,
+2026-11-18] — not the memos and not the identities: one entry per
+downline member, keyed by its path of child indices below this node, each
+holding the occupied child indices under it and whether it operates a
+node. His example: `3[0,2,5,8]` is the sub in slot 3, with subs in 2, 5
+and 8 and running a node; `3,5,9[1]` a great-grandsub with one sub and no
+node. A fill memo adds the slot; an emptying memo removes it **and every
+entry under it**, the subtree going with it — so depth (the longest path
+under a member's prefix) is exact both ways, and the same table is the
+view the `-1/-2/-3` propagation lists are computed from. *"I am open to
+other graph compaction schemes, but the important part is that you keep a
+current view of your downline in such a way that you do not have to cache
+every message or hold the ID of every subordinate to arbitrary depth."*
+
+**Node operation is a byte outside 0–9 in the entry's list** [author,
+2026-11-18: "any single-byte flag value not 0-9 is fine"], slot 0 being a
+real child index (`wire-format.md` §2.1). **Where the flag comes from** [author, 2026-11-18, accepting the proposal]: memos do not say who runs a node, so the flag comes from the endpoint
+records of the infra nodes that attach to this node as their upstream —
+the only ones it hands a post to — with no new wire field. A re-adopted
+member's carried subtree sends no memos and reads shallow until it
+changes: an undercount, so a capped post. **A post over the
+cap is propagated with its cap lowered to the sender's authority**, not
+refused.
+
 **Storage** [author, 2026-11-18]: a limit and no time component. The node
 drops first-in-first-out, as packets arrive; the light client drops
 **oldest first by the post's own timestamp**, because it reads content
