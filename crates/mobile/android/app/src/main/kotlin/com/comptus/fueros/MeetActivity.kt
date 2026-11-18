@@ -4,7 +4,6 @@ import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
 import android.telephony.SubscriptionManager
@@ -1276,7 +1275,7 @@ class MeetActivity : Activity() {
         TextView(this).apply {
             text = t
             textSize = 24f
-            typeface = Typeface.DEFAULT_BOLD
+            typeface = Type.bold
             setPadding(0, 0, 0, 24)
         },
     )
@@ -1290,7 +1289,7 @@ class MeetActivity : Activity() {
         TextView(this).apply {
             text = t
             textSize = 16f
-            typeface = Typeface.DEFAULT_BOLD
+            typeface = Type.bold
             setPadding(0, 20, 0, 8)
         },
     )

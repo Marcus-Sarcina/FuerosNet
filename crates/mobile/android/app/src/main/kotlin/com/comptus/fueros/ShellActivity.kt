@@ -6,7 +6,6 @@ import android.content.Intent
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
-import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.view.Gravity
@@ -329,7 +328,7 @@ class ShellActivity : Activity() {
             TextView(this).apply {
                 text = mark
                 textSize = 21f
-                typeface = Typeface.DEFAULT_BOLD
+                typeface = Type.bold
                 setTextColor(Palette.RAIL_INK)
                 gravity = Gravity.CENTER
                 // **the orb's colour is its identity's** [author, 2026-11-12]:
@@ -356,7 +355,7 @@ class ShellActivity : Activity() {
                 TextView(this).apply {
                     text = n
                     textSize = 10f
-                    typeface = Typeface.DEFAULT_BOLD
+                    typeface = Type.bold
                     setTextColor(Palette.RAIL_INK)
                     gravity = Gravity.CENTER
                     background = Crowns.disc(Palette.COUNT)
@@ -567,7 +566,7 @@ class ShellActivity : Activity() {
             TextView(this).apply {
                 text = Chrome.mark(alias, me)
                 textSize = 14f
-                typeface = Typeface.DEFAULT_BOLD
+                typeface = Type.bold
                 setTextColor(Palette.RAIL_INK)
                 gravity = Gravity.CENTER
                 // the options orb and the nameplate wear the colour of the
@@ -599,7 +598,7 @@ class ShellActivity : Activity() {
                     TextView(this@ShellActivity).apply {
                         text = name
                         textSize = 14f
-                        typeface = Typeface.DEFAULT_BOLD
+                        typeface = Type.bold
                         setTextColor(Palette.RAIL_INK)
                         layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT)
                             .apply { weight = 1f }
@@ -740,7 +739,7 @@ class ShellActivity : Activity() {
                 column.addView(bar("Options", back = Chrome.Place.Home))
                 val line = TextView(this).apply {
                     textSize = 12f
-                    typeface = Typeface.MONOSPACE
+                    typeface = Type.mono
                     setTextColor(Palette.now.sub)
                     text = Attach.statusLine(Gateway.front.status())
                 }
@@ -827,7 +826,7 @@ class ShellActivity : Activity() {
                 TextView(this@ShellActivity).apply {
                     text = title
                     textSize = 19f
-                    typeface = Typeface.DEFAULT_BOLD
+                    typeface = Type.bold
                     setTextColor(c.ink)
                     if (go != null) {
                         isClickable = true

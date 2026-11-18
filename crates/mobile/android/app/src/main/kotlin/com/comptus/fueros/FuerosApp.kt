@@ -68,6 +68,7 @@ class FuerosApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        Type.load(this)
         if (!BuildConfig.FIELD_TEST) return
         Timber.plant(Timber.DebugTree())
         val dir = diagDir(this)

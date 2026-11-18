@@ -2,7 +2,6 @@ package com.comptus.fueros
 
 import android.app.Activity
 import android.content.Intent
-import android.graphics.Typeface
 import android.os.Bundle
 import android.widget.Button
 import android.widget.LinearLayout
@@ -192,7 +191,7 @@ class RotationActivity : Activity() {
     private fun heading(t: String) = body.addView(
         TextView(this).apply {
             textSize = 17f
-            typeface = Typeface.DEFAULT_BOLD
+            typeface = Type.bold
             setTextColor(Palette.now.ink)
             setPadding(0, 24, 0, 8)
             text = t

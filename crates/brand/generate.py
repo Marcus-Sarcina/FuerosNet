@@ -7,7 +7,7 @@ writes each platform's copy of it:
 
   * `Tokens.kt`, the Android shell's values, which `Palette` reads;
   * `colors.xml`, the dark set as resources, which the Android theme wears;
-  * `tokens.css`, the desktop window's custom properties.
+  * `tokens.css`, the desktop window's custom properties and font faces.
 
 And it **checks the floor before it writes anything**: every declared pair
 clears the contrast floor in both modes, and the rail's ink reads on the
@@ -167,7 +167,18 @@ def css(t, n):
         return lines
 
     out = [f'/* {HEAD} */', '',
-           '/* Dark is what a person meets first; light is an option. */']
+           '/* The faces are crates/brand/res/font\'s, which the window serves',
+           '   under fonts/; a script they do not cover falls back to the',
+           '   system\'s own sans and mono. */']
+    for family, stem in ((t['type']['sans'], 'geist'), (t['type']['mono'], 'geist_mono')):
+        for style, suffix in (('normal', ''), ('italic', '_italic')):
+            out += ['@font-face {',
+                    f'  font-family: "{family}";',
+                    f'  src: url("fonts/{stem}{suffix}.ttf") format("truetype");',
+                    '  font-weight: 100 900;',
+                    f'  font-style: {style};',
+                    '}']
+    out += ['', '/* Dark is what a person meets first; light is an option. */']
     out += block(':root', 'dark', SET)
     out += [f'  --sans: "{t["type"]["sans"]}", system-ui, sans-serif;',
             f'  --mono: "{t["type"]["mono"]}", ui-monospace, monospace;']
@@ -193,6 +204,9 @@ def main():
         if missing:
             raise SystemExit(f'tokens.toml: [{mode}] lacks {", ".join(missing)}')
     failing = under_floor(t)
+    for stem in ('geist', 'geist_italic', 'geist_mono', 'geist_mono_italic'):
+        if not os.path.isfile(os.path.join(HERE, 'res', 'font', stem + '.ttf')):
+            failing.append(f'res/font/{stem}.ttf is named and not held')
     for f in failing:
         print(f'UNDER THE FLOOR {t["contrast"]["floor"]}: {f}')
     if failing and not check:

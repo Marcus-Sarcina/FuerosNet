@@ -3,7 +3,6 @@ package com.comptus.fueros
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
-import android.graphics.Typeface
 import android.os.Bundle
 import android.text.InputType
 import android.widget.Button
@@ -259,14 +258,14 @@ class OperatorActivity : Activity() {
             roll.addView(
                 TextView(this).apply {
                     textSize = 15f
-                    typeface = Typeface.DEFAULT_BOLD
+                    typeface = Type.bold
                     text = i.label
                 },
             )
             roll.addView(
                 TextView(this).apply {
                     textSize = 13f
-                    typeface = Typeface.MONOSPACE
+                    typeface = Type.mono
                     setTextColor(Palette.now.sub)
                     text = i.at
                 },
@@ -371,7 +370,7 @@ class OperatorActivity : Activity() {
         }
         val text = TextView(this).apply {
             textSize = 10f
-            typeface = Typeface.MONOSPACE
+            typeface = Type.mono
             setTextIsSelectable(true)
             this.text = key
             setPadding(Screen.gutter(context), 12, Screen.gutter(context), 12)
@@ -408,7 +407,7 @@ class OperatorActivity : Activity() {
                 inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
             } else {
                 inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-                typeface = Typeface.MONOSPACE
+                typeface = Type.mono
             }
         }
 
@@ -427,7 +426,7 @@ class OperatorActivity : Activity() {
 
         narration = TextView(this).apply {
             textSize = 13f
-            typeface = Typeface.MONOSPACE
+            typeface = Type.mono
             setTextColor(Palette.now.sub)
             text = ""
         }
@@ -569,7 +568,7 @@ class OperatorActivity : Activity() {
             addView(
                 TextView(this@OperatorActivity).apply {
                     textSize = 28f
-                    typeface = Typeface.DEFAULT_BOLD
+                    typeface = Type.bold
                     text = "Operator"
                 },
             )
@@ -588,7 +587,7 @@ class OperatorActivity : Activity() {
                 TextView(this@OperatorActivity).apply {
                     setPadding(0, 8, 0, 8)
                     textSize = 12f
-                    typeface = Typeface.DEFAULT_BOLD
+                    typeface = Type.bold
                     setTextColor(Palette.now.sub)
                     text = "Instances you run"
                 },
@@ -600,7 +599,7 @@ class OperatorActivity : Activity() {
                 TextView(this@OperatorActivity).apply {
                     setPadding(0, 32, 0, 8)
                     textSize = 12f
-                    typeface = Typeface.DEFAULT_BOLD
+                    typeface = Type.bold
                     setTextColor(Palette.now.sub)
                     text = "Which of your subnets the instance serves"
                 },
@@ -610,7 +609,7 @@ class OperatorActivity : Activity() {
                 TextView(this@OperatorActivity).apply {
                     setPadding(0, 32, 0, 8)
                     textSize = 12f
-                    typeface = Typeface.DEFAULT_BOLD
+                    typeface = Type.bold
                     setTextColor(Palette.now.sub)
                     text = "Launch one at a provider"
                 },
@@ -620,7 +619,7 @@ class OperatorActivity : Activity() {
                 TextView(this@OperatorActivity).apply {
                     setPadding(0, 32, 0, 8)
                     textSize = 12f
-                    typeface = Typeface.DEFAULT_BOLD
+                    typeface = Type.bold
                     setTextColor(Palette.now.sub)
                     text = "Enrol one by hand"
                 },
@@ -632,7 +631,7 @@ class OperatorActivity : Activity() {
                 TextView(this@OperatorActivity).apply {
                     setPadding(0, 32, 0, 8)
                     textSize = 12f
-                    typeface = Typeface.DEFAULT_BOLD
+                    typeface = Type.bold
                     setTextColor(Palette.now.sub)
                     text = "Your way in to the machines you rent"
                 },
@@ -653,7 +652,7 @@ class OperatorActivity : Activity() {
                 TextView(this@OperatorActivity).apply {
                     setPadding(0, 32, 0, 8)
                     textSize = 12f
-                    typeface = Typeface.MONOSPACE
+                    typeface = Type.mono
                     setTextColor(Palette.now.sub)
                     text = "A package's distributor publishes one link or code carrying the " +
                         "image, a suggested authority and port, and the package's own " +
@@ -667,7 +666,7 @@ class OperatorActivity : Activity() {
                 TextView(this@OperatorActivity).apply {
                     setPadding(0, 32, 0, 8)
                     textSize = 12f
-                    typeface = Typeface.DEFAULT_BOLD
+                    typeface = Type.bold
                     setTextColor(Palette.now.sub)
                     text = "What happened"
                 },

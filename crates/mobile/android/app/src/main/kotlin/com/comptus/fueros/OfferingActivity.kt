@@ -3,7 +3,6 @@ package com.comptus.fueros
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import android.graphics.Typeface
 import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
@@ -68,12 +67,12 @@ class OfferingActivity : Activity() {
 
         narration = TextView(this).apply {
             textSize = 13f
-            typeface = Typeface.MONOSPACE
+            typeface = Type.mono
             setTextColor(Palette.now.sub)
         }
         answer = TextView(this).apply {
             textSize = 13f
-            typeface = Typeface.MONOSPACE
+            typeface = Type.mono
             setTextColor(Palette.now.muted)
         }
         val body = LinearLayout(this).apply {
@@ -106,7 +105,7 @@ class OfferingActivity : Activity() {
             narration.text = "Paste a package offering. One begins `fueros://install`."
             val pasted = EditText(this).apply {
                 textSize = 13f
-                typeface = Typeface.MONOSPACE
+                typeface = Type.mono
                 hint = "fueros://install?v=1&…"
             }
             body.addView(pasted)
@@ -159,7 +158,7 @@ class OfferingActivity : Activity() {
         body.addView(label("Which of your instances"))
         val instanceAt = EditText(this).apply {
             textSize = 13f
-            typeface = Typeface.MONOSPACE
+            typeface = Type.mono
             setText(instances.first())
             hint = instances.joinToString(", ")
         }
@@ -167,14 +166,14 @@ class OfferingActivity : Activity() {
         body.addView(label("The authority it answers under, which is yours to change"))
         val authority = EditText(this).apply {
             textSize = 13f
-            typeface = Typeface.MONOSPACE
+            typeface = Type.mono
             setText(o.authority)
         }
         body.addView(authority)
         body.addView(label("Where it listens on that machine's loopback"))
         val port = EditText(this).apply {
             textSize = 13f
-            typeface = Typeface.MONOSPACE
+            typeface = Type.mono
             setText((o.port ?: 7460u).toString())
         }
         body.addView(port)
@@ -202,7 +201,7 @@ class OfferingActivity : Activity() {
 
     private fun label(text: String) = TextView(this).apply {
         textSize = 12f
-        typeface = Typeface.MONOSPACE
+        typeface = Type.mono
         setTextColor(Palette.now.sub)
         setPadding(0, Screen.gutter(this@OfferingActivity), 0, 0)
         this.text = text

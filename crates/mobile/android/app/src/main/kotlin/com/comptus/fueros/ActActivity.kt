@@ -2,7 +2,6 @@ package com.comptus.fueros
 
 import android.app.Activity
 import android.content.Context
-import android.graphics.Typeface
 import android.os.Bundle
 import android.widget.Button
 import android.widget.CheckBox
@@ -68,13 +67,13 @@ class ActActivity : Activity() {
 
         narration = TextView(this).apply {
             textSize = 13f
-            typeface = Typeface.MONOSPACE
+            typeface = Type.mono
             setTextColor(Palette.now.sub)
             text = "reading what $at declares…"
         }
         answer = TextView(this).apply {
             textSize = 13f
-            typeface = Typeface.MONOSPACE
+            typeface = Type.mono
             setTextColor(Palette.now.muted)
         }
         fields = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -181,7 +180,7 @@ class ActActivity : Activity() {
 
     private fun label(text: String) = TextView(this).apply {
         textSize = 12f
-        typeface = Typeface.MONOSPACE
+        typeface = Type.mono
         setTextColor(Palette.now.sub)
         setPadding(0, Screen.gutter(this@ActActivity), 0, 0)
         this.text = text
@@ -245,7 +244,7 @@ class ActActivity : Activity() {
             else -> box.addView(
                 EditText(this).apply {
                     textSize = 13f
-                    typeface = Typeface.MONOSPACE
+                    typeface = Type.mono
                     setText(held)
                     hint = when (k) {
                         is Acts.Kind.Number -> "a number, ${k.low} to ${k.high}"

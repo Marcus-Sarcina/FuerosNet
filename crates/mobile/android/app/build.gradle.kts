@@ -78,6 +78,9 @@ android {
     }
 
     sourceSets["main"].kotlin.srcDir("src/generated/kotlin")
+    // **the typefaces every client shares** (`crates/brand`): kept once there
+    // and read from there, so the desktop and this shell draw the same files
+    sourceSets["main"].res.srcDir("../../../brand/res")
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

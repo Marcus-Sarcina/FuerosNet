@@ -2,7 +2,6 @@ package com.comptus.fueros
 
 import android.app.Activity
 import android.content.Intent
-import android.graphics.Typeface
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -40,7 +39,7 @@ class ConversationsActivity : Activity() {
         val title = TextView(this).apply {
             text = "Conversations"
             textSize = 24f
-            typeface = Typeface.DEFAULT_BOLD
+            typeface = Type.bold
             setPadding(0, 0, 0, 24)
         }
         val root = LinearLayout(this).apply {
@@ -80,7 +79,7 @@ class ConversationsActivity : Activity() {
                     TextView(this).apply {
                         text = line
                         textSize = 13f
-                        typeface = Typeface.MONOSPACE
+                        typeface = Type.mono
                         setTextColor(Palette.now.sub)
                         setPadding(0, 4, 0, 4)
                     },

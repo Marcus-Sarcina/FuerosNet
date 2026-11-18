@@ -2,7 +2,6 @@ package com.comptus.fueros
 
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.graphics.Typeface
 import android.os.Bundle
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -87,13 +86,13 @@ class ResourceActivity : Activity() {
 
         val title = TextView(this).apply {
             textSize = 19f
-            typeface = Typeface.DEFAULT_BOLD
+            typeface = Type.bold
             text = name.ifBlank { "A resource" }
             setPadding(Screen.gutter(context), 20, Screen.gutter(context), 2)
         }
         val from = TextView(this).apply {
             textSize = 12f
-            typeface = Typeface.MONOSPACE
+            typeface = Type.mono
             setTextColor(Palette.now.sub)
             text = ResourcePage.provenance(resource, node)
             setPadding(Screen.gutter(context), 0, Screen.gutter(context), 6)
@@ -880,7 +879,7 @@ class ResourceActivity : Activity() {
         addView(
             TextView(this@ResourceActivity).apply {
                 textSize = 14f
-                typeface = Typeface.MONOSPACE
+                typeface = Type.mono
                 text = body
                 setPadding(Screen.gutter(context), 8, Screen.gutter(context), 48)
             },

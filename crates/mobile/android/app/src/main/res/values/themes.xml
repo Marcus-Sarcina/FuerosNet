@@ -34,6 +34,11 @@
 
         <item name="android:colorAccent">@color/accent</item>
 
+        <!-- people's words, navigation and headings in the sans; a script
+             it does not cover falls back to the system's own [author,
+             2026-11-18] -->
+        <item name="android:fontFamily">@font/geist</item>
+
         <!-- the bars continue the screen rather than framing it in grey -->
         <item name="android:statusBarColor">@color/chrome</item>
         <item name="android:navigationBarColor">@color/sunken</item>

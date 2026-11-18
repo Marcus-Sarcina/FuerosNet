@@ -1,7 +1,6 @@
 package com.comptus.fueros
 
 import android.app.Activity
-import android.graphics.Typeface
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.Button
@@ -110,7 +109,7 @@ class ConversationActivity : Activity() {
             val t = by?.let { b -> peerKey?.let { Gateway.front.thread(b, it) } }
             text = t?.let { Gateway.aliasOfHeld(it.by, it.peerKey) ?: it.peerName } ?: "conversation"
             textSize = 22f
-            typeface = Typeface.DEFAULT_BOLD
+            typeface = Type.bold
             setPadding(0, 0, 0, 16)
         }
 

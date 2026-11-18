@@ -1,7 +1,6 @@
 package com.comptus.fueros
 
 import android.app.Activity
-import android.graphics.Typeface
 import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
@@ -49,29 +48,29 @@ class CatalogActivity : Activity() {
 
         roll = TextView(this).apply {
             textSize = 14f
-            typeface = Typeface.MONOSPACE
+            typeface = Type.mono
         }
         narration = TextView(this).apply {
             textSize = 13f
-            typeface = Typeface.MONOSPACE
+            typeface = Type.mono
             setTextColor(Palette.now.sub)
             text = "What your serving node holds. Sweep to ask it."
         }
         answer = TextView(this).apply {
             textSize = 13f
-            typeface = Typeface.MONOSPACE
+            typeface = Type.mono
             setTextColor(Palette.now.muted)
         }
         val path = EditText(this).apply {
             hint = "a path to ask for, such as /"
             setText("/")
             textSize = 14f
-            typeface = Typeface.MONOSPACE
+            typeface = Type.mono
         }
         val which = EditText(this).apply {
             hint = "the resource, 64 hex digits"
             textSize = 13f
-            typeface = Typeface.MONOSPACE
+            typeface = Type.mono
         }
         val sweep = Button(this).apply {
             text = "Sweep the catalog"
@@ -168,7 +167,7 @@ class CatalogActivity : Activity() {
             addView(
                 TextView(this@CatalogActivity).apply {
                     textSize = 28f
-                    typeface = Typeface.DEFAULT_BOLD
+                    typeface = Type.bold
                     text = "Catalog"
                 },
             )
@@ -178,7 +177,7 @@ class CatalogActivity : Activity() {
                 TextView(this@CatalogActivity).apply {
                     setPadding(0, 32, 0, 8)
                     textSize = 12f
-                    typeface = Typeface.DEFAULT_BOLD
+                    typeface = Type.bold
                     setTextColor(Palette.now.sub)
                     text = "What is offered"
                 },
@@ -188,7 +187,7 @@ class CatalogActivity : Activity() {
                 TextView(this@CatalogActivity).apply {
                     setPadding(0, 32, 0, 8)
                     textSize = 12f
-                    typeface = Typeface.DEFAULT_BOLD
+                    typeface = Type.bold
                     setTextColor(Palette.now.sub)
                     text = "Ask one for something"
                 },

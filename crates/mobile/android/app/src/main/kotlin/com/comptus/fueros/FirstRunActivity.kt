@@ -2,7 +2,6 @@ package com.comptus.fueros
 
 import android.app.Activity
 import android.content.Intent
-import android.graphics.Typeface
 import android.os.Bundle
 import android.text.InputType
 import android.widget.ArrayAdapter
@@ -332,7 +331,7 @@ class FirstRunActivity : Activity() {
         val typed = MultiAutoCompleteTextView(this).apply {
             hint = "word word word …"
             textSize = 16f
-            typeface = Typeface.MONOSPACE
+            typeface = Type.mono
             inputType = InputType.TYPE_CLASS_TEXT or
                 InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS or
                 InputType.TYPE_TEXT_FLAG_MULTI_LINE
@@ -458,7 +457,7 @@ class FirstRunActivity : Activity() {
         TextView(this).apply {
             text = t
             textSize = 26f
-            typeface = Typeface.DEFAULT_BOLD
+            typeface = Type.bold
             setPadding(0, 0, 0, 16)
         },
     )
@@ -467,7 +466,7 @@ class FirstRunActivity : Activity() {
         TextView(this).apply {
             text = t
             textSize = 16f
-            typeface = Typeface.DEFAULT_BOLD
+            typeface = Type.bold
             setPadding(0, 28, 0, 6)
         },
     )
@@ -485,7 +484,7 @@ class FirstRunActivity : Activity() {
         TextView(this).apply {
             text = t
             textSize = 13f
-            typeface = Typeface.MONOSPACE
+            typeface = Type.mono
             setTextIsSelectable(true)
             setPadding(0, 6, 0, 10)
         },

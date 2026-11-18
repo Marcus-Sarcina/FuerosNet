@@ -2,7 +2,6 @@ package com.comptus.fueros
 
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.graphics.Typeface
 import android.os.Bundle
 import android.webkit.WebResourceRequest
 import android.webkit.WebStorage
@@ -83,7 +82,7 @@ class NodePageActivity : Activity() {
 
         val bar = TextView(this).apply {
             textSize = 12f
-            typeface = Typeface.MONOSPACE
+            typeface = Type.mono
             setTextColor(Palette.now.sub)
             setPadding(24, 24, 24, 8)
             text = "$at — the node's own page, in a frame with no reach into this device"

@@ -1,7 +1,6 @@
 package com.comptus.fueros
 
 import android.app.Activity
-import android.graphics.Typeface
 import android.os.Bundle
 import android.widget.Button
 import android.widget.LinearLayout
@@ -209,14 +208,14 @@ class LeavingActivity : Activity() {
     private fun title(t: String) = TextView(this).apply {
         text = t
         textSize = 26f
-        typeface = Typeface.DEFAULT_BOLD
+        typeface = Type.bold
         setPadding(0, 0, 0, 16)
     }
 
     private fun heading(t: String) = TextView(this).apply {
         text = t
         textSize = 16f
-        typeface = Typeface.DEFAULT_BOLD
+        typeface = Type.bold
         setPadding(0, 32, 0, 8)
     }
 
@@ -236,7 +235,7 @@ class LeavingActivity : Activity() {
     private fun mono(t: String) = TextView(this).apply {
         text = t
         textSize = 13f
-        typeface = Typeface.MONOSPACE
+        typeface = Type.mono
         setPadding(0, 4, 0, 4)
     }
 
