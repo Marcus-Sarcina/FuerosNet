@@ -4310,7 +4310,8 @@ Attach = {
 AttachAck = {
   1: uint,             ; mode: 0 primary, 1 degraded/failover. The SERVER's
                        ; determination, from its own topology, a client is in
-                       ; failover iff it is not in this node's subtree. Sent
+                       ; failover unless this node is the nearest
+                       ; infrastructure node on its patron chain. Sent
                        ; because a client with stale topology may not know
   2: ? [ + SiblingRef ],   ; OPTIONAL — absent means the serving node has no
                            ; siblings, which is a legal topology
@@ -4538,8 +4539,10 @@ siblings to list. Absence means no siblings.
 
 **The serving node determines the mode; the client is told.** A client
 attaching to a sibling sits two hops away in topology the sibling holds within
-its horizon, so *"is this client in my subtree?"* answers the question without
-anything on the wire. `AttachAck` field 1 exists because **the client may not
+its horizon, and one attaching to the node above (design §14.1.2) sits beneath
+another infrastructure node that node holds, so *"am I the nearest
+infrastructure node on this client's patron chain?"* answers the question
+without anything on the wire [author, 2026-11-17]. `AttachAck` field 1 exists because **the client may not
 know**: one whose serving node changed (its patron grew into infra, say) can
 believe it is reaching its primary when it is not. The determination belongs with
 the node that has authority over its own subtree.
@@ -4578,7 +4581,8 @@ intervals**, where:
 - **The timestamp in a heartbeat is advisory.** Liveness is decided by local
   monotonic receipt time; a clock-skew test would let two peers disagree about
   liveness while exchanging identical frames. Below that a client does not fail over; at or above it, it dials a
-sibling of its serving node.
+sibling of its serving node, then the serving node's own serving node (design
+§14.1.2).
 
 **Failover applies to a primary that is already dark, not only to one that dies
 mid-session.** The three-missed-intervals rule presupposes an established
@@ -4619,7 +4623,7 @@ for the handshake, and `Attach` is named here because this is where it arrives.
 `AttachAck` or `SiblingUpdate` and otherwise persists; an in-memory-only client
 loses failover exactly when a crash coincides with its serving node being down.
 
-**No automatic failback.** A client on a sibling stays there until that session
+**No automatic failback.** A client failed over stays there until that session
 ends; the next fresh attach tries its actual serving node first. Probing the
 primary from a degraded session adds traffic for a state the client will leave
 anyway at the next natural reattachment.

@@ -50,9 +50,12 @@ documents. Where a requirement leaves a visible artifact, that is noted in place
   records you kept — a member invited to serve from you (`light-client-
   requirements.md` §2) is admitted on the strength of the adoption that made
   them a member, and nothing else is handed to you for it.
-- **Determine the attachment mode from local topology.** A client not in this
-  node's subtree is in failover, and report it. The client may hold stale
-  topology and not know which state it is in.
+- **Determine the attachment mode from local topology.** A client is in failover
+  unless this node is the nearest infrastructure node on its patron chain
+  [author, 2026-11-17], and report it: a sibling's client is not in this node's
+  subtree, and one failed over to the node above is beneath another
+  infrastructure node in it. The client may hold stale topology and not know
+  which state it is in.
 - **A client must be able to authenticate every failover peer before it needs one.** Include each sibling's full `KeyMaterial` in the list unless this node itself already supplied that sibling's key material to this client in an earlier `AttachAck` or `SiblingUpdate` — the only omission the wire permits (`wire-format.md` §8.2); omitting it from a client that lacks it is what makes first failover fail
   (`wire-format.md` §8). A client that has never contacted a sibling cannot
   authenticate it otherwise, the handshake presents the classical component while

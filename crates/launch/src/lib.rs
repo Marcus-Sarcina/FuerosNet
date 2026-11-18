@@ -249,7 +249,7 @@ pub fn node_config(token_hex: &str, quic: u16, admin: u16) -> String {
          horizon = \"/var/lib/rhtn/horizon\"\n\
          resources = \"/var/lib/rhtn/hosting\"\n\
          state = \"/var/lib/rhtn/state\"\n\
-         heartbeat = 30\n\
+         heartbeat = 60\n\
          ingestion = \"unverified-gossip\"\n\
          [allowance]\n\
          requests = 120\n\

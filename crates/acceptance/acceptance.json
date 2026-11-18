@@ -11943,14 +11943,14 @@
   "rule": [
    {
     "where": "infra-client-requirements.md §1",
-    "text": "Determine the attachment mode from local topology. A client not in this node's subtree is in failover, and report it."
+    "text": "Determine the attachment mode from local topology. A client is in failover unless this node is the nearest infrastructure node on its patron chain"
    },
    {
     "where": "design §14.1.2",
     "text": "Light client dials out to its serving infra node. The nearest infrastructure node on its patron chain, which is not necessarily its patron"
    }
   ],
-  "given": "Infra node N holds an adoption of light client C directly under it, so N is C's nearest infrastructure ancestor. The heartbeat interval is unset (design §21.1) and is a test parameter: the node advertises the harness's chosen value I, in seconds within 1..3600, in AttachAck field 3.",
+  "given": "Infra node N holds an adoption of light client C directly under it, so N is C's nearest infrastructure ancestor. The heartbeat interval is the node's to advertise, 60 s unless retuned (design §21), and is a test parameter: the node advertises the harness's chosen value I, in seconds within 1..3600, in AttachAck field 3.",
   "when": "C dials N and sends Attach with field 1 equal to its own keyhash.",
   "then": "N answers with AttachAck whose field 1 (mode) is 0 and whose field 3 is I.",
   "oracle": "behaviour",
@@ -11980,7 +11980,7 @@
     "text": "A light client whose patron is itself a light client (§3.3 permits this) walks up until it reaches infrastructure."
    }
   ],
-  "given": "Infra node N has adopted light client P; P has adopted light client C. C's nearest infrastructure ancestor is therefore N, which is not its patron. The heartbeat interval is unset (design §21.1) and is a test parameter: the node advertises the harness's chosen value I, in seconds within 1..3600, in AttachAck field 3.",
+  "given": "Infra node N has adopted light client P; P has adopted light client C. C's nearest infrastructure ancestor is therefore N, which is not its patron. The heartbeat interval is the node's to advertise, 60 s unless retuned (design §21), and is a test parameter: the node advertises the harness's chosen value I, in seconds within 1..3600, in AttachAck field 3.",
   "when": "C dials N and sends Attach.",
   "then": "N does not close the connection with application close code 1; it answers with AttachAck whose field 1 (mode) is 0.",
   "oracle": "behaviour",
@@ -12009,7 +12009,7 @@
     "text": "counter 0 is sent after one interval, not immediately"
    }
   ],
-  "given": "A session between C and N is established (AttachAck received). The heartbeat interval is unset (design §21.1) and is a test parameter: the node advertises the harness's chosen value I, in seconds within 1..3600, in AttachAck field 3. Stream 0 is observed in both directions from the moment AttachAck is sent.",
+  "given": "A session between C and N is established (AttachAck received). The heartbeat interval is the node's to advertise, 60 s unless retuned (design §21), and is a test parameter: the node advertises the harness's chosen value I, in seconds within 1..3600, in AttachAck field 3. Stream 0 is observed in both directions from the moment AttachAck is sent.",
   "when": "Three intervals of I seconds elapse with no other traffic.",
   "then": "Each side's first Heartbeat carries counter 0 and is sent no earlier than I seconds after AttachAck; each side's next two carry counters 1 and 2, one per interval.",
   "oracle": "behaviour",
@@ -12090,7 +12090,7 @@
    },
    {
     "where": "design §14.1.2",
-    "text": "after 3 consecutive missed intervals, the client attaches to another party in the same replication set as its serving node"
+    "text": "after 3 consecutive missed intervals, three minutes at step 2's interval, the client attaches elsewhere"
    }
   ],
   "given": "C is in a session on N with interval I and holds sibling S's SiblingRef with KeyMaterial from AttachAck. N is scripted to keep sending payload frames on unidirectional streams while sending no Heartbeat.",
@@ -12146,7 +12146,7 @@
   "rule": [
    {
     "where": "design §14.1.2",
-    "text": "after 3 consecutive missed intervals, the client attaches to another party in the same replication set as its serving node, and the resulting session is degraded."
+    "text": "after 3 consecutive missed intervals, three minutes at step 2's interval, the client attaches elsewhere, and the resulting session is degraded."
    },
    {
     "where": "wire-format.md §8.2",
@@ -12213,7 +12213,7 @@
   "rule": [
    {
     "where": "design §14.1.2",
-    "text": "That party holds the replicated state but not the authority to countersign."
+    "text": "First another party in the same replication set as its serving node, which holds the replicated state but not the authority to countersign"
    },
    {
     "where": "design §14.1.2",
@@ -12243,11 +12243,11 @@
   "rule": [
    {
     "where": "wire-format.md §8.2",
-    "text": "A client on a sibling stays there until that session ends; the next fresh attach tries its actual serving node first."
+    "text": "A client failed over stays there until that session ends; the next fresh attach tries its actual serving node first."
    },
    {
     "where": "design §14.1.2",
-    "text": "No automatic failback: the client stays on the sibling until that session ends, and the next fresh attach tries its actual serving node first."
+    "text": "No automatic failback: the client stays where it landed until that session ends, and the next fresh attach tries its actual serving node first."
    }
   ],
   "given": "C holds a degraded session on S with interval I after N went dark.",
@@ -12273,7 +12273,7 @@
   "rule": [
    {
     "where": "wire-format.md §8.2",
-    "text": "A client on a sibling stays there until that session ends; the next fresh attach tries its actual serving node first."
+    "text": "A client failed over stays there until that session ends; the next fresh attach tries its actual serving node first."
    },
    {
     "where": "design §14.1.2",

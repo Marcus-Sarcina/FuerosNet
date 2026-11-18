@@ -481,3 +481,22 @@ and the app re-proves held invitations every time it starts and attaches.
 and design §14.1.5 / MAIL-020 amended for an invite doorbell carrying the
 address). Option 3 adds a setup step to the first-run flow, which runs
 against the author's no-manual-steps measure.
+
+## How failover runs on iOS [deferred 2026-11-17, until iOS is built]
+
+**Prompted by** the push ruling (entry above): a leaf keeps one live session,
+and after three minutes without its patron's node tries the grandpatron's node
+and then the patron's siblings' nodes, in the order its horizon view lists
+them. iOS lets an app keep no connection in the background, so there the
+session exists only while the app is open, and recovery happens when the app
+is next opened (author, 2026-11-17: accepted).
+
+**The author** [2026-11-17]: *"We aren't building iOS yet, but on iOS, we may
+have to revisit the failover since we want it to cycle through in the period of
+time someone will idly check their app."*
+
+**Meanwhile:** the documents state the three-minute threshold, and no iOS shell
+exists. **What changes when it is decided:** on iOS the threshold and the walk
+through the targets have to finish within a glance at the app (seconds, not
+minutes), so either the threshold is per platform or an iOS client opening
+cold tries the targets without waiting out the patron's node.

@@ -6097,9 +6097,13 @@ same (`wire-format.md` §11.1).
    permits this) walks up until it reaches infrastructure. Serving and
    countersigning are separate roles: a light-client patron still countersigns
    subnet-scoped transactions, it simply does not serve sessions.
-2. Periodic heartbeat keeps the connection alive. **Interval unset**, within the
-   units and range §21.1 fixes. A performance parameter to tune under load,
-   traded off between battery cost and failover detection latency. QUIC 0-RTT resumption (§14.1.3) makes reattachment
+2. Periodic heartbeat keeps the connection alive. **One minute** [author,
+   2026-11-17], the value a node advertises, within the units and range
+   `wire-format.md` §8.2 fixes: *"this is the kind of tuning that will only
+   prove out with heavy real-world use."* A performance parameter, traded off
+   between battery cost and failover detection latency, and **the failover
+   threshold is counted in it** (step 4), so retuning the interval brings
+   failover along with it. QUIC 0-RTT resumption (§14.1.3) makes reattachment
    cheap enough to favour a lazy interval.
 3. **Client heartbeat fails (server side):** the serving node **marks the client
    unreachable; material for it queues as it always did, and delivery waits
@@ -6107,33 +6111,53 @@ same (`wire-format.md` §11.1).
    mechanism depends on the node distinguishing "offline" from "no record". **This state replicates to siblings**, or a sibling
    answering during failover has no idea of the client's status.
 4. **Server heartbeat fails (client side):** after **3 consecutive missed
-   intervals**, the client attaches to another party in the same replication set
-   as its serving node, and **the resulting session is degraded.** That party
-   holds the replicated state but not the authority to countersign. Present
-   encoding: a sibling of the serving infra node (§3.4) —
-   siblings of the serving node, not of the patron, where those differ. The
-   sibling determines from its own topology that this client is not in its
-   subtree, and therefore that it is providing failover rather than primary
-   service; `AttachAck` reports that determination so both ends agree the session
-   is degraded (`wire-format.md` §8). **No automatic failback**: the client stays on
-   the sibling until that session ends, and the next fresh attach tries its actual
+   intervals**, three minutes at step 2's interval, the client attaches
+   elsewhere, and **the resulting session is degraded.** **Siblings first, then
+   the node above** [author, 2026-11-17]. First another party in the same
+   replication set as its serving node, which holds the replicated state but not
+   the authority to countersign: a sibling of the serving infra node (§3.4) —
+   siblings of the serving node, not of the patron, where those differ — in the
+   order of the cached list. Where none attaches, the serving node's own serving
+   node, the next infrastructure node up the patron chain, found in the client's
+   own view of its horizon; it holds what replication brings it, and it does not
+   countersign for the patron either. **The node answering determines the
+   mode from its own topology**: a session is degraded unless that node is the
+   client's nearest infrastructure node on its patron chain, so a sibling (the
+   client not in its subtree) and the node above (the client in its subtree,
+   beneath another infrastructure node) both answer failover; `AttachAck`
+   reports that determination so both ends agree the session is degraded
+   (`wire-format.md` §8). **No automatic failback**: the client stays where
+   it landed until that session ends, and the next fresh attach tries its actual
    serving node first.
 
 **The sibling list must be pushed to clients during normal operation.** A client
 cannot discover failover targets after its patron is already dark. Cheap at
-session establishment; impossible to add afterwards.
+session establishment; impossible to add afterwards. The node above needs no
+list: it is in the client's horizon already, its endpoint record with it
+(`wire-format.md` §7.6).
 
-**Attachment to a sibling is a degraded state, and the reference client must make
-that explicit to the user.** A sibling is not the patron and cannot countersign
-(§6.4). Payload flows; the subnet-scoped transactions the patron countersigns
+**A move reaches a member on the failover session** [author, 2026-11-17]. A
+node at a new address publishes its endpoint record (`wire-format.md` §7.6),
+which reaches its siblings and the node above it and is forwarded to the
+clients attached there (`wire-format.md` §10.1.1); a member failed over to
+either receives it, and its client takes it as an invitation to prove and put
+to the person (`light-client-requirements.md` §4). So the recovery path is the
+failover itself, and needs no push service. **A root's members have none of
+it**: a root has no siblings and no node above, so a move by a root reaches its
+members as a message from the root's handset, as a first invitation does
+(`light-client-requirements.md` §1.5).
+
+**Attachment elsewhere than the serving node is a degraded state, and the
+reference client must make that explicit to the user.** Neither a sibling nor
+the node above is the patron, and neither can countersign (§6.4). Payload flows; the subnet-scoped transactions the patron countersigns
 wait for the patron.
 
 **"Explicit" here means a product obligation, not a wire field**, of the same kind
 as §19.6's disclosure requirements. A user whose countersigned transactions
 silently stop going through will read it as the application being broken, and will
-not know that it resolves on reconnection. The serving sibling determines the mode
-from its own topology, a client not in its subtree is in failover, and reports
-it in `AttachAck` (`wire-format.md` §8), because a client with stale topology may
+not know that it resolves on reconnection. The node answering determines the mode
+from its own topology, a session being degraded unless it is the client's nearest
+infrastructure node on its patron chain, and reports it in `AttachAck` (`wire-format.md` §8), because a client with stale topology may
 not know which state it is in.
 
 **Asymmetry:** client-detects-server matters more than server-detects-client,
@@ -6181,6 +6205,14 @@ persistent connection it cannot count on.*
 occasional and foreground — presence ceremonies are synchronous by nature and
 the DNS/SSL-replacement case is request-driven, so store-and-forward at the
 patron plus fetch-on-foreground covers v1.
+
+**Routine notifications ride the session the client keeps** [author,
+2026-11-17]: *"Use the on-node notification service for routine notifications
+(Messages, scheduled events, etc)."* A client holding the platform's standing
+for a kept connection (`light-client-requirements.md` §4.1) is told of messages
+and scheduled events by the node serving it, over that session, and needs no
+push service for them. The doorbell is for a client the platform refuses that
+standing, and stays its opt-in.
 
 **The dependency is the client's, not the network's** [2026-09-13]. A client
 opting in gives its patron a **wake endpoint** it obtained from a push service
@@ -8637,7 +8669,7 @@ mistaken for established results.
 | 12.2 | "Real early networks will be thousands to tens of thousands of nodes" | SUPPORTING. Characterises expected early operation; the anchor mechanism is stress-tested independently |
 | 12.6.5 | "The industry direction is away from long-lived credentials" toward short-lived ones | SUPPORTING. Persuasive background; the local renewal mechanism does not depend on the trend |
 | 12.7.1 | "Creating a new identity is cheaper than a rotation" | SUPPORTING. The stronger structural reason is that a Genesis identity has no accumulated history to carry across |
-| 14.1.3 | 0-RTT "saves battery" and permits a lazy heartbeat | SUPPORTING. Heartbeat interval is unset; this affects tuning, not architecture |
+| 14.1.3 | 0-RTT "saves battery" and permits a lazy heartbeat | SUPPORTING. Heartbeat interval is one minute, provisionally; this affects tuning, not architecture |
 | 14.1.1 | "A substantial minority" of connections will fall back to TURN relay | Drawn from general familiarity with WebRTC-style deployments, not measured for this topology. **Two mobile peers behind CGNAT is the worst case and the common case here**, so the true fraction may be much higher, which would put the infra economics of §16.6 back in question |
 | 7.1 | Randomised motion prompts "constitute the liveness check" against print, replay and generated video | Presentation-attack detection is method- and attack-dependent. Motion and parallax are **inputs** to a PAD system, not a defence in themselves. **Needs evaluation of a named algorithm against a specified attack suite**, particularly for generated video |
 | 7.5 | A face crop runs 30–80 KB | Depends entirely on dimensions, codec and quality. **State the assumptions and derive** |
@@ -8759,7 +8791,8 @@ not derived.
 | — | Presence record size | ~35 KB | 10 ML-DSA-65 signatures + body; 26–48 KB across parameter sets (§5, §8.2) |
 | — | Currency attestation lifetime | ~10 h | Security parameter, not a cache knob; Kerberos-anchored (§12.6.5) |
 | — | Ceremony duration | **≥ 4 minutes**, witness-enforced | Meters human time, the scarce resource; measured by each witness from its own receipt of the request (§7.1) |
-| — | Heartbeat liveness threshold | 3 consecutive missed intervals | Below this a client does not fail over (§14.1.2) |
+| — | Heartbeat interval | 60 s | **Provisional** [author, 2026-11-17]: the value a node advertises, to be retuned under heavy real-world use, the failover threshold moving with it (§14.1.2) |
+| — | Heartbeat liveness threshold | 3 consecutive missed intervals | Below this a client does not fail over (§14.1.2); three minutes at the interval above |
 | — | Default transport port | 7431/udp | Overridable per `NetworkPoint` (`wire-format.md` §9.2) |
 | — | Delegated transport credential | 48 h each, a run of 45 | 90 days end to end. The run is what lets an instance serve while its operator's device is asleep, and is the horizon a seized store inherits (§12.6.5). Chosen, not derived |
 | — | Anchor hysteresis | promote at S, demote at S/2 | So a boundary node does not flap (§12.2). The ratio is chosen |
@@ -8789,7 +8822,6 @@ than by the chooser:
 
 | Parameter | Section |
 |---|---|
-| Heartbeat interval (the value within 1–3600 s; **units are seconds**, the range and the 3-miss failure threshold are set) | §14.1.2 |
 | Queue **cap value** only. *(Retention, sibling replication, ceiling behaviour, crash-recovery copies and operator logging are all settled, §14.1.6)* | §14.1.6 |
 | Replication depth beyond the floor | §3.4 |
 | Contact-locator and negative cache TTLs | §12.5 |

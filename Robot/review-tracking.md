@@ -22816,3 +22816,33 @@ patron's siblings' nodes after three minutes without its patron's node.
 (3) Siblings in the order the client's own horizon view lists them. (4) On
 iOS, recovery happens when the app is next opened; the iOS exception
 paragraph stays.
+**iOS failover to revisit** [author, 2026-11-17]: *"We aren't building iOS
+yet, but on iOS, we may have to revisit the failover since we want it to cycle
+through in the period of time someone will idly check their app."* So the
+three-minute threshold is Android's; on iOS the cycle through grandpatron and
+siblings has to fit a glance at the app. Nothing to do until iOS is built.
+**Answered by the author, 2026-11-17**: (5) *"no, anchor it to the heartbeat
+and set the heartbeat to 1 minute. We can adjust the heartbeat if needed later
+and bring the failover along with it; this is the kind of tuning that will only
+prove out with heavy real-world use."* Failover stays at 3 consecutive missed
+intervals; the interval is 1 minute. (6) Siblings first, then the grandpatron's
+node.
+**Answered by the author, 2026-11-17** ("7 yes, 8 yes"): (7) a session is
+degraded unless the node is the client's nearest infrastructure node on its
+patron chain, which covers siblings and the grandpatron's node alike. (8) A
+client receiving an endpoint record for its own serving node at an address it
+has not agreed treats it as an invitation: proved by dialling, then asked.
+**Landed in the documents 2026-11-17**: design §14.1.2 (heartbeat one minute;
+siblings, then the node above; the mode rule; a move reaches a member on the
+failover session; a root's members by message), §14.1.4 (routine notifications
+on the kept session), §21 tables (interval moved to the set table); wire §8.2
+(mode rule, failover order); light-client §1.5 (the composer, first invitation
+and a root's move) and §4 (the record as an invitation; the order); infra §1
+(mode rule); rows NET-034, SES-023, SES-024, SES-025, MAIL-029, SES-011 and
+SES-021 amended; four acceptance strings. Launched node config: heartbeat 60.
+**Code owed** (not built): the node's mode rule (today the subtree test), the
+client's failover to the node above, the endpoint record taken as an
+invitation, routine notifications over the session, and the shell narrowing
+SMS to first invitations and a root's moves (it still texts every move, the
+only carrier until the rest lands). Running droplets keep heartbeat 30 until
+relaunched.

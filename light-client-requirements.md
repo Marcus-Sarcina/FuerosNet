@@ -384,6 +384,14 @@ job.
   for the next meeting (design §12.6.3's code is the alternative). **No
   control collects it and no screen explains it**: a number is plumbing,
   and the people meeting are doing something else.
+  - **The patron's handset hands the invitation to the patron to send**
+    [author, 2026-11-17]: fill it into the platform's messaging app,
+    addressed to that number, and leave the sending to the person, the same
+    on every platform. One per member per node address, the next offered when
+    the person comes back from the last. It carries a member's **first**
+    invitation, and a move by a patron who is a root, whose members have no
+    sibling or node above to fail over to; any other member learns of a move
+    on the failover session (§4).
   - **Nullable, and that is the ordinary case.** A number is
     carrier-provisioned rather than device-known, so a handset without a
     subscription, a carrier that never provisioned one, or a platform that
@@ -764,7 +772,12 @@ nothing below reaches across them.
 - **Serve from a node at an address the person agreed to, and nowhere else**
   [author, 2026-11-16]. A node's endpoint record (`wire-format.md` §7.6) at a new
   address reaches your horizon and does not move where you dial it: a move reaches
-  the person as an invitation they accept.
+  the person as an invitation they accept. **For the node serving you, the record
+  is one** [author, 2026-11-17]: a record naming that node at an address your
+  agreement does not hold is taken as an invitation to it at that address, held,
+  proved and asked as below, on the subnet the record's line is in. It reaches you
+  on a failover session from the siblings and the node above (design §14.1.2),
+  which is how a member learns of a move with no message from the patron's handset.
 - **An invitation reaches the person as a mark on its subnet's orb and one
   question, and as nothing else** [author, 2026-11-17]: *"the invite should
   manifest in the UI only in the notification counter on the subnet
@@ -813,7 +826,11 @@ nothing below reaches across them.
   only when a session dies mid-flight. The three-missed-intervals rule presupposes
   an established session; a client that waits for one can never fail over from a
   cold start.
-- **Tell the user when attachment is degraded.** On a sibling, the subnet-scoped
+- **Siblings first, then the node above** [author, 2026-11-17]. Try the cached
+  siblings in order, then the serving node's own serving node, the next
+  infrastructure node up the patron chain, found in your own view of your horizon
+  (design §14.1.2). Each is a degraded session.
+- **Tell the user when attachment is degraded.** On a sibling or the node above, the subnet-scoped
   transactions the patron countersigns wait for the patron (design §6.4); a user
   who is not told will read this as the application being broken and will not know
   that reconnecting resolves it (design §14.1.2).
