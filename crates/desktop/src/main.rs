@@ -56,10 +56,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // pairing offers, where the one the system routes outward from is not
     // the network the phone is on; and the directory this desktop keeps
     // its state in, else the platform's own
-    let (at, named) = match arguments(std::env::args().skip(1)) {
+    let Args {
+        at,
+        dir: named,
+        phrase: given,
+    } = match arguments(std::env::args().skip(1)) {
         Ok(a) => a,
         Err(e) => {
-            eprintln!("rhtn-desktop: {e}\nusage: rhtn-desktop [--at ADDRESS] [DIRECTORY]");
+            eprintln!("rhtn-desktop: {e}\nusage: rhtn-desktop {USAGE}");
             std::process::exit(2);
         }
     };
@@ -115,22 +119,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         let (back, dir, running) = (event_loop.create_proxy(), dir.clone(), running.clone());
         let (phrases, device) = (phrases.clone(), device.clone());
-        std::thread::spawn(move || match start(&dir, at, &back, &running, &phrases) {
-            Ok(d) => {
-                *device.lock().unwrap() = Some(d);
-                show_home(&back, &running, &device);
-                // **the nodes agreed to are attached at every start**, as
-                // the phone's are: the first that answers
-                let p = running.lock().unwrap().clone();
-                if let Some(p) = p.filter(|p| !p.agreed().is_empty()) {
-                    reattach(&p);
+        std::thread::spawn(
+            move || match start(&dir, at, given, &back, &running, &phrases) {
+                Ok(d) => {
+                    *device.lock().unwrap() = Some(d);
                     show_home(&back, &running, &device);
+                    // **the nodes agreed to are attached at every start**, as
+                    // the phone's are: the first that answers
+                    let p = running.lock().unwrap().clone();
+                    if let Some(p) = p.filter(|p| !p.agreed().is_empty()) {
+                        reattach(&p);
+                        show_home(&back, &running, &device);
+                    }
                 }
-            }
-            Err(why) => {
-                let _ = back.send_event(Said::Show(participant::stopped_page(&why)));
-            }
-        });
+                Err(why) => {
+                    let _ = back.send_event(Said::Show(participant::stopped_page(&why)));
+                }
+            },
+        );
     }
 
     // the provider's own windows, held so that they stay open; a web view
@@ -262,6 +268,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn start(
     dir: &Path,
     at: Option<std::net::IpAddr>,
+    given: Option<Zeroizing<String>>,
     back: &EventLoopProxy<Said>,
     running: &Mutex<Option<Arc<Participant>>>,
     phrases: &Mutex<Option<Sender<First>>>,
@@ -285,7 +292,15 @@ fn start(
     let desk = Desk::new(&state(dir), asker, teller)?;
     let platform = desk.platform(keyring.clone());
 
-    match Held::load(dir)? {
+    let held = Held::load(dir)?;
+    if held.is_some() && given.is_some() {
+        return Err(
+            "this desktop is set up already, and a phrase given is not taken over \
+                    it: start it on another directory"
+                .into(),
+        );
+    }
+    match held {
         Some(Held::Paired { material, run }) => {
             let seed = keyring
                 .seed()?
@@ -314,6 +329,13 @@ fn start(
             return Ok(Device::Restored);
         }
         None => {}
+    }
+
+    // **a phrase given on the command line restores at once** (a
+    // field-test build's bench), with no code shown and nothing typed
+    if let Some(typed) = given {
+        let seeds = phrase::seeds(&typed)?;
+        return restore(dir, &keyring, platform, &seeds, running);
     }
 
     // **the transport seed is kept before the code is shown**: a keyring
@@ -378,12 +400,7 @@ fn start(
                         return finish_paired(dir, paired, running);
                     }
                 }
-                keyring.keep_identity(&seeds)?;
-                let p = Participant::start(seeds.to_vec(), vec![], platform)
-                    .map_err(|e| custody_said(&keyring, e.to_string()))?;
-                Held::Restored.keep(dir)?;
-                *running.lock().unwrap() = Some(Arc::new(p));
-                return Ok(Device::Restored);
+                return restore(dir, &keyring, platform, &seeds, running);
             }
         }
     }
@@ -393,6 +410,24 @@ fn start(
 enum First {
     Paired(Result<pairing::Paired, String>),
     Phrase(Zeroizing<String>),
+}
+
+/// **Restore from the identity's seeds**: kept by the keyring first, so a
+/// keyring that will not keep them stops it before the kernel stands on
+/// them, then the kernel, then the note that says how to start again.
+fn restore(
+    dir: &Path,
+    keyring: &Keyring,
+    platform: Arc<rhtn_ffi::device::Platform>,
+    seeds: &[u8],
+    running: &Mutex<Option<Arc<Participant>>>,
+) -> Result<Device, String> {
+    keyring.keep_identity(seeds)?;
+    let p = Participant::start(seeds.to_vec(), vec![], platform)
+        .map_err(|e| custody_said(keyring, e.to_string()))?;
+    Held::Restored.keep(dir)?;
+    *running.lock().unwrap() = Some(Arc::new(p));
+    Ok(Device::Restored)
 }
 
 /// A pairing finished: keep what starts it again, and say what it made.
@@ -466,20 +501,61 @@ fn reattach(p: &Participant) {
     }
 }
 
-/// The command line: an address named with `--at`, and a directory.
-fn arguments(
-    mut args: impl Iterator<Item = String>,
-) -> Result<(Option<std::net::IpAddr>, Option<String>), String> {
-    let (mut at, mut dir) = (None, None);
+/// How the command line is used, in this build.
+#[cfg(not(feature = "fieldtest"))]
+const USAGE: &str = "[--at ADDRESS] [DIRECTORY]";
+#[cfg(feature = "fieldtest")]
+const USAGE: &str = "[--at ADDRESS] [--phrase-from FILE [--phrase-for NAME]] [DIRECTORY]";
+
+/// What the command line says.
+#[derive(Default)]
+struct Args {
+    /// The local address a pairing offers.
+    at: Option<std::net::IpAddr>,
+    /// The directory this desktop keeps its state in.
+    dir: Option<String>,
+    /// **A phrase to restore from, read from a file** — a field-test
+    /// build's alone, for the bench's test identities; a releasable build
+    /// does not know the flag.
+    phrase: Option<Zeroizing<String>>,
+}
+
+/// The command line: an address named with `--at`, a directory, and in a
+/// field-test build a phrase file with `--phrase-from` and which of its
+/// entries with `--phrase-for`.
+fn arguments(mut args: impl Iterator<Item = String>) -> Result<Args, String> {
+    let mut out = Args::default();
+    #[cfg(feature = "fieldtest")]
+    let (mut from, mut entry): (Option<String>, Option<String>) = (None, None);
     while let Some(a) = args.next() {
-        if a == "--at" {
-            let v = args.next().ok_or("--at names an address")?;
-            at = Some(v.parse().map_err(|_| format!("{v} is not an address"))?);
-        } else if dir.replace(a).is_some() {
-            return Err("one directory at most".into());
+        match a.as_str() {
+            "--at" => {
+                let v = args.next().ok_or("--at names an address")?;
+                out.at = Some(v.parse().map_err(|_| format!("{v} is not an address"))?);
+            }
+            #[cfg(feature = "fieldtest")]
+            "--phrase-from" => from = Some(args.next().ok_or("--phrase-from names a file")?),
+            #[cfg(feature = "fieldtest")]
+            "--phrase-for" => entry = Some(args.next().ok_or("--phrase-for names an entry")?),
+            flag if flag.starts_with("--") => return Err(format!("{flag} is not a flag")),
+            _ => {
+                if out.dir.replace(a).is_some() {
+                    return Err("one directory at most".into());
+                }
+            }
         }
     }
-    Ok((at, dir))
+    #[cfg(feature = "fieldtest")]
+    match (from, entry) {
+        (Some(file), entry) => {
+            let text =
+                Zeroizing::new(std::fs::read_to_string(&file).map_err(|e| format!("{file}: {e}"))?);
+            out.phrase = Some(phrase::from_file(&text, entry.as_deref())?);
+        }
+        (None, Some(_)) => return Err("--phrase-for picks from a --phrase-from file".into()),
+        (None, None) => {}
+    }
+    Ok(out)
 }
 
 /// The kernel's own state, in a directory of its own beside what the

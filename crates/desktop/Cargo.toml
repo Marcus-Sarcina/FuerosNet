@@ -13,6 +13,7 @@ description = "The operator's desktop: the provider's own console in a window be
 default = ["releasable"]
 releasable = [
     "rhtn-ffi/releasable",
+    "rhtn-cli/releasable",
     "tracing/max_level_off",
     "tracing/release_max_level_off",
     "log/max_level_off",
@@ -32,8 +33,9 @@ rhtn-launch = { path = "../launch" }
 # **the transport is the command line's** (`rhtn_cli::launch::TlsTransport`):
 # one TLS client over the system's roots, already written and already
 # exercised against two providers, and a second copy of it here would be a
-# second place for it to drift
-rhtn-cli = { path = "../cli" }
+# second place for it to drift; taken without its flavour, which is this
+# crate's to choose
+rhtn-cli = { path = "../cli", default-features = false }
 serde_json = { workspace = true }
 # **the participant kernel, linked directly** [author, 2026-11-18]: the
 # same kernel the phone runs, with no binding between it and the window;

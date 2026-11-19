@@ -123,6 +123,10 @@ shape and one generated binding; `rhtn_ffi::device::Silent` is the no-op.
 ["releasable"]` and the same caps, and `rhtn-participant` names `rhtn-ffi`
 with `default-features = false` so that the leaf decides; `rhtn-node` and
 `rhtn-transport` take `tracing` unconditionally and inherit the choice.
+`rhtn-cli` is a leaf linked by another: its `default = ["releasable"]`
+passes the choice to `rhtn-client` and `rhtn-daemon`, which it names with
+`default-features = false`, and `rhtn-desktop` takes it the same way for
+its TLS client, so the desktop's own feature decides.
 `rhtn_node::diag` is the node-side copy of the client's constructors
 (`id8`, counts, sizes, milliseconds, and the renderers for `Decision`,
 `MemoOutcome`, `Step`, `Replicated`, `Delivery` and `AckTaken`, written

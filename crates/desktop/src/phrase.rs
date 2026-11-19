@@ -69,6 +69,44 @@ pub fn seeds(typed: &str) -> Result<Zeroizing<Vec<u8>>, String> {
     Ok(derive(&master))
 }
 
+/// **A phrase read from a file**, for a field-test build's bench, where
+/// typing one is the slow part of every run: the file holds the words
+/// alone, or lines of `<name>=<words>` (the bench's
+/// `crates/tools/phones-recovery.conf`, `#` for a comment) of which
+/// `entry` picks the one whose name ends with it — a phone's last three
+/// serial characters, or `<them>:<id8>` for a second identity on it.
+/// Checked as a typed phrase is, by [`seeds`].
+pub fn from_file(text: &str, entry: Option<&str>) -> Result<Zeroizing<String>, String> {
+    let named: Vec<(&str, &str)> = text
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .filter_map(|l| l.split_once('='))
+        .map(|(n, w)| (n.trim(), w.trim()))
+        .collect();
+    let Some(entry) = entry else {
+        if !named.is_empty() {
+            let names: Vec<&str> = named.iter().map(|(n, _)| *n).collect();
+            return Err(format!(
+                "the file names {} phrases; say which with --phrase-for ({})",
+                names.len(),
+                names.join(", ")
+            ));
+        }
+        return Ok(Zeroizing::new(text.trim().to_string()));
+    };
+    let hits: Vec<&(&str, &str)> = named.iter().filter(|(n, _)| n.ends_with(entry)).collect();
+    match hits.as_slice() {
+        [(_, words)] => Ok(Zeroizing::new((*words).to_string())),
+        [] => Err(format!("no phrase in the file is named …{entry}")),
+        many => Err(format!(
+            "{} phrases end with {entry}: {}",
+            many.len(),
+            many.iter().map(|(n, _)| *n).collect::<Vec<_>>().join(", ")
+        )),
+    }
+}
+
 /// The two seeds from the 32-byte master: HKDF-SHA256, no salt, the
 /// fixed label, 64 bytes.
 fn derive(master: &[u8]) -> Zeroizing<Vec<u8>> {
@@ -122,6 +160,35 @@ mod tests {
             *seeds(&format!("  {}  ", zero_phrase().to_uppercase())).unwrap(),
             *derive(&[0u8; 32]),
             "spacing and case are not the phrase"
+        );
+    }
+
+    #[test]
+    fn a_phrase_file_is_the_words_alone_or_one_named_line() {
+        let z = zero_phrase();
+        assert_eq!(*from_file(&format!("\n{z}\n"), None).unwrap(), z);
+        let conf = format!(
+            "# bench\nRFCRC1JDGXV={z}\nRFCRC1JDGXV:feb8843a=abandon art\nVGY5IJRWUSAIX4VC=x\n"
+        );
+        assert_eq!(*from_file(&conf, Some("GXV")).unwrap(), z);
+        assert_eq!(
+            *from_file(&conf, Some("GXV:feb8843a")).unwrap(),
+            "abandon art"
+        );
+        assert!(
+            from_file(&conf, Some("ZU8"))
+                .unwrap_err()
+                .contains("no phrase")
+        );
+        assert!(
+            from_file(&conf, Some(""))
+                .unwrap_err()
+                .contains("3 phrases")
+        );
+        assert!(from_file(&conf, None).unwrap_err().contains("--phrase-for"));
+        assert_eq!(
+            *seeds(&from_file(&conf, Some("GXV")).unwrap()).unwrap(),
+            *derive(&[0u8; 32])
         );
     }
 
