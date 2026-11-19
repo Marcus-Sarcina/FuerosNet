@@ -80,6 +80,8 @@ pub enum Act {
     },
     /// Show the page that launches a node.
     Launch,
+    /// Sweep the catalog again from every node attached to.
+    Sweep,
     /// Restore this desktop from the identity's phrase.
     Restore {
         /// What was typed.
@@ -96,6 +98,11 @@ pub enum Act {
     Go {
         /// Where.
         place: screens::Place,
+    },
+    /// Open a backup of this identity and install its archive.
+    Backup {
+        /// The file, as read.
+        bytes: Vec<u8>,
     },
     /// Say something to a party.
     Send {
@@ -127,11 +134,17 @@ pub fn act(message: &str) -> Result<Act, String> {
                 .ok_or_else(|| "`yes` is missing".into());
         }
         "launch" => return Ok(Act::Launch),
+        "sweep" => return Ok(Act::Sweep),
         "go" => {
             let named = s("place")?;
             return screens::Place::parse(&named)
                 .map(|place| Act::Go { place })
                 .ok_or_else(|| format!("{named} is not a place"));
+        }
+        "backup" => {
+            return participant::unhex(&s("data")?)
+                .map(|bytes| Act::Backup { bytes })
+                .ok_or_else(|| "the backup did not arrive as hex".into());
         }
         "send" => {
             // what was typed is kept as typed: spaces at its ends are
@@ -472,6 +485,12 @@ mod tests {
         );
         assert_eq!(act(r#"{"act":"launch"}"#).unwrap(), Act::Launch);
         assert_eq!(
+            act(r#"{"act":"backup","data":"00Ff"}"#).unwrap(),
+            Act::Backup {
+                bytes: vec![0, 0xff]
+            }
+        );
+        assert_eq!(
             act(r#"{"act":"restore","phrase":" a b "}"#).unwrap(),
             Act::Restore {
                 phrase: "a b".into()
@@ -513,6 +532,8 @@ mod tests {
                 "64 hex",
             ),
             (r#"{"act":"go","place":"meet"}"#, "not a place"),
+            (r#"{"act":"backup","data":"zz"}"#, "hex"),
+            (r#"{"act":"backup","data":""}"#, "data"),
             (r#"{"act":"send","to":"ab","text":"x"}"#, "64 hex"),
             (
                 &*format!(r#"{{"act":"send","to":"{k}","text":"  "}}"#),

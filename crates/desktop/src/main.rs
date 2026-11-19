@@ -153,6 +153,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if let Some(p) = p.filter(|p| !p.agreed().is_empty()) {
                         reattach(&p);
                         draw(&up, &back, false);
+                        let _ = sweep(&up);
+                        draw(&up, &back, false);
                     }
                 }
                 Err(why) => {
@@ -239,6 +241,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let (back, up) = (worker.clone(), up.clone());
                     std::thread::spawn(move || draw(&up, &back, true));
                 }
+                Ok(Act::Sweep) => {
+                    let (back, up) = (worker.clone(), up.clone());
+                    std::thread::spawn(move || {
+                        if let Some(why) = sweep(&up) {
+                            let _ = back.send_event(Said::ToPage(false, why));
+                        }
+                        draw(&up, &back, false);
+                    });
+                }
+                Ok(Act::Backup { bytes }) => {
+                    let (back, up) = (worker.clone(), up.clone());
+                    std::thread::spawn(move || import(&up, &back, bytes));
+                }
                 Ok(Act::Send { to, text }) => {
                     let (back, up) = (worker.clone(), up.clone());
                     std::thread::spawn(move || send(&up, &back, to, text));
@@ -253,7 +268,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // **off the drawing thread**: an attach dials and waits
                     let (back, up) = (worker.clone(), up.clone());
                     std::thread::spawn(move || match serve_from(&p, node, address) {
-                        Ok(()) => draw(&up, &back, false),
+                        Ok(()) => {
+                            draw(&up, &back, false);
+                            if let Some(why) = sweep(&up) {
+                                let _ = back.send_event(Said::ToPage(false, why));
+                            }
+                            draw(&up, &back, false);
+                        }
                         Err(why) => {
                             let _ = back.send_event(Said::ToPage(false, why));
                         }
@@ -524,7 +545,7 @@ fn draw(up: &Up, back: &EventLoopProxy<Said>, whole: bool) {
                 .unwrap_or_default();
             Body::Thread(page.messages, page.before.is_some())
         }
-        Place::Subnet(_) => Body::Catalog(
+        Place::Subnet(_) | Place::Resources => Body::Catalog(
             p.resources()
                 .into_iter()
                 .map(|r| ResourceRow {
@@ -667,6 +688,50 @@ fn pump(up: &Up, back: &EventLoopProxy<Said>, p: &Participant) {
     }
 }
 
+/// **Open a backup and install its archive** (`light-client-requirements.md`
+/// §2): the kernel opens it under this identity, scans it for what is past
+/// its retention, and refuses one of another identity or a desktop that
+/// holds an archive already.  What came back is said, the discard with it.
+fn import(up: &Up, back: &EventLoopProxy<Said>, bytes: Vec<u8>) {
+    let Some(p) = up.running.lock().unwrap().clone() else {
+        let _ = back.send_event(Said::ToPage(false, "this desktop is not set up yet".into()));
+        return;
+    };
+    match p.restore_backup(bytes) {
+        Ok(r) => {
+            draw(up, back, false);
+            let _ = back.send_event(Said::ToPage(true, imported(r.records, r.discarded)));
+        }
+        Err(why) => {
+            let _ = back.send_event(Said::ToPage(
+                false,
+                format!("the backup was not taken: {why}"),
+            ));
+        }
+    }
+}
+
+/// **What an import came to**, said as the phone says it: how much came
+/// back, and what the scan deleted on the way in, which is told rather
+/// than swallowed (design §13.7.1).
+fn imported(records: u64, discarded: u64) -> String {
+    let took = format!(
+        "{records} record{} came back.",
+        if records == 1 { "" } else { "s" }
+    );
+    match discarded {
+        0 => format!("{took} Nothing in it was past its retention."),
+        1 => format!(
+            "{took} 1 sealed capture was past the window its subject declared, and was \
+             deleted on import rather than kept."
+        ),
+        n => format!(
+            "{took} {n} sealed captures were past the window their subjects declared, and \
+             were deleted on import rather than kept."
+        ),
+    }
+}
+
 /// **Say something to a party**, as the phone's conversation does: kept as
 /// sending first, so it is on the screen at once, then handed to the
 /// kernel, and the answer kept as a change to it.
@@ -733,6 +798,25 @@ fn attach_to(p: &Participant, node: Vec<u8>, addresses: Vec<String>) -> Result<(
     p.attach(node, addresses, population)
         .map(|_| ())
         .map_err(|e| e.to_string())
+}
+
+/// **What a connection is for, fetched once one is up**: the catalog
+/// swept from every node attached to, and the profiles that name the
+/// people and subnets held — what each device fetches for itself rather
+/// than being handed (design §23.3).  The first refusal, where any.
+fn sweep(up: &Up) -> Option<String> {
+    let p = up.running.lock().unwrap().clone()?;
+    let held = p.attachments();
+    let mut why = held.is_empty().then(|| "no node is attached".to_string());
+    for node in held {
+        if let Err(e) = p.browse(node) {
+            why.get_or_insert(format!("the catalog was not swept: {e}"));
+        }
+    }
+    if let Err(e) = p.request_profiles() {
+        why.get_or_insert(format!("no profiles were asked for: {e}"));
+    }
+    why
 }
 
 /// The nodes agreed to, in the kernel's order, until one answers.

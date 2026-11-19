@@ -25,6 +25,8 @@ pub enum Place {
     Thread(String),
     /// One subnet, by its id in hex.
     Subnet(String),
+    /// The catalog as swept from every node attached to.
+    Resources,
     /// The connection, a node to connect to, a node to launch.
     Options,
 }
@@ -41,6 +43,7 @@ impl Place {
                 "home" => Some(Place::Home),
                 "direct" => Some(Place::Direct),
                 "options" => Some(Place::Options),
+                "resources" => Some(Place::Resources),
                 _ => None,
             },
             Some(("thread", h)) => hex64(h).map(Place::Thread),
@@ -55,6 +58,7 @@ impl Place {
             Place::Home => "home".into(),
             Place::Direct => "direct".into(),
             Place::Options => "options".into(),
+            Place::Resources => "resources".into(),
             Place::Thread(h) => format!("thread:{h}"),
             Place::Subnet(h) => format!("subnet:{h}"),
         }
@@ -189,7 +193,8 @@ pub fn rail(snap: &Snapshot, place: &Place) -> String {
     let here = |p: &Place| if p == place { " class=\"here\"" } else { "" };
     let mut out = format!(
         "<a data-go=\"home\"{}><b class=\"mono\">{}…</b><br><small>{}</small></a>\n\
-         <a data-go=\"direct\"{}>Direct messages</a>\n<h3>Subnets</h3>\n",
+         <a data-go=\"direct\"{}>Direct messages</a>\n\
+         <a data-go=\"resources\"{}>Resources</a>\n<h3>Subnets</h3>\n",
         here(&Place::Home),
         short(&hex(&snap.me)),
         match snap.device {
@@ -200,6 +205,7 @@ pub fn rail(snap: &Snapshot, place: &Place) -> String {
             Place::Thread(_) => " class=\"here\"",
             _ => here(&Place::Direct),
         },
+        here(&Place::Resources),
     );
     if snap.subnets.is_empty() {
         out.push_str("<small>none yet</small>\n");
@@ -234,6 +240,10 @@ fn main(snap: &Snapshot, place: &Place, body: &Body) -> String {
             _ => subnet(snap, id, &[]),
         },
         Place::Options => options(snap),
+        Place::Resources => match body {
+            Body::Catalog(rows) => resources(rows),
+            _ => resources(&[]),
+        },
     }
 }
 
@@ -259,6 +269,14 @@ fn home(snap: &Snapshot) -> String {
             "",
         ),
     };
+    // **a restore brings back the key and not the archive**, and says both
+    // (`light-client-requirements.md` §2): asked here until the archive is
+    // in, which an empty one is the sign of
+    let archive = if snap.device == Device::Restored && snap.subnets.is_empty() {
+        BACKUP
+    } else {
+        ""
+    };
     let next = if snap.connection.starts_with("Connected") {
         format!(
             "<p>{} subnets, {} people, {} conversations.</p>",
@@ -271,7 +289,7 @@ fn home(snap: &Snapshot) -> String {
     };
     format!(
         "<h1>A device of <span class=\"mono\">{}…</span></h1>\n\
-         <p class=\"sub\">{said}</p>\n{dataset}\n<p>{}</p>\n{next}",
+         <p class=\"sub\">{said}</p>\n{dataset}\n<p>{}</p>\n{next}\n{archive}",
         short(&hex(&snap.me)),
         escape(&snap.connection)
     )
@@ -352,18 +370,33 @@ fn thread(snap: &Snapshot, peer: &str, messages: &[Message], more: bool) -> Stri
 
 fn subnet(snap: &Snapshot, id: &str, rows: &[ResourceRow]) -> String {
     let s = snap.subnets.iter().find(|s| s.id == id);
-    let mut out = format!(
+    format!(
         "<h1>{}</h1>\n<p class=\"sub\">{}</p>\n<p class=\"sub mono\">{id}</p>\n\
          <h2>Resources</h2>\n<p class=\"sub\">The catalog as swept from your serving node — \
-         which of them belong to this subnet is not a question it can answer yet.</p>\n",
+         which of them belong to this subnet is not a question it can answer yet.</p>\n{}",
         escape(&s.map(subnet_name).unwrap_or_else(|| short(id))),
-        escape(&s.map(|s| s.rank.clone()).unwrap_or_default())
-    );
+        escape(&s.map(|s| s.rank.clone()).unwrap_or_default()),
+        catalog(rows)
+    )
+}
+
+/// **The catalog on its own**, with or without a subnet held: each
+/// device sweeps every node it attaches to for what is available now
+/// (design §23.3), so a desktop reaches it once connected.
+fn resources(rows: &[ResourceRow]) -> String {
+    format!(
+        "<h1>Resources</h1>\n<p class=\"sub\">The catalog as swept from every node this \
+         desktop is connected to.</p>\n{}\n\
+         <p><button data-act=\"sweep\">Sweep again</button></p>",
+        catalog(rows)
+    )
+}
+
+fn catalog(rows: &[ResourceRow]) -> String {
     if rows.is_empty() {
-        out.push_str("<p>Nothing swept yet.</p>");
-        return out;
+        return "<p>Nothing swept yet.</p>".to_string();
     }
-    out.push_str("<ul class=\"rows\">\n");
+    let mut out = String::from("<ul class=\"rows\">\n");
     for r in rows {
         out.push_str(&format!(
             "<li>{} <small>{} · at {}…{}</small></li>\n",
@@ -390,10 +423,27 @@ fn options(snap: &Snapshot) -> String {
          placeholder=\"203.0.113.7:7431\" autocomplete=\"off\" spellcheck=\"false\"></label>\n\
          <p><button id=\"connect\">Connect</button></p>\n\
          <h2>Or launch one</h2>\n\
-         <p><button data-act=\"launch\">Launch a node at a hosting provider</button></p>",
-        escape(&snap.connection)
+         <p><button data-act=\"launch\">Launch a node at a hosting provider</button></p>\n{}",
+        escape(&snap.connection),
+        if snap.device == Device::Restored {
+            BACKUP
+        } else {
+            ""
+        }
     )
 }
+
+/// **The archive from a backup file**, the one way to it on a desktop
+/// restored from the phrase: the archive never crosses the network
+/// (design §23.3), and a restore brings back the key without it
+/// (`light-client-requirements.md` §2).  The file is opened under the
+/// identity, so only a backup of this one takes.
+const BACKUP: &str = "<h2>Bring the archive from a backup</h2>\n\
+     <p class=\"sub\">Restoring from the phrase brought back the key and not the archive: \
+     your subnets, contacts and records come from a backup or not at all, and never over the \
+     network. Write one on the phone, bring the file here, and open it.</p>\n\
+     <label>Backup file<input id=\"backup\" type=\"file\" accept=\".rhtn\"></label>\n\
+     <p><button id=\"import\">Open the backup</button></p>";
 
 fn subnet_name(s: &SubnetRow) -> String {
     s.name
@@ -451,6 +501,7 @@ mod tests {
             Place::Options,
             Place::Thread("ab".repeat(32)),
             Place::Subnet("cd".repeat(32)),
+            Place::Resources,
         ] {
             assert_eq!(Place::parse(&p.token()), Some(p));
         }
@@ -543,10 +594,41 @@ mod tests {
         }];
         let p = page(&s, &Place::Subnet(id), &Body::Catalog(rows));
         assert!(p.contains("Shared drive") && p.contains("stale") && p.contains("operator"));
+        let all = page(
+            &s,
+            &Place::Resources,
+            &Body::Catalog(vec![ResourceRow {
+                service: "_board._tcp".into(),
+                instance: "Notices".into(),
+                node: "55".repeat(32),
+                stale: false,
+            }]),
+        );
+        assert!(all.contains("Notices") && all.contains("data-act=\"sweep\""));
+        assert!(all.contains("data-go=\"resources\" class=\"here\""));
         let o = page(&s, &Place::Options, &Body::Plain);
         assert!(o.contains("id=\"connect\"") && o.contains(&"ab".repeat(32)));
         assert!(o.contains("data-act=\"launch\""));
         let h = page(&s, &Place::Home, &Body::Plain);
         assert!(h.contains("1 subnets, 2 people, 1 conversations"));
+        assert!(!h.contains("id=\"import\""), "the archive is in");
+        assert!(
+            o.contains("id=\"import\""),
+            "a restored desktop can always open one"
+        );
+        let bare = Snapshot {
+            subnets: vec![],
+            ..s.clone()
+        };
+        assert!(page(&bare, &Place::Home, &Body::Plain).contains("not the archive"));
+        let paired = Snapshot {
+            device: Device::Paired {
+                days: 90,
+                dataset: None,
+            },
+            ..bare
+        };
+        assert!(!page(&paired, &Place::Home, &Body::Plain).contains("id=\"import\""));
+        assert!(!page(&paired, &Place::Options, &Body::Plain).contains("id=\"import\""));
     }
 }

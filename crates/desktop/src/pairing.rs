@@ -336,6 +336,31 @@ mod tests {
         b
     }
 
+    // functional: APP-018
+    #[test]
+    fn a_restored_desktop_takes_its_identitys_backup_and_no_other() {
+        // the archive reaches a desktop restored from the phrase from a
+        // backup alone (`light-client-requirements.md` §2): the phone
+        // writes one, the desktop on the same seeds opens it, and a
+        // desktop of another identity is refused it
+        let (pd, dd, od) = (scratch("bk-phone"), scratch("bk-desk"), scratch("bk-other"));
+        let phone = Participant::start(seeds("alice"), vec![], platform(&pd)).unwrap();
+        let backup = phone.export_backup().unwrap();
+        let desk = Participant::start(seeds("alice"), vec![], platform(&dd)).unwrap();
+        let other = Participant::start(seeds("bob"), vec![], platform(&od)).unwrap();
+        assert!(
+            other.restore_backup(backup.clone()).is_err(),
+            "another identity's"
+        );
+        let took = desk.restore_backup(backup).unwrap();
+        assert_eq!(took.discarded, 0);
+        assert_eq!(desk.subnets(), phone.subnets());
+        assert_eq!(desk.contacts(), phone.contacts());
+        for d in [pd, dd, od] {
+            let _ = std::fs::remove_dir_all(d);
+        }
+    }
+
     fn now() -> u64 {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

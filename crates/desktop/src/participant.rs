@@ -96,7 +96,8 @@ pub fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }
 
-fn unhex(s: &str) -> Option<Vec<u8>> {
+/// Lower-case or upper-case hex back as bytes, or none where it is not hex.
+pub fn unhex(s: &str) -> Option<Vec<u8>> {
     if !s.len().is_multiple_of(2) {
         return None;
     }
@@ -313,6 +314,15 @@ document.addEventListener('click', e => {
     return say('connecting to ' + address + '…');
   }
   if (b.id === 'send') send();
+  if (b.id === 'import') {
+    const f = document.getElementById('backup').files[0];
+    if (!f) return say('choose the backup file first');
+    say('opening ' + f.name + '…');
+    f.arrayBuffer().then(buf => {
+      const hex = Array.from(new Uint8Array(buf), x => x.toString(16).padStart(2, '0')).join('');
+      post({ act: 'backup', data: hex });
+    }, err => say('the file did not read: ' + err));
+  }
 });
 function send() {
   const t = document.getElementById('text');
