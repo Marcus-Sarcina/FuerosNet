@@ -80,7 +80,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let current = Arc::new(Mutex::new(participant::stopped_page("Starting…")));
     let served = current.clone();
     let to_loop = event_loop.create_proxy();
-    let ours = WebViewBuilder::new()
+    let builder = WebViewBuilder::new()
         .with_custom_protocol("rhtn".into(), move |_, request| {
             let path = request.uri().path();
             let (mime, body): (&str, Vec<u8>) = if path == "/index.html" {
@@ -101,8 +101,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_url(INDEX)
         .with_ipc_handler(move |request| {
             let _ = to_loop.send_event(Said::FromPage(request.into_body()));
-        })
-        .build(&window)?;
+        });
+    let ours = attach(builder, &window)?;
 
     // the kernel runs off this thread, held here so it stays up
     let running: Arc<Mutex<Option<Arc<Participant>>>> = Arc::new(Mutex::new(None));
@@ -411,6 +411,22 @@ fn custody_said(keyring: &Keyring, why: String) -> String {
     }
 }
 
+/// **A web view in `window`.**  On Linux it goes into the GTK box tao
+/// gives every window, as wry's own example does: built as a bare X11 child
+/// it drew nothing on this bench (a Quadro under nouveau, WebKitGTK 2.52),
+/// and the box serves Wayland as well.
+fn attach(builder: WebViewBuilder, window: &tao::window::Window) -> wry::Result<wry::WebView> {
+    #[cfg(target_os = "linux")]
+    {
+        use tao::platform::unix::WindowExtUnix;
+        use wry::WebViewBuilderExtUnix;
+        let vbox = window.default_vbox().expect("tao gives every window a box");
+        builder.build_gtk(vbox)
+    }
+    #[cfg(not(target_os = "linux"))]
+    builder.build(window)
+}
+
 /// A provider's own console, in a window of its own.
 fn open_console(
     target: &tao::event_loop::EventLoopWindowTarget<Said>,
@@ -422,6 +438,6 @@ fn open_console(
         .with_title(format!("{provider} — the provider's own console"))
         .with_inner_size(LogicalSize::new(1100.0, 900.0))
         .build(target)?;
-    let v = WebViewBuilder::new().with_url(url).build(&w)?;
+    let v = attach(WebViewBuilder::new().with_url(url), &w)?;
     Ok((w, v))
 }
