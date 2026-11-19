@@ -25,7 +25,7 @@ fieldtest = ["rhtn-ffi/fieldtest"]
 # container with no desktop libraries at all, build and test everything
 # below the window: `cargo build -p rhtn-desktop --features gui` is the
 # build that opens one.
-gui = ["dep:wry", "dep:tao"]
+gui = ["dep:wry", "dep:tao", "dep:keyring"]
 
 [dependencies]
 rhtn-launch = { path = "../launch" }
@@ -52,6 +52,10 @@ log = { version = "0.4", default-features = false }
 # own rather than a browser shipped with this binary
 wry = { version = "0.57", optional = true }
 tao = { version = "0.37", optional = true }
+# MIT OR Apache-2.0; **custody of the storage key is the desktop keyring**
+# [author, 2026-11-18]: the Secret Service (GNOME Keyring, KWallet) over
+# D-Bus, spoken in Rust so no system D-Bus library is linked
+keyring = { version = "3.6", optional = true, default-features = false, features = ["async-secret-service", "tokio", "crypto-rust"] }
 
 [dev-dependencies]
 rhtn-codec = { path = "../codec" }

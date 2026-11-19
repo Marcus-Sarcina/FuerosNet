@@ -33,6 +33,9 @@ compile_error!(
      build the field-test flavour with `--no-default-features --features fieldtest`"
 );
 
+/// Custody of the storage key and the transport seed: the desktop keyring.
+#[cfg(feature = "gui")]
+pub mod custody;
 /// Paired from the phone, over the code this desktop shows.
 pub mod pairing;
 /// The kernel's platform, where the platform is a desktop.
