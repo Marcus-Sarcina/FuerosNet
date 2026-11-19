@@ -33,11 +33,15 @@ compile_error!(
      build the field-test flavour with `--no-default-features --features fieldtest`"
 );
 
+/// The code this desktop shows, drawn as the phone reads one.
+pub mod code;
 /// Custody of the storage key and the transport seed: the desktop keyring.
 #[cfg(feature = "gui")]
 pub mod custody;
 /// Paired from the phone, over the code this desktop shows.
 pub mod pairing;
+/// The participant client's pages and what it keeps between runs.
+pub mod participant;
 /// The kernel's platform, where the platform is a desktop.
 pub mod platform;
 
@@ -63,6 +67,13 @@ pub enum Act {
         /// What was pasted.
         token: String,
     },
+    /// The person's answer to the question the kernel put.
+    Answer {
+        /// Yes or no.
+        yes: bool,
+    },
+    /// Show the page that launches a node.
+    Launch,
 }
 
 /// Read one message from the page, or say why it is not one.
@@ -77,6 +88,17 @@ pub fn act(message: &str) -> Result<Act, String> {
             .map(String::from)
             .ok_or_else(|| format!("`{k}` is missing"))
     };
+    match s("act")?.as_str() {
+        "answer" => {
+            return v
+                .get("yes")
+                .and_then(serde_json::Value::as_bool)
+                .map(|yes| Act::Answer { yes })
+                .ok_or_else(|| "`yes` is missing".into());
+        }
+        "launch" => return Ok(Act::Launch),
+        _ => {}
+    }
     let provider = s("provider")?;
     if rhtn_launch::provider(&provider).is_none() {
         return Err(format!("{provider} is not a provider this build drives"));
@@ -348,12 +370,18 @@ mod tests {
                 token: "dop_v1_x".into()
             }
         );
+        assert_eq!(
+            act(r#"{"act":"answer","yes":true}"#).unwrap(),
+            Act::Answer { yes: true }
+        );
+        assert_eq!(act(r#"{"act":"launch"}"#).unwrap(), Act::Launch);
         for (message, why) in [
             (
                 r#"{"act":"token","provider":"aws","token":"x"}"#,
                 "provider",
             ),
-            (r#"{"act":"launch","provider":"hetzner"}"#, "act"),
+            (r#"{"act":"erase","provider":"hetzner"}"#, "act"),
+            (r#"{"act":"answer"}"#, "yes"),
             (r#"{"act":"token","provider":"hetzner"}"#, "token"),
             ("not json", "message"),
         ] {

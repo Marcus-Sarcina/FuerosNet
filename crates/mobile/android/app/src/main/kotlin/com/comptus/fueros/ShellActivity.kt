@@ -760,6 +760,11 @@ class ShellActivity : Activity() {
                     },
                 )
                 column.addView(
+                    row("A desktop of this identity", "pair it from the code it shows; it reads everything and signs nothing") {
+                        startActivity(Intent(this, DesktopActivity::class.java).putExtra("by", Identities.focused()))
+                    },
+                )
+                column.addView(
                     row("Colour", Identities.colourName(focusColour())) { chooseColour() },
                 )
                 column.addView(

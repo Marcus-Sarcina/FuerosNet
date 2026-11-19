@@ -44,6 +44,9 @@ rhtn-transport = { path = "../transport" }
 # composes and reads them through the kernel's own codec
 rhtn-client = { path = "../client", default-features = false }
 zeroize = { workspace = true }
+# MIT OR Apache-2.0; the symbol the phone reads, drawn here as an SVG,
+# with none of the crate's image renderers
+qrcode = { version = "0.14", default-features = false }
 # MIT; named so `releasable` can cap their static levels
 tracing = { version = "0.1", default-features = false, features = ["std"] }
 log = { version = "0.4", default-features = false }
