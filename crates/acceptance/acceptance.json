@@ -5620,7 +5620,7 @@
   "rule": [
    {
     "where": "design §23.3",
-    "text": "The identity seed sits on the devices that perform ceremonies and nowhere else"
+    "text": "The identity seed sits on the devices its holder put it on, and nowhere else"
    },
    {
     "where": "light-client-requirements.md §4.1",

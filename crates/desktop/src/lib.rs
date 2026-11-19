@@ -42,6 +42,8 @@ pub mod custody;
 pub mod pairing;
 /// The participant client's pages and what it keeps between runs.
 pub mod participant;
+/// A desktop restored from the phrase: the words back as the seeds.
+pub mod phrase;
 /// The kernel's platform, where the platform is a desktop.
 pub mod platform;
 
@@ -74,6 +76,11 @@ pub enum Act {
     },
     /// Show the page that launches a node.
     Launch,
+    /// Restore this desktop from the identity's phrase.
+    Restore {
+        /// What was typed.
+        phrase: String,
+    },
 }
 
 /// Read one message from the page, or say why it is not one.
@@ -97,6 +104,7 @@ pub fn act(message: &str) -> Result<Act, String> {
                 .ok_or_else(|| "`yes` is missing".into());
         }
         "launch" => return Ok(Act::Launch),
+        "restore" => return s("phrase").map(|phrase| Act::Restore { phrase }),
         _ => {}
     }
     let provider = s("provider")?;
@@ -375,6 +383,12 @@ mod tests {
             Act::Answer { yes: true }
         );
         assert_eq!(act(r#"{"act":"launch"}"#).unwrap(), Act::Launch);
+        assert_eq!(
+            act(r#"{"act":"restore","phrase":" a b "}"#).unwrap(),
+            Act::Restore {
+                phrase: "a b".into()
+            }
+        );
         for (message, why) in [
             (
                 r#"{"act":"token","provider":"aws","token":"x"}"#,

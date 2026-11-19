@@ -21,9 +21,10 @@ use rhtn_cli::launch::TlsTransport;
 use rhtn_desktop::custody::Keyring;
 use rhtn_desktop::participant::{self, Held};
 use rhtn_desktop::platform::{self, Desk};
-use rhtn_desktop::{Act, act, code, directory, pairing, said, verify_and_keep};
+use rhtn_desktop::{Act, act, code, directory, pairing, phrase, said, verify_and_keep};
 use rhtn_ffi::client::Participant;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Sender, channel};
 use std::sync::{Arc, Mutex};
 use tao::dpi::LogicalSize;
@@ -32,6 +33,7 @@ use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy};
 use tao::window::WindowBuilder;
 use wry::WebViewBuilder;
 use wry::http::{Response, StatusCode};
+use zeroize::Zeroizing;
 
 /// The current page, as the scheme serves it.
 const INDEX: &str = "rhtn://localhost/index.html";
@@ -104,10 +106,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // the kernel runs off this thread, held here so it stays up
     let running: Arc<Mutex<Option<Arc<Participant>>>> = Arc::new(Mutex::new(None));
+    // where a phrase typed on the first start goes, while one is wanted
+    let phrases: Arc<Mutex<Option<Sender<First>>>> = Arc::new(Mutex::new(None));
     {
         let (back, dir, running) = (event_loop.create_proxy(), dir.clone(), running.clone());
+        let phrases = phrases.clone();
         std::thread::spawn(move || {
-            let page = match start(&dir, at, &back, &running) {
+            let page = match start(&dir, at, &back, &running, &phrases) {
                 Ok(page) => page,
                 Err(why) => participant::stopped_page(&why),
             };
@@ -161,6 +166,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let _ = a.send(yes);
                     }
                 }
+                Ok(Act::Restore { phrase }) => {
+                    let phrase = Zeroizing::new(phrase);
+                    let sent = match phrases.lock().unwrap().as_ref() {
+                        Some(tx) => tx.send(First::Phrase(phrase)).is_ok(),
+                        None => false,
+                    };
+                    if !sent {
+                        let _ =
+                            ours.evaluate_script(&said(false, "this desktop is set up already"));
+                    }
+                }
                 Ok(Act::Launch) => {
                     *current.lock().unwrap() = rhtn_desktop::page();
                     let _ = ours.load_url(INDEX);
@@ -201,14 +217,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     })
 }
 
-/// **Bring the kernel up**: from what is kept where this desktop is paired
-/// already, else by pairing it, showing the code and waiting for the
-/// phone.  The page to show once it is up, or why it cannot be.
+/// **Bring the kernel up**: as it was brought up before, from what is
+/// kept; else for the first time, by whichever of the two ways the person
+/// takes (design §23.3) — the phone reading the code, or the phrase typed
+/// here.  The page to show once it is up, or why it cannot be.
 fn start(
     dir: &Path,
     at: Option<std::net::IpAddr>,
     back: &EventLoopProxy<Said>,
     running: &Mutex<Option<Arc<Participant>>>,
+    phrases: &Mutex<Option<Sender<First>>>,
 ) -> Result<String, String> {
     platform::create_private(dir)?;
     let keyring = Arc::new(Keyring::new(dir));
@@ -229,25 +247,41 @@ fn start(
     let desk = Desk::new(&state(dir), asker, teller)?;
     let platform = desk.platform(keyring.clone());
 
-    let seed = keyring.seed()?;
-    if let (Some(held), Some(seed)) = (Held::load(dir)?, seed.as_ref()) {
-        let p = Participant::start_delegated(
-            held.material.clone(),
-            seed.to_vec(),
-            held.run.clone(),
-            vec![],
-            platform,
-        )
-        .map_err(|e| custody_said(&keyring, e.to_string()))?;
-        let page = participant::home_page(&keyhash(&p), participant::run_days(&held.run), None);
-        *running.lock().unwrap() = Some(Arc::new(p));
-        return Ok(page);
+    match Held::load(dir)? {
+        Some(Held::Paired { material, run }) => {
+            let seed = keyring
+                .seed()?
+                .ok_or("this desktop was paired, and the keyring holds no transport seed for it")?;
+            let p = Participant::start_delegated(
+                material,
+                seed.to_vec(),
+                run.clone(),
+                vec![],
+                platform,
+            )
+            .map_err(|e| custody_said(&keyring, e.to_string()))?;
+            let page = participant::home_page(&keyhash(&p), participant::run_days(&run), None);
+            *running.lock().unwrap() = Some(Arc::new(p));
+            return Ok(page);
+        }
+        Some(Held::Restored) => {
+            let seeds = keyring
+                .identity()?
+                .ok_or("this desktop was restored, and the keyring holds no seeds for it")?;
+            let p = Participant::start(seeds.to_vec(), vec![], platform)
+                .map_err(|e| custody_said(&keyring, e.to_string()))?;
+            let page = participant::restored_page(&keyhash(&p));
+            *running.lock().unwrap() = Some(Arc::new(p));
+            return Ok(page);
+        }
+        None => {}
     }
 
-    // **the seed is kept before the code is shown**: a keyring that will
-    // not keep it stops the pairing before the phone signs anything, and
-    // a seed kept for a pairing never finished is the one the next shows
-    let seed = match seed {
+    // **the transport seed is kept before the code is shown**: a keyring
+    // that will not keep it stops the pairing before the phone signs
+    // anything, and a seed kept for a pairing never finished is the one
+    // the next shows
+    let seed = match keyring.seed()? {
         Some(s) => s,
         None => {
             let s = pairing::fresh_seed();
@@ -255,18 +289,81 @@ fn start(
             s
         }
     };
-    let at = at.or_else(pairing::lan_address).ok_or(
-        "this desktop is on no local network the phone could reach it on; name one with --at",
-    )?;
-    let offer = pairing::Offer::new(seed, at).map_err(|e| e.to_string())?;
-    let _ = back.send_event(Said::Show(participant::pair_page(&code::svg(
-        &offer.code(),
-        320,
-    )?)));
-    let paired = offer
-        .pair(vec![], platform)
-        .map_err(|e| custody_said(&keyring, e))?;
-    Held {
+    // no local network is no code, and the phrase is still offered
+    let offer = match at.or_else(pairing::lan_address) {
+        Some(at) => Some(pairing::Offer::new(seed, at).map_err(|e| e.to_string())?),
+        None => None,
+    };
+    let shown = match &offer {
+        Some(o) => code::svg(&o.code(), 320)?,
+        None => "<p class=\"sub\">This desktop is on no local network a phone could reach \
+                 it on; name one with <code>--at</code>, or restore from the phrase.</p>"
+            .to_string(),
+    };
+    let _ = back.send_event(Said::Show(participant::pair_page(&shown)));
+
+    let (tx, rx) = channel();
+    *phrases.lock().unwrap() = Some(tx.clone());
+    let stop = Arc::new(AtomicBool::new(false));
+    let mut waiting = offer.map(|offer| {
+        let (platform, stop) = (platform.clone(), stop.clone());
+        std::thread::spawn(move || {
+            let _ = tx.send(First::Paired(offer.pair(vec![], platform, &stop)));
+        })
+    });
+    loop {
+        match rx.recv().map_err(|_| "the window closed".to_string())? {
+            First::Paired(Ok(paired)) => {
+                *phrases.lock().unwrap() = None;
+                return finish_paired(dir, paired, running);
+            }
+            First::Paired(Err(why)) if why == pairing::STOPPED => {}
+            First::Paired(Err(why)) => return Err(custody_said(&keyring, why)),
+            First::Phrase(typed) => {
+                let seeds = match phrase::seeds(&typed) {
+                    Ok(s) => s,
+                    Err(why) => {
+                        let _ = back.send_event(Said::ToPage(false, why));
+                        continue;
+                    }
+                };
+                // the pairing ends first, so one kernel and only one stands
+                // on this desktop's state; one that finished meanwhile wins
+                stop.store(true, Ordering::Relaxed);
+                if let Some(h) = waiting.take() {
+                    let _ = h.join();
+                }
+                *phrases.lock().unwrap() = None;
+                while let Ok(m) = rx.try_recv() {
+                    if let First::Paired(Ok(paired)) = m {
+                        return finish_paired(dir, paired, running);
+                    }
+                }
+                keyring.keep_identity(&seeds)?;
+                let p = Participant::start(seeds.to_vec(), vec![], platform)
+                    .map_err(|e| custody_said(&keyring, e.to_string()))?;
+                Held::Restored.keep(dir)?;
+                let page = participant::restored_page(&keyhash(&p));
+                *running.lock().unwrap() = Some(Arc::new(p));
+                return Ok(page);
+            }
+        }
+    }
+}
+
+/// What reaches a first start: the pairing's outcome, or a phrase typed.
+enum First {
+    Paired(Result<pairing::Paired, String>),
+    Phrase(Zeroizing<String>),
+}
+
+/// A pairing finished: keep what starts it again, and the page to show.
+fn finish_paired(
+    dir: &Path,
+    paired: pairing::Paired,
+    running: &Mutex<Option<Arc<Participant>>>,
+) -> Result<String, String> {
+    Held::Paired {
         material: paired.material.clone(),
         run: paired.run.clone(),
     }

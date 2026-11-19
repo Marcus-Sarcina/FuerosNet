@@ -30,8 +30,12 @@ use rhtn_ffi::device::Platform;
 use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use zeroize::Zeroizing;
+
+/// What [`Offer::pair`] says when it was stopped before a phone came.
+pub const STOPPED: &str = "the pairing was stopped before a phone came";
 
 /// How long one step waits for the phone, its holder's yes included.
 pub const STEP: Duration = Duration::from_secs(180);
@@ -107,14 +111,35 @@ impl Offer {
     /// **Wait for the phone and run the whole pairing**: the credential and
     /// then the dataset.  A connection whose first carriage does not open
     /// under this offer is dropped and the next one waited for, so a
-    /// stranger on the network costs a reconnect and nothing else.
-    pub fn pair(&self, known: Vec<Vec<u8>>, platform: Arc<Platform>) -> Result<Paired, String> {
+    /// stranger on the network costs a reconnect and nothing else.  While
+    /// it waits, `stop` set ends the wait with nothing paired: the person
+    /// chose the phrase instead.
+    pub fn pair(
+        &self,
+        known: Vec<Vec<u8>>,
+        platform: Arc<Platform>,
+        stop: &AtomicBool,
+    ) -> Result<Paired, String> {
         let session = self.offer.session();
+        self.listener
+            .set_nonblocking(true)
+            .map_err(|e| e.to_string())?;
         let (mut stream, start) = loop {
-            let (mut stream, peer) = self.listener.accept().map_err(|e| e.to_string())?;
+            let (mut stream, peer) = match self.listener.accept() {
+                Ok(a) => a,
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    if stop.load(Ordering::Relaxed) {
+                        return Err(STOPPED.into());
+                    }
+                    std::thread::sleep(Duration::from_millis(100));
+                    continue;
+                }
+                Err(e) => return Err(e.to_string()),
+            };
             if !local(peer.ip()) {
                 continue;
             }
+            stream.set_nonblocking(false).map_err(|e| e.to_string())?;
             stream
                 .set_read_timeout(Some(STEP))
                 .map_err(|e| e.to_string())?;
@@ -355,7 +380,9 @@ mod tests {
         let code = offer.code();
         let p = ph.clone();
         let side = std::thread::spawn(move || phone(p, code, true));
-        let paired = offer.pair(vec![], platform(&dd)).expect("paired");
+        let paired = offer
+            .pair(vec![], platform(&dd), &AtomicBool::new(false))
+            .expect("paired");
         side.join().unwrap().expect("the phone's side runs");
 
         assert_eq!(paired.material, ph.material());
@@ -386,6 +413,16 @@ mod tests {
             link.open(sealed).is_err(),
             "the phone's link refuses it too"
         );
+    }
+
+    #[test]
+    fn a_pairing_stopped_while_it_waits_pairs_nothing() {
+        let d = scratch("stopped");
+        let offer = Offer::new(fresh_seed(), "127.0.0.1".parse().unwrap()).unwrap();
+        let stop = AtomicBool::new(true);
+        let e = offer.pair(vec![], platform(&d), &stop).err().unwrap();
+        assert_eq!(e, STOPPED);
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]

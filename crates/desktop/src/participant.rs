@@ -10,35 +10,48 @@
 
 use std::path::Path;
 
-/// The file beside the kernel's state that says which identity this
-/// desktop is a device of and holds the run it presents: both public, so
-/// a file the owner alone reads is enough.  The transport seed is the
-/// keyring's (`custody.rs`).
+/// The file beside the kernel's state that says how this desktop was
+/// brought up and, where paired, which identity it is a device of and the
+/// run it presents: all public, so a file the owner alone reads is
+/// enough.  The seeds are the keyring's (`custody.rs`).
 pub const HELD: &str = "device.json";
 
-/// **What this desktop keeps to start again**: the identity's
-/// `KeyMaterial` and the run of delegations, in window order.
+/// **What this desktop keeps to start again**, by the way it was brought
+/// up (design §23.3).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Held {
-    /// The identity's `KeyMaterial` (`wire-format.md` §2.2).
-    pub material: Vec<u8>,
-    /// The run (`wire-format.md` §8.2).
-    pub run: Vec<Vec<u8>>,
+pub enum Held {
+    /// Paired from the phone: the identity's `KeyMaterial`
+    /// (`wire-format.md` §2.2) and the run of delegations, in window order
+    /// (§8.2), beside the transport seed the keyring holds.
+    Paired {
+        /// The identity's `KeyMaterial`.
+        material: Vec<u8>,
+        /// The run.
+        run: Vec<Vec<u8>>,
+    },
+    /// Restored from the phrase: the identity's seeds are the keyring's,
+    /// and nothing else is needed to start.
+    Restored,
 }
 
 impl Held {
     /// Write it under `dir`, whole or not at all.
     pub fn keep(&self, dir: &Path) -> Result<(), String> {
-        let v = serde_json::json!({
-            "material": hex(&self.material),
-            "run": self.run.iter().map(|d| hex(d)).collect::<Vec<_>>(),
-        });
+        let v = match self {
+            Held::Paired { material, run } => serde_json::json!({
+                "paired": {
+                    "material": hex(material),
+                    "run": run.iter().map(|d| hex(d)).collect::<Vec<_>>(),
+                }
+            }),
+            Held::Restored => serde_json::json!({ "restored": true }),
+        };
         crate::platform::write_whole(&dir.join(HELD), v.to_string().as_bytes())
             .map_err(|e| format!("{HELD}: {e}"))
     }
 
-    /// What is kept under `dir`: nothing before the first pairing, an
-    /// error where something is kept and does not read.
+    /// What is kept under `dir`: nothing before the first start, an error
+    /// where something is kept and does not read.
     pub fn load(dir: &Path) -> Result<Option<Held>, String> {
         let b = match std::fs::read(dir.join(HELD)) {
             Ok(b) => b,
@@ -47,20 +60,26 @@ impl Held {
         };
         let v: serde_json::Value =
             serde_json::from_slice(&b).map_err(|e| format!("{HELD}: {e}"))?;
+        if v.get("restored").and_then(serde_json::Value::as_bool) == Some(true) {
+            return Ok(Some(Held::Restored));
+        }
+        let p = v
+            .get("paired")
+            .ok_or_else(|| format!("{HELD}: neither paired nor restored"))?;
         let bytes = |s: Option<&serde_json::Value>| {
             s.and_then(serde_json::Value::as_str)
                 .and_then(unhex)
                 .ok_or_else(|| format!("{HELD}: a field is not hex"))
         };
-        let run = v
+        let run = p
             .get("run")
             .and_then(serde_json::Value::as_array)
             .ok_or_else(|| format!("{HELD}: no run"))?
             .iter()
             .map(|d| bytes(Some(d)))
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(Some(Held {
-            material: bytes(v.get("material"))?,
+        Ok(Some(Held::Paired {
+            material: bytes(p.get("material"))?,
             run,
         }))
     }
@@ -108,10 +127,12 @@ pub fn asset(path: &str) -> Option<(&'static str, &'static [u8])> {
     })
 }
 
-/// **The page that pairs this desktop**: the code, and what to do with it.
+/// **The page a desktop starts on the first time**: the code to pair it
+/// from the phone, and the phrase to restore it from where the phone
+/// never shares a network with it (design §23.3).
 pub fn pair_page(code_svg: &str) -> String {
     shell(
-        "Pair this desktop",
+        "Set up this desktop",
         &format!(
             "<h1>Pair this desktop with your phone</h1>\n\
              <p class=\"sub\">On the phone, open the identity's settings and choose \
@@ -120,7 +141,14 @@ pub fn pair_page(code_svg: &str) -> String {
              and sign nothing.</p>\n\
              <figure class=\"code\">{code_svg}</figure>\n\
              <p class=\"sub\">Both devices must be on the same local network. The code is \
-             good until this window closes.</p>"
+             good until this window closes.</p>\n\
+             <h2>Or restore it from your phrase</h2>\n\
+             <p class=\"sub\">Where the phone and this desktop never share a network. The \
+             desktop then holds the identity as the phone does and can sign as it; it knows \
+             only the nodes you introduce it to, and receives what they serve from now on.</p>\n\
+             <textarea id=\"phrase\" rows=\"4\" autocomplete=\"off\" autocapitalize=\"off\" \
+             spellcheck=\"false\" placeholder=\"the twenty-four words\"></textarea>\n\
+             <p><button id=\"restore\">Restore</button></p>"
         ),
     )
 }
@@ -128,6 +156,28 @@ pub fn pair_page(code_svg: &str) -> String {
 /// **The page once paired**: which identity, how long the run lasts, and
 /// whether the dataset came across.
 pub fn home_page(keyhash: &[u8], days: u64, dataset: Option<bool>) -> String {
+    home(
+        keyhash,
+        &format!(
+            "This desktop presents its own key under a run of {days} days the phone \
+             signed. It reads everything and signs nothing."
+        ),
+        dataset,
+    )
+}
+
+/// **The page once restored from the phrase**: a signing device of the
+/// identity, as the phone is.
+pub fn restored_page(keyhash: &[u8]) -> String {
+    home(
+        keyhash,
+        "Restored from the phrase: this desktop holds the identity and can sign as it. \
+         It knows only the nodes you introduce it to.",
+        None,
+    )
+}
+
+fn home(keyhash: &[u8], said: &str, dataset: Option<bool>) -> String {
     let short: String = hex(keyhash).chars().take(16).collect();
     let dataset = match dataset {
         Some(true) => "<p>Everything the phone holds of the identity came across.</p>",
@@ -138,8 +188,7 @@ pub fn home_page(keyhash: &[u8], days: u64, dataset: Option<bool>) -> String {
         "FuerosNet",
         &format!(
             "<h1>A device of <span class=\"mono\">{short}…</span></h1>\n\
-             <p class=\"sub\">This desktop presents its own key under a run of {days} days the \
-             phone signed. It reads everything and signs nothing.</p>\n{dataset}\n\
+             <p class=\"sub\">{said}</p>\n{dataset}\n\
              <p><button data-act=\"launch\">Launch a node at a hosting provider</button></p>"
         ),
     )
@@ -196,6 +245,9 @@ const STYLE: &str = "body { background: var(--ground); color: var(--ink);\n\
      .mono, pre { font-family: var(--mono) }\n\
      figure.code { margin: 1.5rem 0; display: flex; justify-content: center }\n\
      figure.code svg { max-width: 100%; height: auto }\n\
+     h2 { font-size: 1rem; font-weight: 600; margin: 2rem 0 .5rem }\n\
+     textarea { width: 100%; box-sizing: border-box; background: var(--sunken); color: var(--ink);\n\
+       border: 1px solid var(--rule); border-radius: 4px; padding: .6rem; font: 14px/1.5 var(--mono) }\n\
      #ask { background: var(--chrome); border: 1px solid var(--rule); border-radius: 6px;\n\
        padding: 1rem; margin: 1rem 0 }\n\
      button { background: var(--accent); color: var(--on-accent); border: 0;\n\
@@ -208,6 +260,14 @@ const STYLE: &str = "body { background: var(--ground); color: var(--ink);\n\
 const SCRIPT: &str = "for (const b of document.querySelectorAll('button[data-act]')) {\n\
   b.addEventListener('click', () => window.ipc.postMessage(JSON.stringify({ act: b.dataset.act })));\n\
 }\n\
+const restore = document.getElementById('restore');\n\
+if (restore) restore.addEventListener('click', () => {\n\
+  const phrase = document.getElementById('phrase');\n\
+  if (!phrase.value.trim()) { document.getElementById('said').textContent = 'type the phrase first'; return }\n\
+  window.ipc.postMessage(JSON.stringify({ act: 'restore', phrase: phrase.value }));\n\
+  phrase.value = '';\n\
+  document.getElementById('said').textContent = 'restoring…';\n\
+});\n\
 for (const b of document.querySelectorAll('#ask button')) {\n\
   b.addEventListener('click', () => {\n\
     document.getElementById('ask').hidden = true;\n\
@@ -225,13 +285,19 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
         crate::platform::create_private(&d).unwrap();
         assert_eq!(Held::load(&d).unwrap(), None);
-        let h = Held {
+        let h = Held::Paired {
             material: vec![1, 2, 0xff],
             run: vec![vec![9; 4], vec![0; 3]],
         };
         h.keep(&d).unwrap();
         assert_eq!(Held::load(&d).unwrap(), Some(h));
-        std::fs::write(d.join(HELD), b"{\"material\":\"zz\",\"run\":[]}").unwrap();
+        Held::Restored.keep(&d).unwrap();
+        assert_eq!(Held::load(&d).unwrap(), Some(Held::Restored));
+        std::fs::write(
+            d.join(HELD),
+            b"{\"paired\":{\"material\":\"zz\",\"run\":[]}}",
+        )
+        .unwrap();
         assert!(Held::load(&d).is_err(), "a kept file that does not read");
         let _ = std::fs::remove_dir_all(&d);
     }
@@ -264,6 +330,8 @@ mod tests {
         assert!(p.contains("href=\"tokens.css\"") && p.contains("<svg/>"));
         assert!(stopped_page("<b>no keyring</b>").contains("&lt;b&gt;no keyring"));
         assert!(home_page(&[0xab; 32], 90, Some(true)).contains("abababab"));
+        assert!(restored_page(&[0xab; 32]).contains("can sign"));
+        assert!(p.contains("id=\"phrase\"") && p.contains("autocomplete=\"off\""));
         assert!(ask_script("Take \"it\"?").contains("\"Take \\\"it\\\"?\""));
     }
 }

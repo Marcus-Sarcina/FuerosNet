@@ -1333,8 +1333,8 @@ consequence of subnet plurality, not a gap in this mechanism.
   peer holds is the contacts and the transaction records, not the captures
   and never a secret** [author, 2026-09-29]: the sealed captures go to a
   desktop or third-party backup with the archive (§23.3), and the seeds go
-  nowhere — they sit on the device that performs ceremonies and nowhere
-  else (§23.3). **The blob is §13.7.1's envelope under the owner's own
+  nowhere — they sit only on the devices their holder put them on
+  (§23.3). **The blob is §13.7.1's envelope under the owner's own
   identity** [author, 2026-10-24], the same blob a desktop would hold, so
   a peer holds what it cannot open and the owner opens it wherever the
   identity is. **And it is a mirror the owner reconciles with on every
@@ -8398,7 +8398,7 @@ and a citation to a missing number resolves there.
 | P30 | **A brokered external session may outlive a user's membership** (§11.2) | Medium | **Addressed at the client**: `light-client-requirements.md` §6 requires telling the user, at first use of a brokered resource, that ending their membership will not end that vendor's session. The network can stop new establishment; it cannot reach into a session running on someone else's terms |
 | P31 | **A hostile infra extension is inside the trust boundary** (`infra-client-requirements.md` §9.2) | Medium | Narrowed from a claim about joining separated datasets, which the design does not permit — no binding exposes network primitives to a package. The residual is that **installed code runs inside the boundary the threat model draws around operator conduct**, and whether an isolation mechanism holds against a hostile module is an engineering question this document does not settle |
 | P32 | **Client-side caches have no stated lifetimes** — resolved locators, catalog answers, session and capability history, currency queries (§12.6.1, §11.5) | Medium | Each is a record of who a user looked for and when, held on a device that can be seized. **A cache with no expiry is a retention decision made by omission**, and the endpoint-aggregation problem (C9) is what it feeds. Client obligation added; the values are unset |
-| P33 | **Multi-device replication semantics are unspecified** (§23.3) | Undetermined | **Answered at §23.3** [author, 2026-09-16]: seeds sit on the ceremony device alone and every other device carries a delegated transport credential; deletion state follows the seed, §7.5.2 making a capture decryptable only when its subject releases a key derived from one; archives, captures and caches go where the storage is, under §13.7.1's envelope. Retention and deletion commitments can be assessed now, being a property of one device rather than of an unspecified set. Severity is left as filed rather than restated |
+| P33 | **Multi-device replication semantics are unspecified** (§23.3) | Undetermined | **Answered at §23.3** [author, 2026-09-16]: seeds sit only where their holder put them — the ceremony device, and a desktop restored from the phrase [author, 2026-11-18] — and every other device carries a delegated transport credential; deletion state follows the seed, §7.5.2 making a capture decryptable only when its subject releases a key derived from one; archives, captures and caches go where the storage is, under §13.7.1's envelope. Retention and deletion commitments can be assessed now, being a property of one device rather than of an unspecified set. Severity is left as filed rather than restated |
 | P41 | **Witness engagement discloses the intent before anything exists** (§7.1) | Medium | Up to eight of each party's own contacts learn who that party is meeting, the transaction's kind and its start — before the counterparty has accepted, and for meetings that never complete. The ten dismissed at the prune retain what they saw: the intent, the ceremony-id, and one side's optical trace, whose block counts also say roughly how large each party's bundle was. **Accepted as the price of live observation** [author, 2026-10-19]: the recipients are contacts the nominator chose, which is the disclosure model everywhere else; a client should say that engaging witnesses is telling them |
 | P42 | **A witness set samples its nominator's knowledge graph** (§7.1.1) | Low | A witness set travels by locator and a locator names the witness's subnet, which invites reading the nominator's memberships off its nominations. **The pool's breadth is what breaks that reading** [author, 2026-10-19]: anyone ever learned of is nominable, lookup-scraped strangers included, so an appearance in a set is not evidence the nominator belongs to that subnet — §3.1.1's personas are suggested at most, never linked. What remains is statistical: many records' sets together sample where the nominator's attention and standing live. The reference pool defaults to the acting subnet's horizon plus met parties as hygiene, and widening is the person's choice |
 | **P35** | **An ancestor accumulates a key→position index for its whole subtree** (§15.2.1), so a subnet's root can look up any member without an introduction | Medium | **Accepted, with the boundary stated.** The disclosure content is unchanged — §12.1 already has a locator disclosing patron, depth and subtree to anyone you introduce yourself to, and what changes is that an ancestor stops needing the introduction. **Joining a subnet is a choice to be structurally visible to it**; the property defended is that this never crosses a subnet boundary, which §3.1.1 guarantees by construction. **The memo carries no address**, and that depends on peering being excluded from rootward travel (§15.2) |
@@ -9149,12 +9149,18 @@ for anyone in §3.3's tier. Past three is the unusual case by construction, whic
 is the whole of the shaping needed: a warning about replication a user has not
 performed would be noise.
 
-**Which device holds what is settled** [author, 2026-09-16].
-**The identity seed sits on the devices that perform ceremonies and nowhere else**:
-an instance, a desktop and a terminal instrument each carry a delegated
-transport credential instead, so the only device holding the key that signs is
-the one its owner keeps on them, and it holds it because its holder put it
-there.
+**Which device holds what is settled** [author, 2026-09-16; a desktop,
+2026-11-18]. **The identity seed sits on the devices its holder put it on, and
+nowhere else**: a device that performs ceremonies, and a desktop its holder
+restores from the phrase. An instance and a terminal instrument each carry a
+delegated transport credential instead, and so does a desktop paired from the
+phone (`wire-format.md` §14.3.3). **A desktop is brought up either way**
+[author, 2026-11-18]. Paired, it reads everything and signs nothing. Restored,
+it is a signing device of the identity as the phone is, knows only the nodes its
+holder introduces it to, and receives what those nodes and its peers serve it
+from then on (§6.3). Restoring is for the desktop the phone never shares a
+network with — a workstation wired behind a firewall — where no local carrier
+joins the two.
 
 **No per-capture deletion state has to be allocated**, because §7.5.2 makes a
 capture decryptable only when its subject releases a key and **the ordinary
@@ -9169,11 +9175,13 @@ far as the deletion did. **Archives, sealed
 captures and caches go where the storage is**, §13.7.1's envelope being what makes
 anywhere safe to put them, and a personal computer is the obvious place: a phone
 is lost, broken and stolen, and neither the transaction record nor the captures
-should go with it. Such a device holds ciphertext under the identity's own key,
-which it does not hold, rather than a
+should go with it. Such a device, paired rather than restored, holds
+ciphertext under the identity's own key, which it does not hold, rather than a
 seal under a platform's key storage — **a cold store for the archive and the
 captures rather than a live client for them**,
-which is why it needs no enclave to be safe (P33).
+which is why it needs no enclave to be safe (P33). One restored from the phrase
+holds the key as well, and its seal is the client's custody
+(`light-client-requirements.md` §9), as the phone's is.
 
 **A delegated device is nevertheless a payload endpoint of its own**
 [author, 2026-09-22]. A desktop's anticipated use is duplex interaction with

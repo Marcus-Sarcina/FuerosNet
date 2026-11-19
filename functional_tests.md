@@ -714,6 +714,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | APP-015 | C | **The kernel seals the application's own files** [author, 2026-11-14]: a service offered to the application alone that encrypts and decrypts bytes under keys that never leave the kernel, so the application keeps files of its own shape sealed at rest. The conversation store uses it per message, appending each message's ciphertext to a file rather than resealing the history. Test: bytes sealed through the service are unreadable in the stored file and read back equal; a conversation of N messages is stored as N appended ciphertexts, the (N+1)th appended without the first N rewritten; opening a thread decrypts its most recent messages only, and an earlier page only when asked for, so that nothing of a thread not opened is decrypted at start; the keys are not reachable from the application's side of the seam; memory need not be sealed and the test does not demand it. | L §9 |
 | APP-016 | C | **The kernel's state at rest is six relations, each versioned, written when it changes and read whole or refused whole** [2026-11-14]: `archive`, `store`, `payload`, `horizon`, `delegations`, `holder`, each `[version, body]`. Test: the relations hold what the one blob held (a client restored from them reproduces the blob byte for byte); a relation missing, or carrying a version the reader does not know, refuses by name and leaves the client as it was; a save after one message rewrites the relation that changed and no other; a client holding the one blob opens it, writes the relations, keeps the blob until the next clean start and reduces it to a mark then, migrating once. | L §9.0; D §14.1.0 |
 | APP-017 | C | **The shell brings another device of the identity to the dataset** [author, 2026-11-15] (APP-014's screen and facade). The person chooses on each device which hands over and which takes; the two contributions cross as a meeting's codes do, each device showing its own and reading the other's; the sealed dataset crosses the local radio under the pairing's id, the handing device advertising the link and the taking one seeking it; the kernel's question is answered on each device by its holder; what came back is shown in counts. The facade exposes the contribution, the other's taken with its heads, the pairing's id, the carriage and its taking, every one of them opaque bytes or counts (NET-019). Test: the handing role advertises and the taking one seeks; the steps run role, codes, link, carriage, done, and a stop ends them; the outcome names records, contacts and the rest, and what was left out; through the facade, two devices of one identity pair and name the pairing the same, a device of another identity is refused, a tampered carriage is unsealable, a no on either device moves nothing and each holder is asked on their own device. | W §§14.3.1, 14.3.3; L §4.2; D §23.3 |
+| APP-018 | C | **A desktop is brought up by pairing or by restoring the phrase** [author, 2026-11-18] (D §23.3). Paired from the phone over a local network (NET-035), it starts on the run the phone signed and the transport seed it minted, holds no identity seed, reads everything and signs nothing (APP-010). Restored from the phrase where the phone never shares a network with it, it is a signing device as the phone is (OPS-019), knows only the nodes its holder introduces it to, and receives what they and its peers serve from then on (PAY-019). Either way its secrets are kept by the platform's custody, and a desktop that cannot keep them refuses to start rather than writing them to a file (L §9). Test: a paired desktop restarts from its kept seed and run with no phone present, presents the delegated key and refuses a body; a restored desktop signs; a desktop whose custody refuses a key does not start and writes no secret. | D §§23.3, 6.3; W §14.3.3; L §9 |
 
 ### Human authorization, privacy choices and warnings
 
@@ -1072,7 +1073,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **598 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **599 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -1095,7 +1096,7 @@ This specification contains **598 numbered requirement/test families** across **
 | CAT | 27 |
 | GAT | 43 |
 | PKG | 20 |
-| APP | 17 |
+| APP | 18 |
 | UX | 32 |
 | OPS | 30 |
 | TOOL | 7 |

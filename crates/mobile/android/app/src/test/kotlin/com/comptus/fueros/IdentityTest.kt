@@ -70,6 +70,11 @@ class IdentityTest {
         assertTrue(!a.copyOfRange(0, 32).contentEquals(a.copyOfRange(32, 64)))
         // a different master is a different identity
         assertTrue(!a.contentEquals(Identity.seeds(ByteArray(32))))
+        // the known answer the desktop's `phrase.rs` is held to as well,
+        // computed apart from both (RFC 5869 over HMAC-SHA256)
+        val known = "5ce51bf7091a7288ab3642a5ba655c147a531a87bab674b62e448ca8bb4df15a" +
+            "f5b3e2b796ee3793b021b9e591840a45a7c7aecc0fb67a9065cb790a4d1c7d08"
+        assertEquals(known, a.joinToString("") { "%02x".format(it) })
     }
 
     @Test

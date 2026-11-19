@@ -2,9 +2,10 @@
 //! Service (GNOME Keyring, KWallet), which holds a secret under the
 //! person's login and opens it with their session.  Two secrets are kept
 //! there and nothing else: the storage key the kernel seals its state
-//! under (`light-client-requirements.md` §9), and the seed of the
-//! transport key this desktop presents, which the kernel needs before it
-//! can start and so cannot keep for itself.
+//! under (`light-client-requirements.md` §9), and the seed the kernel
+//! needs before it can start and so cannot keep for itself — the seed of
+//! the transport key a paired desktop presents, or the identity's own
+//! seeds where the desktop was restored from the phrase (design §23.3).
 //!
 //! **No keyring, no start.**  A desktop with no Secret Service refuses to
 //! start rather than keeping either secret in a file: failed custody is
@@ -105,6 +106,27 @@ impl Keyring {
         }
     }
 
+    /// **The identity's seeds, where this desktop was restored from the
+    /// phrase** [author, 2026-11-18]: the kernel's 64 bytes, kept as the
+    /// phone keeps them; nothing on a paired desktop.
+    pub fn identity(&self) -> Result<Option<Zeroizing<Vec<u8>>>, String> {
+        match self.read("identity-seeds") {
+            Held::Some(b) if b.len() == 64 => Ok(Some(b)),
+            Held::Some(_) => Err("the kept identity seeds are not 64 bytes".into()),
+            Held::None => Ok(None),
+            Held::Unreachable(e) => Err(format!("the keyring could not be read: {e}")),
+        }
+    }
+
+    /// Keep the seeds a phrase restored.
+    pub fn keep_identity(&self, seeds: &[u8]) -> Result<(), String> {
+        if self.keep_new("identity-seeds", seeds) {
+            Ok(())
+        } else {
+            Err(self.why().unwrap_or_default())
+        }
+    }
+
     /// Keep the transport seed a first pairing drew.
     pub fn keep_seed(&self, seed: &[u8; 32]) -> Result<(), String> {
         if self.keep_new("transport-seed", seed) {
@@ -158,7 +180,13 @@ mod tests {
         assert_eq!(k.key(), Some(vec![7u8; 32]));
         k.keep_seed(&[5u8; 32]).unwrap();
         assert_eq!(k.seed().unwrap().as_deref(), Some(&[5u8; 32]));
-        for name in ["storage-key", "transport-seed"] {
+        assert!(matches!(k.identity(), Ok(None)));
+        k.keep_identity(&[3u8; 64]).unwrap();
+        assert_eq!(
+            k.identity().unwrap().as_deref().map(|v| v.as_slice()),
+            Some(&[3u8; 64][..])
+        );
+        for name in ["storage-key", "transport-seed", "identity-seeds"] {
             k.entry(name).unwrap().delete_credential().unwrap();
         }
         assert_eq!(k.key(), None, "removed");

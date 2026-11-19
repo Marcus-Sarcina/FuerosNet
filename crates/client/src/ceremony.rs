@@ -666,7 +666,7 @@ pub struct PendingAsk {
 pub struct Client {
     /// Whom this client is: the identity it speaks as on every device.
     pub public: Identity,
-    /// The seed, on the device that performs ceremonies and nowhere else
+    /// The seed, on the devices its holder put it on and nowhere else
     /// (design §23.3).  A delegated device holds none, and every act the
     /// signing table gives the identity key is refused on it with
     /// [`Abort::NoSeed`].  Boxed: a signing identity carries its expanded

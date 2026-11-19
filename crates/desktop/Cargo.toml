@@ -44,6 +44,10 @@ rhtn-transport = { path = "../transport" }
 # composes and reads them through the kernel's own codec
 rhtn-client = { path = "../client", default-features = false }
 zeroize = { workspace = true }
+# the phrase's checksum, and the seeds' HKDF: the kernel's own SHA-256
+# and the AEAD library the kernel already links (ISC AND Apache-2.0)
+rhtn-codec = { path = "../codec" }
+aws-lc-rs = "1.18"
 # MIT OR Apache-2.0; the symbol the phone reads, drawn here as an SVG,
 # with none of the crate's image renderers
 qrcode = { version = "0.14", default-features = false }
@@ -60,8 +64,6 @@ tao = { version = "0.37", optional = true }
 # D-Bus, spoken in Rust so no system D-Bus library is linked
 keyring = { version = "3.6", optional = true, default-features = false, features = ["async-secret-service", "tokio", "crypto-rust"] }
 
-[dev-dependencies]
-rhtn-codec = { path = "../codec" }
 
 [[bin]]
 name = "rhtn-desktop"
