@@ -19,7 +19,7 @@
 
 use rhtn_cli::launch::TlsTransport;
 use rhtn_desktop::custody::Keyring;
-use rhtn_desktop::participant::{self, Held};
+use rhtn_desktop::participant::{self, Device, Held};
 use rhtn_desktop::platform::{self, Desk};
 use rhtn_desktop::{Act, act, code, directory, pairing, phrase, said, verify_and_keep};
 use rhtn_ffi::client::Participant;
@@ -102,21 +102,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_ipc_handler(move |request| {
             let _ = to_loop.send_event(Said::FromPage(request.into_body()));
         });
-    let ours = attach(builder, &window)?;
+    let ours = web_view(builder, &window)?;
 
     // the kernel runs off this thread, held here so it stays up
     let running: Arc<Mutex<Option<Arc<Participant>>>> = Arc::new(Mutex::new(None));
     // where a phrase typed on the first start goes, while one is wanted
     let phrases: Arc<Mutex<Option<Sender<First>>>> = Arc::new(Mutex::new(None));
+    // what this desktop is to its identity, once it is up: the home page
+    // is drawn from it and from the kernel, so it says where things stand
+    // whenever it is come back to
+    let device: Arc<Mutex<Option<Device>>> = Arc::new(Mutex::new(None));
     {
         let (back, dir, running) = (event_loop.create_proxy(), dir.clone(), running.clone());
-        let phrases = phrases.clone();
-        std::thread::spawn(move || {
-            let page = match start(&dir, at, &back, &running, &phrases) {
-                Ok(page) => page,
-                Err(why) => participant::stopped_page(&why),
-            };
-            let _ = back.send_event(Said::Show(page));
+        let (phrases, device) = (phrases.clone(), device.clone());
+        std::thread::spawn(move || match start(&dir, at, &back, &running, &phrases) {
+            Ok(d) => {
+                *device.lock().unwrap() = Some(d);
+                show_home(&back, &running, &device);
+                // **the nodes agreed to are attached at every start**, as
+                // the phone's are: the first that answers
+                let p = running.lock().unwrap().clone();
+                if let Some(p) = p.filter(|p| !p.agreed().is_empty()) {
+                    reattach(&p);
+                    show_home(&back, &running, &device);
+                }
+            }
+            Err(why) => {
+                let _ = back.send_event(Said::Show(participant::stopped_page(&why)));
+            }
         });
     }
 
@@ -140,6 +153,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // a question unanswered at close is a no
                     if let Some(a) = asking.take() {
                         let _ = a.send(false);
+                    }
+                    // the session closed cleanly, so the node queues for
+                    // this desktop from now and not after missed intervals
+                    if let Some(p) = running.lock().unwrap().as_ref() {
+                        let _ = p.detach();
                     }
                     *control_flow = ControlFlow::Exit;
                 } else {
@@ -180,6 +198,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Ok(Act::Launch) => {
                     *current.lock().unwrap() = rhtn_desktop::page();
                     let _ = ours.load_url(INDEX);
+                }
+                Ok(Act::Home) => {
+                    let (back, running, device) = (worker.clone(), running.clone(), device.clone());
+                    std::thread::spawn(move || show_home(&back, &running, &device));
+                }
+                Ok(Act::Attach { node, address }) => {
+                    let p = running.lock().unwrap().clone();
+                    let Some(p) = p else {
+                        let _ =
+                            ours.evaluate_script(&said(false, "this desktop is not set up yet"));
+                        return;
+                    };
+                    // **off the drawing thread**: an attach dials and waits
+                    let (back, running, device) = (worker.clone(), running.clone(), device.clone());
+                    std::thread::spawn(move || match serve_from(&p, node, address) {
+                        Ok(()) => show_home(&back, &running, &device),
+                        Err(why) => {
+                            let _ = back.send_event(Said::ToPage(false, why));
+                        }
+                    });
                 }
                 Ok(Act::Console { provider }) => match open_console(target, &provider) {
                     Ok(open) => {
@@ -227,7 +265,7 @@ fn start(
     back: &EventLoopProxy<Said>,
     running: &Mutex<Option<Arc<Participant>>>,
     phrases: &Mutex<Option<Sender<First>>>,
-) -> Result<String, String> {
+) -> Result<Device, String> {
     platform::create_private(dir)?;
     let keyring = Arc::new(Keyring::new(dir));
     let asker = {
@@ -260,9 +298,11 @@ fn start(
                 platform,
             )
             .map_err(|e| custody_said(&keyring, e.to_string()))?;
-            let page = participant::home_page(&keyhash(&p), participant::run_days(&run), None);
             *running.lock().unwrap() = Some(Arc::new(p));
-            return Ok(page);
+            return Ok(Device::Paired {
+                days: participant::run_days(&run),
+                dataset: None,
+            });
         }
         Some(Held::Restored) => {
             let seeds = keyring
@@ -270,9 +310,8 @@ fn start(
                 .ok_or("this desktop was restored, and the keyring holds no seeds for it")?;
             let p = Participant::start(seeds.to_vec(), vec![], platform)
                 .map_err(|e| custody_said(&keyring, e.to_string()))?;
-            let page = participant::restored_page(&keyhash(&p));
             *running.lock().unwrap() = Some(Arc::new(p));
-            return Ok(page);
+            return Ok(Device::Restored);
         }
         None => {}
     }
@@ -343,9 +382,8 @@ fn start(
                 let p = Participant::start(seeds.to_vec(), vec![], platform)
                     .map_err(|e| custody_said(&keyring, e.to_string()))?;
                 Held::Restored.keep(dir)?;
-                let page = participant::restored_page(&keyhash(&p));
                 *running.lock().unwrap() = Some(Arc::new(p));
-                return Ok(page);
+                return Ok(Device::Restored);
             }
         }
     }
@@ -357,24 +395,75 @@ enum First {
     Phrase(Zeroizing<String>),
 }
 
-/// A pairing finished: keep what starts it again, and the page to show.
+/// A pairing finished: keep what starts it again, and say what it made.
 fn finish_paired(
     dir: &Path,
     paired: pairing::Paired,
     running: &Mutex<Option<Arc<Participant>>>,
-) -> Result<String, String> {
+) -> Result<Device, String> {
     Held::Paired {
         material: paired.material.clone(),
         run: paired.run.clone(),
     }
     .keep(dir)?;
-    let page = participant::home_page(
-        &keyhash(&paired.participant),
-        participant::run_days(&paired.run),
-        Some(paired.dataset),
-    );
     *running.lock().unwrap() = Some(paired.participant);
-    Ok(page)
+    Ok(Device::Paired {
+        days: participant::run_days(&paired.run),
+        dataset: Some(paired.dataset),
+    })
+}
+
+/// **The home page as things stand**, sent to the window.  Off the
+/// drawing thread: asking the kernel where it is connected waits on it.
+fn show_home(
+    back: &EventLoopProxy<Said>,
+    running: &Mutex<Option<Arc<Participant>>>,
+    device: &Mutex<Option<Device>>,
+) {
+    let p = running.lock().unwrap().clone();
+    let d = device.lock().unwrap().clone();
+    if let (Some(p), Some(d)) = (p, d) {
+        let agreed: Vec<(Vec<u8>, Vec<String>)> = p
+            .agreed()
+            .into_iter()
+            .map(|a| (a.serving, a.addresses))
+            .collect();
+        let line = participant::connection(&p.attachments(), &agreed);
+        let _ = back.send_event(Said::Show(participant::home_page(&keyhash(&p), &d, &line)));
+    }
+}
+
+/// **Connect to a node already running**, as the phone's attach screen
+/// does: the agreement kept by the kernel first, so the node is attached
+/// again at every start, then the attach.  The tap that sent this is the
+/// choosing of the node; nothing attaches to one unchosen.
+fn serve_from(p: &Participant, node: Vec<u8>, address: String) -> Result<(), String> {
+    p.agree_to(node.clone(), vec![address.clone()])
+        .map_err(|e| format!("the node could not be remembered: {e}"))?;
+    attach_to(p, node, vec![address])
+}
+
+/// Attach to `node`, sweeping the people this identity knows rather than
+/// the infrastructure.
+fn attach_to(p: &Participant, node: Vec<u8>, addresses: Vec<String>) -> Result<(), String> {
+    let population = p
+        .contacts()
+        .into_iter()
+        .filter(|c| c.how != rhtn_model::How::Infra)
+        .map(|c| c.keyhash.to_vec())
+        .collect();
+    p.attach(node, addresses, population)
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+/// The nodes agreed to, in the kernel's order, until one answers.
+fn reattach(p: &Participant) {
+    for a in p.agreed() {
+        if attach_to(p, a.serving, a.addresses).is_ok() {
+            return;
+        }
+    }
 }
 
 /// The command line: an address named with `--at`, and a directory.
@@ -415,7 +504,7 @@ fn custody_said(keyring: &Keyring, why: String) -> String {
 /// gives every window, as wry's own example does: built as a bare X11 child
 /// it drew nothing on this bench (a Quadro under nouveau, WebKitGTK 2.52),
 /// and the box serves Wayland as well.
-fn attach(builder: WebViewBuilder, window: &tao::window::Window) -> wry::Result<wry::WebView> {
+fn web_view(builder: WebViewBuilder, window: &tao::window::Window) -> wry::Result<wry::WebView> {
     #[cfg(target_os = "linux")]
     {
         use tao::platform::unix::WindowExtUnix;
@@ -438,6 +527,6 @@ fn open_console(
         .with_title(format!("{provider} — the provider's own console"))
         .with_inner_size(LogicalSize::new(1100.0, 900.0))
         .build(target)?;
-    let v = attach(WebViewBuilder::new().with_url(url), &w)?;
+    let v = web_view(WebViewBuilder::new().with_url(url), &w)?;
     Ok((w, v))
 }

@@ -13,8 +13,13 @@ fn main() {
         ),
         (
             "home.html",
-            participant::home_page(&[0x5a; 32], 90, Some(true)),
+            participant::home_page(
+                &[0x5a; 32],
+                &participant::Device::Restored,
+                "Not connected to any node.",
+            ),
         ),
+        ("launch.html", rhtn_desktop::page()),
         (
             "stopped.html",
             participant::stopped_page("no Secret Service on this session"),

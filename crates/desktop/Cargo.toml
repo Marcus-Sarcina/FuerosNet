@@ -39,6 +39,8 @@ serde_json = { workspace = true }
 # same kernel the phone runs, with no binding between it and the window;
 # the flavour is chosen by this crate's features, never the FFI's default
 rhtn-ffi = { path = "../ffi", default-features = false }
+# the model the kernel answers in: which contacts are people
+rhtn-model = { path = "../model" }
 rhtn-transport = { path = "../transport" }
 # the local interface's objects (`wire-format.md` §14.3.3), so the pairing
 # composes and reads them through the kernel's own codec

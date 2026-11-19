@@ -153,43 +153,94 @@ pub fn pair_page(code_svg: &str) -> String {
     )
 }
 
-/// **The page once paired**: which identity, how long the run lasts, and
-/// whether the dataset came across.
-pub fn home_page(keyhash: &[u8], days: u64, dataset: Option<bool>) -> String {
-    home(
-        keyhash,
-        &format!(
-            "This desktop presents its own key under a run of {days} days the phone \
-             signed. It reads everything and signs nothing."
+/// **What this desktop is to its identity**, as its home page says it
+/// (design §23.3).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Device {
+    /// Paired from the phone, presenting a run of `days`.
+    Paired {
+        /// How long the run lasts.
+        days: u64,
+        /// Whether the dataset came across, said once on the start that
+        /// paired it and not again.
+        dataset: Option<bool>,
+    },
+    /// Restored from the phrase: a signing device, as the phone is.
+    Restored,
+}
+
+/// **Where this desktop is connected, in one line**: the node it holds a
+/// session with first, else the nodes it agreed to and is not reaching,
+/// else none.  `attached` is the kernel's sessions, serving node first;
+/// `agreed` its agreements with their addresses.
+pub fn connection(attached: &[Vec<u8>], agreed: &[(Vec<u8>, Vec<String>)]) -> String {
+    let short = |k: &[u8]| -> String { hex(k).chars().take(16).collect() };
+    let at = |k: &[u8]| -> String {
+        agreed
+            .iter()
+            .find(|(n, _)| n == k)
+            .map(|(_, a)| format!(" at {}", a.join(" ")))
+            .unwrap_or_default()
+    };
+    if let Some(node) = attached.first() {
+        return format!("Connected to {}…{}", short(node), at(node));
+    }
+    match agreed.first() {
+        Some((node, _)) => format!(
+            "Not connected. {}…{} is tried again at every start.",
+            short(node),
+            at(node)
         ),
-        dataset,
-    )
+        None => "Not connected to any node.".to_string(),
+    }
 }
 
-/// **The page once restored from the phrase**: a signing device of the
-/// identity, as the phone is.
-pub fn restored_page(keyhash: &[u8]) -> String {
-    home(
-        keyhash,
-        "Restored from the phrase: this desktop holds the identity and can sign as it. \
-         It knows only the nodes you introduce it to.",
-        None,
-    )
-}
-
-fn home(keyhash: &[u8], said: &str, dataset: Option<bool>) -> String {
-    let short: String = hex(keyhash).chars().take(16).collect();
-    let dataset = match dataset {
-        Some(true) => "<p>Everything the phone holds of the identity came across.</p>",
-        Some(false) => "<p>Nothing else was handed over; pair again to bring it across.</p>",
-        None => "",
+/// **The page once the desktop is up**: which identity, what this desktop
+/// is to it, where it is connected, and the two ways to a node — one
+/// already running, or one launched now.  The key field starts as the
+/// identity's own, because a node its holder launched speaks as its
+/// operator.
+pub fn home_page(keyhash: &[u8], device: &Device, connected: &str) -> String {
+    let full = hex(keyhash);
+    let short: String = full.chars().take(16).collect();
+    let (said, dataset) = match device {
+        Device::Paired { days, dataset } => (
+            format!(
+                "This desktop presents its own key under a run of {days} days the phone \
+                 signed. It reads everything and signs nothing."
+            ),
+            match dataset {
+                Some(true) => "<p>Everything the phone holds of the identity came across.</p>",
+                Some(false) => {
+                    "<p>Nothing else was handed over; pair again to bring it across.</p>"
+                }
+                None => "",
+            },
+        ),
+        Device::Restored => (
+            "Restored from the phrase: this desktop holds the identity and can sign as it. \
+             It knows only the nodes you introduce it to."
+                .to_string(),
+            "",
+        ),
     };
     shell(
         "FuerosNet",
         &format!(
             "<h1>A device of <span class=\"mono\">{short}…</span></h1>\n\
              <p class=\"sub\">{said}</p>\n{dataset}\n\
-             <p><button data-act=\"launch\">Launch a node at a hosting provider</button></p>"
+             <p id=\"connected\">{}</p>\n\
+             <h2>Connect to a node already running</h2>\n\
+             <p class=\"sub\">Its key and the address it answers at. A node you launched \
+             answers to your own key, which is filled in.</p>\n\
+             <label>Node key<input id=\"node\" class=\"mono\" value=\"{full}\" \
+             autocomplete=\"off\" spellcheck=\"false\"></label>\n\
+             <label>Address<input id=\"address\" class=\"mono\" \
+             placeholder=\"203.0.113.7:7431\" autocomplete=\"off\" spellcheck=\"false\"></label>\n\
+             <p><button id=\"connect\">Connect</button></p>\n\
+             <h2>Or launch one</h2>\n\
+             <p><button data-act=\"launch\">Launch a node at a hosting provider</button></p>",
+            escape(connected)
         ),
     )
 }
@@ -246,6 +297,10 @@ const STYLE: &str = "body { background: var(--ground); color: var(--ink);\n\
      figure.code { margin: 1.5rem 0; display: flex; justify-content: center }\n\
      figure.code svg { max-width: 100%; height: auto }\n\
      h2 { font-size: 1rem; font-weight: 600; margin: 2rem 0 .5rem }\n\
+     label { display: block; color: var(--sub); font-size: 13px; margin: .5rem 0 }\n\
+     input { display: block; width: 100%; box-sizing: border-box; margin-top: .25rem;\n\
+       background: var(--sunken); color: var(--ink); border: 1px solid var(--rule);\n\
+       border-radius: 4px; padding: .5rem .6rem; font: 14px/1.5 var(--mono) }\n\
      textarea { width: 100%; box-sizing: border-box; background: var(--sunken); color: var(--ink);\n\
        border: 1px solid var(--rule); border-radius: 4px; padding: .6rem; font: 14px/1.5 var(--mono) }\n\
      #ask { background: var(--chrome); border: 1px solid var(--rule); border-radius: 6px;\n\
@@ -267,6 +322,14 @@ if (restore) restore.addEventListener('click', () => {\n\
   window.ipc.postMessage(JSON.stringify({ act: 'restore', phrase: phrase.value }));\n\
   phrase.value = '';\n\
   document.getElementById('said').textContent = 'restoring…';\n\
+});\n\
+const connect = document.getElementById('connect');\n\
+if (connect) connect.addEventListener('click', () => {\n\
+  const node = document.getElementById('node').value.trim();\n\
+  const address = document.getElementById('address').value.trim();\n\
+  if (!node || !address) { document.getElementById('said').textContent = 'the key and the address, both'; return }\n\
+  window.ipc.postMessage(JSON.stringify({ act: 'attach', node, address }));\n\
+  document.getElementById('said').textContent = 'connecting to ' + address + '…';\n\
 });\n\
 for (const b of document.querySelectorAll('#ask button')) {\n\
   b.addEventListener('click', () => {\n\
@@ -329,9 +392,28 @@ mod tests {
         let p = pair_page("<svg/>");
         assert!(p.contains("href=\"tokens.css\"") && p.contains("<svg/>"));
         assert!(stopped_page("<b>no keyring</b>").contains("&lt;b&gt;no keyring"));
-        assert!(home_page(&[0xab; 32], 90, Some(true)).contains("abababab"));
-        assert!(restored_page(&[0xab; 32]).contains("can sign"));
+        let paired = Device::Paired {
+            days: 90,
+            dataset: Some(true),
+        };
+        assert!(home_page(&[0xab; 32], &paired, "").contains("abababab"));
+        let restored = home_page(&[0xab; 32], &Device::Restored, "<i>");
+        assert!(restored.contains("can sign") && restored.contains("&lt;i&gt;"));
+        assert!(restored.contains("id=\"connect\"") && restored.contains(&"ab".repeat(32)));
         assert!(p.contains("id=\"phrase\"") && p.contains("autocomplete=\"off\""));
         assert!(ask_script("Take \"it\"?").contains("\"Take \\\"it\\\"?\""));
+    }
+
+    #[test]
+    fn the_connection_names_the_session_first_then_the_agreement() {
+        let (a, b) = (vec![0x11; 32], vec![0x22; 32]);
+        let agreed = vec![(a.clone(), vec!["203.0.113.7:7431".to_string()])];
+        assert_eq!(
+            connection(std::slice::from_ref(&a), &agreed),
+            "Connected to 1111111111111111… at 203.0.113.7:7431"
+        );
+        assert_eq!(connection(&[b], &agreed), "Connected to 2222222222222222…");
+        assert!(connection(&[], &agreed).starts_with("Not connected. 1111"));
+        assert_eq!(connection(&[], &[]), "Not connected to any node.");
     }
 }

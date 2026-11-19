@@ -3802,6 +3802,7 @@ dependencies = [
  "rhtn-codec",
  "rhtn-ffi",
  "rhtn-launch",
+ "rhtn-model",
  "rhtn-transport",
  "serde_json",
  "tao",

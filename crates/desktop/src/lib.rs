@@ -81,6 +81,15 @@ pub enum Act {
         /// What was typed.
         phrase: String,
     },
+    /// Connect to a node already running: agree to it and attach.
+    Attach {
+        /// The node's keyhash.
+        node: Vec<u8>,
+        /// Where it answers, `host:port`.
+        address: String,
+    },
+    /// Back to the desktop's home page.
+    Home,
 }
 
 /// Read one message from the page, or say why it is not one.
@@ -104,6 +113,13 @@ pub fn act(message: &str) -> Result<Act, String> {
                 .ok_or_else(|| "`yes` is missing".into());
         }
         "launch" => return Ok(Act::Launch),
+        "home" => return Ok(Act::Home),
+        "attach" => {
+            return Ok(Act::Attach {
+                node: node_key(&s("node")?)?,
+                address: node_address(&s("address")?)?,
+            });
+        }
         "restore" => return s("phrase").map(|phrase| Act::Restore { phrase }),
         _ => {}
     }
@@ -118,6 +134,42 @@ pub fn act(message: &str) -> Result<Act, String> {
             token: s("token")?,
         }),
         other => Err(format!("`{other}` is not an act")),
+    }
+}
+
+/// **A node's keyhash as typed**: 64 hex characters, spaces, colons and an
+/// `0x` taken off, as the phone's attach screen takes one.
+pub fn node_key(typed: &str) -> Result<Vec<u8>, String> {
+    let t: String = typed
+        .trim()
+        .trim_start_matches("0x")
+        .chars()
+        .filter(|c| *c != ' ' && *c != ':')
+        .collect();
+    if t.len() != 64 || !t.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("a node's key is 64 hex characters".into());
+    }
+    Ok((0..32)
+        .map(|i| u8::from_str_radix(&t[2 * i..2 * i + 2], 16).expect("hex, checked"))
+        .collect())
+}
+
+/// **Where a node answers, as typed**: an IP and a port, or an IP alone
+/// and the port a launched node answers on.  A name is not one: the
+/// kernel resolves nothing, so it is refused here rather than three layers
+/// down.
+pub fn node_address(typed: &str) -> Result<String, String> {
+    let t = typed.trim();
+    if let Ok(a) = t.parse::<std::net::SocketAddr>() {
+        return Ok(a.to_string());
+    }
+    let bare = t.trim_start_matches('[').trim_end_matches(']');
+    match bare.parse::<std::net::IpAddr>() {
+        Ok(ip) => Ok(std::net::SocketAddr::new(ip, rhtn_launch::QUIC_PORT).to_string()),
+        Err(_) => Err(format!(
+            "{t} is not an address: an IP and a port, such as 203.0.113.7:{}",
+            rhtn_launch::QUIC_PORT
+        )),
     }
 }
 
@@ -243,6 +295,7 @@ pub fn page() -> String {
     format!(
         "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">\n\
          <title>Launch a node</title>\n<style>\n{STYLE}\n</style></head><body>\n\
+         <p><button id=\"back\">← Back</button></p>\n\
          <h1>Launch a node at a hosting provider</h1>\n\
          <p class=\"sub\">One instance, at a provider you choose, with a credential of your own \
          and no broker between (<code>light-client-requirements.md</code> §10).</p>\n\
@@ -289,7 +342,9 @@ const STYLE: &str = ":root { color-scheme: light dark }\n\
        white-space: pre-wrap; font: 13px/1.5 ui-monospace, monospace; min-height: 1.5em }\n\
      pre.bad { background: rgba(200,80,80,.18) }";
 
-const SCRIPT: &str = "for (const s of document.querySelectorAll('section')) {\n\
+const SCRIPT: &str = "document.getElementById('back').addEventListener('click', () =>\n\
+  window.ipc.postMessage(JSON.stringify({ act: 'home' })));\n\
+for (const s of document.querySelectorAll('section')) {\n\
   const provider = s.dataset.provider;\n\
   const field = s.querySelector('input');\n\
   for (const b of s.querySelectorAll('button')) {\n\
@@ -389,7 +444,29 @@ mod tests {
                 phrase: "a b".into()
             }
         );
+        assert_eq!(act(r#"{"act":"home"}"#).unwrap(), Act::Home);
+        let k = "ab".repeat(32);
+        assert_eq!(
+            act(&format!(
+                r#"{{"act":"attach","node":"0x{k}","address":"203.0.113.7"}}"#
+            ))
+            .unwrap(),
+            Act::Attach {
+                node: vec![0xab; 32],
+                address: "203.0.113.7:7431".into()
+            }
+        );
+        assert_eq!(node_address("[::1]:9").unwrap(), "[::1]:9");
+        assert_eq!(node_address("::1").unwrap(), "[::1]:7431");
         for (message, why) in [
+            (
+                r#"{"act":"attach","node":"abcd","address":"203.0.113.7:1"}"#,
+                "64 hex",
+            ),
+            (
+                &*format!(r#"{{"act":"attach","node":"{k}","address":"node.example:7431"}}"#),
+                "not an address",
+            ),
             (
                 r#"{"act":"token","provider":"aws","token":"x"}"#,
                 "provider",
