@@ -46,6 +46,10 @@ pub mod participant;
 pub mod phrase;
 /// The kernel's platform, where the platform is a desktop.
 pub mod platform;
+/// The participant's screens once the desktop is up.
+pub mod screens;
+/// An identity's conversations at rest, sealed through the kernel.
+pub mod threads;
 
 use rhtn_launch::Transport;
 use std::path::{Path, PathBuf};
@@ -88,8 +92,18 @@ pub enum Act {
         /// Where it answers, `host:port`.
         address: String,
     },
-    /// Back to the desktop's home page.
-    Home,
+    /// Go to a place.
+    Go {
+        /// Where.
+        place: screens::Place,
+    },
+    /// Say something to a party.
+    Send {
+        /// Their keyhash.
+        to: Vec<u8>,
+        /// What, as typed.
+        text: String,
+    },
 }
 
 /// Read one message from the page, or say why it is not one.
@@ -113,7 +127,26 @@ pub fn act(message: &str) -> Result<Act, String> {
                 .ok_or_else(|| "`yes` is missing".into());
         }
         "launch" => return Ok(Act::Launch),
-        "home" => return Ok(Act::Home),
+        "go" => {
+            let named = s("place")?;
+            return screens::Place::parse(&named)
+                .map(|place| Act::Go { place })
+                .ok_or_else(|| format!("{named} is not a place"));
+        }
+        "send" => {
+            // what was typed is kept as typed: spaces at its ends are
+            // the person's, and only a message of nothing is refused
+            let text = v
+                .get("text")
+                .and_then(serde_json::Value::as_str)
+                .filter(|t| !t.trim().is_empty())
+                .ok_or("`text` is missing")?
+                .to_string();
+            return Ok(Act::Send {
+                to: node_key(&s("to")?).map_err(|_| "a party's key is 64 hex characters")?,
+                text,
+            });
+        }
         "attach" => {
             return Ok(Act::Attach {
                 node: node_key(&s("node")?)?,
@@ -343,7 +376,7 @@ const STYLE: &str = ":root { color-scheme: light dark }\n\
      pre.bad { background: rgba(200,80,80,.18) }";
 
 const SCRIPT: &str = "document.getElementById('back').addEventListener('click', () =>\n\
-  window.ipc.postMessage(JSON.stringify({ act: 'home' })));\n\
+  window.ipc.postMessage(JSON.stringify({ act: 'go', place: 'options' })));\n\
 for (const s of document.querySelectorAll('section')) {\n\
   const provider = s.dataset.provider;\n\
   const field = s.querySelector('input');\n\
@@ -444,7 +477,23 @@ mod tests {
                 phrase: "a b".into()
             }
         );
-        assert_eq!(act(r#"{"act":"home"}"#).unwrap(), Act::Home);
+        assert_eq!(
+            act(r#"{"act":"go","place":"direct"}"#).unwrap(),
+            Act::Go {
+                place: screens::Place::Direct
+            }
+        );
+        assert_eq!(
+            act(&format!(
+                r#"{{"act":"send","to":"{}","text":" hi "}}"#,
+                "cd".repeat(32)
+            ))
+            .unwrap(),
+            Act::Send {
+                to: vec![0xcd; 32],
+                text: " hi ".into()
+            }
+        );
         let k = "ab".repeat(32);
         assert_eq!(
             act(&format!(
@@ -462,6 +511,12 @@ mod tests {
             (
                 r#"{"act":"attach","node":"abcd","address":"203.0.113.7:1"}"#,
                 "64 hex",
+            ),
+            (r#"{"act":"go","place":"meet"}"#, "not a place"),
+            (r#"{"act":"send","to":"ab","text":"x"}"#, "64 hex"),
+            (
+                &*format!(r#"{{"act":"send","to":"{k}","text":"  "}}"#),
+                "text",
             ),
             (
                 &*format!(r#"{{"act":"attach","node":"{k}","address":"node.example:7431"}}"#),

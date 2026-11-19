@@ -91,7 +91,8 @@ pub fn run_days(run: &[Vec<u8>]) -> u64 {
     run.len() as u64 * 2
 }
 
-fn hex(b: &[u8]) -> String {
+/// Bytes in lower-case hex.
+pub fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }
 
@@ -195,56 +196,6 @@ pub fn connection(attached: &[Vec<u8>], agreed: &[(Vec<u8>, Vec<String>)]) -> St
     }
 }
 
-/// **The page once the desktop is up**: which identity, what this desktop
-/// is to it, where it is connected, and the two ways to a node — one
-/// already running, or one launched now.  The key field starts as the
-/// identity's own, because a node its holder launched speaks as its
-/// operator.
-pub fn home_page(keyhash: &[u8], device: &Device, connected: &str) -> String {
-    let full = hex(keyhash);
-    let short: String = full.chars().take(16).collect();
-    let (said, dataset) = match device {
-        Device::Paired { days, dataset } => (
-            format!(
-                "This desktop presents its own key under a run of {days} days the phone \
-                 signed. It reads everything and signs nothing."
-            ),
-            match dataset {
-                Some(true) => "<p>Everything the phone holds of the identity came across.</p>",
-                Some(false) => {
-                    "<p>Nothing else was handed over; pair again to bring it across.</p>"
-                }
-                None => "",
-            },
-        ),
-        Device::Restored => (
-            "Restored from the phrase: this desktop holds the identity and can sign as it. \
-             It knows only the nodes you introduce it to."
-                .to_string(),
-            "",
-        ),
-    };
-    shell(
-        "FuerosNet",
-        &format!(
-            "<h1>A device of <span class=\"mono\">{short}…</span></h1>\n\
-             <p class=\"sub\">{said}</p>\n{dataset}\n\
-             <p id=\"connected\">{}</p>\n\
-             <h2>Connect to a node already running</h2>\n\
-             <p class=\"sub\">Its key and the address it answers at. A node you launched \
-             answers to your own key, which is filled in.</p>\n\
-             <label>Node key<input id=\"node\" class=\"mono\" value=\"{full}\" \
-             autocomplete=\"off\" spellcheck=\"false\"></label>\n\
-             <label>Address<input id=\"address\" class=\"mono\" \
-             placeholder=\"203.0.113.7:7431\" autocomplete=\"off\" spellcheck=\"false\"></label>\n\
-             <p><button id=\"connect\">Connect</button></p>\n\
-             <h2>Or launch one</h2>\n\
-             <p><button data-act=\"launch\">Launch a node at a hosting provider</button></p>",
-            escape(connected)
-        ),
-    )
-}
-
 /// **The page that says why the window cannot go on**: no keyring, a
 /// state that will not open.  Nothing is offered that would fall back to
 /// keeping a secret in a file.
@@ -260,7 +211,7 @@ pub fn stopped_page(why: &str) -> String {
 
 /// A page in the shared look, with the line the shell writes into and the
 /// question it asks.
-fn shell(title: &str, body: &str) -> String {
+pub(crate) fn shell(title: &str, body: &str) -> String {
     format!(
         "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">\n\
          <title>{}</title>\n<link rel=\"stylesheet\" href=\"tokens.css\">\n\
@@ -282,7 +233,7 @@ pub fn ask_script(question: &str) -> String {
     )
 }
 
-fn escape(s: &str) -> String {
+pub(crate) fn escape(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
@@ -294,6 +245,7 @@ const STYLE: &str = "body { background: var(--ground); color: var(--ink);\n\
      h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 .5rem }\n\
      p.sub { color: var(--sub); margin: 0 0 1rem }\n\
      .mono, pre { font-family: var(--mono) }\n\
+     .mono { overflow-wrap: anywhere }\n\
      figure.code { margin: 1.5rem 0; display: flex; justify-content: center }\n\
      figure.code svg { max-width: 100%; height: auto }\n\
      h2 { font-size: 1rem; font-weight: 600; margin: 2rem 0 .5rem }\n\
@@ -310,33 +262,70 @@ const STYLE: &str = "body { background: var(--ground); color: var(--ink);\n\
      button[data-yes=\"0\"] { background: var(--control); color: var(--ink) }\n\
      pre { background: var(--sunken); border-radius: 4px; padding: .6rem .8rem;\n\
        white-space: pre-wrap; font-size: 13px; min-height: 1.5em }\n\
-     pre.bad { color: var(--warn) }";
+     pre.bad, .bad { color: var(--warn) }\n\
+     body:has(#rail) { max-width: none; margin: 0; padding: 1.5rem 1.5rem 1.5rem 16rem }\n\
+     body:has(#rail) > :not(#rail) { max-width: 46rem }\n\
+     #rail { position: fixed; top: 0; bottom: 0; left: 0; width: 14rem; box-sizing: border-box;\n\
+       overflow-y: auto; padding: 1rem .75rem; background: var(--chrome);\n\
+       border-right: 1px solid var(--rule); display: flex; flex-direction: column }\n\
+     #rail h3 { font-size: 12px; font-weight: 600; color: var(--sub); margin: 1rem .5rem .25rem;\n\
+       text-transform: uppercase; letter-spacing: .04em }\n\
+     #rail small { color: var(--sub); padding: 0 .5rem }\n\
+     #rail .foot { margin-top: auto; padding-top: 1rem }\n\
+     a[data-go] { display: block; padding: .35rem .5rem; border-radius: 4px; color: var(--ink);\n\
+       cursor: pointer; text-decoration: none; overflow: hidden; text-overflow: ellipsis }\n\
+     a[data-go]:hover { background: var(--control) }\n\
+     a[data-go].here { background: var(--sunken) }\n\
+     ul.rows { list-style: none; padding: 0; margin: 0 }\n\
+     ul.rows small { color: var(--sub) }\n\
+     .said { margin: .5rem 0; padding: .5rem .75rem; border-radius: 6px; background: var(--sunken);\n\
+       max-width: 80%; width: fit-content }\n\
+     .said p { margin: 0; white-space: pre-wrap }\n\
+     .said.mine { margin-left: auto; background: var(--control) }\n\
+     .said small { color: var(--sub) }\n\
+     #compose { position: sticky; bottom: 0; background: var(--ground); padding-top: .5rem }";
 
-const SCRIPT: &str = "for (const b of document.querySelectorAll('button[data-act]')) {\n\
-  b.addEventListener('click', () => window.ipc.postMessage(JSON.stringify({ act: b.dataset.act })));\n\
-}\n\
-const restore = document.getElementById('restore');\n\
-if (restore) restore.addEventListener('click', () => {\n\
-  const phrase = document.getElementById('phrase');\n\
-  if (!phrase.value.trim()) { document.getElementById('said').textContent = 'type the phrase first'; return }\n\
-  window.ipc.postMessage(JSON.stringify({ act: 'restore', phrase: phrase.value }));\n\
-  phrase.value = '';\n\
-  document.getElementById('said').textContent = 'restoring…';\n\
-});\n\
-const connect = document.getElementById('connect');\n\
-if (connect) connect.addEventListener('click', () => {\n\
-  const node = document.getElementById('node').value.trim();\n\
-  const address = document.getElementById('address').value.trim();\n\
-  if (!node || !address) { document.getElementById('said').textContent = 'the key and the address, both'; return }\n\
-  window.ipc.postMessage(JSON.stringify({ act: 'attach', node, address }));\n\
-  document.getElementById('said').textContent = 'connecting to ' + address + '…';\n\
-});\n\
-for (const b of document.querySelectorAll('#ask button')) {\n\
-  b.addEventListener('click', () => {\n\
-    document.getElementById('ask').hidden = true;\n\
-    window.ipc.postMessage(JSON.stringify({ act: 'answer', yes: b.dataset.yes === '1' }));\n\
-  });\n\
-}";
+const SCRIPT: &str = r#"const post = m => window.ipc.postMessage(JSON.stringify(m));
+const say = t => { document.getElementById('said').textContent = t; };
+// one listener for the page, since a place's rail and body are redrawn
+// under it and anything bound to them would go with them
+document.addEventListener('click', e => {
+  const b = e.target.closest('button, a[data-go]');
+  if (!b) return;
+  if (b.dataset.go) return post({ act: 'go', place: b.dataset.go });
+  if (b.dataset.yes) {
+    document.getElementById('ask').hidden = true;
+    return post({ act: 'answer', yes: b.dataset.yes === '1' });
+  }
+  if (b.dataset.act) return post({ act: b.dataset.act });
+  if (b.id === 'restore') {
+    const phrase = document.getElementById('phrase');
+    if (!phrase.value.trim()) return say('type the phrase first');
+    post({ act: 'restore', phrase: phrase.value });
+    phrase.value = '';
+    return say('restoring…');
+  }
+  if (b.id === 'connect') {
+    const node = document.getElementById('node').value.trim();
+    const address = document.getElementById('address').value.trim();
+    if (!node || !address) return say('the key and the address, both');
+    post({ act: 'attach', node, address });
+    return say('connecting to ' + address + '…');
+  }
+  if (b.id === 'send') send();
+});
+function send() {
+  const t = document.getElementById('text');
+  if (!t.value.trim()) return;
+  post({ act: 'send', to: t.dataset.peer, text: t.value });
+  t.value = '';
+}
+// Enter sends, as a chat's box does; Shift and Enter is a new line
+document.addEventListener('keydown', e => {
+  if (e.target.id === 'text' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+if (document.getElementById('messages')) window.scrollTo(0, document.body.scrollHeight);
+if (document.getElementById('text')) document.getElementById('text').focus();"#;
 
 #[cfg(test)]
 mod tests {
@@ -392,14 +381,6 @@ mod tests {
         let p = pair_page("<svg/>");
         assert!(p.contains("href=\"tokens.css\"") && p.contains("<svg/>"));
         assert!(stopped_page("<b>no keyring</b>").contains("&lt;b&gt;no keyring"));
-        let paired = Device::Paired {
-            days: 90,
-            dataset: Some(true),
-        };
-        assert!(home_page(&[0xab; 32], &paired, "").contains("abababab"));
-        let restored = home_page(&[0xab; 32], &Device::Restored, "<i>");
-        assert!(restored.contains("can sign") && restored.contains("&lt;i&gt;"));
-        assert!(restored.contains("id=\"connect\"") && restored.contains(&"ab".repeat(32)));
         assert!(p.contains("id=\"phrase\"") && p.contains("autocomplete=\"off\""));
         assert!(ask_script("Take \"it\"?").contains("\"Take \\\"it\\\"?\""));
     }

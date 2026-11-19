@@ -19,10 +19,15 @@
 
 use rhtn_cli::launch::TlsTransport;
 use rhtn_desktop::custody::Keyring;
-use rhtn_desktop::participant::{self, Device, Held};
+use rhtn_desktop::participant::{self, Device, Held, hex};
 use rhtn_desktop::platform::{self, Desk};
+use rhtn_desktop::screens::{self, Body, Person, Place, ResourceRow, Snapshot, SubnetRow};
+use rhtn_desktop::threads::{self, Delivery, Record, Sealer, Threads};
 use rhtn_desktop::{Act, act, code, directory, pairing, phrase, said, verify_and_keep};
 use rhtn_ffi::client::Participant;
+use rhtn_ffi::net::Event as Kernel;
+use rhtn_ffi::types::kind_application;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Sender, channel};
@@ -47,6 +52,9 @@ enum Said {
     ToPage(bool, String),
     /// A whole page to show in place of the current one.
     Show(String),
+    /// A place's rail and body redrawn where they stand, for the place
+    /// they were drawn for: dropped where the window has gone elsewhere.
+    Redraw(Place, String),
     /// The kernel's question for the person, and where the answer goes.
     Ask(String, Sender<bool>),
 }
@@ -108,28 +116,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     let ours = web_view(builder, &window)?;
 
-    // the kernel runs off this thread, held here so it stays up
-    let running: Arc<Mutex<Option<Arc<Participant>>>> = Arc::new(Mutex::new(None));
+    // the kernel and what the screens are drawn from, shared with the
+    // workers that ask it, since none of that happens on this thread
+    let up = Arc::new(Up {
+        running: Mutex::new(None),
+        device: Mutex::new(None),
+        place: Mutex::new(Place::Home),
+        threads: Mutex::new(None),
+        closing: AtomicBool::new(false),
+    });
     // where a phrase typed on the first start goes, while one is wanted
     let phrases: Arc<Mutex<Option<Sender<First>>>> = Arc::new(Mutex::new(None));
-    // what this desktop is to its identity, once it is up: the home page
-    // is drawn from it and from the kernel, so it says where things stand
-    // whenever it is come back to
-    let device: Arc<Mutex<Option<Device>>> = Arc::new(Mutex::new(None));
     {
-        let (back, dir, running) = (event_loop.create_proxy(), dir.clone(), running.clone());
-        let (phrases, device) = (phrases.clone(), device.clone());
+        let (back, dir, up) = (event_loop.create_proxy(), dir.clone(), up.clone());
+        let phrases = phrases.clone();
         std::thread::spawn(
-            move || match start(&dir, at, given, &back, &running, &phrases) {
+            move || match start(&dir, at, given, &back, &up.running, &phrases) {
                 Ok(d) => {
-                    *device.lock().unwrap() = Some(d);
-                    show_home(&back, &running, &device);
+                    let Some(p) = up.running.lock().unwrap().clone() else {
+                        return;
+                    };
+                    *up.device.lock().unwrap() = Some(d);
+                    *up.threads.lock().unwrap() = Some(Arc::new(Threads::new(
+                        &dir,
+                        &hex(&p.me()),
+                        Box::new(KernelSealer(p.clone())),
+                    )));
+                    draw(&up, &back, true);
+                    {
+                        let (up, back) = (up.clone(), back.clone());
+                        std::thread::spawn(move || pump(&up, &back, &p));
+                    }
                     // **the nodes agreed to are attached at every start**, as
                     // the phone's are: the first that answers
-                    let p = running.lock().unwrap().clone();
+                    let p = up.running.lock().unwrap().clone();
                     if let Some(p) = p.filter(|p| !p.agreed().is_empty()) {
                         reattach(&p);
-                        show_home(&back, &running, &device);
+                        draw(&up, &back, false);
                     }
                 }
                 Err(why) => {
@@ -162,7 +185,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     // the session closed cleanly, so the node queues for
                     // this desktop from now and not after missed intervals
-                    if let Some(p) = running.lock().unwrap().as_ref() {
+                    up.closing.store(true, Ordering::Relaxed);
+                    if let Some(p) = up.running.lock().unwrap().as_ref() {
                         let _ = p.detach();
                     }
                     *control_flow = ControlFlow::Exit;
@@ -174,6 +198,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Event::UserEvent(Said::Show(page)) => {
                 *current.lock().unwrap() = page;
                 let _ = ours.load_url(INDEX);
+            }
+            Event::UserEvent(Said::Redraw(place, script)) => {
+                if *up.place.lock().unwrap() == place {
+                    let _ = ours.evaluate_script(&script);
+                }
             }
             Event::UserEvent(Said::Ask(question, answer)) => {
                 if let Some(a) = asking.replace(answer) {
@@ -205,21 +234,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     *current.lock().unwrap() = rhtn_desktop::page();
                     let _ = ours.load_url(INDEX);
                 }
-                Ok(Act::Home) => {
-                    let (back, running, device) = (worker.clone(), running.clone(), device.clone());
-                    std::thread::spawn(move || show_home(&back, &running, &device));
+                Ok(Act::Go { place }) => {
+                    *up.place.lock().unwrap() = place;
+                    let (back, up) = (worker.clone(), up.clone());
+                    std::thread::spawn(move || draw(&up, &back, true));
+                }
+                Ok(Act::Send { to, text }) => {
+                    let (back, up) = (worker.clone(), up.clone());
+                    std::thread::spawn(move || send(&up, &back, to, text));
                 }
                 Ok(Act::Attach { node, address }) => {
-                    let p = running.lock().unwrap().clone();
+                    let p = up.running.lock().unwrap().clone();
                     let Some(p) = p else {
                         let _ =
                             ours.evaluate_script(&said(false, "this desktop is not set up yet"));
                         return;
                     };
                     // **off the drawing thread**: an attach dials and waits
-                    let (back, running, device) = (worker.clone(), running.clone(), device.clone());
+                    let (back, up) = (worker.clone(), up.clone());
                     std::thread::spawn(move || match serve_from(&p, node, address) {
-                        Ok(()) => show_home(&back, &running, &device),
+                        Ok(()) => draw(&up, &back, false),
                         Err(why) => {
                             let _ = back.send_event(Said::ToPage(false, why));
                         }
@@ -448,24 +482,233 @@ fn finish_paired(
     })
 }
 
-/// **The home page as things stand**, sent to the window.  Off the
-/// drawing thread: asking the kernel where it is connected waits on it.
-fn show_home(
-    back: &EventLoopProxy<Said>,
-    running: &Mutex<Option<Arc<Participant>>>,
-    device: &Mutex<Option<Device>>,
-) {
-    let p = running.lock().unwrap().clone();
-    let d = device.lock().unwrap().clone();
-    if let (Some(p), Some(d)) = (p, d) {
-        let agreed: Vec<(Vec<u8>, Vec<String>)> = p
-            .agreed()
-            .into_iter()
-            .map(|a| (a.serving, a.addresses))
-            .collect();
-        let line = participant::connection(&p.attachments(), &agreed);
-        let _ = back.send_event(Said::Show(participant::home_page(&keyhash(&p), &d, &line)));
+/// **What the window's workers share**: the kernel once it is up, what
+/// this desktop is to it, where the window is, the identity's threads,
+/// and whether the window is closing.
+struct Up {
+    running: Mutex<Option<Arc<Participant>>>,
+    device: Mutex<Option<Device>>,
+    place: Mutex<Place>,
+    threads: Mutex<Option<Arc<Threads>>>,
+    closing: AtomicBool,
+}
+
+/// The kernel's sealing service, which the threads are kept under.
+struct KernelSealer(Arc<Participant>);
+
+impl Sealer for KernelSealer {
+    fn seal(&self, label: &str, bytes: &[u8]) -> Vec<u8> {
+        self.0.seal(label.to_string(), bytes.to_vec())
     }
+    fn unseal(&self, label: &str, bytes: &[u8]) -> Option<Vec<u8>> {
+        self.0.unseal(label.to_string(), bytes.to_vec()).ok()
+    }
+}
+
+/// **The place the window is at, drawn from the kernel as it stands**:
+/// whole where it was just gone to, its rail and body alone otherwise.
+/// Off the drawing thread, since every question here waits on the kernel.
+fn draw(up: &Up, back: &EventLoopProxy<Said>, whole: bool) {
+    let p = up.running.lock().unwrap().clone();
+    let d = up.device.lock().unwrap().clone();
+    let (Some(p), Some(d)) = (p, d) else {
+        return;
+    };
+    let place = up.place.lock().unwrap().clone();
+    let threads = up.threads.lock().unwrap().clone();
+    let snap = snapshot(&p, d, threads.as_deref());
+    let body = match &place {
+        Place::Thread(peer) => {
+            let page = threads
+                .map(|t| t.page(peer, None, threads::PAGE, HashMap::new()))
+                .unwrap_or_default();
+            Body::Thread(page.messages, page.before.is_some())
+        }
+        Place::Subnet(_) => Body::Catalog(
+            p.resources()
+                .into_iter()
+                .map(|r| ResourceRow {
+                    service: r.service_type,
+                    instance: r.instance,
+                    node: hex(&r.node),
+                    stale: r.stale,
+                })
+                .collect(),
+        ),
+        _ => Body::Plain,
+    };
+    let _ = back.send_event(if whole {
+        Said::Show(screens::page(&snap, &place, &body))
+    } else {
+        let script = screens::refresh(&snap, &place, &body);
+        Said::Redraw(place, script)
+    });
+}
+
+/// **The kernel's answers as the screens' rows**: where it is connected,
+/// its subnets, the people met, the threads kept.
+fn snapshot(p: &Participant, device: Device, threads: Option<&Threads>) -> Snapshot {
+    let agreed: Vec<(Vec<u8>, Vec<String>)> = p
+        .agreed()
+        .into_iter()
+        .map(|a| (a.serving, a.addresses))
+        .collect();
+    Snapshot {
+        me: p.me(),
+        device,
+        connection: participant::connection(&p.attachments(), &agreed),
+        subnets: p
+            .subnets()
+            .into_iter()
+            .map(|s| SubnetRow {
+                id: hex(&s.id),
+                name: s.alias.or(s.own_alias),
+                rank: rank(&s.rank),
+            })
+            .collect(),
+        // **the people are the ones met**, as the phone's list has them:
+        // an introduction, a verifier and a node are held but not listed
+        people: p
+            .contacts()
+            .into_iter()
+            .filter(|c| c.how == rhtn_model::How::Counterparty)
+            .map(|c| Person {
+                key: hex(&c.keyhash),
+                alias: c.alias,
+                how: match c.count {
+                    1 => "met once".to_string(),
+                    n => format!("met {n} times"),
+                },
+            })
+            .collect(),
+        threads: threads.map(Threads::index).unwrap_or_default(),
+    }
+}
+
+/// What this key is in a subnet, in the phone's words for its downline.
+fn rank(r: &rhtn_model::Rank) -> String {
+    let what = match (r.root, r.operator) {
+        (true, true) => "Its root, and its operator.",
+        (true, false) => "Its root.",
+        (false, true) => "Its operator.",
+        (false, false) => "A member.",
+    };
+    let lines = match r.subordinates {
+        0 => "No line of yours is issued here.".to_string(),
+        1 => "Your downline here: 1 direct line.".to_string(),
+        n => format!("Your downline here: {n} direct lines."),
+    };
+    format!("{what} {lines}")
+}
+
+/// **The kernel's events, for as long as the window is open**: a message
+/// kept in its thread as it arrives, and the place redrawn where what it
+/// shows changed.  The phone's loop, less the meeting a desktop never
+/// holds.
+fn pump(up: &Up, back: &EventLoopProxy<Said>, p: &Participant) {
+    while !up.closing.load(Ordering::Relaxed) {
+        let Some(e) = p.next_event(2000) else {
+            continue;
+        };
+        match e {
+            Kernel::Payload { from, kind, bytes } if kind == kind_application() => {
+                let peer = hex(&from);
+                let who = p
+                    .contacts()
+                    .into_iter()
+                    .find(|c| c.keyhash[..] == from[..])
+                    .and_then(|c| c.alias)
+                    .unwrap_or_else(|| peer.chars().take(16).collect());
+                let text = String::from_utf8_lossy(&bytes).into_owned();
+                let kept = up.threads.lock().unwrap().clone().map(|t| {
+                    t.append(
+                        &peer,
+                        &Record::Said {
+                            mine: false,
+                            who: who.clone(),
+                            text,
+                            delivery: Delivery::Sent,
+                            reason: None,
+                        },
+                    )
+                    .and_then(|_| t.list(&peer, &who))
+                });
+                if let Some(Err(why)) = kept {
+                    let _ = back.send_event(Said::ToPage(
+                        false,
+                        format!("a message from {who} was not kept: {why}"),
+                    ));
+                }
+                draw(up, back, false);
+            }
+            Kernel::Payload { kind, bytes, .. } => {
+                let _ = back.send_event(Said::ToPage(
+                    true,
+                    format!(
+                        "a payload of kind {kind}, {} bytes, not one this screen reads",
+                        bytes.len()
+                    ),
+                ));
+            }
+            Kernel::Connection(_) | Kernel::Changed { .. } => draw(up, back, false),
+            Kernel::Peer { what, .. } | Kernel::Conversed { what, .. } => {
+                let _ = back.send_event(Said::ToPage(true, what));
+            }
+            Kernel::Answered {
+                refused: Some(why), ..
+            } => {
+                let _ = back.send_event(Said::ToPage(
+                    false,
+                    format!("a response was refused: {why}"),
+                ));
+            }
+            _ => {}
+        }
+    }
+}
+
+/// **Say something to a party**, as the phone's conversation does: kept as
+/// sending first, so it is on the screen at once, then handed to the
+/// kernel, and the answer kept as a change to it.
+fn send(up: &Up, back: &EventLoopProxy<Said>, to: Vec<u8>, text: String) {
+    let p = up.running.lock().unwrap().clone();
+    let t = up.threads.lock().unwrap().clone();
+    let (Some(p), Some(t)) = (p, t) else {
+        let _ = back.send_event(Said::ToPage(false, "this desktop is not set up yet".into()));
+        return;
+    };
+    let peer = hex(&to);
+    let mine = Record::Said {
+        mine: true,
+        who: "me".into(),
+        text: text.clone(),
+        delivery: Delivery::Sending,
+        reason: None,
+    };
+    let id = match t.append(&peer, &mine) {
+        Ok(id) => id,
+        Err(why) => {
+            let _ = back.send_event(Said::ToPage(false, format!("not kept, so not sent: {why}")));
+            return;
+        }
+    };
+    if !t.index().iter().any(|e| e.peer == peer) {
+        let _ = t.list(&peer, &peer);
+    }
+    draw(up, back, false);
+    let (delivery, reason) = match p.send(to, kind_application(), text.into_bytes()) {
+        Ok(()) => (Delivery::Sent, None),
+        Err(why) => (Delivery::Unsent, Some(why.to_string())),
+    };
+    let _ = t.append(
+        &peer,
+        &Record::Settled {
+            id,
+            delivery,
+            reason,
+        },
+    );
+    draw(up, back, false);
 }
 
 /// **Connect to a node already running**, as the phone's attach screen
@@ -562,10 +805,6 @@ fn arguments(mut args: impl Iterator<Item = String>) -> Result<Args, String> {
 /// window keeps.
 fn state(dir: &Path) -> PathBuf {
     dir.join("state")
-}
-
-fn keyhash(p: &Participant) -> Vec<u8> {
-    p.me()
 }
 
 /// A refusal, with the keyring's reason where custody was what failed.
