@@ -7,7 +7,18 @@ authors.workspace = true
 description = "The operator's desktop: the provider's own console in a window beside the steps, the token pasted back, and the launch driven from there (light-client-requirements.md §10)"
 
 [features]
-default = []
+# **This leaf decides the flavour for the kernel beneath it**, as `rhtnp`
+# does (`crates/README.md`, the gating section): releasable by default,
+# every diagnostic hook in the graph compiled out.
+default = ["releasable"]
+releasable = [
+    "rhtn-ffi/releasable",
+    "tracing/max_level_off",
+    "tracing/release_max_level_off",
+    "log/max_level_off",
+    "log/release_max_level_off",
+]
+fieldtest = ["rhtn-ffi/fieldtest"]
 # **The window and its web view are the system's** (`main.rs`), which on
 # this platform means WebKitGTK and GTK 3 with their development files
 # present.  Off by default so that the gate, and a continuous-integration
@@ -24,11 +35,26 @@ rhtn-launch = { path = "../launch" }
 # second place for it to drift
 rhtn-cli = { path = "../cli" }
 serde_json = { workspace = true }
+# **the participant kernel, linked directly** [author, 2026-11-18]: the
+# same kernel the phone runs, with no binding between it and the window;
+# the flavour is chosen by this crate's features, never the FFI's default
+rhtn-ffi = { path = "../ffi", default-features = false }
+rhtn-transport = { path = "../transport" }
+# the local interface's objects (`wire-format.md` §14.3.3), so the pairing
+# composes and reads them through the kernel's own codec
+rhtn-client = { path = "../client", default-features = false }
+zeroize = { workspace = true }
+# MIT; named so `releasable` can cap their static levels
+tracing = { version = "0.1", default-features = false, features = ["std"] }
+log = { version = "0.4", default-features = false }
 
 # Apache-2.0 OR MIT, both; the web view and the window, each the system's
 # own rather than a browser shipped with this binary
 wry = { version = "0.57", optional = true }
 tao = { version = "0.37", optional = true }
+
+[dev-dependencies]
+rhtn-codec = { path = "../codec" }
 
 [[bin]]
 name = "rhtn-desktop"

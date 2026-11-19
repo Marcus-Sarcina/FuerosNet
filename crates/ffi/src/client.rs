@@ -39,6 +39,54 @@ impl Drop for Participant {
     }
 }
 
+/// **The ceremony device's end of the session a device with no camera
+/// opens** (`wire-format.md` §14.3.3): read from the offer that device
+/// shows, and holding the run its credential will carry.  The shell moves
+/// what it seals and opens on the bearer the offer names, and reads none of
+/// it.
+#[derive(uniffi::Object)]
+pub struct DeviceLink {
+    session: rhtn_client::local::DeviceSession,
+    reach: String,
+    run: std::sync::Mutex<Vec<Vec<u8>>>,
+}
+
+#[uniffi::export]
+impl DeviceLink {
+    /// Read the offer a device with no camera shows.
+    #[uniffi::constructor]
+    pub fn read(offer: Vec<u8>) -> Result<Arc<DeviceLink>, Refused> {
+        let o = rhtn_client::local::DeviceOffer::decode(&offer).map_err(Refused::new)?;
+        Ok(Arc::new(DeviceLink {
+            session: o.session(),
+            reach: o.reach,
+            run: std::sync::Mutex::new(Vec::new()),
+        }))
+    }
+
+    /// Where the device is reached, in the form of the bearer it chose.
+    #[must_use]
+    pub fn reach(&self) -> String {
+        self.reach.clone()
+    }
+
+    /// One carriage for the device, sealed: a dataset contribution or the
+    /// hand-over (`wire-format.md` §14.3.3).
+    #[must_use]
+    pub fn seal(&self, plain: Vec<u8>) -> Vec<u8> {
+        self.session.seal(&plain)
+    }
+
+    /// One carriage from the device, opened; refused where it does not
+    /// open under this offer.
+    pub fn open(&self, sealed: Vec<u8>) -> Result<Vec<u8>, Refused> {
+        self.session
+            .open(&sealed)
+            .map(|p| p.to_vec())
+            .ok_or_else(|| Refused::new("the carriage does not open under this offer"))
+    }
+}
+
 /// A participant client, running on a thread of its own.
 ///
 /// Every method is blocking and short: the work happens on the client's
@@ -1646,6 +1694,72 @@ impl Participant {
             self.handle
                 .with_blocking(move |c| c.delegate_run(&key, not_before, count as usize))
                 .map_err(|e| Refused::new(format!("{e:?}")))
+        })
+    }
+
+    /// **On the ceremony device, the first message to a device with no
+    /// camera** (`wire-format.md` §14.3.3): a run of `count` delegations
+    /// from `not_before` over the key `link`'s offer named, held on the
+    /// link for the credential, and the identity with the run's first,
+    /// sealed for the link.
+    pub fn device_start(
+        &self,
+        link: Arc<DeviceLink>,
+        not_before: u64,
+        count: u32,
+    ) -> Result<Vec<u8>, Refused> {
+        self.call("device_start", || {
+            let run = self.delegate(link.session.device().to_vec(), not_before, count)?;
+            let start = rhtn_client::local::DeviceStart {
+                material: self.material(),
+                delegation: run[0].clone(),
+            };
+            *link.run.lock().unwrap() = run;
+            Ok(link.session.seal(&start.encode()))
+        })
+    }
+
+    /// **On the ceremony device, the answer to the device's introduction**
+    /// (`wire-format.md` §14.3.3): opened under the link, refused where it
+    /// names a key other than the offer's, its bundle signed, and the
+    /// credential sealed for the link.  The run is the one
+    /// [`Self::device_start`] held, so the device holds one run.
+    pub fn device_credential(
+        &self,
+        link: Arc<DeviceLink>,
+        sealed: Vec<u8>,
+    ) -> Result<Vec<u8>, Refused> {
+        self.call("device_credential", || {
+            let plain = link
+                .session
+                .open(&sealed)
+                .ok_or_else(|| Refused::new("the introduction does not open under this offer"))?;
+            let intro =
+                rhtn_client::local::DeviceIntroduction::decode(&plain).map_err(Refused::new)?;
+            if intro.device != link.session.device() {
+                return Err(Refused::new("the introduction names another key"));
+            }
+            let run = link.run.lock().unwrap().clone();
+            if run.is_empty() {
+                return Err(Refused::new("no run started on this link"));
+            }
+            let bundle = self.sign_device_bundle(intro.bundle)?;
+            let credential = rhtn_client::local::DeviceCredential { run, bundle };
+            Ok(link.session.seal(&credential.encode()))
+        })
+    }
+
+    /// On a device holding no seed: take a run into the credential it
+    /// presents, each window verified under the identity
+    /// (`wire-format.md` §8.2).  A window already held byte for byte is
+    /// taken once; one overlapping it is refused.
+    pub fn take_run(&self, run: Vec<Vec<u8>>) -> Result<(), Refused> {
+        self.call("take_run", || {
+            let me = self.handle.with_blocking(|c| c.public.clone());
+            for d in &run {
+                self.net.take_delegation(std::slice::from_ref(&me), d)?;
+            }
+            Ok(())
         })
     }
 

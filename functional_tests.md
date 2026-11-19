@@ -310,6 +310,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | NET-026 | C | A witnessless, verifierless formation ceremony completes with **no node reachable by either participant**: the local exchanges, the conversation's participant legs and the record's assembly all cross the local interface, and neither party's own patron is asked for anything (design §7.1, §13.2). This is what design §6.4's escape from a false social universe rests on, by the formation path of D §13.2, so a participant whose own serving node is absent or hostile must still reach a record. A witnessed ceremony is the contrasting case and legitimately needs the network, reaching each witness through that witness's own locator and upstream node. | D §§7.1, 13.2, 6.4; W §7.10.1 |
 | NET-027 | C | **The key separates ceremonies before any anchor is compared, and the anchor is what remains against a holder of the key.** A carriage sealed under one ceremony's session does not open under another's, since the key is derived from that ceremony's two contributions; the refusal says only that the bytes came from somebody without the key. A party that read both screens does hold it (`wire-format.md` §14.3.1), and for that party the anchor checks of NET-016 are what refuse a re-anchored message. Both layers are testable and both are tested: raw cross-ceremony bytes fail to open, the same bytes re-sealed by a key holder open and are then refused on the anchor. | W §§14.3.1, 14.3.2 |
 | NET-028 | C | **A carriage that will not open says nothing about why.** A device whose ceremony has stopped has discarded the local session's key with it (`wire-format.md` §14.3.2), so a conversation step reaching it is refused for want of a key rather than read and answered. **A device that never began a ceremony, one that finished and one that stopped are therefore indistinguishable from outside** [author, 2026-10-05]: *"Less metadata leakage this way."* The earlier behaviour read the step, recognised that it named its own device, and refused by name, which confirmed to the sender that this device had held that ceremony and had stopped. Nothing is owed that answer. | W §14.3.2; D §7.1 |
+| NET-035 | C | **A device with no camera is introduced from one code it shows** [author, 2026-11-18] (`wire-format.md` §14.3.3). The code carries the device's transport key, a 32-byte secret drawn fresh per offer and where the ceremony device reaches it; everything after crosses a session keyed by `SHA-256` of `rhtn/1:device-session` and the secret, AES-256-GCM with the device key as associated data, in the order `DeviceStart`, `DeviceIntroduction`, `DeviceCredential`, and the dataset's contributions and hand-over where it is brought to the dataset. The credential's run opens with the delegation `DeviceStart` carried, byte for byte. Test: a full introduction leaves the device holding the run and a signed bundle over its own material; a carriage sealed under another offer's secret does not open on either side, so a `DeviceStart` or an introduction from a party that did not read the code is refused and nothing is signed for it; a credential whose run does not open with the delegation `DeviceStart` carried is refused as overlapping; a new offer ends the last one's session; the dataset crosses the session and a third party holding neither secret nor contribution opens none of it. | W §§14.3.3, 14.3.2, 14.1, 8.2, 7.8; D §23.3 |
 
 ### Attach, sibling state, heartbeat and failover
 
@@ -1071,7 +1072,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **597 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **598 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -1082,7 +1083,7 @@ This specification contains **597 numbered requirement/test families** across **
 | TOP | 46 |
 | RES | 17 |
 | CUR | 12 |
-| NET | 34 |
+| NET | 35 |
 | SES | 25 |
 | MAIL | 29 |
 | CER | 32 |

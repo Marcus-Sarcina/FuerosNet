@@ -3346,11 +3346,18 @@ dependencies = [
 name = "rhtn-desktop"
 version = "0.1.0"
 dependencies = [
+ "log",
  "rhtn-cli",
+ "rhtn-client",
+ "rhtn-codec",
+ "rhtn-ffi",
  "rhtn-launch",
+ "rhtn-transport",
  "serde_json",
  "tao",
+ "tracing",
  "wry",
+ "zeroize",
 ]
 
 [[package]]

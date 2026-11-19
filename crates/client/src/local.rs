@@ -554,6 +554,229 @@ pub fn read_intent(
     Ok((intent, taken))
 }
 
+/// **What a device with no camera shows** (§14.3.3): the transport key the
+/// delegations will name, the offer's secret, and where the ceremony device
+/// reaches it.  The secret keys the session everything after crosses
+/// ([`DeviceSession`]) and crosses no other way.
+#[derive(Clone, PartialEq, Eq)]
+pub struct DeviceOffer {
+    /// The raw transport key this device minted.
+    pub device: [u8; 32],
+    /// Drawn fresh per offer.
+    pub secret: [u8; 32],
+    /// Where the ceremony device's bearer reaches this one, in that
+    /// bearer's own form.
+    pub reach: String,
+}
+
+impl std::fmt::Debug for DeviceOffer {
+    /// The secret keys the session, and is not printed.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DeviceOffer")
+            .field("device", &self.device)
+            .field("secret", &"<redacted>")
+            .field("reach", &self.reach)
+            .finish()
+    }
+}
+
+impl DeviceOffer {
+    /// The bytes of this `DeviceOffer`, as §14.3.3 composes them.
+    pub fn encode(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        emit_array_head(&mut out, 4);
+        emit_uint(&mut out, 1);
+        emit_bstr(&mut out, &self.device);
+        emit_bstr(&mut out, &self.secret);
+        emit_tstr(&mut out, &self.reach);
+        out
+    }
+
+    /// Read a `DeviceOffer` from `b`; an error naming what did not read.
+    pub fn decode(b: &[u8]) -> Result<Self, String> {
+        let item = parse_all(b).map_err(|e| format!("DeviceOffer: {}", e.0))?;
+        let Item::Array(f) = &item else {
+            return Err("DeviceOffer: not an array".into());
+        };
+        let [v, d, s, r] = f.as_slice() else {
+            return Err("DeviceOffer: not four fields".into());
+        };
+        if !matches!(v, Item::Uint(1)) {
+            return Err("DeviceOffer: not version 1".into());
+        }
+        let Item::Text(t) = r else {
+            return Err("DeviceOffer: the reach is not text".into());
+        };
+        let reach = std::str::from_utf8(&b[t.clone()])
+            .map_err(|_| "DeviceOffer: the reach is not UTF-8")?
+            .to_string();
+        if reach.is_empty() || reach.len() > 255 {
+            return Err("DeviceOffer: the reach is 1 to 255 bytes".into());
+        }
+        Ok(DeviceOffer {
+            device: fixed32(b, d)?,
+            secret: fixed32(b, s)?,
+            reach,
+        })
+    }
+
+    /// The session this offer keys.
+    pub fn session(&self) -> DeviceSession {
+        DeviceSession {
+            key: crate::keys::device_session_key(&self.secret),
+            device: self.device,
+        }
+    }
+}
+
+/// **The session a device with no camera and the ceremony device speak
+/// on** (§14.3.3): §14.3.2's sealing, keyed from the offer's secret, with
+/// the offer's device key as the associated data.  Held for the offer's
+/// lifetime and no longer: dropping it is letting the key go.
+pub struct DeviceSession {
+    key: Zeroizing<[u8; 32]>,
+    device: [u8; 32],
+}
+
+impl DeviceSession {
+    /// The device the offer named.
+    pub fn device(&self) -> [u8; 32] {
+        self.device
+    }
+
+    /// One carriage, sealed.
+    pub fn seal(&self, plaintext: &[u8]) -> Vec<u8> {
+        seal_carriage(&self.key, &self.device, plaintext)
+    }
+
+    /// One carriage opened, or nothing: from a party that did not read the
+    /// offer, or under an offer since replaced.
+    pub fn open(&self, sealed: &[u8]) -> Option<Zeroizing<Vec<u8>>> {
+        open_carriage(&self.key, &self.device, sealed)
+    }
+}
+
+/// **The ceremony device's first message on the device session** (§14.3.3):
+/// the identity, and the run's first delegation, which the device stands
+/// up on to mint the material its introduction offers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeviceStart {
+    /// The identity's key material in full (§2.2).
+    pub material: Vec<u8>,
+    /// The run's first `Delegation` (§8.2).
+    pub delegation: Vec<u8>,
+}
+
+impl DeviceStart {
+    /// The bytes of this `DeviceStart`, as §14.3.3 composes them.
+    pub fn encode(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        emit_array_head(&mut out, 3);
+        emit_uint(&mut out, 1);
+        out.extend_from_slice(&self.material);
+        emit_bstr(&mut out, &self.delegation);
+        out
+    }
+
+    /// Read a `DeviceStart` from `b`; an error naming what did not read.
+    pub fn decode(b: &[u8]) -> Result<Self, String> {
+        let item = parse_all(b).map_err(|e| format!("DeviceStart: {}", e.0))?;
+        let Item::Array(f) = &item else {
+            return Err("DeviceStart: not an array".into());
+        };
+        let [v, _, d] = f.as_slice() else {
+            return Err("DeviceStart: not three fields".into());
+        };
+        if !matches!(v, Item::Uint(1)) {
+            return Err("DeviceStart: not version 1".into());
+        }
+        let ranges = array_item_ranges(b, 0).ok_or("DeviceStart: item ranges")?;
+        let material = b[ranges[1].clone()].to_vec();
+        rhtn_crypto::Identity::from_key_material(&material)
+            .ok_or("DeviceStart: the key material does not read as an identity")?;
+        let delegation = bs(b, d)
+            .filter(|d| !d.is_empty() && d.len() <= 4096)
+            .ok_or("DeviceStart: a delegation is 1 to 4096 bytes")?;
+        Ok(DeviceStart {
+            material,
+            delegation,
+        })
+    }
+}
+
+/// **A delegated device's introduction** (§14.3.3): its transport key and
+/// the bundle the identity is to sign, field 6 absent.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeviceIntroduction {
+    /// The raw transport key the delegations name.
+    pub device: [u8; 32],
+    /// The unsigned `PrekeyBundle` (§7.8).
+    pub bundle: Vec<u8>,
+}
+
+impl DeviceIntroduction {
+    /// The bytes of this `DeviceIntroduction`, as §14.3.3 composes them.
+    pub fn encode(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        emit_array_head(&mut out, 3);
+        emit_uint(&mut out, 1);
+        emit_bstr(&mut out, &self.device);
+        emit_bstr(&mut out, &self.bundle);
+        out
+    }
+
+    /// Read a `DeviceIntroduction` from `b`, through the schema's own check.
+    pub fn decode(b: &[u8]) -> Result<Self, String> {
+        let item = checked(b, "DeviceIntroduction")?;
+        let f = fields(&item);
+        Ok(DeviceIntroduction {
+            device: fixed32(b, &f[1])?,
+            bundle: bs(b, &f[2]).ok_or("DeviceIntroduction: the bundle")?,
+        })
+    }
+}
+
+/// **The ceremony device's answer** (§14.3.3): the run of delegations and
+/// the bundle, signed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeviceCredential {
+    /// The run, contiguous 48-hour windows (§8.2).
+    pub run: Vec<Vec<u8>>,
+    /// The `PrekeyBundle`, field 6 present (§7.8).
+    pub bundle: Vec<u8>,
+}
+
+impl DeviceCredential {
+    /// The bytes of this `DeviceCredential`, as §14.3.3 composes them.
+    pub fn encode(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        emit_array_head(&mut out, 3);
+        emit_uint(&mut out, 1);
+        emit_array_head(&mut out, self.run.len());
+        for d in &self.run {
+            emit_bstr(&mut out, d);
+        }
+        emit_bstr(&mut out, &self.bundle);
+        out
+    }
+
+    /// Read a `DeviceCredential` from `b`, through the schema's own check.
+    pub fn decode(b: &[u8]) -> Result<Self, String> {
+        let item = checked(b, "DeviceCredential")?;
+        let f = fields(&item);
+        let Item::Array(run) = &f[1] else {
+            return Err("DeviceCredential: the run is not an array".into());
+        };
+        Ok(DeviceCredential {
+            run: run
+                .iter()
+                .map(|d| bs(b, d).ok_or("DeviceCredential: a delegation".to_string()))
+                .collect::<Result<_, _>>()?,
+            bundle: bs(b, &f[2]).ok_or("DeviceCredential: the bundle")?,
+        })
+    }
+}
+
 // ---------------------------------------------------------------- helpers
 
 /// Parse and put the bytes through the codec's own checker for that kind,

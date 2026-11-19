@@ -31,6 +31,9 @@ pub const SESSION_TAG: &[u8] = b"rhtn/1:ceremony-session";
 pub const DATASET_TAG: &[u8] = b"rhtn/1:dataset-id";
 /// The ASCII tag the pairing key hashes first (`wire-format.md` §14.3.3).
 pub const DATASET_SESSION_TAG: &[u8] = b"rhtn/1:dataset-session";
+/// The ASCII tag the session a device with no camera keys from its offer
+/// hashes first (`wire-format.md` §14.3.3).
+pub const DEVICE_SESSION_TAG: &[u8] = b"rhtn/1:device-session";
 
 /// The two contributions of a dataset pairing in ascending byte order: the
 /// two devices share a keyhash, so the participant order the ceremony uses
@@ -59,6 +62,16 @@ pub fn dataset_key(a: &[u8; 16], b: &[u8; 16]) -> Zeroizing<[u8; 32]> {
     pre.extend_from_slice(DATASET_SESSION_TAG);
     pre.extend_from_slice(first);
     pre.extend_from_slice(second);
+    Zeroizing::new(sha256(&pre))
+}
+
+/// The key of the session a device with no camera opens with the ceremony
+/// device (`wire-format.md` §14.3.3): the tag and the offer's secret, which
+/// crossed by the screen alone.
+pub fn device_session_key(secret: &[u8; 32]) -> Zeroizing<[u8; 32]> {
+    let mut pre = Zeroizing::new(Vec::with_capacity(DEVICE_SESSION_TAG.len() + 32));
+    pre.extend_from_slice(DEVICE_SESSION_TAG);
+    pre.extend_from_slice(secret);
     Zeroizing::new(sha256(&pre))
 }
 

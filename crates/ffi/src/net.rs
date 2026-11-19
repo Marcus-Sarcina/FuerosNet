@@ -650,6 +650,24 @@ impl Net {
         self.me.presenter.presented_key()
     }
 
+    /// Take a delegation into the run this device presents (`wire-format.md`
+    /// §8.2): verified under `ids`, naming this device's key, and not
+    /// overlapping a window already held.  Refused where the device holds
+    /// the seed and presents no delegation.
+    pub(crate) fn take_delegation(
+        &self,
+        ids: &[rhtn_crypto::Identity],
+        raw: &[u8],
+    ) -> Result<(), Refused> {
+        let c = self
+            .me
+            .credential()
+            .ok_or_else(|| Refused::new("this device holds the seed and presents no delegation"))?;
+        c.add(ids, raw)
+            .map(|_| ())
+            .map_err(|e| Refused::new(format!("delegation refused: {e}")))
+    }
+
     fn rt(&self) -> &tokio::runtime::Runtime {
         self.rt
             .as_ref()

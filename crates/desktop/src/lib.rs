@@ -26,6 +26,18 @@
 // Every public item carries its own documentation.
 #![warn(missing_docs)]
 
+// Two flavours of one build, never both (see `rhtn-client`'s manifest).
+#[cfg(all(feature = "releasable", feature = "fieldtest"))]
+compile_error!(
+    "rhtn-desktop: `releasable` and `fieldtest` are two flavours of one build; \
+     build the field-test flavour with `--no-default-features --features fieldtest`"
+);
+
+/// Paired from the phone, over the code this desktop shows.
+pub mod pairing;
+/// The kernel's platform, where the platform is a desktop.
+pub mod platform;
+
 use rhtn_launch::Transport;
 use std::path::{Path, PathBuf};
 
