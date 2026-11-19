@@ -9,10 +9,28 @@
 //! line untouched by it — and the bench holds the mount.
 
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Child, Command};
 
 fn runner() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../packaging/package-runner.sh")
+}
+
+/// Hand a runner its standard input, as ssh would.
+///
+/// **A runner that refuses a request from its arguments exits without
+/// reading it**, as it should, so the write meets a closed pipe whenever
+/// the runner has already gone. Under a loaded run it sometimes had, and
+/// the test failed on the write rather than on anything the runner said
+/// [2026-11-18]. A closed pipe is what a caller sees of such a refusal,
+/// and the exit status and stderr say the rest; any other failure to
+/// write is the test's own.
+fn feed(child: &mut Child, input: &[u8]) {
+    use std::io::Write;
+    match child.stdin.take().unwrap().write_all(input) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => {}
+        Err(e) => panic!("writing the runner's standard input: {e}"),
+    }
 }
 
 struct Host {
@@ -49,7 +67,6 @@ impl Host {
     /// a copy of the runner at `self.dir/runner` and the operator lines in
     /// `self.dir/authorized_keys`.
     fn ask_with(&self, request: &str, input: &[u8]) -> (i32, String, String) {
-        use std::io::Write;
         let me = self.dir.join("runner");
         if !me.exists() {
             std::fs::copy(runner(), &me).unwrap();
@@ -66,7 +83,7 @@ impl Host {
             .stderr(std::process::Stdio::piped())
             .spawn()
             .expect("sh runs the runner");
-        child.stdin.take().unwrap().write_all(input).unwrap();
+        feed(&mut child, input);
         let out = child.wait_with_output().expect("the runner ends");
         (
             out.status.code().unwrap_or(-1),
@@ -254,7 +271,6 @@ impl Moving {
     }
 
     fn ask(&self, request: &str, input: &[u8]) -> (i32, String, String) {
-        use std::io::Write;
         let me = self.dir.join("runner");
         if !me.exists() {
             std::fs::copy(runner(), &me).unwrap();
@@ -273,7 +289,7 @@ impl Moving {
             .stderr(std::process::Stdio::piped())
             .spawn()
             .expect("sh runs the runner");
-        child.stdin.take().unwrap().write_all(input).unwrap();
+        feed(&mut child, input);
         let out = child.wait_with_output().expect("the runner ends");
         (
             out.status.code().unwrap_or(-1),
