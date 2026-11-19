@@ -13,6 +13,8 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+mod common;
+
 const PA: &str = "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a";
 const SB: &str = "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b";
 
@@ -204,11 +206,6 @@ fn origin() -> (SocketAddr, Arc<Mutex<Vec<String>>>) {
     (addr, got)
 }
 
-/// Ports fixed, so each node can be configured for the other before
-/// either of them starts.
-const A_PORT: u16 = 37461;
-const B_PORT: u16 = 37462;
-
 // acceptance: DMN-30
 #[test]
 fn a_receipt_crosses_from_the_subordinates_node_to_the_patrons_over_tls_with_the_key_pinned() {
@@ -216,12 +213,15 @@ fn a_receipt_crosses_from_the_subordinates_node_to_the_patrons_over_tls_with_the
     let alice = hex(&test_identity("alice").public.keyhash);
     let manifest_text = "roles = [\"reader\"]\n";
     let (a_key, b_key) = (presents("bob"), presents("alice"));
+    // ports named, so each node can be configured for the other before
+    // either of them starts (`common::unclaimed_port`)
+    let (a_port, b_port) = (common::unclaimed_port(), common::unclaimed_port());
 
     // **node A: the patron's instance**, brokered, with the subordinate
     // named *and located* — an envelope arriving for an instance whose
     // origin has no node configured is refused, because nothing
     // authenticates the claim
-    let a = node("a", "bob", A_PORT, "");
+    let a = node("a", "bob", a_port, "");
     let ma = a.dir.join("front.manifest");
     std::fs::write(&ma, manifest_text).unwrap();
     std::fs::write(
@@ -229,21 +229,21 @@ fn a_receipt_crosses_from_the_subordinates_node_to_the_patrons_over_tls_with_the
         format!(
             "[[host]]\nresource = \"{PA}\"\nowner = \"{bob}\"\nauthority = \"hall.internal\"\n\
              manifest = \"{}\"\nsubordinates = [\"{SB}\"]\n\
-             [host.at]\n\"{SB}\" = {{ address = \"127.0.0.1:{B_PORT}\", key = \"{b_key}\" }}\n",
+             [host.at]\n\"{SB}\" = {{ address = \"127.0.0.1:{b_port}\", key = \"{b_key}\" }}\n",
             ma.display()
         ),
     )
     .unwrap();
     let ra = Running::start(&a);
     let (a_addr, said_key) = ra.federation();
-    assert_eq!(a_addr.port(), A_PORT);
+    assert_eq!(a_addr.port(), a_port);
     assert_eq!(said_key, a_key, "a node presents its identity's own key");
 
     // **node B: the subordinate's instance** on a socket of its own, its
     // patron located at node A — first with the wrong key, which the
     // sender refuses to deliver to
     let (origin_addr, _handed) = origin();
-    let b = node("b", "alice", B_PORT, "");
+    let b = node("b", "alice", b_port, "");
     let mb = b.dir.join("front.manifest");
     std::fs::write(&mb, manifest_text).unwrap();
     let hosting_b = |key: &str, origin_addr: SocketAddr| {
@@ -332,9 +332,9 @@ fn a_receipt_crosses_from_the_subordinates_node_to_the_patrons_over_tls_with_the
 #[test]
 fn a_node_that_does_not_host_the_origin_cannot_speak_for_it() {
     use rhtn_node::federation::Envelope;
-    const PORT: u16 = 37463;
+    let port = common::unclaimed_port();
     let bob = hex(&test_identity("bob").public.keyhash);
-    let a = node("forged", "bob", PORT, "");
+    let a = node("forged", "bob", port, "");
     let m = a.dir.join("front.manifest");
     std::fs::write(&m, "roles = [\"reader\"]\n").unwrap();
     // the patron's instance is hosted here with two relationships: a
@@ -479,9 +479,9 @@ fn put_envelope(
 #[test]
 fn an_envelope_admitted_and_not_applied_survives_a_restart() {
     use rhtn_node::federation::Envelope;
-    const PORT: u16 = 37464;
+    let port = common::unclaimed_port();
     let bob = hex(&test_identity("bob").public.keyhash);
-    let a = node("custody", "bob", PORT, "");
+    let a = node("custody", "bob", port, "");
     let m = a.dir.join("front.manifest");
     std::fs::write(&m, "roles = [\"reader\"]\n").unwrap();
     // brokered, so nothing takes the envelope off the node's hands: it

@@ -29,16 +29,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-/// A free loopback port, by binding and releasing it: the daemon binds
-/// the address its configuration names, and the endpoint records were
-/// signed for it before the daemon existed.
-fn free_port() -> u16 {
-    std::net::UdpSocket::bind("127.0.0.1:0")
-        .expect("a socket")
-        .local_addr()
-        .expect("an address")
-        .port()
-}
+mod common;
 
 struct Running {
     children: Vec<(String, Child)>,
@@ -139,7 +130,12 @@ async fn the_provisioned_fabric_runs_as_daemons_and_a_client_descends_it() {
         .collect();
     let addrs: BTreeMap<&'static str, SocketAddr> = infra
         .iter()
-        .map(|n| (*n, SocketAddr::from(([127, 0, 0, 1], free_port()))))
+        .map(|n| {
+            (
+                *n,
+                SocketAddr::from(([127, 0, 0, 1], common::unclaimed_port())),
+            )
+        })
         .collect();
     let p = Fabric::provision(
         plans,
@@ -294,7 +290,12 @@ async fn a_sibling_admits_a_member_adopted_after_it_started() {
                 .collect();
             let addrs: BTreeMap<&'static str, SocketAddr> = infra
                 .iter()
-                .map(|n| (*n, SocketAddr::from(([127, 0, 0, 1], free_port()))))
+                .map(|n| {
+                    (
+                        *n,
+                        SocketAddr::from(([127, 0, 0, 1], common::unclaimed_port())),
+                    )
+                })
                 .collect();
             let p = Fabric::provision(
                 plans,

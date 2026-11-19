@@ -20,6 +20,8 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+mod common;
+
 const WINDOW: u64 = rhtn_codec::schema::DELEGATION_WINDOW_SECONDS;
 
 fn kh(n: &str) -> [u8; 32] {
@@ -463,7 +465,7 @@ async fn dmn_26_the_operator_signed_record_and_entry_are_what_the_instance_serve
 /// would get wrong — so the port is what decides, on a wildcard bind.
 #[tokio::test]
 async fn dmn_25a_a_wildcard_bind_is_reached_at_the_host_the_record_names() {
-    const PORT: u16 = 37451;
+    let port = common::unclaimed_port();
     let bob = test_identity("bob");
     let moved = "is not one the endpoint record names";
     // the record lives in a directory of its own, as the moved test's
@@ -477,7 +479,7 @@ async fn dmn_25a_a_wildcard_bind_is_reached_at_the_host_the_record_names() {
         std::fs::write(&path, record).unwrap();
         let l = layout_bound(
             tag,
-            &format!("0.0.0.0:{PORT}"),
+            &format!("0.0.0.0:{port}"),
             &format!("endpoint-record = \"{}\"\n", path.display()),
         );
         let public = premint(&l, 29);
@@ -488,12 +490,12 @@ async fn dmn_25a_a_wildcard_bind_is_reached_at_the_host_the_record_names() {
     // the record names a host this machine is not, on the port served
     let record = endpoint_record(
         &bob,
-        &[NetworkPoint::new([192, 0, 2, 1], Some(PORT as u64))],
+        &[NetworkPoint::new([192, 0, 2, 1], Some(u64::from(port)))],
         seqno(1),
     );
     let mut d = run("wildcard-same-port", &record);
     let served = d.address();
-    assert_eq!(served.port(), PORT, "serving where it was bound: {served}");
+    assert_eq!(served.port(), port, "serving where it was bound: {served}");
     std::thread::sleep(Duration::from_millis(300));
     assert!(
         !d.stderr_has(moved),
@@ -505,7 +507,7 @@ async fn dmn_25a_a_wildcard_bind_is_reached_at_the_host_the_record_names() {
     // and the same bind with a record naming another port has
     let record = endpoint_record(
         &bob,
-        &[NetworkPoint::new([192, 0, 2, 1], Some(PORT as u64 + 1))],
+        &[NetworkPoint::new([192, 0, 2, 1], Some(u64::from(port) + 1))],
         seqno(1),
     );
     let d = run("wildcard-other-port", &record);

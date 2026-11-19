@@ -18,6 +18,8 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+mod common;
+
 fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }
@@ -43,6 +45,9 @@ struct Layout {
     config: PathBuf,
     peers: PathBuf,
     delegations: PathBuf,
+    /// The port its node serves QUIC on, which the records a test signs
+    /// for it name (`common::unclaimed_port`).
+    quic: u16,
     /// **What stands in for the image's ssh client**
     /// (`rhtn_daemon::runner::client`): a recorder, so the whole install
     /// path can be exercised without a machine to install on. Absent
@@ -60,19 +65,20 @@ fn seqno(counter: u32) -> rhtn_archive::tx::Seqno {
 /// An instance for bob, with its operator's surface on a port the
 /// operating system picks.
 ///
-/// **`quic_port` is named rather than left to the system** because
+/// **Its QUIC port is named rather than left to the system** because
 /// `Service::start` compares the address it serves on against the one the
 /// endpoint record names and says so when they differ, so a test that
-/// delivers a record has to know the port in advance. One per test: these
-/// run in one binary, and two daemons cannot hold one port.
-fn layout(tag: &str, token: &[u8; 32], quic_port: u16) -> Layout {
-    layout_on(tag, token, quic_port, "127.0.0.1:0")
+/// delivers a record has to know the port in advance. Where it is picked
+/// is `common::unclaimed_port`'s business.
+fn layout(tag: &str, token: &[u8; 32]) -> Layout {
+    layout_on(tag, token, "127.0.0.1:0")
 }
 
 /// The same with the surface bound where the caller says, so a test can
 /// reach it from an address that is not the loopback — which is where an
 /// act must prove itself (`Surface::authorised`).
-fn layout_on(tag: &str, token: &[u8; 32], quic_port: u16, surface: &str) -> Layout {
+fn layout_on(tag: &str, token: &[u8; 32], surface: &str) -> Layout {
+    let quic_port = common::unclaimed_port();
     let dir = std::env::temp_dir().join(format!("rhtnd-enrol-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -126,6 +132,7 @@ fn layout_on(tag: &str, token: &[u8; 32], quic_port: u16, surface: &str) -> Layo
         config,
         peers,
         delegations,
+        quic: quic_port,
         ssh_client: None,
     }
 }
@@ -207,6 +214,35 @@ impl Daemon {
         }
     }
 
+    /// **That it serves, or why not**, for a helper that has just handed
+    /// over the run.
+    ///
+    /// **And whether the process is still there** [2026-11-07]: `serving`
+    /// blocks on stdout and answers `None` on EOF, so a daemon that died
+    /// and a daemon that is slow read the same from here. Under a full
+    /// parallel run this failed once with the waiting-for-the-run lines
+    /// and no way to tell which it was. The exit status is the number that
+    /// tells them apart, so the message carries it.
+    fn serves_once_enrolled(&mut self) {
+        let serving = self.serving();
+        let gone = self.gone();
+        // **what it said is read after it stopped saying it** [2026-11-16]:
+        // read before the wait, a daemon that died panicking left its exit
+        // status here and its reason on the far side of the snapshot
+        if serving.is_none() {
+            std::thread::sleep(Duration::from_millis(200));
+        }
+        let said = self.lines();
+        assert!(
+            serving.is_some(),
+            "it serves once enrolled; the daemon said {said:?} and its process was {}",
+            match gone {
+                Some(st) => format!("gone with {st}"),
+                None => "still running".to_string(),
+            }
+        );
+    }
+
     /// Whether the process has gone, and with what.
     fn gone(&mut self) -> Option<std::process::ExitStatus> {
         self.child.try_wait().ok().flatten()
@@ -275,8 +311,7 @@ fn status(response: &str) -> u16 {
 /// the run signed over that key is handed back.
 #[test]
 fn an_instance_is_enrolled_over_its_own_surface_and_then_serves() {
-    const QUIC: u16 = 37447;
-    let l = layout("happy", &TOKEN, QUIC);
+    let l = layout("happy", &TOKEN);
     let mut d = spawn(&l);
     let at = d.surface_at();
 
@@ -336,7 +371,7 @@ fn an_instance_is_enrolled_over_its_own_surface_and_then_serves() {
     // **the two records an instance cannot sign for itself** (§4.4), over
     // the same surface and needing no token either: each carries the
     // operator's signature, which is the whole of what admits it
-    let point = NetworkPoint::new([127, 0, 0, 1], Some(QUIC.into()));
+    let point = NetworkPoint::new([127, 0, 0, 1], Some(l.quic.into()));
     let record = endpoint_record(&bob, std::slice::from_ref(&point), seqno(1));
     let entry = anchor_entry(&bob, std::slice::from_ref(&point), 3, seqno(1));
     let put = ask(at, "PUT /node/endpoint-record HTTP/1.1", &record);
@@ -483,7 +518,7 @@ fn an_instance_is_enrolled_over_its_own_surface_and_then_serves() {
 
     // **the address moves**: the operator signs a record for the new one,
     // and the node publishes it without being restarted
-    let moved = NetworkPoint::new([127, 0, 0, 1], Some(u64::from(QUIC) + 100));
+    let moved = NetworkPoint::new([127, 0, 0, 1], Some(u64::from(l.quic) + 100));
     let next = endpoint_record(&bob, std::slice::from_ref(&moved), seqno(2));
     let put = ask(at, "PUT /node/endpoint-record HTTP/1.1", &next);
     assert_eq!(200, status(&put), "the re-signed record is taken: {put}");
@@ -518,7 +553,7 @@ fn an_instance_is_enrolled_over_its_own_surface_and_then_serves() {
 /// refused, and the second leaves nothing behind.
 #[test]
 fn a_nonceless_fetch_and_a_run_of_the_wrong_signer_are_refused() {
-    let l = layout("refusals", &TOKEN, 37448);
+    let l = layout("refusals", &TOKEN);
     let d = spawn(&l);
     let at = d.surface_at();
 
@@ -568,7 +603,7 @@ fn a_nonceless_fetch_and_a_run_of_the_wrong_signer_are_refused() {
 
     // **the two records are refused on the same terms**: about somebody
     // else, signed by somebody else, or not a record at all
-    let point = NetworkPoint::new([127, 0, 0, 1], Some(37448));
+    let point = NetworkPoint::new([127, 0, 0, 1], Some(l.quic.into()));
     let theirs = endpoint_record(&alice, std::slice::from_ref(&point), seqno(1));
     let put = ask(at, "PUT /node/endpoint-record HTTP/1.1", &theirs);
     assert_eq!(
@@ -604,18 +639,14 @@ fn a_nonceless_fetch_and_a_run_of_the_wrong_signer_are_refused() {
 /// Enrol an instance and leave it serving: the exchange the happy path
 /// walks through, as a helper for the tests that need a node rather than
 /// the enrolment.
-fn enrolled(tag: &str, quic: u16) -> (Layout, Daemon, SocketAddr) {
-    enrolled_with(tag, quic, |_| {})
+fn enrolled(tag: &str) -> (Layout, Daemon, SocketAddr) {
+    enrolled_with(tag, |_| {})
 }
 
 /// The same, with a chance to write files the daemon reads at start and
 /// to shape the layout itself.
-fn enrolled_with(
-    tag: &str,
-    quic: u16,
-    before: impl FnOnce(&mut Layout),
-) -> (Layout, Daemon, SocketAddr) {
-    let mut l = layout(tag, &TOKEN, quic);
+fn enrolled_with(tag: &str, before: impl FnOnce(&mut Layout)) -> (Layout, Daemon, SocketAddr) {
+    let mut l = layout(tag, &TOKEN);
     before(&mut l);
     let mut d = spawn(&l);
     let at = d.surface_at();
@@ -628,7 +659,7 @@ fn enrolled_with(
         .try_into()
         .expect("32 bytes");
     let bob = test_identity("bob");
-    let point = NetworkPoint::new([127, 0, 0, 1], Some(u64::from(quic)));
+    let point = NetworkPoint::new([127, 0, 0, 1], Some(u64::from(l.quic)));
     let record = endpoint_record(&bob, std::slice::from_ref(&point), seqno(1));
     let entry = anchor_entry(&bob, std::slice::from_ref(&point), 3, seqno(1));
     assert_eq!(
@@ -642,29 +673,7 @@ fn enrolled_with(
     for c in issue_run(&bob, &key, now(), 1) {
         assert_eq!(200, status(&ask(at, "PUT /node/run HTTP/1.1", &c)));
     }
-    // **and whether the process is still there** [2026-11-07]: `serving`
-    // blocks on stdout and answers `None` on EOF, so a daemon that died
-    // and a daemon that is slow read the same from here. Under a full
-    // parallel run this failed once with the waiting-for-the-run lines
-    // and no way to tell which it was. The exit status is the number that
-    // tells them apart, so the message carries it.
-    let serving = d.serving();
-    let gone = d.gone();
-    // **what it said is read after it stopped saying it** [2026-11-16]:
-    // read before the wait, a daemon that died panicking left its exit
-    // status here and its reason on the far side of the snapshot
-    if serving.is_none() {
-        std::thread::sleep(Duration::from_millis(200));
-    }
-    let said = d.lines();
-    assert!(
-        serving.is_some(),
-        "it serves once enrolled; the daemon said {said:?} and its process was {}",
-        match gone {
-            Some(st) => format!("gone with {st}"),
-            None => "still running".to_string(),
-        }
-    );
+    d.serves_once_enrolled();
     (l, d, at)
 }
 
@@ -678,7 +687,7 @@ fn enrolled_with(
 /// and of an instance enrolled before the rule.
 #[test]
 fn a_node_enrolled_with_no_subtree_claimed_serves_and_serves_again_after_a_restart() {
-    let l = layout("no-anchor", &TOKEN, 37452);
+    let l = layout("no-anchor", &TOKEN);
     let mut d = spawn(&l);
     let at = d.surface_at();
     let got = ask(
@@ -690,7 +699,7 @@ fn a_node_enrolled_with_no_subtree_claimed_serves_and_serves_again_after_a_resta
         .try_into()
         .expect("32 bytes");
     let bob = test_identity("bob");
-    let point = NetworkPoint::new([127, 0, 0, 1], Some(37452));
+    let point = NetworkPoint::new([127, 0, 0, 1], Some(l.quic.into()));
     let record = endpoint_record(&bob, std::slice::from_ref(&point), seqno(1));
     assert_eq!(
         200,
@@ -730,7 +739,7 @@ fn a_node_enrolled_with_no_subtree_claimed_serves_and_serves_again_after_a_resta
 /// administer [author, 2026-10-08].
 #[test]
 fn a_standing_policy_is_changed_from_the_page_and_a_stop_is_the_signal_s_path() {
-    let (l, mut d, at) = enrolled("acts", 37449);
+    let (l, mut d, at) = enrolled("acts");
 
     // the page offers the act, and says where the policy stands
     let page = ask(at, "GET / HTTP/1.1", b"");
@@ -822,7 +831,7 @@ fn a_standing_policy_is_changed_from_the_page_and_a_stop_is_the_signal_s_path() 
 fn a_grant_is_made_and_withdrawn_from_the_page_and_is_written_back() {
     const RES: &str = "0909090909090909090909090909090909090909090909090909090909090909";
     let owner = hex(&test_identity("bob").public.keyhash);
-    let (l, d, at) = enrolled_with("grants", 37450, |l| {
+    let (l, d, at) = enrolled_with("grants", |l| {
         std::fs::write(l.dir.join("echo.wasm"), rhtn_sim::packages::echo()).unwrap();
         std::fs::write(
             l.dir.join("shop.manifest"),
@@ -1008,7 +1017,7 @@ fn a_grant_is_made_and_withdrawn_from_the_page_and_is_written_back() {
 // acceptance: DMN-28
 #[tokio::test]
 async fn dmn_28_a_renewal_opens_where_the_run_ends_and_an_overlap_is_refused() {
-    let l = layout("renew", &TOKEN, 37449);
+    let l = layout("renew", &TOKEN);
     let d = spawn(&l);
     let at = d.surface_at();
     let bob = test_identity("bob");
@@ -1075,7 +1084,7 @@ fn an_envelope_is_delivered_from_the_surface_and_the_plane_is_readable() {
     use rhtn_node::federation::Envelope;
     const RES: &str = "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c";
     const PATRON: &str = "0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d";
-    let (l, mut d, at) = enrolled_with("federation", 37453, |l| {
+    let (l, mut d, at) = enrolled_with("federation", |l| {
         let m = l.dir.join("front.manifest");
         std::fs::write(&m, "roles = [\"reader\"]\n").unwrap();
         std::fs::write(
@@ -1196,7 +1205,7 @@ fn an_envelope_is_delivered_from_the_surface_and_the_plane_is_readable() {
 /// grown subtree makes from the other side.
 #[test]
 fn the_fetch_says_the_subtree_it_counts_and_the_page_owes_a_re_signed_entry() {
-    let (l, mut d, at) = enrolled_with("subtree", 37454, |_| {});
+    let (l, mut d, at) = enrolled_with("subtree", |_| {});
     assert!(d.serving().is_some(), "{:?}", d.lines());
 
     // the entry `enrolled_with` delivered claims 3 (its fixture's size)
@@ -1228,7 +1237,7 @@ fn the_fetch_says_the_subtree_it_counts_and_the_page_owes_a_re_signed_entry() {
     // re-signed at the next counter over the same points, and the page
     // stops asking
     let bob = test_identity("bob");
-    let point = NetworkPoint::new([127, 0, 0, 1], Some(37454));
+    let point = NetworkPoint::new([127, 0, 0, 1], Some(l.quic.into()));
     let entry = anchor_entry(&bob, std::slice::from_ref(&point), 0, seqno(2));
     assert_eq!(
         200,
@@ -1247,8 +1256,8 @@ fn the_fetch_says_the_subtree_it_counts_and_the_page_owes_a_re_signed_entry() {
 /// which is what a rented one binds: enrolled over the loopback, where
 /// arriving is the authorisation, and then reachable from this machine's
 /// own address, where an act must prove itself.
-fn enrolled_on(tag: &str, quic: u16, token: &[u8; 32]) -> (Layout, Daemon, SocketAddr) {
-    let l = layout_on(tag, token, quic, "0.0.0.0:0");
+fn enrolled_on(tag: &str, token: &[u8; 32]) -> (Layout, Daemon, SocketAddr) {
+    let l = layout_on(tag, token, "0.0.0.0:0");
     let mut d = spawn(&l);
     let port = d.surface_at().port();
     let at: SocketAddr = (std::net::Ipv4Addr::LOCALHOST, port).into();
@@ -1261,7 +1270,7 @@ fn enrolled_on(tag: &str, quic: u16, token: &[u8; 32]) -> (Layout, Daemon, Socke
         .try_into()
         .expect("32 bytes");
     let bob = test_identity("bob");
-    let point = NetworkPoint::new([127, 0, 0, 1], Some(u64::from(quic)));
+    let point = NetworkPoint::new([127, 0, 0, 1], Some(u64::from(l.quic)));
     let record = endpoint_record(&bob, std::slice::from_ref(&point), seqno(1));
     let entry = anchor_entry(&bob, std::slice::from_ref(&point), 3, seqno(1));
     assert_eq!(
@@ -1275,7 +1284,7 @@ fn enrolled_on(tag: &str, quic: u16, token: &[u8; 32]) -> (Layout, Daemon, Socke
     for c in issue_run(&bob, &key, now(), 1) {
         assert_eq!(200, status(&ask(at, "PUT /node/run HTTP/1.1", &c)));
     }
-    assert!(d.serving().is_some(), "it serves once enrolled");
+    d.serves_once_enrolled();
     (l, d, at)
 }
 
@@ -1305,7 +1314,7 @@ fn an_act_that_did_not_arrive_on_the_loopback_proves_itself_under_the_token() {
         return;
     };
     let token = [0x5au8; 32];
-    let (_l, d, at) = enrolled_on("proof", 7489, &token);
+    let (_l, d, at) = enrolled_on("proof", &token);
     let away: SocketAddr = (ip, at.port()).into();
 
     // **on the loopback, arriving is the authorisation**, which is the
@@ -1386,7 +1395,7 @@ fn the_token_is_replaced_at_enrolment_and_the_replacement_survives_a_restart() {
     };
     let old = [0x11u8; 32];
     let fresh = [0x22u8; 32];
-    let (l, d, at) = enrolled_on("rotate", 7491, &old);
+    let (l, d, at) = enrolled_on("rotate", &old);
     let away: SocketAddr = (ip, at.port()).into();
 
     // **the replacement is set under the old token**, so a caller who
@@ -1549,7 +1558,7 @@ fn install_body(resource: &str, owner: &str, image: &str, port: u16, manifest: &
 // acceptance: DMN-39
 #[test]
 fn a_package_is_installed_on_the_hosts_shell_and_the_node_then_hosts_it() {
-    let (l, d, at) = enrolled_with("install", 37455, |l| {
+    let (l, d, at) = enrolled_with("install", |l| {
         l.ssh_client = Some(recorder(&l.dir, "none"));
     });
     let resource = hex(&[0xa7u8; 32]);
@@ -1699,7 +1708,7 @@ fn a_package_is_installed_on_the_hosts_shell_and_the_node_then_hosts_it() {
 // acceptance: DMN-39
 #[test]
 fn an_install_the_node_or_the_host_refuses_leaves_the_configuration_as_it_was() {
-    let (l, d, at) = enrolled_with("install-undo", 37456, |l| {
+    let (l, d, at) = enrolled_with("install-undo", |l| {
         l.ssh_client = Some(recorder(&l.dir, "start"));
     });
     // the operator's own line, which no install may touch
@@ -1767,7 +1776,7 @@ fn an_install_the_node_or_the_host_refuses_leaves_the_configuration_as_it_was() 
 // acceptance: DMN-39
 #[test]
 fn an_install_says_what_it_was_missing_rather_than_half_doing_it() {
-    let (l, d, at) = enrolled_with("install-refusals", 37457, |l| {
+    let (l, d, at) = enrolled_with("install-refusals", |l| {
         l.ssh_client = Some(recorder(&l.dir, "none"));
     });
     let resource = hex(&[0xc1u8; 32]);
@@ -1867,7 +1876,7 @@ fn an_instance_with_no_shell_on_its_host_installs_nothing_and_says_which_line_is
     // **a serving node, and no way to reach its host**: an instance
     // provisioned before the host could be asked for anything names no
     // `host-shell`, and the install it cannot make must say which line
-    let (l, d, at) = enrolled_with("install-no-shell", 37458, |l| {
+    let (l, d, at) = enrolled_with("install-no-shell", |l| {
         let conf = std::fs::read_to_string(&l.config).unwrap();
         std::fs::write(
             &l.config,
@@ -1893,7 +1902,7 @@ fn an_instance_with_no_shell_on_its_host_installs_nothing_and_says_which_line_is
 // acceptance: DMN-39
 #[test]
 fn a_host_shell_that_is_not_this_instances_own_is_refused_in_the_configuration() {
-    let l = layout("install-far-shell", &TOKEN, 37459);
+    let l = layout("install-far-shell", &TOKEN);
     let conf = std::fs::read_to_string(&l.config).unwrap();
     std::fs::write(
         &l.config,
@@ -1928,7 +1937,7 @@ fn the_three_routes_that_carry_a_signature_need_no_proof_from_anywhere() {
         return;
     };
     let token = [0x77u8; 32];
-    let l = layout_on("unproved-records", &token, 37464, "0.0.0.0:0");
+    let l = layout_on("unproved-records", &token, "0.0.0.0:0");
     let mut d = spawn(&l);
     let port = d.surface_at().port();
     let away: SocketAddr = (ip, port).into();
@@ -1947,7 +1956,7 @@ fn the_three_routes_that_carry_a_signature_need_no_proof_from_anywhere() {
 
     // and the three that carry a signature, with no nonce and no proof
     let bob = test_identity("bob");
-    let point = NetworkPoint::new([127, 0, 0, 1], Some(37464));
+    let point = NetworkPoint::new([127, 0, 0, 1], Some(l.quic.into()));
     let record = endpoint_record(&bob, std::slice::from_ref(&point), seqno(1));
     let entry = anchor_entry(&bob, std::slice::from_ref(&point), 3, seqno(1));
     assert_eq!(
@@ -1990,7 +1999,7 @@ fn the_three_routes_that_carry_a_signature_need_no_proof_from_anywhere() {
 #[test]
 fn an_instance_declares_what_it_can_be_asked_for_and_one_route_invokes_it() {
     const RES: &str = "aa00000000000000000000000000000000000000000000000000000000000001";
-    let (l, d, at) = enrolled_with("declared", 37465, |l| {
+    let (l, d, at) = enrolled_with("declared", |l| {
         l.ssh_client = Some(recorder(&l.dir, "none"));
         let manifest = l.dir.join("declared.manifest");
         std::fs::write(
@@ -2154,7 +2163,7 @@ fn a_declared_act_is_proved_as_any_act_is_and_not_otherwise() {
         return;
     };
     let token = [0x3cu8; 32];
-    let (_l, d, at) = enrolled_on("declared-proof", 37466, &token);
+    let (_l, d, at) = enrolled_on("declared-proof", &token);
     let away: SocketAddr = (ip, at.port()).into();
 
     // the declaration is a read of this instance's own state, so it is an
@@ -2180,7 +2189,7 @@ fn a_declared_act_is_proved_as_any_act_is_and_not_otherwise() {
 // functional: OPS-028
 #[test]
 fn the_node_is_upgraded_in_place_by_asking_its_host_and_a_bad_image_asks_nothing() {
-    let (l, d, at) = enrolled_with("upgrade", 37467, |l| {
+    let (l, d, at) = enrolled_with("upgrade", |l| {
         l.ssh_client = Some(recorder(&l.dir, "none"));
     });
     // declared, so a client draws it and the page links it with the image suggested
@@ -2220,7 +2229,7 @@ fn the_node_is_upgraded_in_place_by_asking_its_host_and_a_bad_image_asks_nothing
 // functional: OPS-029
 #[test]
 fn a_runner_reaches_the_host_only_with_a_signature_and_the_node_carries_it_unread() {
-    let (l, d, at) = enrolled_with("runner-refresh", 37468, |l| {
+    let (l, d, at) = enrolled_with("runner-refresh", |l| {
         l.ssh_client = Some(recorder(&l.dir, "none"));
     });
     // declared for the client that brings it, and never a control on the
@@ -2281,7 +2290,7 @@ fn a_runner_reaches_the_host_only_with_a_signature_and_the_node_carries_it_unrea
 /// one, or a receiver unpinned, asks nothing.
 #[test]
 fn a_move_is_asked_of_the_host_with_the_receiver_pinned_and_nothing_without_it() {
-    let (l, d, at) = enrolled_with("move", 37469, |l| {
+    let (l, d, at) = enrolled_with("move", |l| {
         let at = l.dir.join("ssh-keeper");
         std::fs::write(
             &at,
