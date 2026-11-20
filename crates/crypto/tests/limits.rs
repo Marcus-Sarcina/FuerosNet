@@ -135,8 +135,8 @@ fn a_txid_is_the_digest_of_the_body_and_of_nothing_else() {
 }
 
 /// The signing domains of `wire-format.md` §1.1, as the codec names them:
-/// the fifteen the table lists.
-const DOMAINS: [&[u8]; 15] = [
+/// the sixteen the table lists.
+const DOMAINS: [&[u8]; 16] = [
     aad::ENVELOPE,
     aad::VERIFIER,
     aad::CONSENT,
@@ -146,7 +146,8 @@ const DOMAINS: [&[u8]; 15] = [
     aad::LOCATOR,
     aad::ANCHOR,
     aad::ENDPOINTS,
-    aad::PREKEY,
+    aad::NODE_KEY,
+    aad::ENCRYPTION_KEY,
     aad::SUBTREE_ACK,
     aad::SUCCESSOR,
     aad::TRANSFER,
@@ -183,7 +184,8 @@ fn a_signature_made_for_one_domain_verifies_as_nothing_in_another() {
         "locator",
         "anchor",
         "endpoints",
-        "prekey",
+        "node-key",
+        "encryption-key",
         "profile",
         "subtree-ack",
         "successor",

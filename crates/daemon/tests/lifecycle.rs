@@ -4,7 +4,7 @@
 
 use rhtn_crypto::identity::testkit::test_identity;
 use rhtn_node::queue::DirStore;
-use rhtn_transport::queue::{QueueStore, Queued};
+use rhtn_transport::queue::QueueStore;
 use rhtn_transport::session::*;
 use rhtn_transport::tls::{self, Party, Pins};
 use std::collections::BTreeMap;
@@ -61,10 +61,10 @@ fn layout(tag: &str) -> Layout {
     std::fs::write(
         &config,
         format!(
-            "identity = \"{}\"\nlisten = \"127.0.0.1:0\"\nqueue = \"{}\"\nprekeys = \"{}\"\ntopology = \"{}\"\narchive = \"{}\"\nheartbeat = 30\ningestion = \"unverified-gossip\"\n\n[allowance]\nrequests = 120\nseconds = 60\n",
+            "identity = \"{}\"\nlisten = \"127.0.0.1:0\"\nqueue = \"{}\"\nkeys = \"{}\"\ntopology = \"{}\"\narchive = \"{}\"\nheartbeat = 30\ningestion = \"unverified-gossip\"\n\n[allowance]\nrequests = 120\nseconds = 60\n",
             dir.join("identity.key").display(),
             queue.display(),
-            dir.join("prekeys").display(),
+            dir.join("keys").display(),
             dir.join("topology").display(),
             dir.join("archive").display()
         ),
@@ -149,6 +149,7 @@ fn client_cfg(name: &str, target: [u8; 32], addr: SocketAddr) -> ClientConfig {
         filter: None,
         sibling_cache: Arc::new(Mutex::new(Vec::new())),
         addresses: Arc::new(Mutex::new(book)),
+        cursors: Default::default(),
         tls: Arc::new(Mutex::new(Default::default())),
         connect_timeout: Duration::from_millis(2000),
         on_reachability: None,
@@ -156,9 +157,13 @@ fn client_cfg(name: &str, target: [u8; 32], addr: SocketAddr) -> ClientConfig {
     }
 }
 
-/// Attach as alice and take everything delivered within `ms`.
-async fn collect(addr: SocketAddr, ms: u64) -> Vec<Vec<u8>> {
+/// Attach as alice, naming `cursor` where the device holds one, and take
+/// everything delivered within `ms`.
+async fn collect(addr: SocketAddr, ms: u64, cursor: Option<u64>) -> Vec<Vec<u8>> {
     let cfg = client_cfg("alice", kh("bob"), addr);
+    if let Some(c) = cursor {
+        cfg.cursors.lock().unwrap().insert(kh("bob"), c);
+    }
     let ep = tls::client_endpoint("127.0.0.1:0".parse().unwrap()).unwrap();
     let AttachOutcome::Attached(mut s) = attach(&cfg, &ep, kh("bob"), addr, false).await else {
         panic!("alice attaches to the daemon")
@@ -168,48 +173,159 @@ async fn collect(addr: SocketAddr, ms: u64) -> Vec<Vec<u8>> {
     while let Ok(Some(b)) = tokio::time::timeout_at(end, s.deliveries.recv()).await {
         got.push(b);
     }
+    // the device goes away: a session left open would take what arrives next
+    s.conn.close(0u32.into(), b"");
+    s.task.abort();
+    tokio::time::sleep(Duration::from_millis(200)).await;
     got
+}
+
+/// An identity's encryption secrets for a test: the node opens nothing,
+/// so the recipient's own are whatever the test says they are.
+fn secret(name: &str) -> rhtn_crypto::seal::EncryptionSecret {
+    rhtn_crypto::seal::EncryptionSecret::from_identity_root(&rhtn_codec::cose::sha256(
+        format!("lifecycle root:{name}").as_bytes(),
+    ))
+}
+
+/// **One request of the daemon on a connection under a key minted for
+/// it** (`wire-format.md` §9.1). The key is `mint`'s, a test identity the
+/// daemon has never been told of, so a test can look for it afterwards
+/// (`test_identity(mint).public.ed`); a real sender draws a fresh one.
+async fn ask_minted(addr: SocketAddr, mint: &str, request: u64, body: &[u8]) -> Vec<u8> {
+    let me = tls::Presenter::Own {
+        keyhash: MINTED,
+        ed: Box::new(test_identity(mint).ed_signing_key().clone()),
+    };
+    let pins = Pins::new();
+    pins.pin_identity(&test_identity("bob").public);
+    let cfg = tls::client_config(me, &pins, &kh("bob")).expect("bob is pinned");
+    let ep = tls::client_endpoint("127.0.0.1:0".parse().unwrap()).unwrap();
+    let conn = tls::dial_with(&ep, cfg, addr)
+        .expect("dials")
+        .await
+        .expect("connects");
+    let reply = request_on(&conn, request, body).await.expect("answered");
+    conn.close(0u32.into(), b"");
+    reply
+}
+
+/// `to`'s newest node key at the daemon, asked under `mint`'s key.
+async fn node_key(addr: SocketAddr, mint: &str, to: &str, nonce: [u8; 16]) -> Vec<u8> {
+    use rhtn_archive::node_key::*;
+    let ask = NodeKeyRequest::for_recipients(vec![kh(to)], nonce).unwrap();
+    let reply = ask_minted(addr, mint, REQUEST_NODE_KEY, &ask.encode()).await;
+    NodeKeyReply::decode(&reply)
+        .unwrap()
+        .outcome
+        .expect("a key for a recipient the daemon serves")
+}
+
+/// **Send `bytes` to `to` at the daemon as a client does**: the node key
+/// fetched and the seal submitted, each on a connection minted for it. The
+/// reply's code.
+async fn send(addr: SocketAddr, from: &str, to: &str, bytes: &[u8]) -> u64 {
+    use rhtn_archive::submission::*;
+    use rhtn_client::payload::{KIND_APPLICATION, NodeKeyHeld, Sender, seal_to};
+    let record = node_key(addr, "w1", to, [1; 16]).await;
+    let key = rhtn_archive::node_key::NodeKey::parse(&record).unwrap();
+    let theirs = secret(to);
+    let their = rhtn_crypto::verify::EncryptionKey {
+        keyhash: kh(to),
+        kem: *theirs.kem_public(),
+        auth: theirs.auth_public(),
+    };
+    let mine = secret(from);
+    let sealed = seal_to(
+        &Sender {
+            keyhash: &kh(from),
+            secret: &mine,
+            alias: from,
+            introduction: None,
+        },
+        &kh(to),
+        &their,
+        &NodeKeyHeld {
+            node: key.fields.node,
+            n: key.fields.n,
+            public: Box::new(key.fields.public),
+        },
+        KIND_APPLICATION,
+        bytes,
+        &mut |b: &mut [u8]| {
+            let r = tls::random_bytes::<64>();
+            b.copy_from_slice(&r[..b.len()]);
+        },
+    )
+    .unwrap();
+    let body = RelaySubmission {
+        recipient: kh(to),
+        sealed,
+        nonce: [2; 16],
+    }
+    .encode();
+    let reply = ask_minted(addr, "w2", REQUEST_RELAY, &body).await;
+    SubmissionReply::decode(&reply).unwrap().code
+}
+
+/// What one delivery opens to, for `to`, from the daemon.
+fn opened(to: &str, delivery: &[u8]) -> (u64, Vec<u8>) {
+    let r = rhtn_archive::submission::unrelayed(delivery).expect("a relayed payload");
+    let (_, body) = rhtn_client::payload::open_relayed(&secret(to), &kh(to), &kh("bob"), &r)
+        .expect("opens with the daemon's half");
+    (r.position, body.bytes)
 }
 
 // acceptance: DMN-02
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn the_daemon_serves_from_a_configuration_and_redelivers_across_a_restart_exactly_once() {
+async fn the_daemon_serves_from_a_configuration_and_keeps_a_delivered_message_across_a_restart() {
     let l = layout("restart");
     // it starts from the file alone, and serves a real session
     let (child, addr) = start(&l);
     assert!(
-        collect(addr, 400).await.is_empty(),
+        collect(addr, 400, None).await.is_empty(),
         "nothing is waiting yet"
     );
-    stop(child);
-    // something is accepted for alice while the daemon is down: the queue's
-    // directory store is what a restart finds
-    DirStore::new(&l.queue).push(Queued {
-        device: rhtn_transport::queue::ANY_DEVICE,
-        ciphertext: b"kept across the restart".to_vec(),
-        recipient: kh("alice"),
-        arrival: 1,
-    });
-    let (child, addr) = start(&l);
-    let got = collect(addr, 1500).await;
+    // a message is accepted for alice, who is away, and the daemon is
+    // stopped with a signal with it waiting in the queue
     assert_eq!(
-        got,
-        vec![b"kept across the restart".to_vec()],
+        send(addr, "carol", "alice", b"kept across the restart").await,
+        rhtn_archive::submission::SUBMISSION_ACCEPTED
+    );
+    stop(child);
+    let held = DirStore::new(&l.queue).list(&kh("alice"));
+    assert_eq!(held.len(), 1, "waiting on disk");
+    assert_eq!(held[0].delivered_at, None);
+    // restarted, a device of alice's attaches: delivered on the first attach
+    let (child, addr) = start(&l);
+    let got = collect(addr, 1500, None).await;
+    assert_eq!(got.len(), 1);
+    let (position, bytes) = opened("alice", &got[0]);
+    assert_eq!(
+        bytes, b"kept across the restart",
         "redelivered on the next attach"
     );
     stop(child);
-    // delete on delivery survived the restart too: a second attach finds
-    // nothing, and the store holds nothing (`infra-client-requirements.md` §2)
-    assert!(
-        DirStore::new(&l.queue).list(&kh("alice")).is_empty(),
-        "nothing recoverable is left"
-    );
+    let first = DirStore::new(&l.queue).list(&kh("alice"));
+    assert_eq!(first.len(), 1, "still held once delivered");
+    let delivered_at = first[0]
+        .delivered_at
+        .expect("its first delivery is recorded");
+    // stopped and restarted, the device attaches naming the position it was
+    // handed: nothing
     let (child, addr) = start(&l);
     assert!(
-        collect(addr, 600).await.is_empty(),
-        "and it is not delivered twice"
+        collect(addr, 600, Some(position)).await.is_empty(),
+        "the second attach is handed nothing"
     );
     stop(child);
+    let after = DirStore::new(&l.queue).list(&kh("alice"));
+    assert_eq!(after.len(), 1, "the message is still held");
+    assert_eq!(
+        after[0].delivered_at,
+        Some(delivered_at),
+        "its thirty days count from the first delivery, not restarted by the stop"
+    );
     let _ = std::fs::remove_dir_all(&l.dir);
 }
 
@@ -714,90 +830,101 @@ async fn a_derived_view_that_cannot_account_for_the_store_is_discarded_whole() {
     let _ = std::fs::remove_dir_all(&l.dir);
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn serving_a_one_time_key_does_not_stop_the_node_writing_its_state_back() {
+// acceptance: PAY-09
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn nothing_the_daemon_keeps_says_who_asked_for_whose_node_key() {
+    use rhtn_archive::node_key::*;
     use rhtn_daemon::config::Config;
     use rhtn_daemon::service::Service;
-    let l = layout("issuance-save");
+    let l = layout("node-key-askers");
     std::fs::write(
         &l.peers,
-        ["carol", "witness"]
+        ["alice", "carol"]
             .map(|n| format!("{}\n", hex(&test_identity(n).public.key_material())))
             .concat(),
     )
     .unwrap();
     let cfg = Config::read(&l.config).unwrap();
     let s = Service::start(&cfg, &l.peers).await.expect("starts");
-    {
-        let mut view = s.node.view.lock().unwrap();
-        let bundle = rhtn_archive::prekey::PrekeyBundle::build(
-            &test_identity("carol"),
-            rhtn_archive::prekey::CONSTRUCTION_PQXDH,
-            b"reusable material",
-            1_800_000_000,
-            &[0u8; 32],
-        );
-        view.prekeys.publish(&ids(), &bundle).expect("published");
-        assert!(
-            view.prekeys
-                .stock(kh("carol"), vec![b"the only one-time key".to_vec()]),
-            "stocked"
-        );
-    }
-    // a save before any issuance, so the failure below can only be the
-    // issuance's
-    s.persist().expect("persists before serving anything");
-
-    let served = {
-        let mut view = s.node.view.lock().unwrap();
-        let now = view.now();
-        let req = rhtn_archive::prekey::PrekeyRequest::One {
-            subject: kh("carol"),
-            one_time: true,
-            nonce: [1; 16],
-            device: Some([0u8; 32]),
-        }
-        .encode();
-        let reply = view
-            .prekeys
-            .answer(&kh("witness"), &req, now)
-            .expect("answered");
-        rhtn_archive::prekey::PrekeyReply::decode(&reply)
-            .unwrap()
-            .one_time
-            .is_some()
-    };
-    assert!(
-        served,
-        "a one-time key was served, which is the condition under test"
-    );
-
-    // a bookkeeping file beside the pools, which is what the issuance
-    // counter used to be: **a stray file is not a stale subject
-    // directory**, and treating it as one turned every later save into
-    // `NotADirectory` before the archive, the store or the derived view
-    // reached disk
+    let addr = s.node.addr;
+    // several requests and a batch, each on a connection under a key
+    // minted for it: w3 to w6 are those keys, never told to the daemon
+    let a = node_key(addr, "w3", "alice", [1; 16]).await;
+    let c = node_key(addr, "w4", "carol", [2; 16]).await;
+    assert_eq!(node_key(addr, "w5", "alice", [3; 16]).await, a);
+    let both = NodeKeyRequest::for_recipients(vec![kh("alice"), kh("carol")], [4; 16]).unwrap();
+    let replies =
+        decode_batch_reply(&ask_minted(addr, "w6", REQUEST_NODE_KEY, &both.encode()).await)
+            .unwrap();
+    let mut served: Vec<Vec<u8>> = replies.into_iter().map(|r| r.outcome.unwrap()).collect();
+    served.sort();
+    let mut expected = vec![a, c];
+    expected.sort();
+    assert_eq!(served, expected, "the batch is answered from the same keys");
+    // a stray file beside the keys is not a recipient, and does not stop
+    // the node writing its state back
+    std::fs::create_dir_all(cfg.keys.join("node-keys")).unwrap();
     std::fs::write(
-        cfg.prekeys.join("prekeys").join("issued"),
-        b"a file, not a subject",
+        cfg.keys.join("node-keys").join("stray"),
+        b"a file, not a recipient",
     )
     .unwrap();
-
-    // **ordinary issuance is not a condition that can stop a node
-    // persisting** (`infra-client-requirements.md` §4.3): the archive, the
-    // store and the derived view all have to reach disk afterwards
-    s.persist().expect("persists after serving a one-time key");
+    s.persist().expect("written back");
     s.persist().expect("and again");
     assert!(
         cfg.topology.join("derived").exists(),
         "the derived view is written"
     );
-    assert!(cfg.archive.exists(), "and the archive");
-    assert!(
-        cfg.topology.join("seen").exists(),
-        "and the topology store's seen-set"
-    );
+    // every byte the daemon keeps, in its names and its files
+    let mut all = Vec::new();
+    for f in walk(&l.dir) {
+        all.extend(f.to_string_lossy().as_bytes());
+        all.push(0);
+        all.extend(std::fs::read(&f).unwrap_or_default());
+        all.push(0);
+    }
+    for who in ["w3", "w4", "w5", "w6"] {
+        let id = test_identity(who);
+        for (what, v) in [
+            ("keyhash", id.public.keyhash.to_vec()),
+            ("presented key", id.public.ed.to_bytes().to_vec()),
+        ] {
+            let h = hex(&v);
+            assert!(
+                !all.windows(v.len()).any(|w| w == v.as_slice()),
+                "{who}'s {what} raw"
+            );
+            assert!(
+                !all.windows(h.len()).any(|w| w == h.as_bytes()),
+                "{who}'s {what} in hex"
+            );
+        }
+    }
+    // which subjects were asked for, and how often, is not kept either: one
+    // key file per recipient, alice's asked for three times
+    for (who, asked) in [("alice", 3), ("carol", 2)] {
+        let files = walk(&cfg.keys.join("node-keys").join(hex(&kh(who))));
+        assert_eq!(
+            files.len(),
+            1,
+            "{who}, asked {asked} times: one key and nothing else"
+        );
+    }
     let _ = std::fs::remove_dir_all(&l.dir);
+}
+
+fn walk(dir: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    if let Ok(rd) = std::fs::read_dir(dir) {
+        for e in rd.flatten() {
+            if e.path().is_dir() {
+                out.extend(walk(&e.path()));
+            } else {
+                out.push(e.path());
+            }
+        }
+    }
+    out
 }
 
 // acceptance: DMN-16

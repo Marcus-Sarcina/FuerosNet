@@ -8,6 +8,7 @@ description = "RHTN adaptors: the participant client bound to what is local to i
 
 [dependencies]
 rhtn-codec = { path = "../codec" }
+zeroize = { workspace = true }
 rhtn-crypto = { path = "../crypto" }
 rhtn-archive = { path = "../archive" }
 # no default: the diagnostics flavour is the leaf crate's choice (rhtn-ffi),

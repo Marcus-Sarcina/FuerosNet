@@ -685,7 +685,15 @@ impl LiveNode {
                 // carried as the relay traversal fell back to, is outside the
                 // allowance — a serving node holds no policy over what flows
                 // to its own clients (design §12.6.3)
-                if !matches!(family, Family::RelaySubmission) && !lim.allow(&peer) {
+                //
+                // **A minted connection has no allowance to spend**: it
+                // names nobody (`wire-format.md` §9.1), so one bucket would
+                // be every sender's at once. Its two requests are the mail
+                // and a key that is not consumed by being served (§7.8)
+                if peer != rhtn_transport::session::MINTED
+                    && !matches!(family, Family::RelaySubmission)
+                    && !lim.allow(&peer)
+                {
                     tracing::info!(target: "node", peer8 = %crate::diag::id8(&peer), "node.allowance");
                     return None;
                 }
@@ -695,10 +703,16 @@ impl LiveNode {
                         let reply = v.lock().unwrap().answer_currency(&c.lock().unwrap(), &req);
                         Some(reply.encode())
                     }
-                    Family::PrekeyRequestOrBatch => {
+                    // read-only to the asker, who is not recorded; a key
+                    // is made or rotated here, on demand (`wire-format.md`
+                    // §7.8)
+                    Family::NodeKeyRequestOrBatch => {
+                        let node = s.lock().unwrap().clone()?;
                         let mut view = v.lock().unwrap();
                         let now = view.now();
-                        view.prekeys.answer(&peer, &body, now)
+                        let signer = view.ack_signer()?;
+                        let serves = node.cfg.serves.clone();
+                        view.node_keys.answer(&*signer, &|r| serves(r), &body, now)
                     }
                     Family::ArchiveRequest => {
                         // this node serves its own archive; a subject it is
@@ -748,24 +762,12 @@ impl LiveNode {
                                 .encode(),
                         )
                     }
-                    // the four things a client hands the node serving it
-                    // (`wire-format.md` §7.10).  Each is about the peer that
-                    // sent it, so the authenticated requester is the subject,
-                    // the pool's owner, the submitter and the endpoint's
-                    // holder, and none of the four can name another party
-                    Family::PrekeyPublication => {
-                        let mut view = v.lock().unwrap();
-                        let i = ids_for_requests.lock().unwrap();
-                        crate::submissions::publication(&mut view, &i, &peer, &device, &body)
-                    }
-                    Family::OneTimeDeposit => {
-                        let mut view = v.lock().unwrap();
-                        crate::submissions::deposit(&mut view, &peer, &device, &body)
-                    }
+                    // what a client hands a node (`wire-format.md` §7.10): a
+                    // sealed message from nobody it can name, and the wake
+                    // endpoint and profile of the peer that sent them
                     Family::RelaySubmission => {
                         let node = s.lock().unwrap().clone();
-                        let view = v.lock().unwrap();
-                        crate::submissions::relay(&view, node.as_ref(), &peer, &device, &body)
+                        crate::submissions::relay(&v, node.as_ref(), &body)
                     }
                     Family::WakeRegistration => {
                         let mut view = v.lock().unwrap();
@@ -830,6 +832,24 @@ impl LiveNode {
             })
         });
         cfg.on_request = Some(on_request);
+        // **the node's half at delivery** (`wire-format.md` §7.10), and the
+        // private half deleted with the last message that needs it (design
+        // §14.2.4.3)
+        let v = view.clone();
+        cfg.open_half = Some(Arc::new(move |recipient, item| {
+            let sealed = rhtn_archive::sealed::Sealed::decode(&item.sealed).ok()?;
+            v.lock()
+                .unwrap()
+                .node_keys
+                .open_half(recipient, item.n, &sealed.ct_n)
+        }));
+        let (v, q) = (view.clone(), cfg.queue.clone());
+        cfg.on_removed = Some(Arc::new(move |recipient, _n| {
+            let held: Vec<u64> = q.list(recipient).iter().map(|m| m.n).collect();
+            let mut view = v.lock().unwrap();
+            let now = view.now();
+            view.node_keys.prune(recipient, &|n| held.contains(&n), now);
+        }));
 
         // payload delivered on the direct path reaches the caller through
         // a channel; the peer is the connection's authenticated identity
@@ -1184,6 +1204,7 @@ async fn drive(
         filter: None,
         sibling_cache: Arc::new(Mutex::new(Vec::new())),
         addresses: Arc::new(Mutex::new(HashMap::new())),
+        cursors: Default::default(),
         tls: Arc::new(Mutex::new(HashMap::new())),
         connect_timeout: per_endpoint,
         on_reachability: None,

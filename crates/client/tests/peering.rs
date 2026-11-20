@@ -340,35 +340,23 @@ fn a_peer_holds_a_blob_it_cannot_open_and_the_owner_recovers_a_lost_contact_from
     );
 }
 
-/// A session each way between two clients on the harness, as a bearer
-/// handover gives it: each takes the other's prekeys, so a first message
-/// opens with no node asked (`carriage.rs` has the full case).
-fn sessions_between(s: &mut common::harness::Setup, a: &'static str, b: &'static str) {
-    s.face_off(a, b);
-    s.client(a).begin(Some(kh(b)), vec![], true).unwrap();
-    s.client(b).begin(Some(kh(a)), vec![], false).unwrap();
-    let oa = s.client(a).optical_contribution().unwrap();
-    let ob = s.client(b).optical_contribution().unwrap();
-    s.client(a).take_optical(&ob).unwrap();
-    s.client(b).take_optical(&oa).unwrap();
-    let ta = s.client(a).transcript_confirm().unwrap();
-    let tb = s.client(b).transcript_confirm().unwrap();
-    s.client(a).take_transcript(&tb).unwrap();
-    s.client(b).take_transcript(&ta).unwrap();
-    let ha = s.client(a).prekey_carriage().unwrap();
-    let hb = s.client(b).prekey_carriage().unwrap();
-    s.client(a).take_prekey_carriage(&hb).unwrap();
-    s.client(b).take_prekey_carriage(&ha).unwrap();
-    s.client(a).abandon();
-    s.client(b).abandon();
+/// Each of `a` and `b` takes the other's introduction, as a meeting's
+/// intents carry them: each holds the other's encryption key, so what the
+/// direct path cannot carry can be sealed.
+fn introduced(s: &mut common::harness::Setup, a: &'static str, b: &'static str) {
+    for (x, y) in [(a, b), (b, a)] {
+        let card = s.client(x).own_introduction().expect("an introduction");
+        s.client(y).take_introduction(&card).expect("taken");
+    }
 }
 
-/// Only `Msg::Payload`s, which is what a greeting queues: the locator,
-/// the request, and the deposit where one goes.
+/// Only `Msg::Payload`s, the direct path's, which is what a greeting
+/// queues where the path is held: the locator, the record, the request,
+/// and the deposit where one goes.
 fn payloads(msgs: &[rhtn_client::ceremony::Msg]) -> usize {
     use rhtn_client::ceremony::Msg;
     msgs.iter()
-        .filter(|m| matches!(m, Msg::Payload { .. } | Msg::Relay { .. }))
+        .filter(|m| matches!(m, Msg::Payload { .. }))
         .count()
 }
 
@@ -454,16 +442,20 @@ fn a_restored_client_knows_its_peers_from_the_horizon_and_takes_its_dataset_from
         c.greet_peer(kh("bob"), false).is_some(),
         "so he is greeted, for what he holds"
     );
-    // with no session to him yet, the greeting asks for his bundle first
-    // and waits (on the bench his own reopening has opened one by now)
+    // the path to him is held, as his dial to her is: the greeting goes on
+    // it, with nothing between them and no node asked for anything
     let out = c.outbox();
-    assert!(
-        out.iter()
-            .any(|m| matches!(m, rhtn_client::ceremony::Msg::PrekeyRequest(_))),
-        "the request waits on a session: {} messages",
+    assert_eq!(
+        payloads(&out),
+        3,
+        "the locator, the record and the request, direct: {} messages",
         out.len()
     );
-    assert_eq!(payloads(&out), 0, "nothing went on no session");
+    assert!(
+        !out.iter()
+            .any(|m| matches!(m, rhtn_client::ceremony::Msg::NodeKeyRequest(_))),
+        "no node key is asked for"
+    );
     let _ = peering;
 
     // and what bob holds comes back whole
@@ -497,77 +489,49 @@ fn a_restored_client_knows_its_peers_from_the_horizon_and_takes_its_dataset_from
     );
 }
 
-// functional: PAY-019
-/// **A peer silent for two rounds is opened to anew, and the deposit goes
-/// again** (`light-client-requirements.md` §3's rule for a verifier that
-/// lost its sessions, applied to a peer): the greeting on a held path
-/// carries the deposit once per dataset; on an unheld one never; after
-/// two rounds with no word back the session is set aside — the next
-/// message asks for a bundle, as a first message does, and the harness
-/// has no node to answer, so the asking is the proof — the deposit memory
-/// with it, so the next held contact on a session deposits afresh; and
-/// the silence allowed doubles.
+/// **A peer silent for two rounds is deposited to again, and the silence
+/// allowed doubles** (design §6.3): a peer restored from its phrase holds
+/// no deposit, so after two rounds with no word back what was deposited
+/// is taken as lost and goes again at the next held contact. The deposit
+/// goes on the direct path alone, once per dataset, and never on a round
+/// where the path is not held.
 // functional: TX-031
 #[test]
-fn a_peer_silent_for_two_rounds_is_opened_to_anew_and_deposited_to_again() {
-    use rhtn_client::ceremony::Msg;
+fn a_peer_silent_for_two_rounds_is_deposited_to_again() {
     let mut s = setup(&PARTIES);
     let _ = peered(&mut s);
-    sessions_between(&mut s, "alice", "bob");
     let c = s.client("alice");
     let _ = c.outbox(); // the peering's own submission, not a greeting
-    // round 1, held: locator, request, deposit
+    // round 1, held: locator, record, request and the deposit
     assert!(c.greet_peer(kh("bob"), true).is_some());
     assert_eq!(
         payloads(&c.outbox()),
         4,
         "locator, the record, request and the deposit"
     );
-    // round 2, unheld, and the second of silence: the session is set
-    // aside and the greeting waits on a bundle
+    // round 2, unheld, and the second of silence: no deposit on this round,
+    // and the memory of the last one goes
     assert!(c.greet_peer(kh("bob"), false).is_some());
-    let out = c.outbox();
-    assert!(
-        out.iter().any(|m| matches!(m, Msg::PrekeyRequest(_))),
-        "reopened: a bundle is asked for, as for a first message: {out:?}"
-    );
-    assert_eq!(payloads(&out), 0, "nothing goes on a session set aside");
-    // a session again (the bench's node would have answered the request),
-    // and round 3 held: the deposit memory went with the session, so the
-    // same dataset goes once more, with whatever had waited
-    sessions_between(&mut s, "alice", "bob");
-    let c = s.client("alice");
-    let _ = c.outbox();
+    assert_eq!(payloads(&c.outbox()), 3, "nothing deposited unheld");
+    // round 3, held: the same dataset goes once more
     assert!(c.greet_peer(kh("bob"), true).is_some());
     assert_eq!(
         payloads(&c.outbox()),
         4,
-        "deposited again after the reopening, and the greeting that waited was dropped"
+        "deposited again after two rounds of silence"
     );
-    // the silence allowed doubled: rounds 4 and 5 reopen nothing
+    // the silence allowed doubled: rounds 4 and 5 deposit nothing
     for _ in 0..2 {
         assert!(c.greet_peer(kh("bob"), true).is_some());
-        let out = c.outbox();
-        assert!(
-            !out.iter().any(|m| matches!(m, Msg::PrekeyRequest(_))),
-            "the session stands"
-        );
-        assert_eq!(payloads(&out), 3, "nothing to deposit: {out:?}");
+        assert_eq!(payloads(&c.outbox()), 3, "nothing new to deposit");
     }
-    // round 6 is the fourth of silence: reopened at the doubled interval
-    // — on a bundle still held, so the first message goes at once and
-    // the deposit with it; on none, a bundle is asked for first
+    // round 6 is the fourth of silence: deposited again at the doubled
+    // interval
     assert!(c.greet_peer(kh("bob"), true).is_some());
-    let out = c.outbox();
-    // on the harness, with no node to answer the bundle asked for in
-    // round 2, the greeting parks behind that request: anything but the
-    // plain two-payload greeting of a standing session is the reopening
-    let n = payloads(&out);
-    assert_ne!(
-        n,
-        3,
-        "reopened at the doubled interval: {} messages",
-        out.len()
+    assert_eq!(
+        payloads(&c.outbox()),
+        4,
+        "deposited again at the doubled interval"
     );
 }
 
@@ -584,7 +548,6 @@ fn a_peer_silent_for_two_rounds_is_opened_to_anew_and_deposited_to_again() {
 fn a_peering_record_in_the_greeting_makes_the_sender_a_peer_of_a_client_that_lost_everything() {
     let mut s = setup(&PARTIES);
     let peering = peered(&mut s);
-    sessions_between(&mut s, "alice", "bob");
     // the record goes with every greeting, from either side
     let _ = s.client("bob").outbox();
     assert!(s.client("bob").greet_peer(kh("alice"), false).is_some());
@@ -625,40 +588,44 @@ fn a_peering_record_in_the_greeting_makes_the_sender_a_peer_of_a_client_that_los
     );
 }
 
-/// **A prekey request that got no answer is asked again after a
-/// patience** [bench `61c672c-restore-kind30-1`, 2026-10-30]: the first
-/// may have met a node that had nothing for the peer yet, and until it
-/// is asked again every message to that peer parks behind it.
+/// **A greeting with no direct path waits for a node key, and the next
+/// greeting replaces what waited**: each is a fetch asked of the peer's
+/// node, since one that met nobody leaves nothing else to ask it, and the
+/// kinds a greeting carries park behind it only once — a key that arrives
+/// carries one greeting and not a round per minute of waiting [bench
+/// 584a275-restore-kind30-1, 2026-10-30].
 // functional: TX-031
 #[test]
-fn an_unanswered_prekey_request_is_asked_again_after_a_patience() {
-    use rhtn_client::ceremony::{Client, Msg};
+fn a_greeting_with_no_path_waits_for_a_node_key_and_the_next_one_replaces_it() {
+    use rhtn_client::ceremony::Msg;
     let mut s = setup(&PARTIES);
     let _ = peered(&mut s);
-    sessions_between(&mut s, "alice", "bob");
+    introduced(&mut s, "alice", "bob");
+    s.handles["alice"].reach.0.set(false);
     let asks = |out: &[Msg]| {
         out.iter()
-            .filter(|m| matches!(m, Msg::PrekeyRequest(_)))
+            .filter(|m| matches!(m, Msg::NodeKeyRequest(r) if *r == vec![kh("bob")]))
             .count()
     };
     let c = s.client("alice");
     let _ = c.outbox();
-    // two silent rounds: the session is set aside and a bundle asked for
-    assert!(c.greet_peer(kh("bob"), true).is_some());
-    let _ = c.outbox();
     assert!(c.greet_peer(kh("bob"), false).is_some());
-    assert_eq!(asks(&c.outbox()), 1, "asked once");
-    // asked again at once: no — the first request stands
-    assert!(c.greet_peer(kh("bob"), false).is_some());
-    assert_eq!(
-        asks(&c.outbox()),
-        0,
-        "the first request stands within the patience"
+    let out = c.outbox();
+    assert_eq!(payloads(&out), 0, "nothing on a path not held");
+    assert!(asks(&out) >= 1, "bob's node key asked for: {out:?}");
+    assert!(
+        !out.iter().any(|m| matches!(m, Msg::Sealed { .. })),
+        "nothing sealed before a node key is held"
     );
-    // past the patience with no answer: asked again
-    s.clock
-        .set(s.clock.get() + (Client::PREKEY_PATIENCE_S + 1) * 1000);
-    let c = s.client("alice");
+    let waiting = c.payload.pending.get(&kh("bob")).map_or(0, Vec::len);
+    assert_eq!(waiting, 3, "locator, the record and the request wait");
+    // a second greeting, the first still unanswered: asked again, and what
+    // waited is replaced rather than added to
     assert!(c.greet_peer(kh("bob"), false).is_some());
-    assert_eq!(asks(&c.outbox()), 1, "asked again after the patience");
+    assert!(asks(&c.outbox()) >= 1, "asked again");
+    assert_eq!(
+        c.payload.pending.get(&kh("bob")).map_or(0, Vec::len),
+        3,
+        "one greeting waits, not two"
+    );
 }

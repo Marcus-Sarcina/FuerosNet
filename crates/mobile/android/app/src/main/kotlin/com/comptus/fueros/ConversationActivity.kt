@@ -22,6 +22,9 @@ class ConversationActivity : Activity() {
 
     private lateinit var messages: LinearLayout
     private lateinit var scroll: ScrollView
+    /** The box and its button: not offered on a thread whose sender is
+     *  unverified, since a reply goes only to a contact. */
+    private lateinit var compose: LinearLayout
     private var peerKey: String? = null
 
     /** The identity this conversation belongs to: the one a thread was
@@ -80,6 +83,7 @@ class ConversationActivity : Activity() {
             addView(box)
             addView(send)
         }
+        compose = row
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(Screen.gutter(context), 24, Screen.gutter(context), 16)
@@ -116,6 +120,7 @@ class ConversationActivity : Activity() {
     private fun redraw() {
         messages.removeAllViews()
         val t = by?.let { b -> peerKey?.let { Gateway.front.thread(b, it) } }
+        compose.visibility = if (t?.unverified == true) android.view.View.GONE else android.view.View.VISIBLE
         if (t == null) {
             // **a screen with nobody behind it says so**: this opens from
             // the thread list, and a thread exists for every party met,

@@ -409,64 +409,6 @@ pub struct CaptureKeyHandover {
     pub key: Zeroizing<[u8; 32]>,
 }
 
-/// The sender's prekey material, carried across the local session
-/// (`wire-format.md` §14.3.4).
-///
-/// **What it is for.** Opening an end-to-end channel needs the peer's
-/// published bundle, and fetching one needs a node. Crossing it here means
-/// a co-present pair can open that channel afterwards without either
-/// party's own node having cooperated in anything.
-///
-/// **The bundle is reused, not reinvented.** It arrives in the bytes
-/// §7.8 publishes, signed by the sending identity, so the material's
-/// authenticity is that signature's and not the channel's. The channel
-/// supplies confidentiality: a bundle is not secret, but which pair
-/// exchanged one and alongside which ceremony are.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PrekeyHandover {
-    /// The ceremony this belongs to; one from another is refused.
-    pub ceremony_id: [u8; 32],
-    /// The sending device, by the key it presents (`wire-format.md` §8.2):
-    /// a session is with a device and never with an identity.
-    pub device: [u8; 32],
-    /// The sender's signed bundle, exactly the bytes §7.8 publishes.
-    pub bundle: Vec<u8>,
-    /// One one-time key as §7.8 encodes it, or nothing where the sender's
-    /// pool is empty, which §7.8 permits and is not an error here.
-    pub one_time: Option<Vec<u8>>,
-}
-
-impl PrekeyHandover {
-    /// The bytes of this `PrekeyHandover`, as §14.3.4 composes them.
-    pub fn encode(&self) -> Vec<u8> {
-        let mut out = Vec::new();
-        emit_array_head(&mut out, 4 + usize::from(self.one_time.is_some()));
-        emit_uint(&mut out, 1);
-        emit_bstr(&mut out, &self.ceremony_id);
-        emit_bstr(&mut out, &self.device);
-        emit_bstr(&mut out, &self.bundle);
-        if let Some(k) = &self.one_time {
-            emit_bstr(&mut out, k);
-        }
-        out
-    }
-
-    /// Read a `PrekeyHandover` from `b`; an error naming what did not read.
-    pub fn decode(b: &[u8]) -> Result<Self, String> {
-        let it = checked(b, "PrekeyHandover")?;
-        let a = fields(&it);
-        Ok(PrekeyHandover {
-            ceremony_id: fixed32(b, &a[1])?,
-            device: fixed32(b, &a[2])?,
-            bundle: bs(b, &a[3]).ok_or("a bundle is a byte string")?,
-            one_time: match a.get(4) {
-                None => None,
-                Some(k) => Some(bs(b, k).ok_or("a one-time key is a byte string")?),
-            },
-        })
-    }
-}
-
 impl CaptureKeyHandover {
     /// The bytes of this `CaptureKeyHandover`, as §14.3.2 composes them.
     pub fn encode(&self) -> Zeroizing<Vec<u8>> {
@@ -710,24 +652,21 @@ impl DeviceStart {
     }
 }
 
-/// **A delegated device's introduction** (§14.3.3): its transport key and
-/// the bundle the identity is to sign, field 6 absent.
+/// **A delegated device's introduction** (§14.3.3): the transport key it
+/// minted, which the delegations will name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeviceIntroduction {
     /// The raw transport key the delegations name.
     pub device: [u8; 32],
-    /// The unsigned `PrekeyBundle` (§7.8).
-    pub bundle: Vec<u8>,
 }
 
 impl DeviceIntroduction {
     /// The bytes of this `DeviceIntroduction`, as §14.3.3 composes them.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
-        emit_array_head(&mut out, 3);
+        emit_array_head(&mut out, 2);
         emit_uint(&mut out, 1);
         emit_bstr(&mut out, &self.device);
-        emit_bstr(&mut out, &self.bundle);
         out
     }
 
@@ -737,32 +676,47 @@ impl DeviceIntroduction {
         let f = fields(&item);
         Ok(DeviceIntroduction {
             device: fixed32(b, &f[1])?,
-            bundle: bs(b, &f[2]).ok_or("DeviceIntroduction: the bundle")?,
         })
     }
 }
 
-/// **The ceremony device's answer** (§14.3.3): the run of delegations and
-/// the bundle, signed.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// **The ceremony device's answer** (§14.3.3): the run of delegations,
+/// and the identity's two encryption secrets, so the device opens what is
+/// sealed to the person and authenticates what it sends as the person's
+/// [author, 2026-11-19]. **The secrets are wiped when dropped.**
+#[derive(Clone, PartialEq, Eq)]
 pub struct DeviceCredential {
     /// The run, contiguous 48-hour windows (§8.2).
     pub run: Vec<Vec<u8>>,
-    /// The `PrekeyBundle`, field 6 present (§7.8).
-    pub bundle: Vec<u8>,
+    /// The identity's X-Wing decapsulation seed (§2.5).
+    pub kem_seed: Zeroizing<[u8; 32]>,
+    /// The identity's sealing-authentication private key (§2.5).
+    pub auth: Zeroizing<[u8; 32]>,
+}
+
+impl std::fmt::Debug for DeviceCredential {
+    /// The run's length and nothing of the secrets.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DeviceCredential")
+            .field("run", &self.run.len())
+            .field("secrets", &"<redacted>")
+            .finish()
+    }
 }
 
 impl DeviceCredential {
-    /// The bytes of this `DeviceCredential`, as §14.3.3 composes them.
-    pub fn encode(&self) -> Vec<u8> {
-        let mut out = Vec::new();
-        emit_array_head(&mut out, 3);
+    /// The bytes of this `DeviceCredential`, as §14.3.3 composes them;
+    /// wiped when dropped, since they carry the secrets.
+    pub fn encode(&self) -> Zeroizing<Vec<u8>> {
+        let mut out = Zeroizing::new(Vec::new());
+        emit_array_head(&mut out, 4);
         emit_uint(&mut out, 1);
         emit_array_head(&mut out, self.run.len());
         for d in &self.run {
             emit_bstr(&mut out, d);
         }
-        emit_bstr(&mut out, &self.bundle);
+        emit_bstr(&mut out, &self.kem_seed[..]);
+        emit_bstr(&mut out, &self.auth[..]);
         out
     }
 
@@ -778,7 +732,8 @@ impl DeviceCredential {
                 .iter()
                 .map(|d| bs(b, d).ok_or("DeviceCredential: a delegation".to_string()))
                 .collect::<Result<_, _>>()?,
-            bundle: bs(b, &f[2]).ok_or("DeviceCredential: the bundle")?,
+            kem_seed: Zeroizing::new(fixed32(b, &f[2])?),
+            auth: Zeroizing::new(fixed32(b, &f[3])?),
         })
     }
 }

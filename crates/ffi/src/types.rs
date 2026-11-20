@@ -31,26 +31,6 @@ pub fn keyhash(id: &[u8]) -> Option<Keyhash> {
     id.try_into().ok()
 }
 
-/// The payload session's construction, as the client states it to its own
-/// user (`light-client-requirements.md` §3). A value, not a sentence: the
-/// wording is each shell's, in its user's own language.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
-pub enum Construction {
-    /// The classical construction.
-    DoubleRatchet,
-    /// The construction with the post-quantum ratchet beside it.
-    TripleRatchet,
-}
-
-impl From<rhtn_client::ratchet::Construction> for Construction {
-    fn from(c: rhtn_client::ratchet::Construction) -> Self {
-        match c {
-            rhtn_client::ratchet::Construction::DoubleRatchet => Construction::DoubleRatchet,
-            rhtn_client::ratchet::Construction::TripleRatchet => Construction::TripleRatchet,
-        }
-    }
-}
-
 /// What the capture asks the counterparty to do (design §7.5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum Ask {

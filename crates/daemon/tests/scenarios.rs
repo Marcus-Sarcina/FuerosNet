@@ -55,6 +55,7 @@ fn client_cfg(name: &str) -> ClientConfig {
         filter: None,
         sibling_cache: Arc::new(Mutex::new(Vec::new())),
         addresses: Arc::new(Mutex::new(Default::default())),
+        cursors: Default::default(),
         tls: Arc::new(Mutex::new(Default::default())),
         // **a dial's patience, and not a claim.**  Nothing in these
         // scenarios is about how fast a handshake completes.  What makes

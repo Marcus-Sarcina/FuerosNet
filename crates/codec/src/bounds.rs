@@ -23,9 +23,6 @@ pub const FRESH_SUBTREE: u64 = 0;
 
 /// Archive subset references (§1.3).
 pub const ARCHIVE_SUBSET_REFS: usize = 256;
-/// Bundles per `PrekeyReply`, one per device (`wire-format.md` §7.8): a chosen
-/// ceiling beside design §23.3's count of about three.
-pub const PREKEY_BUNDLES_PER_REPLY: usize = 8;
 /// Verifier responses per recovery (§1.3).
 pub const VERIFIER_RESPONSES_PER_RECOVERY: usize = 32;
 /// Witnesses per presence record (§1.3).  With the two participants this
@@ -34,14 +31,9 @@ pub const WITNESSES_PER_RECORD: usize = 16;
 /// Path length in nibbles (§1.3): depth 24 at a fanout of 10 exceeds any
 /// plausible network.
 pub const PATH_NIBBLES: u64 = 24;
-/// A prekey bundle's opaque blob (§1.3).  A PQXDH bundle is an ML-KEM-768
-/// encapsulation key of 1,184 bytes plus signed prekeys and signatures,
-/// roughly 1.5 to 2 KB, so 4 KB is a denial-of-service ceiling with
-/// headroom rather than a capacity figure.
-pub const PREKEY_BUNDLE_BLOB: usize = 4096;
 /// A profile's alias (§7.11): a name, not a biography.
 pub const PROFILE_ALIAS_BYTES: usize = 64;
-/// A profile's image (§7.11): a small picture, near a prekey fetch in
+/// A profile's image (§7.11): a small picture, near a node-key fetch in
 /// cost, and what §3.3's horizon of 221 multiplies.
 pub const PROFILE_IMAGE_BYTES: usize = 65_536;
 /// Back-pointers per signer in a merge (§1.3).  Longer than one means the
@@ -121,9 +113,6 @@ pub const SIGNING_REPLY_ENTRIES: usize = 2;
 /// A `DeviceCredential` delegation entry: a hybrid signature and its
 /// fields, bounded with room (§14.3.3).
 pub const DELEGATION_ENTRY_BYTES: usize = 4096;
-/// A carried `PrekeyBundle`, signed or its unsigned payload: §1.3's 4 KB
-/// blob bound plus the bundle's own fields (§14.3.3).
-pub const DEVICE_BUNDLE_BYTES: usize = 5120;
 /// Stream-0 control frames (§8.0): the length prefix's ceiling.
 pub const CONTROL_FRAME_BYTES: usize = 65_536;
 /// Bidirectional request frames (§9.2).

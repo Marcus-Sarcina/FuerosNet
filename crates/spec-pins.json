@@ -1,11 +1,11 @@
 {
  "specs": {
-  "network-design.md": "f5143c59dc85cf3b345b233f40c90ac3a39f5125714d9c2f218464473ddf7d84",
-  "wire-format.md": "6b8ecbaa3df46c10e0b65bcb4cfd854201ea72093d923622175f42c59c5636bf",
-  "light-client-requirements.md": "3b6ec31a89f1561a39d2605ed4601428af8a2983ef4b7e37aa1d0edbaa7c93dc",
+  "network-design.md": "325815ea309dcd3760b837ef561a41312cdcfd4b37e8749eac49370c1a7c71b6",
+  "wire-format.md": "2463498d5d2925f273ef3cf567a14c8a93afe731516239dab9c8ea049e0b0230",
+  "light-client-requirements.md": "2125ca4680af75a2580469efa31d8a608fbcbf5dd3af9b46078d33c154e78a39",
   "infra-client-requirements.md": "83a7a22f5f2ac2b252de62a4fc82acff0282b53e0c1085fde8d0afed345d9996",
   "resource-requirements.md": "6023af865aec051ba04e4451dbd2de7703d85b60809db7f793b91de6b4bbaf39",
-  "functional_tests.md": "150901aa37d26e3897dd843ed17a8117e2056bb4bec58dd744ac78b43b9d73cf"
+  "functional_tests.md": "2a944f2608ca2c31b64c28d1efb8990ad145a3d2d809999e612b995825a0e428"
  },
  "accepted": "2026-11-20",
  "note": "the documents crates/check.sh last passed against; rewritten only by tools/pincheck.py --accept"

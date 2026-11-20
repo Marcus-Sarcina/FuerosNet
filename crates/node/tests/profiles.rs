@@ -140,3 +140,67 @@ fn profiles_are_kept_where_the_store_is_and_come_back_after_a_restart() {
     assert_eq!(third.len(), 1);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// acceptance: SUB-13
+#[test]
+fn sub_13_a_node_holds_the_current_profile_and_no_history_of_its_publications() {
+    let dir = std::env::temp_dir().join(format!("rhtn-profiles-history-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut n = view("bob", Table::with_me(kh("bob")), "alice", &[]);
+    n.profiles = rhtn_node::profiles::ProfileStore::at(&dir).unwrap();
+    let hex = |b: &[u8]| b.iter().map(|x| format!("{x:02x}")).collect::<String>();
+    let subject_dir = dir.join("profiles").join(hex(&kh("carol")));
+    let inspect = |s: &rhtn_node::profiles::ProfileStore, current: &[u8], note: &str| {
+        assert_eq!(
+            s.get(&kh("carol"), &SUBNET, KIND_OWN).map(Vec::as_slice),
+            Some(current),
+            "{note}: the current profile"
+        );
+        assert_eq!(s.len(), 1, "{note}: no prior profile");
+        // on disk: one file, named by subnet and kind and never by time
+        // or count, holding the profile's bytes and nothing more
+        let files = files_under(&dir);
+        assert_eq!(
+            files,
+            vec![subject_dir.join(format!("{}-{KIND_OWN}", hex(&SUBNET)))],
+            "{note}: one file and nothing else"
+        );
+        assert_eq!(
+            std::fs::read(&files[0]).unwrap(),
+            current,
+            "{note}: the profile alone"
+        );
+    };
+    let first = Profile::build(
+        &id("carol"),
+        &SUBNET,
+        KIND_OWN,
+        "Carol",
+        None,
+        1_800_000_000,
+    );
+    assert_eq!(
+        publish(&mut n, "carol", first.clone(), 1),
+        SUBMISSION_ACCEPTED
+    );
+    inspect(&n.profiles, &first, "after the first");
+    let later = Profile::build(
+        &id("carol"),
+        &SUBNET,
+        KIND_OWN,
+        "Caroline",
+        None,
+        1_800_003_600,
+    );
+    assert_eq!(
+        publish(&mut n, "carol", later.clone(), 2),
+        SUBMISSION_ACCEPTED
+    );
+    inspect(&n.profiles, &later, "after the later one");
+    // after a save and a restart, the same and nothing more
+    n.profiles.save(&dir).unwrap();
+    let again = rhtn_node::profiles::ProfileStore::at(&dir).unwrap();
+    inspect(&again, &later, "after a restart");
+    let _ = std::fs::remove_dir_all(&dir);
+}

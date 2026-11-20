@@ -3,7 +3,6 @@ package com.comptus.fueros
 import android.content.Context
 import org.json.JSONObject
 import uniffi.rhtn_ffi.Answer
-import uniffi.rhtn_ffi.Construction
 import uniffi.rhtn_ffi.Conversation
 import uniffi.rhtn_ffi.Event
 import uniffi.rhtn_ffi.Participant
@@ -811,18 +810,6 @@ object Ceremony {
         // callback thread (step has already moved). The lock makes the
         // second entry see the advanced step and do nothing.
         val live = carriage ?: return
-        // **the prekey handover is taken the moment it lands, at any
-        // step**: the kernel keeps it only while the ceremony is active,
-        // and the ceremony ends at finalization on the kernel's own clock
-        live.received(Carriage.Phase.PREKEY)?.let { set ->
-            set.firstOrNull()?.let { bytes ->
-                Gateway.call("takePrekeyCarriage", { e -> m.note("their prekey handover was refused: ${e.reason}") }) {
-                    p.takePrekeyCarriage(bytes)
-                    m.note("their prekeys are in: a channel can open later without a node.")
-                }
-            }
-            live.discard(Carriage.Phase.PREKEY)
-        }
         // **the window opens with the request** (design §7.1 item 4), the
         // first step after the codes, and **the conversation enters with
         // it** [author, 2026-10-24]: the queries go the moment the window is
@@ -1011,17 +998,6 @@ object Ceremony {
         }
         if (!sent) return m.stop("the radio would not take the capture key; nothing crossed")
         m.note("my capture key is sent; capturing the counterparty across the window.")
-        // **and the prekeys behind it** (`wire-format.md` §14.3.4): this
-        // device's signed bundle and one one-time key, so the two can open
-        // a channel afterwards with no node to ask. Not the record's
-        // concern: a handover that will not cross is noted, and the meeting
-        // goes on
-        val prekeys = Gateway.call("prekeyCarriage", { e -> m.note("no prekey handover: ${e.reason}"); null }) {
-            p.prekeyCarriage()
-        }
-        if (prekeys != null && carriage?.send(listOf(prekeys), Carriage.Phase.PREKEY) != true) {
-            m.note("the radio would not take the prekey handover; a later message will need a node.")
-        }
         drainBearer(p, m)
         // THE HOLD, turned from here for the window: each tick is one short
         // call into the kernel — a frame and the detector — so the

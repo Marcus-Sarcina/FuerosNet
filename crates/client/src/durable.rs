@@ -3,16 +3,14 @@
 //! and the readers that take nothing partial.
 //!
 //! **This is the device's own storage, not the backup** (design §13.7.1,
-//! §23.3).  The payload material and the sessions are a device's: a
-//! session is with a device, and material moved to another device would
-//! part the ratchet at the first message.  So they survive a restart here
-//! and never travel in the portable envelope, which carries the identity,
-//! the records and the capture store.
+//! §23.3).  What this device has collected from each node, what it has
+//! opened and what waits for a node key are its own, so they survive a
+//! restart here and never travel in the portable envelope, which carries
+//! the identity, the records and the capture store.
 //!
 //! A blob that does not decode whole is refused whole: a client that
-//! restored five of six parts would hold sessions it cannot advance or an
-//! archive with no store, and would be quietly worse than one starting
-//! from nothing that says so.
+//! restored five of six parts would hold an archive with no store, and
+//! would be quietly worse than one starting from nothing that says so.
 
 use rhtn_codec::cbor::{Item, parse_all};
 use rhtn_codec::encode::*;
@@ -54,13 +52,6 @@ pub(crate) fn optional<T>(it: &Item, f: impl FnOnce(&Item) -> Option<T>) -> Opti
 pub(crate) fn emit_opt_bstr(out: &mut Vec<u8>, b: Option<&[u8]>) {
     match b {
         Some(b) => emit_bstr(out, b),
-        None => emit_null(out),
-    }
-}
-
-pub(crate) fn emit_opt_uint(out: &mut Vec<u8>, u: Option<u64>) {
-    match u {
-        Some(u) => emit_uint(out, u),
         None => emit_null(out),
     }
 }

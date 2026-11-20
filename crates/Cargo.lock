@@ -3660,6 +3660,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "zeroize",
 ]
 
 [[package]]
@@ -3672,6 +3673,7 @@ dependencies = [
  "serde_json",
  "sha2 0.11.0",
  "tracing",
+ "zeroize",
 ]
 
 [[package]]
@@ -3802,6 +3804,7 @@ dependencies = [
  "rhtn-cli",
  "rhtn-client",
  "rhtn-codec",
+ "rhtn-crypto",
  "rhtn-ffi",
  "rhtn-launch",
  "rhtn-model",
@@ -3956,6 +3959,7 @@ dependencies = [
  "sha2 0.11.0",
  "tokio",
  "tracing",
+ "zeroize",
 ]
 
 [[package]]

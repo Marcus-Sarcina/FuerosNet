@@ -8,10 +8,10 @@
 //!
 //! 1. the phone's `DeviceStart`: the identity and the run's first window,
 //!    which this desktop stands up on;
-//! 2. this desktop's `DeviceIntroduction`: its key and the bundle over the
-//!    payload material it minted on standing up;
+//! 2. this desktop's `DeviceIntroduction`: the key it presents;
 //! 3. the phone's `DeviceCredential`: the whole run, opening with that
-//!    first window byte for byte, and the bundle signed;
+//!    first window byte for byte, and the identity's two encryption
+//!    secrets, so this desktop reads what is sealed to the person;
 //! 4. the dataset (design §23.3): this desktop's contribution, the
 //!    phone's, and the hand-over sealed under the key the two derive, each
 //!    holder saying yes on their own device.
@@ -166,12 +166,8 @@ impl Offer {
             )
             .map_err(|e| e.to_string())?,
         );
-        let bundle = participant
-            .bundle_to_sign()
-            .ok_or("no bundle to sign: this desktop's material is signed over already")?;
         let intro = DeviceIntroduction {
             device: self.offer.device,
-            bundle,
         };
         write_frame(&mut stream, &session.seal(&intro.encode()))?;
 
@@ -185,8 +181,10 @@ impl Offer {
         participant
             .take_run(credential.run.clone())
             .map_err(|e| e.to_string())?;
+        // the identity's encryption secrets, so this desktop reads what is
+        // sealed to the person (`wire-format.md` §14.3.3)
         participant
-            .take_signed_bundle(credential.bundle)
+            .take_encryption_secrets(credential.kem_seed.to_vec(), credential.auth.to_vec())
             .map_err(|e| e.to_string())?;
 
         let dataset = self.dataset(&session, &mut stream, &participant)?;
@@ -370,7 +368,11 @@ mod tests {
 
     /// The phone's side, as its shell runs it: read the code, connect, and
     /// answer each carriage through the kernel.
-    fn phone(phone: Arc<Participant>, code: Vec<u8>, hand: bool) -> Result<(), String> {
+    fn phone(
+        phone: Arc<Participant>,
+        code: Vec<u8>,
+        hand: bool,
+    ) -> Result<DeviceCredential, String> {
         let link = DeviceLink::read(code).map_err(|e| e.to_string())?;
         let mut s = TcpStream::connect(link.reach()).map_err(|e| e.to_string())?;
         let start = phone
@@ -381,6 +383,9 @@ mod tests {
         let credential = phone
             .device_credential(link.clone(), intro)
             .map_err(|e| e.to_string())?;
+        // what crossed, as the desktop opens it, kept for the test to read
+        let crossed =
+            DeviceCredential::decode(&link.open(credential.clone()).map_err(|e| e.to_string())?)?;
         write_frame(&mut s, &credential)?;
         // shown before the other's is taken: showing ends the pairing before
         let mine = phone.dataset_contribution().map_err(|e| e.to_string())?;
@@ -393,7 +398,7 @@ mod tests {
             let carriage = phone.dataset_carriage().map_err(|e| e.to_string())?;
             write_frame(&mut s, &link.seal(carriage))?;
         }
-        Ok(())
+        Ok(crossed)
     }
 
     // functional: NET-035
@@ -408,7 +413,7 @@ mod tests {
         let paired = offer
             .pair(vec![], platform(&dd), &AtomicBool::new(false))
             .expect("paired");
-        side.join().unwrap().expect("the phone's side runs");
+        let crossed = side.join().unwrap().expect("the phone's side runs");
 
         assert_eq!(paired.material, ph.material());
         assert_eq!(paired.run.len(), 3);
@@ -416,7 +421,23 @@ mod tests {
         let desk = &paired.participant;
         assert!(!desk.holds_seed());
         assert_eq!(desk.presented_key(), offer.device().to_vec());
-        assert!(desk.bundle_to_sign().is_none(), "the bundle is signed over");
+        // **the credential carries the run and alice's two encryption
+        // secrets** (`wire-format.md` §14.3.3), equal to what her phone
+        // derives from her root: what lets the desktop open what is sealed
+        // to the person and seal as her
+        assert_eq!(crossed.run, paired.run);
+        let s = seeds("alice");
+        let root = rhtn_crypto::SigningIdentity::from_seeds(
+            s[..32].try_into().unwrap(),
+            s[32..].try_into().unwrap(),
+        );
+        let derived = rhtn_crypto::seal::EncryptionSecret::from_identity_root(root.identity_root());
+        assert_eq!(*crossed.kem_seed, *derived.kem_seed(), "her X-Wing seed");
+        assert_eq!(
+            *crossed.auth,
+            *derived.auth_secret(),
+            "her authentication key"
+        );
         let _ = std::fs::remove_dir_all(&pd);
         let _ = std::fs::remove_dir_all(&dd);
     }

@@ -222,41 +222,61 @@ fn an_object_the_schema_refuses_does_not_decode_here_either() {
     assert!(CandidateHandover::decode(&fixture("P-capture-key-handover")).is_err());
 }
 
-/// The prekey handover encodes to the canonical bytes, with and without a
-/// one-time key.
+/// **The pairing's two objects** (`wire-format.md` §14.3.3): the desktop's
+/// `DeviceIntroduction` and the phone's `DeviceCredential` encode to the
+/// canonical bytes, and the credential carries alice's two encryption
+/// secrets, the ones her own seed derives.
 #[test]
-fn the_prekey_handover_encodes_to_the_canonical_bytes() {
-    let fx = fixture("P-prekey-handover");
-    let read = PrekeyHandover::decode(&fx).expect("the canonical handover decodes");
-    assert_eq!(read.encode(), fx, "byte equality with the corpus");
-    assert!(
-        read.one_time.is_some(),
-        "the canonical one carries a one-time key"
-    );
-    // the bundle is records.md's bytes unchanged, not a reinvention: it is
-    // long enough to be a signed COSE object rather than a stub
-    assert!(read.bundle.len() > 64, "a signed bundle, reused");
+fn the_device_introduction_and_credential_encode_to_the_canonical_bytes() {
+    let fx = fixture("P-device-introduction");
+    let intro = DeviceIntroduction::decode(&fx).expect("the canonical introduction decodes");
+    assert_eq!(intro.encode(), fx, "byte equality with the corpus");
 
-    // §7.8 lets a pool run dry, so an absent one-time key is the empty
-    // pool and not a malformed object
-    let dry = fixture("P-prekey-handover-dry");
-    let read = PrekeyHandover::decode(&dry).expect("the dry handover decodes");
-    assert_eq!(read.encode(), dry);
-    assert_eq!(read.one_time, None);
-    assert_ne!(dry, fx, "the fifth element is present or not");
+    let fx = fixture("P-device-credential");
+    let cred = DeviceCredential::decode(&fx).expect("the canonical credential decodes");
+    assert_eq!(&cred.encode()[..], &fx[..], "byte equality with the corpus");
+    assert_eq!(cred.run.len(), 1, "one delegation");
+    let alice = rhtn_crypto::identity::testkit::test_identity("alice");
+    assert_eq!(hex(&alice.public.keyhash), ALICE, "the vectors' alice");
+    let own = rhtn_crypto::seal::EncryptionSecret::from_identity_root(alice.identity_root());
+    assert_eq!(
+        *cred.kem_seed,
+        *own.kem_seed(),
+        "her X-Wing seed, as her seed derives it"
+    );
+    assert_eq!(
+        *cred.auth,
+        *own.auth_secret(),
+        "her sealing-authentication key, as her seed derives it"
+    );
+    assert!(
+        !format!("{cred:?}").contains(&hex(&cred.kem_seed[..])),
+        "a credential's debug form shows nothing of the secrets"
+    );
+
+    // the run's ceiling is ninety days, forty-five windows
+    let b = fixture("B-credential-delegations-45");
+    assert_eq!(
+        DeviceCredential::decode(&b)
+            .expect("at the ceiling")
+            .run
+            .len(),
+        45
+    );
 }
 
-/// What the checker refuses, each against the corpus's own negative.
+/// What the checker refuses of the pairing's objects, each against the
+/// corpus's own negative.
 #[test]
-fn the_prekey_handover_refuses_what_it_should() {
-    for id in [
-        "N-prekey-handover-device-31",
-        "N-prekey-handover-anchor-31",
-        "N-prekey-handover-empty-bundle",
-        "N-prekey-handover-version-2",
-    ] {
-        assert!(PrekeyHandover::decode(&fixture(id)).is_err(), "{id}");
+fn the_device_introduction_and_credential_refuse_what_they_should() {
+    for id in ["N-device-introduction-31", "N-device-introduction-bundle"] {
+        assert!(DeviceIntroduction::decode(&fixture(id)).is_err(), "{id}");
     }
+    for id in ["N-device-credential-seed-31", "N-credential-delegations-46"] {
+        assert!(DeviceCredential::decode(&fixture(id)).is_err(), "{id}");
+    }
+    assert!(DeviceCredential::decode(&fixture("P-device-introduction")).is_err());
+    assert!(DeviceIntroduction::decode(&fixture("P-device-credential")).is_err());
 }
 
 // functional: NET-024
@@ -351,12 +371,15 @@ fn the_session_key_and_the_sealed_carriage_match_the_fixed_vector() {
     );
     assert_eq!(*session_key((&hi, &second), (&lo, &first)), *key);
     let cid = kh("cb8ea88ad0a089017394c291f918217c4dc8d754a4639eb024f23662e5ca2b18");
-    let sealed = hexbytes(
-        "5de3c068484e4dfcbbd92cd758d67f3179fe2114ea5ac6e25e06e6b8c62624093d2f3bacf815836d9d29958b7aab3e3df07de4e2ecdc0a73fb3d77809a20ff582a0ec97db3e13d1d1b642100cbc9d8594b4c8e491373668bce783a84f363e46ab3e0ae8248f32479194454c0c729dfbec5663825650a8a4ab38e40f59659c2343b17b3814dba1b171d1125e00c9430d71b3736f6166be8fee2957d74440b3b921b5044be54c96c520e233f88601f0d4d86f5c2ef384e8485302291ac2d32cff50bce00d3460716b33c74410c52a588f23bc2f2a58b6cf6e7b05f895243f69ecf2eb5682905c07ee95c404c85b1918d074e333064f530163930c1f3dd169323be766a89163a35bc7a6566cfa19e5dbbc3954d19e346d6fe13e9aa953a97e746cf9d5a38444773054a3bab6edf3234fb6333b26eb76d3f5231532365c956014640461d7efedf02fb632ec9eef11aa5a40058f09bbae449fdb72f2e25b05309f5521b5e",
-    );
-    assert_eq!(sealed.len(), 354);
+    let sealed = hexbytes(concat!(
+        "5de3c068484e4dfcbbd92cd75ed67f3179fe2114ea5ac6e25e06e6b8c6262409",
+        "3d2f3bacf815836d9d29958b7aab3e3df07d4cd446db024f40994a36b438b074",
+        "7ee651b917b1d7dcc3e0ff1f1d819796567beac38cb68b78149d058183029bb0",
+        "8c37",
+    ));
+    assert_eq!(sealed.len(), 98);
     let plain = open_carriage(&key, &cid, &sealed).expect("the fixed carriage opens");
-    assert_eq!(&plain[..], &fixture("P-prekey-handover")[..]);
+    assert_eq!(&plain[..], &fixture("P-capture-key-handover")[..]);
     // another ceremony's key — the same contributions the other way round
     // is one — does not open it, and neither does the right key under
     // another ceremony's id

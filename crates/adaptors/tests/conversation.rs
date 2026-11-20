@@ -86,6 +86,8 @@ async fn the_conversation_runs_over_the_payload_path_to_a_record_every_signer_ho
         .iter()
         .map(|n| kh(n))
         .collect();
+    // carol writes to alice below, which takes alice's card
+    knows(&carol, "alice").await;
     for p in [&alice, &bob, &w1, &w2, &carol] {
         p.courier.attach(population.clone()).await;
     }
@@ -485,6 +487,7 @@ async fn a_signer_whose_root_check_fails_answers_and_the_proposer_records_it() {
     let mut bob = host("bob", &serving, &inboxes, 0);
     let w1 = host("w1", &serving, &inboxes, 0);
     let population: Vec<Keyhash> = ["alice", "bob", "w1"].iter().map(|n| kh(n)).collect();
+    exchange_cards(&[("alice", &alice), ("bob", &bob), ("w1", &w1)]).await;
     for p in [&alice, &bob, &w1] {
         p.courier.attach(population.clone()).await;
     }
@@ -525,7 +528,7 @@ async fn a_signer_whose_root_check_fails_answers_and_the_proposer_records_it() {
     );
     ra.expect("alice captures bob");
     rb.expect("bob captures alice");
-    let _bearer = bearing(vec![
+    let bearer = bearing(vec![
         (kh("alice"), alice.handle.clone(), alice.courier.clone()),
         (kh("bob"), bob.handle.clone(), bob.courier.clone()),
     ]);
@@ -554,9 +557,12 @@ async fn a_signer_whose_root_check_fails_answers_and_the_proposer_records_it() {
     );
 
     // what bob is sent is alice's body rebuilt with its root flipped,
-    // sealed before she proposes so the session's order is kept; her
-    // own proposal then goes out and is kept back, so bob and w1 never
-    // see a body that verifies
+    // sealed before she proposes; her own proposal then goes out and is
+    // kept back, so bob and w1 never see a body that verifies. **The
+    // bearer stops first**: her proposal's leg to bob crosses the local
+    // interface, and two paths keep no order between them, so the one
+    // that would carry a body that verifies carries nothing from here
+    bearer.abort();
     let sent = alice
         .with(|c| {
             let flags = c
@@ -586,6 +592,24 @@ async fn a_signer_whose_root_check_fails_answers_and_the_proposer_records_it() {
         .await;
     let carried = alice.courier.carry(sent).await;
     assert!(carried.complete(), "{carried:?}");
+    // bob reviews the body that reached him, and only then does the bearer
+    // run again — with alice's own leg dropped, the kept-back proposal
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !bob
+        .conversed()
+        .iter()
+        .any(|(_, c)| matches!(c, Conversed::Reviewed { .. }))
+    {
+        assert!(Instant::now() < deadline, "bob reviews the body");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        bob.drain();
+    }
+    let dropped = alice.with(|c| c.carriages()).await;
+    assert!(!dropped.is_empty(), "her own body, which never reaches bob");
+    let _bearer = bearing(vec![
+        (kh("alice"), alice.handle.clone(), alice.courier.clone()),
+        (kh("bob"), bob.handle.clone(), bob.courier.clone()),
+    ]);
 
     // bob answers refusal 4 and alice records it rather than waiting
     assert!(
@@ -675,6 +699,7 @@ async fn a_stopped_participant_does_not_witness_its_own_ceremony() {
     let mut alice = host("alice", &serving, &inboxes, 0);
     let mut bob = host("bob", &serving, &inboxes, 0);
     let population: Vec<Keyhash> = ["alice", "bob"].iter().map(|n| kh(n)).collect();
+    exchange_cards(&[("alice", &alice), ("bob", &bob)]).await;
     for p in [&alice, &bob] {
         p.courier.attach(population.clone()).await;
     }
@@ -909,6 +934,7 @@ async fn a_witness_both_participants_nominated_signs_once() {
     let bob = host("bob", &serving, &inboxes, 0);
     let w1 = host("w1", &serving, &inboxes, 0);
     let population: Vec<Keyhash> = ["alice", "bob", "w1"].iter().map(|n| kh(n)).collect();
+    exchange_cards(&[("alice", &alice), ("bob", &bob), ("w1", &w1)]).await;
     for p in [&alice, &bob, &w1] {
         p.courier.attach(population.clone()).await;
     }

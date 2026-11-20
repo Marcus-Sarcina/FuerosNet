@@ -178,8 +178,8 @@ pub mod aad {
     pub const ANCHOR: &[u8] = b"rhtn/1:anchor";
     /// A node's endpoint record (§1.1, §7.6).
     pub const ENDPOINTS: &[u8] = b"rhtn/1:endpoints";
-    /// A prekey bundle (§1.1, §7.8).
-    pub const PREKEY: &[u8] = b"rhtn/1:prekey";
+    /// A node's key for one recipient (§1.1, §7.8).
+    pub const NODE_KEY: &[u8] = b"rhtn/1:node-key";
     /// A profile, an alias and an image per position (§1.1, §7.11).
     pub const PROFILE: &[u8] = b"rhtn/1:profile";
     /// A subtree acknowledgement (§1.1, §7.5).

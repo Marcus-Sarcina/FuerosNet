@@ -66,6 +66,7 @@ pub fn client_cfg(name: &str) -> ClientConfig {
         filter: None,
         sibling_cache: Arc::new(Mutex::new(Vec::new())),
         addresses: Arc::new(Mutex::new(Default::default())),
+        cursors: Default::default(),
         tls: Arc::new(Mutex::new(Default::default())),
         connect_timeout: std::time::Duration::from_millis(1500),
         on_reachability: None,
@@ -117,13 +118,61 @@ pub fn drop_heartbeats() -> OutboundFilter {
     })
 }
 
-/// Every delivery that arrives within `ms`.
+/// What stands for a seal's nonce and tag ahead of [`sealed`]'s text: the
+/// shortest body the grammar admits (`wire-format.md` §7.8.1).
+const SEAL_OVERHEAD: usize = 28;
+
+/// **`text` as a node queues it**: a `Sealed` (`wire-format.md` §7.8.1)
+/// whose body is the text behind filler standing for the nonce and tag,
+/// and whose two encapsulations are filler of the declared length. A
+/// transport test is about what is queued, delivered and when, not about
+/// the seal's arithmetic, and a node with no node keys delivers its half
+/// as zeros.
+pub fn sealed(text: &[u8]) -> Vec<u8> {
+    sealed_to(text, 1)
+}
+
+/// [`sealed`] under node key number `n`: what a node holding keys of its
+/// own has a half for.
+pub fn sealed_to(text: &[u8], n: u64) -> Vec<u8> {
+    use rhtn_crypto::xwing::CIPHERTEXT_BYTES;
+    let mut body = vec![0u8; SEAL_OVERHEAD];
+    body.extend_from_slice(text);
+    rhtn_archive::sealed::Sealed {
+        n,
+        ct_r: Box::new([0x11; CIPHERTEXT_BYTES]),
+        ct_n: Box::new([0x22; CIPHERTEXT_BYTES]),
+        body,
+    }
+    .encode()
+}
+
+/// What [`sealed`] stood for, read back out of a delivery: the
+/// `RelayedPayload`'s seal, and its body.
+pub fn opened(delivery: &[u8]) -> Vec<u8> {
+    let r = rhtn_archive::submission::unrelayed(delivery).expect("a relayed payload");
+    rhtn_archive::sealed::Sealed::decode(&r.sealed)
+        .expect("a seal")
+        .body[SEAL_OVERHEAD..]
+        .to_vec()
+}
+
+/// Queue `text` for `to` at `node`, as [`sealed`] stands it in.
+pub fn enqueue(
+    node: &Arc<Node>,
+    to: &str,
+    text: &[u8],
+) -> Result<u64, rhtn_transport::queue::Refusal> {
+    node.enqueue(kh(to), sealed(text), 1)
+}
+
+/// Every delivery that arrives within `ms`, each as the text it stood for.
 pub async fn drain(s: &mut Session, ms: u64) -> Vec<Vec<u8>> {
     let mut got = Vec::new();
     while let Ok(Some(b)) =
         tokio::time::timeout(std::time::Duration::from_millis(ms), s.deliveries.recv()).await
     {
-        got.push(b);
+        got.push(opened(&b));
     }
     got
 }

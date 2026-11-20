@@ -389,7 +389,10 @@ impl Client {
                             abort = %crate::diag::abort(&e),
                             "cer.carriage.failed"
                         );
-                        failed.push((*k, PayloadError::NoSession));
+                        failed.push((
+                            *k,
+                            PayloadError::Malformed("the local carriage failed".into()),
+                        ));
                     }
                 }
                 continue;

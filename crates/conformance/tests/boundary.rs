@@ -22,18 +22,22 @@ async fn s03_ffi_send_must_report_a_refused_relay_submission() {
  use rhtn_transport::{session::NodeConfig,tls::Pins};
  let (a,b,c)=(test_identity("alice"),Arc::new(test_identity("bob")),test_identity("carol"));
  let ids=vec![a.public.clone(),b.public.clone(),c.public.clone()];let pins=Pins::new();for id in &ids {pins.pin_identity(id);}
- let mut view=NodeView::new(b.clone(),Locator::root(b.public.keyhash,Seqno {series:1,counter:0}));
- let mut ck=rhtn_client::payload::PayloadKeys::generate(&mut |b|b.fill(31),1_800_000_000);
- view.prekeys.publish(&ids,&ck.bundle(&c,c.public.ed.as_bytes(),1_800_000_000)).unwrap();
+ let view=NodeView::new(b.clone(),Locator::root(b.public.keyhash,Seqno {series:1,counter:0}));
  let mut cfg=NodeConfig::defaults(b.clone(),pins,30);cfg.queue_cap=Some(0);
  let node=LiveNode::start(cfg,view,ids.clone(),AnchorTable::new(0,Ingestion::UnverifiedGossip));
- assert!(node.node.serves(&c.public.keyhash),"control: Carol is known through her held bundle");
- let known=ids.iter().map(|i|i.key_material()).collect();
+ assert!(node.node.serves(&c.public.keyhash),"control: the node serves Carol");
+ let known:Vec<Vec<u8>>=ids.iter().map(|i|i.key_material()).collect();
+ // 2026-11-20, slice 2: a message is sealed to its recipient, so Alice holds
+ // Carol's introduction, which carries her encryption key
+ let k2=known.clone();
+ let carol=tokio::task::spawn_blocking(move ||Participant::start(seeds("carol"),k2,platform()).unwrap()).await.unwrap();
+ let intro=carol.own_introduction().unwrap();
  let p=Arc::new(tokio::task::spawn_blocking(move ||Participant::start(seeds("alice"),known,platform()).unwrap()).await.unwrap());
+ let q=p.clone();tokio::task::spawn_blocking(move ||q.take_introduction(intro)).await.unwrap().unwrap();
  let (q,addr,bid,cid)=(p.clone(),node.addr.to_string(),b.public.keyhash.to_vec(),c.public.keyhash.to_vec());
  tokio::task::spawn_blocking(move ||q.attach(bid,vec![addr],vec![cid])).await.unwrap().unwrap();
  let recipient=c.public.keyhash;
- assert!(matches!(node.node.enqueue(recipient,vec![1]),Err(rhtn_transport::queue::Refusal::AtCap)),"control: configured queue bound refuses delivery for this recipient");
+ assert!(matches!(node.node.enqueue(recipient,vec![1],1),Err(rhtn_transport::queue::Refusal::AtCap)),"control: configured queue bound refuses delivery for this recipient");
  let q=p.clone();let sent=tokio::task::spawn_blocking(move ||q.send(recipient.to_vec(),KIND_APPLICATION,b"message that cannot be taken".to_vec())).await.unwrap();
  assert_eq!(node.node.queued(&recipient),0,"control: no message was queued");
  node.endpoint.close(0u32.into(),b"done");

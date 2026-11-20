@@ -48,10 +48,10 @@ class Carriage(private val radio: Bearer.Link?) {
         const val PROXIMITY_RETIRED = 1
         /** The capture key, one each way. */
         const val CAPTURE_KEY = 2
-        /** The prekey handover (`wire-format.md` §14.3.4), one each way:
-         *  the sender's signed bundle and one one-time key, so the two
-         *  can open a channel afterwards without a node. */
-        const val PREKEY = 3
+        /** Retired [2026-11-20]: carried the prekey handover while there
+         *  was one. The number is never reused. */
+        @Suppress("unused")
+        const val PREKEY_RETIRED = 3
         /** The traversal candidates (`wire-format.md` §14.3.2, design
          *  §12.6.3), one each way, anchored: the route the two leave with
          *  that no node carried. */

@@ -7,7 +7,10 @@ use crate::direct::Direct;
 use crate::serving::{Inbound, Serving};
 use crate::verifier::Verifiers;
 use rhtn_archive::Keyhash;
-use rhtn_archive::prekey::{PrekeyRequest, REQUEST_PREKEY};
+use rhtn_archive::node_key::{NodeKeyRequest, REQUEST_NODE_KEY};
+use rhtn_archive::submission::{
+    REQUEST_RELAY, RelaySubmission, SUBMISSION_ACCEPTED, SUBMISSION_REFUSED, SubmissionReply,
+};
 use rhtn_client::ceremony::{Dispatched, Msg};
 use rhtn_client::horizon::{Askable, Upstream};
 use rhtn_client::payload::{KIND_CANDIDATES, KIND_QUERY, KIND_RESPONSE, KIND_RESPONSE_COPY};
@@ -30,10 +33,10 @@ impl Inlet {
     /// Where payload for this party is delivered.
     pub fn inbound(&self) -> Inbound {
         let slot = self.0.clone();
-        Arc::new(move |from, bytes, binding| {
+        Arc::new(move |from, bytes| {
             let f = slot.lock().unwrap().clone();
             if let Some(f) = f {
-                f(from, bytes, binding);
+                f(from, bytes);
             }
         })
     }
@@ -49,8 +52,10 @@ impl Inlet {
 /// reports a message delivered that is not.
 #[derive(Debug, Default)]
 pub struct Carried {
-    /// Not the adaptors' to carry: the ceremony's own conversation between
-    /// two present devices, which no document gives an encoding.
+    /// Not carried, and nobody refused it: the ceremony's own conversation
+    /// between two present devices, which no document gives an encoding;
+    /// and a message waiting on a node key no node answered for, named by
+    /// the fetch that went unanswered, which stays with the client.
     pub left: Vec<Msg>,
     /// Handed to the serving node and refused by it.
     pub refused: Vec<Msg>,
@@ -77,7 +82,10 @@ impl Carried {
 /// the bytes, and the binding the node carried where it carried one.
 /// What arrives: from whom, the bytes, a binding sent along, and **the
 /// node it came by** where a tab's collector delivered it.
-type Delivery = (Keyhash, Vec<u8>, Option<Vec<u8>>, Option<Keyhash>);
+/// Who it came from, the bytes, and the node that delivered it where a
+/// node did: then the bytes are a `RelayedPayload` and the sender is inside
+/// the seal.
+type Delivery = (Keyhash, Vec<u8>, Option<Keyhash>);
 
 /// What carries the client's messages: the serving node for what it
 /// relays, the direct path where one is held, and the client's own thread
@@ -114,7 +122,8 @@ pub struct Courier {
     /// write what it changed.
     ///
     /// **It cannot be left to whatever the arrival becomes.** A delivery
-    /// advances a ratchet whether or not anything is handed up: a query
+    /// moves the client's state — the queue position collected, the seal
+    /// remembered as opened — whether or not anything is handed up: a query
     /// and a grant are answered here and go to no application channel at
     /// all, so a verifier that served a whole ceremony produced nothing a
     /// caller could save on. On the bench a verifier opened sessions on
@@ -219,15 +228,6 @@ impl Courier {
         self.first().map(|s| s.me())
     }
 
-    /// To every node held; true where any took it.
-    async fn publish_all(&self, b: &[u8]) -> bool {
-        let mut took = false;
-        for s in self.servings() {
-            took |= s.publish(b).await;
-        }
-        took
-    }
-
     async fn publish_profile_all(&self, b: &[u8]) -> bool {
         let mut took = false;
         for s in self.servings() {
@@ -255,24 +255,9 @@ impl Courier {
         took
     }
 
-    /// The one-time pool a message names no node for goes to the first.
-    async fn stock_first(&self, keys: Vec<Vec<u8>>) -> bool {
-        match self.first() {
-            Some(s) => s.stock(self.me(), keys).await,
-            None => false,
-        }
-    }
-
     async fn profile_first(&self, b: &[u8]) -> Option<Vec<u8>> {
         match self.first() {
             Some(s) => s.profile(b).await,
-            None => None,
-        }
-    }
-
-    async fn prekey_first(&self, b: &[u8]) -> Option<Vec<u8>> {
-        match self.first() {
-            Some(s) => s.prekey(self.me(), b).await,
             None => None,
         }
     }
@@ -282,19 +267,6 @@ impl Courier {
         match self.serving_for(node).or_else(|| self.first()) {
             Some(s) => s.resource(self.me(), bytes).await,
             None => None,
-        }
-    }
-
-    /// Material for a node itself, addressed to the device it presented
-    /// (`wire-format.md` §7.10): the first node held, there being nothing
-    /// in the client that names one any more.
-    async fn relay_to_first_node(&self, b: &[u8]) -> bool {
-        match self.first() {
-            Some(s) => {
-                let (node, device) = (s.me(), s.node_device());
-                s.relay(self.me(), node, b.to_vec(), device).await
-            }
-            None => false,
         }
     }
 
@@ -331,122 +303,6 @@ impl Courier {
     /// did: the direct path, then the node serving this client.
     pub fn reach_beyond(&self, beyond: Arc<Beyond>) {
         *self.beyond.lock().unwrap() = Some(beyond);
-    }
-
-    /// Hand payload to the node that serves `to`, where this client can
-    /// say who that is and reach them.
-    ///
-    /// **The recipient's node, not this client's** [author, 2026-10-05]:
-    /// it is the party that queues for its own client while the client is
-    /// away (design §14.1.4), and reaching it needs no cooperation from
-    /// the sender's patron, which is what makes a route obtained in person
-    /// survive an uncooperative one (design §12.6.3, §6.4).
-    /// **To the node serving each address the client's routing names**
-    /// [author, 2026-11-11]: one reach where a message of theirs has
-    /// arrived, every address otherwise. A node this courier holds a
-    /// session with is reached over it; any other is dialled. How many
-    /// took it.
-    async fn to_their_nodes(&self, to: Keyhash, bytes: &[u8], device: [u8; 32]) -> usize {
-        let beyond = self.beyond.lock().unwrap().clone();
-        let reaches = self.handle.with(move |c| c.reaches_for(&to)).await;
-        let mut took = 0;
-        for reach in reaches {
-            if let Upstream::Known { node, .. } = &reach.upstream
-                && let Some(held) = self.serving_for(node)
-            {
-                if held.relay(self.me(), to, bytes.to_vec(), device).await {
-                    took += 1;
-                }
-                continue;
-            }
-            let Some(beyond) = beyond.as_ref() else {
-                continue;
-            };
-            if beyond
-                .carry(to, device, bytes.to_vec(), reach, self.via())
-                .await
-            {
-                took += 1;
-            }
-        }
-        took
-    }
-
-    /// A targeted prekey fetch, put to the node that serves the subject.
-    ///
-    /// **A node answers prekey requests from what was published to it**
-    /// (`wire-format.md` §7.8), so the node that holds a subject's bundle
-    /// is the node that subject attached to.  A client asking its own
-    /// patron for a peer served elsewhere is asking a party that cannot
-    /// know, and under the ruling of 2026-10-05 it is also asking the one
-    /// party the ceremony must not depend on.
-    ///
-    /// **It discloses less, not more.** §7.8 states that requesting a
-    /// one-time key discloses the intent to message that subject; put
-    /// here, that intent reaches the subject's own node, which is about to
-    /// be handed the message anyway, instead of this client's patron
-    /// (design §19.4, P26).
-    ///
-    /// The sweep is not routed this way: a `PrekeyBatchRequest` names a
-    /// whole population and is answered from what one node holds.
-    async fn their_prekeys(&self, body: &[u8]) -> Option<Vec<u8>> {
-        let subject = match PrekeyRequest::decode(body).ok()? {
-            PrekeyRequest::One { subject, .. } => subject,
-            PrekeyRequest::Batch { .. } => return None,
-        };
-        self.prekeys_by_reach(subject, body).await
-    }
-
-    /// `subject`'s material from the node that serves them, reached by
-    /// what this client holds of them (`reach_for`): asked over a held
-    /// tab where that node is one, dialled otherwise.
-    async fn prekeys_by_reach(&self, subject: Keyhash, body: &[u8]) -> Option<Vec<u8>> {
-        let beyond = self.beyond.lock().unwrap().clone()?;
-        let mut reach = self.handle.with(move |c| c.reach_for(&subject)).await;
-        // **the serving node resolves where this client holds no node to
-        // ask itself** (`wire-format.md` §7.7.1's default) [2026-11-15]: a
-        // client whose horizon holds no infra endpoints yet, a light
-        // client under a light patron a moment after attaching, puts the
-        // resolution to the tab it holds, which the dialler rides without
-        // an address.
-        if reach.ask.is_empty()
-            && let Some(via) = self.via()
-        {
-            reach.ask.push(Askable {
-                node: via,
-                endpoints: Vec::new(),
-                key_material: None,
-            });
-        }
-        tracing::debug!(
-            target: "pay",
-            subject = %hex4(&subject),
-            upstream = match &reach.upstream {
-                Upstream::Known { .. } => "known",
-                Upstream::Position { .. } => "position",
-                Upstream::Unknown => "unknown",
-            },
-            ask = reach.ask.len(),
-            "pay.prekey.reach"
-        );
-        // **over a held tab where the subject's node is one** [author,
-        // 2026-11-12]: asked of the session rather than dialled, as a
-        // payload is carried
-        if let Upstream::Known { node, .. } = &reach.upstream
-            && let Some(held) = self.serving_for(node)
-        {
-            return held.prekey(self.me(), body).await;
-        }
-        let answered = beyond
-            .ask_their_node(subject, reach, self.via(), REQUEST_PREKEY, body.to_vec())
-            .await;
-        tracing::debug!(
-            target: "pay",
-            subject = %hex4(&subject),
-            answered = answered.is_some(),
-            "pay.prekey.theirs"
-        );
-        answered
     }
 
     async fn their_profile(&self, body: &[u8]) -> Option<Vec<u8>> {
@@ -508,9 +364,9 @@ impl Courier {
                     let (tx, mut rx) = mpsc::unbounded_channel::<Delivery>();
                     let weak = Arc::downgrade(self);
                     tokio::spawn(async move {
-                        while let Some((from, bytes, binding, via)) = rx.recv().await {
+                        while let Some((from, bytes, via)) = rx.recv().await {
                             let Some(me) = weak.upgrade() else { break };
-                            me.receive_via(from, bytes, binding, via).await;
+                            me.receive_via(from, bytes, via).await;
                         }
                     });
                     *slot = Some(tx.clone());
@@ -518,141 +374,63 @@ impl Courier {
                 }
             }
         };
-        Arc::new(move |from, bytes, binding| {
+        Arc::new(move |from, bytes| {
             // a courier whose task has gone is one nobody holds any more
-            let _ = tx.send((from, bytes, binding, None));
+            let _ = tx.send((from, bytes, None));
         })
     }
 
-    /// The inbound a tab's collector delivers to: what arrives is said to
-    /// have come by `via`, which is what the client's routing records.
+    /// The inbound a node's deliveries go to: each a `RelayedPayload` from
+    /// `via` (`wire-format.md` §7.10), opened and attributed by the client,
+    /// and the node recorded as where the next message to its sender goes.
     pub fn inbound_via(self: &Arc<Self>, via: Keyhash) -> Inbound {
-        let plain = self.inbound();
-        let tx = self.inbox.lock().unwrap().clone();
-        match tx {
-            Some(tx) => Arc::new(move |from, bytes, binding| {
-                let _ = tx.send((from, bytes, binding, Some(via)));
-            }),
-            None => plain,
-        }
+        let _ = self.inbound();
+        let tx = self
+            .inbox
+            .lock()
+            .unwrap()
+            .clone()
+            .expect("the inbox is made by inbound()");
+        Arc::new(move |_, bytes| {
+            let _ = tx.send((via, bytes, Some(via)));
+        })
     }
 
-    /// What arrived from `from` on the end-to-end channel: decrypted at the
-    /// client and delivered by kind.  Candidates open the direct path, and
-    /// this side offers its own if it has not; a grant that answered a
-    /// waiting query completes its stream; the rest is the application's.
-    pub async fn receive(self: Arc<Self>, from: Keyhash, bytes: Vec<u8>, binding: Option<Vec<u8>>) {
-        self.receive_via(from, bytes, binding, None).await
+    /// What arrived from `from` on the direct path: `[kind, bytes]` from
+    /// the peer the transport authenticated, delivered by kind.
+    pub async fn receive(self: Arc<Self>, from: Keyhash, bytes: Vec<u8>) {
+        self.receive_via(from, bytes, None).await
     }
 
-    /// An arrival, with the node it came by where a tab delivered it: a
-    /// payload taken records that node as where the next message to its
+    /// An arrival: on the direct path from `from`, or delivered by `via`,
+    /// a node, whose seal the client opens and attributes. A payload taken
+    /// from a node records that node as where the next message to its
     /// sender goes [author, 2026-11-11].
-    pub async fn receive_via(
-        self: Arc<Self>,
-        from: Keyhash,
-        bytes: Vec<u8>,
-        binding: Option<Vec<u8>>,
-        via: Option<Keyhash>,
-    ) {
-        // The binding the node carried is taken first, so an initial
-        // message from a peer this client has never held one for is
-        // attributable on arrival rather than a message too late
-        // (`wire-format.md` §7.10).
-        let again = bytes.clone();
+    pub async fn receive_via(self: Arc<Self>, from: Keyhash, bytes: Vec<u8>, via: Option<Keyhash>) {
         let (d, owed) = self
             .handle
             .with(move |c| {
-                // **a stranger's first message carries its introduction**
-                // [author, 2026-10-30], taken before the binding so the
-                // binding verifies under material this client now holds
-                if let Some(i) = rhtn_client::payload::introduction_in(&bytes) {
-                    c.take_cold_introduction(&from, &i);
-                }
-                if let Some(b) = binding {
-                    c.take_binding(&b);
-                }
-                let d = c.receive_payload(from, &bytes);
-                if d.is_ok()
-                    && let Some(v) = via
-                {
-                    c.record_arrival(from, &v);
-                }
+                let d = match via {
+                    Some(node) => c.receive_relayed(node, &bytes).map(|(sender, d)| {
+                        if !matches!(d, Dispatched::Unverified { .. }) {
+                            c.record_arrival(sender, &node);
+                        }
+                        (sender, d)
+                    }),
+                    None => c.receive_payload(from, &bytes).map(|d| (from, d)),
+                };
                 // what the client owes in answer goes now, on this courier:
                 // the conversation's replies (`wire-format.md` §7.10.1), an
                 // archive reply, a record to propagate
                 (d, c.outbox())
             })
             .await;
-        // **a first message on the direct path, from a peer whose bundle
-        // this client does not hold**: the node carries the sender's
-        // binding on the relay (`wire-format.md` §7.10), and nothing does
-        // here — so the sender is asked for it on the path it opened
-        // (§9.1, control stream 3) and the message is taken again, once
-        // [bench 9dbf607-restore-nodeless-1, 2026-10-30: every first
-        // message met "no bundle for that peer"]
-        //
-        // **And by relay, from a node that never served the sender**
-        // [author, 2026-11-15; `functional_tests.md` PAY-021]: a sender in
-        // another subnet dials this client's node
-        // itself (the ruling of 2026-10-05, `functional_tests.md` PAY-012),
-        // so that node holds no bundle of the sender's to carry
-        // (`wire-format.md` §7.10) and the introduction the message brought
-        // (§7.10.1) is all this side has.  Its locator says where the
-        // sender's own node is, and that node is asked as a first message
-        // to the sender would ask it.  The inbox is one queue, so what
-        // followed the opener waits for the answer rather than meeting no
-        // session [sim: the far witness's answer never reached the
-        // participant that nominated it, in this process and on the WAN]
-        let (d, owed) = match d {
-            Err(why) if why.contains("no bundle") => {
-                let device = rhtn_client::payload::unchannel(&again)
-                    .ok()
-                    .map(|f| f.device)
-                    .unwrap_or([0; 32]);
-                let nonce = rhtn_transport::tls::random_bytes();
-                let req = rhtn_client::payload::one_time_request(from, device, nonce);
-                let reply = if self.direct.reachable().holds(&from) {
-                    let reply = self.direct.request(from, req).await;
-                    if reply.is_some() {
-                        tracing::info!(target: "pay", from = %hex8(&from), "pay.direct.bundle.fetched");
-                    }
-                    reply
-                } else {
-                    let reply = self.prekeys_by_reach(from, &req).await;
-                    tracing::info!(
-                        target: "pay",
-                        from = %hex8(&from),
-                        fetched = reply.is_some(),
-                        "pay.relay.bundle.fetched"
-                    );
-                    reply
-                };
-                match reply {
-                    Some(reply) => {
-                        let bytes = again;
-                        self.handle
-                            .with(move |c| {
-                                let _ = c.take_prekey_reply(&reply);
-                                let d = c.receive_payload(from, &bytes);
-                                if d.is_ok()
-                                    && let Some(v) = via
-                                {
-                                    c.record_arrival(from, &v);
-                                }
-                                let mut more = owed;
-                                more.extend(c.outbox());
-                                (d, more)
-                            })
-                            .await
-                    }
-                    None => (Err(why), owed),
-                }
-            }
-            other => (other, owed),
+        let (from, d) = match d {
+            Ok((sender, d)) => (sender, Ok(d)),
+            Err(e) => (from, Err(e)),
         };
-        // **the state goes down before anything else happens**: the ratchet
-        // this arrival moved, the session it opened, the query it answered
+        // **the state goes down before anything else happens**: what this
+        // arrival collected and opened, and the query it answered
         self.wrote();
         if !owed.is_empty() {
             self.carry(owed).await;
@@ -698,7 +476,7 @@ impl Courier {
             Ok(other) => {
                 let _ = self.app.send((from, other));
             }
-            // undecryptable: dropped, and nothing said to anyone
+            // unopened or unattributed: dropped, and nothing said to anyone
             Err(_) => {}
         }
     }
@@ -887,67 +665,156 @@ impl Courier {
         Ok(self.carry(msgs).await)
     }
 
-    /// The relayed path, in the order design §12.6.3 takes it: **the
-    /// recipient's own node first**, and the node serving this client as
-    /// the fallback.
+    /// **One request of `to`'s node, as nobody** (`wire-format.md` §9.1):
+    /// in process where that node is beside this client, else on a
+    /// connection under a key minted for it. The node asked and its reply.
+    async fn minted_to(
+        &self,
+        to: Keyhash,
+        request: u64,
+        body: Vec<u8>,
+    ) -> Option<(Keyhash, Vec<u8>)> {
+        let reach = self.handle.with(move |c| c.reach_for(&to)).await;
+        if let Upstream::Known { node, .. } = &reach.upstream
+            && let Some(held) = self.serving_for(node)
+            && let Some(reply) = held.minted(request, body.clone()).await
+        {
+            return Some((*node, reply));
+        }
+        // a node beside this client that does not itself serve `to` asks
+        // the node beyond it that does
+        for s in self.servings() {
+            if s.serves(&to)
+                && let Some(reply) = s.minted(request, body.clone()).await
+            {
+                return Some((s.me(), reply));
+            }
+        }
+        let beyond = self.beyond.lock().unwrap().clone()?;
+        let mut reach = reach;
+        // **the serving node resolves where this client holds no node to
+        // ask itself** (`wire-format.md` §7.7.1's default) [2026-11-15]
+        if reach.ask.is_empty()
+            && let Some(via) = self.via()
+        {
+            reach.ask.push(Askable {
+                node: via,
+                endpoints: Vec::new(),
+                key_material: None,
+            });
+        }
+        if let Some((up, reply)) = beyond.minted(to, reach, request, body.clone()).await {
+            return Some((up.node, reply));
+        }
+        // **this client's own nodes are the fallback**
+        // (`light-client-requirements.md` §5): where no node could be
+        // resolved for `to`, each node this client holds a session with is
+        // asked — as nobody still, on a connection of its own — whether it
+        // serves `to`. A fetch takes the first that holds a key for them;
+        // a sealed message goes only to the node whose key sealed it
+        let sealed_at = self
+            .handle
+            .with(move |c| c.payload.node_keys.get(&to).map(|k| k.node))
+            .await;
+        for s in self.servings() {
+            let node = s.me();
+            if request == REQUEST_RELAY && sealed_at.is_some_and(|k| k != node) {
+                continue;
+            }
+            let Some(reply) = beyond.minted_at(node, request, body.clone()).await else {
+                continue;
+            };
+            if request == REQUEST_NODE_KEY
+                && !rhtn_archive::node_key::NodeKeyReply::decode(&reply)
+                    .is_ok_and(|r| r.outcome.is_ok())
+            {
+                continue;
+            }
+            return Some((node, reply));
+        }
+        None
+    }
+
+    /// **Fetch the node keys of `recipients`** (`wire-format.md` §7.8): each
+    /// from the node that serves it, as nobody, and what was waiting for
+    /// them sealed. A batch request where one node is asked about several
+    /// is the sweep's business; a fetch at send time names one.
     ///
-    /// **Why the sender's node is still a term.** The ruling that put the
-    /// recipient's node first also kept the sender's nearest infra node as
-    /// a relay for a client that cannot open an outbound connection at all
-    /// — one behind a proxy it must traverse [author, 2026-10-05]. That is
-    /// a traversal relay rather than a carriage, and this workspace has no
-    /// separate traversal path to put it on, so it stands where the
-    /// store-and-forward fallback already stood. What changed is that it is
-    /// no longer the *first* answer, and so no longer a party whose
-    /// cooperation a sender needs.
-    async fn relayed(&self, to: Keyhash, bytes: &[u8], device: [u8; 32]) -> bool {
-        // **a relay submission is one request frame**, and a frame is
-        // bounded at 256 KiB (`wire-format.md` §9.2): a body past it would
-        // be dropped by the node unread, with no reply — which is how a
-        // 426 KiB backup blob went nowhere on the bench with nothing to
-        // say why (run 0c8c8f8-a3-node-1, 2026-10-24).  Said here instead,
-        // and not attempted.  The frame's own head and the submission's
-        // fields around the ciphertext are allowed for generously
-        if bytes.len() + 256 > rhtn_codec::bounds::REQUEST_FRAME_BYTES {
+    /// **A fetch that left a message waiting is unsent work**
+    /// (`light-client-requirements.md` §9): nobody answered, or the answer
+    /// carried no key. Its recipient comes back beside what was sealed, so
+    /// the caller reports the message unsent rather than taken. A sweep's
+    /// fetch with nothing waiting says nothing.
+    async fn fetch_node_keys(&self, recipients: Vec<Keyhash>) -> (Vec<Msg>, Vec<Keyhash>) {
+        let mut out = Vec::new();
+        let mut unsent = Vec::new();
+        for to in recipients {
+            let Some(req) =
+                NodeKeyRequest::for_recipients(vec![to], rhtn_transport::tls::random_bytes())
+            else {
+                continue;
+            };
+            let Some((node, reply)) = self.minted_to(to, REQUEST_NODE_KEY, req.encode()).await
+            else {
+                tracing::info!(target: "pay", to = %hex4(&to), "pay.node_key.unanswered");
+                let waiting = self
+                    .handle
+                    .with(move |c| c.payload.pending.get(&to).is_some_and(|w| !w.is_empty()))
+                    .await;
+                if waiting {
+                    unsent.push(to);
+                }
+                continue;
+            };
+            let asked = req.recipients();
+            let (sealed, waiting) = self
+                .handle
+                .with(move |c| {
+                    let sealed = c.take_node_key_reply(&node, &asked, &reply);
+                    let waiting = c.payload.pending.get(&to).is_some_and(|w| !w.is_empty());
+                    (sealed, waiting)
+                })
+                .await;
+            out.extend(sealed);
+            // answered, and with no key for them: as unsent as no answer
+            if waiting {
+                unsent.push(to);
+            }
+        }
+        (out, unsent)
+    }
+
+    /// **Hand a sealed message to `to`'s node** (`wire-format.md` §7.10), as
+    /// nobody. The code it answered with, or none where nobody answered.
+    async fn submit_sealed(&self, to: Keyhash, sealed: Vec<u8>) -> Option<u64> {
+        // **one request frame**, bounded at 256 KiB (`wire-format.md` §9.2):
+        // a body past it would be dropped unread with no reply, so it is
+        // said here and not attempted
+        if sealed.len() + 256 > rhtn_codec::bounds::REQUEST_FRAME_BYTES {
             tracing::info!(
                 target: "pay",
                 to = %hex4(&to),
-                bytes = bytes.len(),
-                bound = rhtn_codec::bounds::REQUEST_FRAME_BYTES,
-                via = "nowhere",
-                reason = "over the request frame bound: the relay cannot carry it",
-                "pay.relay"
+                bytes = sealed.len(),
+                reason = "over the request frame bound",
+                "pay.sealed.unsent"
             );
-            return false;
+            return None;
         }
-        let theirs = self.to_their_nodes(to, bytes, device).await > 0;
-        // else by a node of mine, the first that takes it: each serves an
-        // address, and the one that shares a subnet with the recipient
-        // relays or holds it (design §14.1.6)
-        let mut mine = false;
-        if !theirs {
-            for s in self.servings() {
-                if s.relay(self.me(), to, bytes.to_vec(), device).await {
-                    mine = true;
-                    break;
-                }
-            }
+        let nonce = rhtn_transport::tls::random_bytes();
+        let body = RelaySubmission {
+            recipient: to,
+            sealed,
+            nonce,
         }
-        // said either way: a relay that silently went nowhere left a
-        // 424 KiB backup blob unaccounted for on the bench (2026-10-24)
-        tracing::info!(
-            target: "pay",
-            to = %hex4(&to),
-            bytes = bytes.len(),
-            via = if theirs { "their node" } else if mine { "serving node" } else { "nowhere" },
-            "pay.relay"
-        );
-        theirs || mine
+        .encode();
+        let (_, reply) = self.minted_to(to, REQUEST_RELAY, body).await?;
+        let r = SubmissionReply::decode(&reply).ok()?;
+        (r.nonce == nonce).then_some(r.code)
     }
 
-    /// Carry the client's messages where the seams go: prekey traffic to
-    /// the serving node, payload on the direct path where it is held and
-    /// to the relay otherwise.
+    /// Carry the client's messages where the seams go: payload on the
+    /// direct path where it is held, sealed messages and node-key fetches
+    /// to the recipient's node as nobody.
     ///
     /// **A refusal comes back.**  A serving node that will not take a
     /// submission answers with a code (`wire-format.md` §7.10), and a
@@ -965,31 +832,9 @@ impl Courier {
             let mut out = Carried::default();
             for m in msgs {
                 match m {
-                    // **the bundle and the profiles go to every node held**:
-                    // a peer in any of this client's subnets fetches from
-                    // the node serving it there [author, 2026-11-11]. The
-                    // serving node's answer is the one reported
-                    Msg::PublishBundle(b) => {
-                        if !me.publish_all(&b).await {
-                            out.refused.push(Msg::PublishBundle(b));
-                        }
-                    }
-                    Msg::StockOneTime(keys) => {
-                        if !me.stock_first(keys.clone()).await {
-                            out.refused.push(Msg::StockOneTime(keys));
-                        }
-                    }
-                    // a tab's pool is the tab's: refused where the tab is
-                    // gone, since the keys would stock nothing
-                    Msg::StockOneTimeAt { node, keys } => {
-                        let took = match me.serving_for(&node) {
-                            Some(s) => s.stock(me.me(), keys.clone()).await,
-                            None => false,
-                        };
-                        if !took {
-                            out.refused.push(Msg::StockOneTimeAt { node, keys });
-                        }
-                    }
+                    // **the profiles go to every node held**: a peer in any
+                    // of this client's subnets fetches from the node
+                    // serving it there [author, 2026-11-11]
                     Msg::PublishProfile(b) => {
                         if !me.publish_profile_all(&b).await {
                             out.refused.push(Msg::PublishProfile(b));
@@ -1021,80 +866,82 @@ impl Courier {
                             None => out.refused.push(Msg::ProfileRequest(b)),
                         }
                     }
-                    Msg::PrekeyRequest(b) => {
-                        // **the subject itself, where a direct path to it
-                        // is held** (`wire-format.md` §9.1: a session opens
-                        // with no node asked); the subject's own node next,
-                        // and this client's where that one could not be
-                        // reached
-                        let subject = match PrekeyRequest::decode(&b) {
-                            Ok(PrekeyRequest::One { subject, .. }) => Some(subject),
-                            _ => None,
-                        };
-                        let direct = match subject {
-                            Some(s) if me.direct.reachable().holds(&s) => {
-                                me.direct.request(s, b.clone()).await
-                            }
-                            _ => None,
-                        };
-                        let answered = match direct {
-                            Some(reply) => Some(reply),
-                            None => match me.their_prekeys(&b).await {
-                                Some(reply) => Some(reply),
-                                None => me.prekey_first(&b).await,
-                            },
-                        };
-                        match answered {
-                            Some(reply) => {
-                                let more =
-                                    me.handle.with(move |c| c.take_prekey_reply(&reply)).await;
-                                match more {
-                                    Ok(more) => out.absorb(me.carry(more).await),
-                                    Err(why) => {
-                                        tracing::info!(target: "pay", why = %why, "pay.prekey.refused");
-                                    }
-                                }
-                            }
-                            // said, not swallowed: the kernel asks again
-                            // after its patience
-                            None => tracing::info!(target: "pay", "pay.prekey.unanswered"),
+                    Msg::NodeKeyRequest(recipients) => {
+                        let (sealed, unsent) = me.fetch_node_keys(recipients).await;
+                        out.absorb(me.carry(sealed).await);
+                        if !unsent.is_empty() {
+                            out.left.push(Msg::NodeKeyRequest(unsent));
                         }
                     }
-                    Msg::Payload { to, bytes, device } => {
+                    Msg::Payload { to, bytes } => {
                         // a delivery short of complete leaves the message
-                        // with the sender, and a relayed path carries it
-                        // (design §14.1.1): direct where a path is held,
-                        // then the three terms below, nobody's choice
-                        if !me.direct.deliver(to, bytes.clone()).await
-                            && !me.relayed(to, &bytes, device).await
-                        {
-                            out.refused.push(Msg::Payload { to, bytes, device });
+                        // with the sender, and the seal for the recipient's
+                        // node carries it (design §12.6.3)
+                        if !me.direct.deliver(to, bytes.clone()).await {
+                            match me.handle.with(move |c| c.reseal(to, bytes)).await {
+                                Ok(more) => out.absorb(me.carry(more).await),
+                                Err(why) => {
+                                    tracing::info!(target: "pay", to = %hex4(&to), %why, "pay.direct.unsealed");
+                                }
+                            }
                         }
                         // **the ceremony's own legs offer the direct path
                         // too** [author, 2026-10-24]: a witness or a verifier
                         // is a contact, and the first message to one not yet
                         // reached directly is followed by this side's
-                        // candidates, as a send from the application is.
-                        // **After the message, never ahead of it**: the first
-                        // message on a fresh session is the one that opens it,
-                        // and candidates relayed as their own request raced
-                        // past it and met "no session with that peer" at the
-                        // witness (run 1bd1c15-direct-1)
+                        // candidates. **After the message, never ahead of it**
                         if !me.direct.reachable().holds(&to) && !me.offered(&to) {
                             me.offer(to).await;
                         }
                     }
-                    // the client already said no direct path is held, so
-                    // the relayed path is the whole of what is left — for
-                    // this message. **The first to a contact not yet reached
-                    // directly carries this side's candidates ahead of it**
-                    // [author, 2026-10-24]: the kernel routes every leg as a
-                    // relay until a path is held, so this is where a
-                    // ceremony's legs to its witnesses earn one (run
-                    // 1bd1c15-a5-2: 219 relayed, not one offer)
-                    Msg::Relay { to, bytes, device } => {
-                        if !me.relayed(to, &bytes, device).await {
-                            out.refused.push(Msg::Relay { to, bytes, device });
+                    // **a sealed message to the recipient's node**
+                    // (`wire-format.md` §7.10). Refused for a stale node key,
+                    // the newest is fetched and it is sealed again, once
+                    // (§7.8): a second refusal is the node's answer
+                    Msg::Sealed { to, sealed, plain } => {
+                        let code = me.submit_sealed(to, sealed.clone()).await;
+                        let took = match code {
+                            Some(SUBMISSION_ACCEPTED) => true,
+                            Some(SUBMISSION_REFUSED) => {
+                                let plain = plain.clone();
+                                let again = me
+                                    .handle
+                                    .with(move |c| {
+                                        c.node_key_refused(&to);
+                                        c.reseal(to, plain)
+                                    })
+                                    .await
+                                    .unwrap_or_default();
+                                let mut resealed = Vec::new();
+                                for m in again {
+                                    match m {
+                                        Msg::NodeKeyRequest(r) => {
+                                            resealed.extend(me.fetch_node_keys(r).await.0)
+                                        }
+                                        other => resealed.push(other),
+                                    }
+                                }
+                                let mut took = !resealed.is_empty();
+                                for m in resealed {
+                                    if let Msg::Sealed { to, sealed, .. } = m {
+                                        took &= me.submit_sealed(to, sealed).await
+                                            == Some(SUBMISSION_ACCEPTED);
+                                    }
+                                }
+                                took
+                            }
+                            _ => false,
+                        };
+                        tracing::info!(
+                            target: "pay",
+                            to = %hex4(&to),
+                            bytes = sealed.len(),
+                            took,
+                            code = ?code,
+                            "pay.sealed"
+                        );
+                        if !took {
+                            out.refused.push(Msg::Sealed { to, sealed, plain });
                         }
                         // the offer follows the message, as above
                         if !me.offered(&to) {
@@ -1156,21 +1003,11 @@ impl Courier {
                         },
                         Err(_) => out.refused.push(Msg::Query(b)),
                     },
-                    Msg::Transport(b) => {
-                        // material for the serving node itself is addressed
-                        // to the device it presented (`wire-format.md` §7.10)
-                        if !me.relay_to_first_node(&b).await {
-                            out.refused.push(Msg::Transport(b));
-                        }
-                    }
                     other => out.left.push(other),
                 }
             }
-            // **what the node would not take, by name** [2026-11-04]. A
-            // refusal detaches the client that attached (`rhtn_ffi`'s
-            // attach reports "refused N of what attaching published,
-            // stocked or swept" and undoes the attach), and until here it
-            // said only how many — so which message it was had to be
+            // **what the node would not take, by name** [2026-11-04]: until
+            // here a refusal said only how many — so which message it was had to be
             // guessed at from the outside, which is what it cost an
             // evening to do. The kind, never the bytes.
             if !out.refused.is_empty() {

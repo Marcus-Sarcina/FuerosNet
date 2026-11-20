@@ -528,7 +528,7 @@ CTX = [  # (caption, sig_slot, aad, signer-field or fixed name, wrong-signer nam
     ('Abuse report', 5, b'rhtn/1:abuse', 1, 'carol', None),
     ('Anchor table entry', 5, b'rhtn/1:anchor', 1, 'carol', None),
     ('Subtree acknowledgement', 5, b'rhtn/1:subtree-ack', 2, 'bob', 'carol-instance'),
-    ('Prekey bundle', 6, b'rhtn/1:prekey', 1, 'carol', None),
+    ('Node key', 6, b'rhtn/1:node-key', 2, 'carol', None),
 ]
 csect = rc[rc.index('## The remaining signed contexts'):]
 ok_pos = ok_wrong = ok_cross = 0
@@ -632,7 +632,7 @@ def section_blocks(name):
 
 control = section_blocks('Control frames (stream 0)')
 requests = section_blocks('Requests (bidirectional streams)')
-relayed_blocks = section_blocks('What the node delivers for a relay submission')
+relayed_blocks = section_blocks('What the node delivers for a sealed message')
 replies = section_blocks('Replies')
 e2e = section_blocks('End-to-end payloads')
 check(len(blocks) == len(control) + len(requests) + len(relayed_blocks) + len(replies) + len(e2e),
@@ -640,8 +640,10 @@ check(len(blocks) == len(control) + len(requests) + len(relayed_blocks) + len(re
 
 # control frames first, as messages.md sections them; the no-siblings
 # AttachAck is the last control frame [2026-10-02]
-EXPECT_FRAMES = [1, 2, 3, 4, 4, 5, 6, 6, 1, 2, 7, 5, 5, 2,
-                 1, 2, 3, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 12, 13, 14]
+# request types 9 and 10 are retired (§9.2): their places in the list went to
+# two Attach frames, with and without field 5 [2026-11-20]
+EXPECT_FRAMES = [1, 2, 3, 4, 4, 5, 6, 6, 1, 1, 1, 2, 7, 5, 5, 2,
+                 1, 2, 3, 3, 4, 5, 6, 7, 8, 11, 12, 12, 13, 14]
 framed = control + requests
 check(len(framed) == len(EXPECT_FRAMES),
       f'messages: {len(EXPECT_FRAMES)} framed fixtures, one per family and variant')
@@ -663,18 +665,29 @@ replies_ok = sum(canonical(bytes.fromhex(h.replace('\n', ''))) is not None
 check(replies_ok == len(unframed),
       f'messages: all {len(replies)} replies and {len(e2e)} end-to-end payloads canonical')
 
-# `RelayedPayload` (§7.10): the submitter in front of the ciphertext, an
-# array and not a map, and the submitter is a keyhash
+# `RelayedPayload` (§7.10): the position, the seal unchanged, and the
+# node's 32-byte half; no sender is named
 rp = canonical(bytes.fromhex(relayed_blocks[0].replace('\n', '')))
-check(isinstance(rp, list) and len(rp) == 2 and len(bytes.fromhex(rp[0])) == 32,
-      'RelayedPayload: a two-element array whose first member is a keyhash')
+check(isinstance(rp, list) and len(rp) == 3 and isinstance(rp[0], int)
+      and isinstance(rp[1], list) and len(bytes.fromhex(rp[2])) == 32,
+      'RelayedPayload: position, the Sealed, and the 32-byte node half, naming no sender')
+_nkb = canonical(bytes.fromhex(relayed_blocks[1].replace('\n', '')))
+_asked = sorted([KH['alice'], KH['carol']])
+_by_recipient = dict(zip(_asked, _nkb)) if isinstance(_nkb, list) and len(_nkb) == 2 else {}
+check(_by_recipient.get(KH['carol'], {}).get(2) is not None
+      and _by_recipient.get(KH['alice'], {}).get(3) == 0,
+      "NodeKeyBatchReply: one reply per recipient in the request's ascending order — carol's key, and a failure for alice, whom bob's node does not serve")
 
-# the four submissions carry the shapes §7.10 fixes
-pub = frame_objs[EXPECT_FRAMES.index(9)][1]
-check(isinstance(pub[1], dict), 'PrekeyPublication: field 1 is the bundle object, not a byte string')
-dep = frame_objs[EXPECT_FRAMES.index(10)][1]
-check(isinstance(dep[1], list) and 1 <= len(dep[1]) <= 256,
-      'OneTimeDeposit: field 1 is one to 256 keys')
+# a sealed submission (§7.10) carries the seal as the object, names its
+# recipient and nothing of its sender
+_rs = frame_objs[EXPECT_FRAMES.index(11)][1]
+check(isinstance(_rs[2], list) and len(_rs[2]) == 4 and set(_rs) == {1, 2, 3},
+      'RelaySubmission: field 2 is the Sealed itself, and no field names a sender or a device')
+# two Attach frames: field 5 is the device's queue cursor, absent for a
+# device that holds nothing yet (§7.10, §8.2)
+_att = [o[1] for o, t in zip(frame_objs, EXPECT_FRAMES) if t == 1]
+check(any(a.get(5) == 6 for a in _att) and any(5 not in a and 4 not in a and 2 not in a for a in _att),
+      'Attach: field 5 carries the cursor, and an attach holding nothing carries none')
 wake_on = frame_objs[EXPECT_FRAMES.index(12)][1]
 wake_off = frame_objs[[i for i, f in enumerate(EXPECT_FRAMES) if f == 12][1]][1]
 check(2 in wake_on and 3 in wake_on, 'WakeRegistration: an endpoint arrives with its key')
@@ -856,14 +869,20 @@ check(_ix[5] is True and _ixr[5] is False,
 for _fid in ('P-candidate-handover',):
     check(canonical(bytes.fromhex(byid[_fid]['hex']))[1] == _cid,
           f's14.3: {_fid} is anchored to the derived ceremony-id')
+# the identity root (design §7.5.2.6) and the two encryption secrets it
+# derives (§2.5), recomputed here from the seed recipe
+def _root(n):
+    return H(b'rhtn/1:identity-root' + H(f'rhtn-test-vectors:{n}:ed25519-seed'.encode())
+             + H(f'rhtn-test-vectors:{n}:ml-dsa-65-seed'.encode()))
+def _secrets(n):
+    return _hkdf(_root(n), b'rhtn/1:encryption-key'), _hkdf(_root(n), b'rhtn/1:seal-auth')
 _dc = canonical(bytes.fromhex(byid['P-device-credential']['hex']))
 check(_dc[1][0] == byid['P-delegation-alice-desktop']['hex']
-      and _dc[2] == byid['P-prekey-desktop']['hex'],
-      's14.3: the credential carries the delegation and signed bundle byte-for-byte')
+      and (bytes.fromhex(_dc[2]), bytes.fromhex(_dc[3])) == _secrets('alice'),
+      "s14.3: the credential carries the delegation byte-for-byte and alice's two encryption secrets from her root")
 _di = canonical(bytes.fromhex(byid['P-device-introduction']['hex']))
-_pd = canonical(bytes.fromhex(byid['P-prekey-desktop']['hex']))
-check(canonical(bytes.fromhex(_di[2])) == {k: v for k, v in _pd.items() if k != 6},
-      "s14.3: the introduction's payload is the signed bundle less its field 6")
+check(_di == [1, TKPUB['alice-desktop'].hex()],
+      "s14.3: the introduction is the desktop's transport key and nothing else")
 check(len([e for e in corpus['entries'] if e['class'] == 'trace']) == 24
       and len([e for e in corpus['entries'] if e['class'] == 'context']) == 5,
       'corpus: twenty-four traces and five contexts')
@@ -1137,13 +1156,11 @@ check(len(bytes.fromhex(canonical(bytes.fromhex(byid['N-capture-key-handover-anc
 # SubmissionReply: the three codes, each echoing its request's nonce
 _subs = [canonical(bytes.fromhex(e['hex'])) for e in corpus['entries']
          if e.get('family') == 'SubmissionReply']
-_req_nonce = {9: frame_objs[EXPECT_FRAMES.index(9)][1][2],
-              10: frame_objs[EXPECT_FRAMES.index(10)][1][2],
-              11: frame_objs[EXPECT_FRAMES.index(11)][1][3]}
+_relay_nonce = frame_objs[EXPECT_FRAMES.index(11)][1][3]
 check(sorted(r_[2] for r_ in _subs) == [0, 1, 2]
-      and {r_[1] for r_ in _subs} == set(_req_nonce.values())
+      and any(r_[2] == 1 and r_[1] == _relay_nonce for r_ in _subs)
       and all(set(r_) == {1, 2} for r_ in _subs),
-      'SubmissionReply: codes 0, 1 and 2 each present, each echoing a request nonce, nothing further')
+      "SubmissionReply: codes 0, 1 and 2 each present, the refusal echoing the sealed submission's nonce, nothing further")
 # AttachAck with no siblings: field 2 absent, never an empty list
 _nosib = canonical(bytes.fromhex(byid['P-frame-28']['hex'])[4:])
 check(_nosib[0] == 2 and 2 not in _nosib[1] and {1, 3, 4, 5} <= set(_nosib[1]),
@@ -1205,7 +1222,7 @@ _sealed = next(
      if _m and len(b) == int(_m.group(1)) and b[:12] == _nonce),
     None,
 )
-_plain = bytes.fromhex(byid['P-prekey-handover']['hex'])
+_plain = bytes.fromhex(byid['P-capture-key-handover']['hex'])
 _opened = None
 if _sealed is not None:
     try:
@@ -1214,7 +1231,7 @@ if _sealed is not None:
         _opened = None
 check(
     _opened == _plain,
-    'sealed carriage: nonce in front, AES-256-GCM, and it opens to the P-prekey-handover fixture',
+    'sealed carriage: nonce in front, AES-256-GCM, and it opens to the P-capture-key-handover fixture',
 )
 # a carriage of another ceremony does not open, which is what the key's own
 # derivation and the associated data each enforce
@@ -1226,6 +1243,68 @@ if _sealed is not None:
     except Exception:
         _no = None
 check(_no is None, "sealed carriage: another ceremony's key does not open it")
+
+# ------------------------------------------------- the split seal (s7.8.1)
+# **Opened as the recipient opens it**, with nothing of the generator's: the
+# generator only ever encapsulates, and this decapsulates — carol's X-Wing key
+# from her root, the node's half as the delivery carries it — then derives
+# the message key, opens the body and checks the tag as carol would.
+try:
+    from kyber_py.ml_kem import ML_KEM_768 as _KEM
+except ImportError:
+    _KEM = None
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey as _XPriv, X25519PublicKey as _XPub
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM as _GCM
+def _xpub(sk):
+    return _XPriv.from_private_bytes(sk).public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+def _xwing_decaps(seed, ct):
+    e = hashlib.shake_256(seed).digest(96)
+    ek, dk = _KEM.key_derive(e[:64])
+    k = _KEM.decaps(dk, ct[:1088])
+    ss_x = _XPriv.from_private_bytes(e[64:]).exchange(_XPub.from_public_bytes(ct[1088:]))
+    return hashlib.sha3_256(k + ss_x + ct[1088:] + _xpub(e[64:]) + bytes.fromhex('5c2e2f2f5e5c')).digest()
+_sd = canonical(bytes.fromhex(byid['P-sealed']['hex']))
+_rpd = canonical(bytes.fromhex(byid['P-relayed']['hex']))
+_ct_r, _ct_n = bytes.fromhex(_sd[1]), bytes.fromhex(_sd[2])
+check(_rpd[1] == _sd, 'seal: the delivery carries the Sealed unchanged')
+if _KEM is None:
+    check(False, 'seal: kyber-py is required to decapsulate (pip install kyber-py)')
+else:
+    _kem_seed, _ = _secrets('carol')
+    _ss_r = _xwing_decaps(_kem_seed, _ct_r)
+    _ss_n = bytes.fromhex(_rpd[2])
+    _nk_seed = H(b'rhtn-test-vectors:node-key-seed:bob:carol:3')
+    check(_xwing_decaps(_nk_seed, _ct_n) == _ss_n,
+          "seal: the node's half in the delivery is what its key decapsulates from ctN")
+    _cbor_n = bytes([_sd[0]]) if _sd[0] < 24 else None
+    _mk = _hkdf(_ss_r + _ss_n, b'rhtn/1:seal' + bytes.fromhex(KH['carol']) + bytes.fromhex(KH['bob'])
+                + _cbor_n + _ct_r + _ct_n)
+    _ct = bytes.fromhex(_sd[3])
+    try:
+        _body = _GCM(_mk).decrypt(_ct[:12], _ct[12:], None)
+    except Exception:
+        _body = None
+    check(_body is not None and _body.hex() == byid['P-sealed-body']['hex'],
+          "seal: carol's half and the node's open it, to the P-sealed-body fixture")
+    _wrong = _hkdf(_ss_r + bytes(32), b'rhtn/1:seal' + bytes.fromhex(KH['carol']) + bytes.fromhex(KH['bob'])
+                   + _cbor_n + _ct_r + _ct_n)
+    try:
+        _GCM(_wrong).decrypt(_ct[:12], _ct[12:], None); _opened_wrong = True
+    except Exception:
+        _opened_wrong = False
+    check(not _opened_wrong, "seal: carol's half alone opens nothing")
+    if _body is not None:
+        _sb = canonical(_body)
+        _intro = _sb[2]
+        _alice_auth_pub = bytes.fromhex(_intro[2][3])
+        _, _carol_auth = _secrets('carol')
+        _dh = _XPriv.from_private_bytes(_carol_auth).exchange(_XPub.from_public_bytes(_alice_auth_pub))
+        _tk = _hkdf(_dh, b'rhtn/1:seal-auth' + bytes.fromhex(KH['alice']) + bytes.fromhex(KH['carol']))
+        _fields = _body[1:len(_body) - 34]
+        check(_sb[0] == KH['alice'] and _intro[2][1] == KH['alice']
+              and _hmac.compare_digest(_hmac.new(_tk, _ct_r + _ct_n + _fields, hashlib.sha256).digest(),
+                                       bytes.fromhex(_sb[5])),
+              "seal: the tag verifies under the exchange of carol's key with the one alice's introduction carries")
 
 print()
 if FAILURES:

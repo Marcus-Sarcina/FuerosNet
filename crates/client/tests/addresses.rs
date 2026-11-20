@@ -8,7 +8,7 @@ mod common;
 
 use common::harness::*;
 use common::*;
-use rhtn_client::payload::{PayloadConfig, PayloadState};
+use rhtn_client::payload::PayloadState;
 
 // functional: SES-017
 /// **A message's arrival decides where the next one goes**, and a first
@@ -37,23 +37,23 @@ fn the_last_subnet_a_message_came_by_is_where_the_next_one_goes() {
     assert!(!a.reaches_for(&kh("bob")).is_empty());
 }
 
-/// **The three fields persist, and the seven-field form still reads.**
+/// **The address fields persist.** The payload state is written whole in
+/// its own version, and a form before the split seal is not read.
 #[test]
-fn the_address_state_round_trips_and_the_older_form_still_reads() {
-    let mut fresh = |b: &mut [u8]| b.fill(7);
-    let mut p = PayloadState::new(PayloadConfig::default(), &mut fresh, 1);
+fn the_address_state_round_trips() {
+    let mut p = PayloadState::default();
     p.attachments.insert(kh("n1"));
     p.serving_at.insert(kh("a1"), kh("n1"));
     p.last_from.insert(kh("bob"), kh("a1"));
     p.agreed
         .insert(kh("n1"), vec!["192.168.0.8:7431".to_string()]);
     let bytes = p.encode();
-    let back = PayloadState::decode(PayloadConfig::default(), &bytes).expect("reads");
+    let back = PayloadState::decode(&bytes).expect("reads");
     assert_eq!(back.attachments, p.attachments);
     assert_eq!(back.serving_at, p.serving_at);
     assert_eq!(back.last_from, p.last_from);
     assert_eq!(back.agreed, p.agreed, "the agreement and its addresses");
-    assert_eq!(bytes[0], 0x8c, "twelve fields");
+    assert_eq!(bytes[0], 0x8b, "eleven fields");
 }
 
 // functional: SES-017

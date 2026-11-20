@@ -9,6 +9,11 @@ use rhtn_ffi::types::KIND_APPLICATION;
 use rhtn_ffi::types::*;
 use std::sync::{Arc, Mutex};
 
+/// A kind of the shell's own, which the kernel hands up as payload
+/// (`Event::Payload`'s kind is the application's to read): what crosses
+/// the direct path with nothing around it but the connection.
+const SHELL_KIND: u64 = 100;
+
 /// A shell's hardware: what it reports and what it was asked.
 #[derive(Default)]
 struct Shell {
@@ -97,8 +102,8 @@ impl Random for Shell {
         } else {
             n as usize
         };
-        // real randomness: two shells drawing the same constant would
-        // derive the same ratchet keys and read as one party to each other
+        // real randomness: two shells drawing the same constant would seal
+        // under the same ephemeral keys and read as one party to each other
         let mut out = Vec::with_capacity(want);
         while out.len() < want {
             out.extend_from_slice(&rhtn_transport::tls::random_bytes::<64>());
@@ -242,22 +247,24 @@ fn a_shell_drives_the_client_through_the_boundary_and_gets_values_back() {
         p.take_candidate_offer(back).expect("anchored"),
         "alice holds it too"
     );
-    // the prekeys cross the bearer as well (`wire-format.md` §14.3.4), so
-    // the session a first message needs opens with no node asked
-    let pk_b = bob.prekey_carriage().expect("bob's prekeys");
-    p.take_prekey_carriage(pk_b).expect("alice takes them");
-    let pk_a = p.prekey_carriage().expect("alice's prekeys");
-    bob.take_prekey_carriage(pk_a).expect("bob takes them");
-    p.send(id("bob"), 0, b"with no node".to_vec())
+    // the path is the seal (`wire-format.md` §7.10.1): a shell's own kind
+    // crosses it with no node asked for anything. A direct message, kind
+    // 0, always passes the recipient's node (design §14.2.2), so with none
+    // attached it is refused, not sent some other way
+    p.send(id("bob"), SHELL_KIND, b"with no node".to_vec())
         .expect("direct, with no node attached");
     match bob.next_event(5000) {
         Some(Event::Payload { from, kind, bytes }) => {
             assert_eq!(from, id("alice"));
-            assert_eq!(kind, 0);
+            assert_eq!(kind, SHELL_KIND);
             assert_eq!(bytes, b"with no node");
         }
         other => panic!("bob got {other:?}"),
     }
+    assert!(
+        p.send(id("bob"), 0, b"a direct message".to_vec()).is_err(),
+        "a direct message with no node to seal it through is refused"
+    );
 
     // a refusal is a value carrying its reason, not a failure the shell
     // has to guess at
@@ -282,14 +289,15 @@ fn randomness_of_short_measure_is_refused_and_the_shell_is_told() {
         ..Default::default()
     });
     let known: Vec<Vec<u8>> = ["alice"].iter().map(|n| material(n)).collect();
-    // the client seeds its payload material as it starts, so a platform
-    // giving short measure is caught there: a seed completed with zeroes
-    // is not random, and padding one silently is worse than refusing
+    // the kernel draws on the platform's randomness once as it starts, so
+    // a platform giving short measure is caught there: bytes completed
+    // with zeroes are not random, and padding them silently is worse than
+    // refusing
     let Err(e) = Participant::start(seeds("alice"), known, platform_of(shell)) else {
         panic!("short measure was accepted")
     };
     // and it reaches the shell as a value, not as a process that vanished
-    assert!(e.reason().contains("could not be built"), "{e}");
+    assert!(e.reason().contains("came up short"), "{e}");
 }
 
 // ------------------------------------- the kernel's own side of the wire
@@ -429,19 +437,18 @@ async fn the_kernel_holds_the_session_and_no_wire_byte_crosses_outward() {
     assert_eq!(a.queued, 0);
     assert!(p.attached());
 
-    // and the node holds what the attach published and stocked, which no
-    // shell carried for it
-    {
-        let view = node.view.lock().unwrap();
-        assert!(
-            view.prekeys.bundle(&sid("alice").public.keyhash).is_some(),
-            "the bundle went over the wire from the kernel"
-        );
-        assert!(
-            view.prekeys.pool_size(&sid("alice").public.keyhash) > 0,
-            "and the one-time pool with it"
-        );
-    }
+    // and the node holds the session the kernel opened, which no shell
+    // carried for it — and nothing published with it: a node makes its
+    // keys for a client when a sender asks (`wire-format.md` §7.8), and an
+    // attach hands over no key material at all
+    assert!(
+        node.node.sessions().contains(&sid("alice").public.keyhash),
+        "the session went over the wire from the kernel"
+    );
+    assert!(
+        node.view.lock().unwrap().node_keys.recipients().is_empty(),
+        "and no key was made for anyone by the attach"
+    );
 
     // where to be rung is the user's choice, handed over and withdrawn
     // through the same seam
@@ -483,9 +490,9 @@ async fn the_kernel_holds_the_session_and_no_wire_byte_crosses_outward() {
     );
 
     // payload reaches another client of the same node, through the kernel
-    // on both sides: carol attaches so its bundle is published, alice
-    // sweeps it, and what alice sends comes out of carol's event queue
-    // already decrypted
+    // on both sides: alice holds carol's card, which carries the key a
+    // message to her is sealed to, carol attaches, and what alice sends
+    // comes out of carol's event queue already opened and attributed
     let carol_side = Arc::new(
         tokio::task::spawn_blocking({
             let known = known.clone();
@@ -502,29 +509,21 @@ async fn the_kernel_holds_the_session_and_no_wire_byte_crosses_outward() {
         .unwrap(),
     );
     {
+        let (q, intro) = (
+            p.clone(),
+            carol_side.own_introduction().expect("carol's card"),
+        );
+        tokio::task::spawn_blocking(move || q.take_introduction(intro))
+            .await
+            .unwrap()
+            .expect("alice holds carol's card");
+    }
+    {
         let (q, addr) = (carol_side.clone(), addr.clone());
         tokio::task::spawn_blocking(move || q.attach(id("bob"), vec![addr], vec![]))
             .await
             .unwrap()
             .expect("carol attaches");
-    }
-    // alice sweeps again, since the first sweep ran before carol published
-    {
-        let (q, addr) = (p.clone(), addr.clone());
-        tokio::task::spawn_blocking(move || q.attach(id("bob"), vec![addr], vec![id("carol")]))
-            .await
-            .unwrap()
-            .expect("alice attaches again");
-    }
-    // and carol sweeps alice, since carol attached before alice's second
-    // publication and a recipient attributes an initial message only under
-    // the binding it holds
-    {
-        let (q, addr) = (carol_side.clone(), addr.clone());
-        tokio::task::spawn_blocking(move || q.attach(id("bob"), vec![addr], vec![id("alice")]))
-            .await
-            .unwrap()
-            .expect("carol sweeps");
     }
     {
         let q = p.clone();
@@ -661,7 +660,18 @@ async fn a_message_the_serving_node_refused_reaches_the_application_as_unsent() 
         .await
         .unwrap(),
     );
-    // carol publishes so alice can address it, and alice sweeps carol
+    // alice holds carol's card, and both attach: the node serves carol
+    // and will queue nothing for her
+    {
+        let (q, intro) = (
+            alice.clone(),
+            carol.own_introduction().expect("carol's card"),
+        );
+        tokio::task::spawn_blocking(move || q.take_introduction(intro))
+            .await
+            .unwrap()
+            .expect("alice holds carol's card");
+    }
     {
         let (q, a) = (carol.clone(), addr.clone());
         tokio::task::spawn_blocking(move || q.attach(id("bob"), vec![a], vec![]))
@@ -677,13 +687,8 @@ async fn a_message_the_serving_node_refused_reaches_the_application_as_unsent() 
             .expect("alice attaches");
     }
     assert!(
-        node.view
-            .lock()
-            .unwrap()
-            .prekeys
-            .bundle(&sid("carol").public.keyhash)
-            .is_some(),
-        "control: the recipient's material is known"
+        node.node.serves(&sid("carol").public.keyhash),
+        "control: the node serves the recipient"
     );
 
     let before = node.node.queued(&sid("carol").public.keyhash);
@@ -707,12 +712,13 @@ async fn a_message_the_serving_node_refused_reaches_the_application_as_unsent() 
 
 /// A desktop of alice's that holds no seed (design §23.3): started from
 /// her key material, a transport seed of its own and the run her phone
-/// delegated over it; it attaches under the delegation, its bundle is
-/// signed on the phone and published under its own device, and what her
-/// key signs is refused on it.
+/// delegated over it, and handed her two encryption secrets; it attaches
+/// under the delegation, what was sealed to alice while it was away opens
+/// there, attributed to its sender, and what her key signs is refused on
+/// it.
 // acceptance: DMN-27
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_device_holding_no_seed_attaches_under_its_delegation_and_publishes_what_the_phone_signed()
+async fn a_device_holding_no_seed_attaches_under_its_delegation_and_opens_what_is_sealed_to_the_person()
  {
     let node = serving("bob");
     let addr = node.addr.to_string();
@@ -814,74 +820,110 @@ async fn a_device_holding_no_seed_attaches_under_its_delegation_and_publishes_wh
         desktop.sign_body(b"a body".to_vec()).is_err(),
         "the identity key is not here"
     );
+
+    // **a message sealed to alice waits at the node**: carol holds her
+    // card and sends while no device of alice's is attached
+    let carol = Arc::new({
+        let known = known.clone();
+        tokio::task::spawn_blocking(move || Participant::start(seeds("carol"), known, shell()))
+            .await
+            .unwrap()
+            .expect("carol starts")
+    });
+    {
+        let (q, intro) = (
+            carol.clone(),
+            phone.own_introduction().expect("alice's card"),
+        );
+        tokio::task::spawn_blocking(move || q.take_introduction(intro))
+            .await
+            .unwrap()
+            .expect("carol holds alice's card");
+    }
+    {
+        let (q, addr) = (carol.clone(), addr.clone());
+        tokio::task::spawn_blocking(move || q.attach(id("bob"), vec![addr], vec![id("alice")]))
+            .await
+            .unwrap()
+            .expect("carol attaches");
+    }
+    {
+        let q = carol.clone();
+        tokio::task::spawn_blocking(move || {
+            q.send(id("alice"), KIND_APPLICATION, b"for alice".to_vec())
+        })
+        .await
+        .unwrap()
+        .expect("sealed to alice and taken");
+    }
     assert!(
-        phone.bundle_to_sign().is_none(),
-        "the phone signs its own bundle"
+        node.node.queued(&sid("alice").public.keyhash) >= 1,
+        "waiting, with carol's offer of the direct path behind it"
     );
+
+    // the phone's two encryption secrets, as the pairing's credential
+    // carries them (`wire-format.md` §14.3.3): what alice's phone derives
+    // from her root, and nothing the desktop could derive itself
+    let secret =
+        rhtn_crypto::seal::EncryptionSecret::from_identity_root(sid("alice").identity_root());
+    let (kem_seed, auth) = (secret.kem_seed().to_vec(), secret.auth_secret().to_vec());
+    assert!(
+        desktop
+            .take_encryption_secrets(vec![0; 31], auth.clone())
+            .is_err(),
+        "an X-Wing seed is 32 bytes"
+    );
+    desktop
+        .take_encryption_secrets(kem_seed, auth)
+        .expect("the desktop holds alice's secrets");
 
     // the attach binds under the delegation: the node pinned alice, and
     // the key presented is the one the delegation names
     let a = {
         let (q, addr) = (desktop.clone(), addr.clone());
-        tokio::task::spawn_blocking(move || q.attach(id("bob"), vec![addr], vec![id("carol")]))
+        tokio::task::spawn_blocking(move || q.attach(id("bob"), vec![addr], vec![]))
             .await
             .unwrap()
             .expect("attaches under the delegation")
     };
     assert_eq!(a.serving, id("bob"));
+    assert!(a.queued >= 1, "the node says it is waiting");
     assert!(desktop.attached());
-    {
-        let view = node.view.lock().unwrap();
-        assert!(
-            view.prekeys
-                .bundle_for(&sid("alice").public.keyhash, &presented)
-                .is_none(),
-            "no bundle yet: nothing signed it"
-        );
-        assert!(
-            view.prekeys
-                .pool_size_for(&sid("alice").public.keyhash, &presented)
-                > 0,
-            "the pool is the device's own and is stocked"
-        );
-    }
-
-    // the unsigned bundle crosses to the phone and the signed one back,
-    // and the node then holds it under the desktop's device
-    let payload = desktop
-        .bundle_to_sign()
-        .expect("material awaiting a signature");
-    let signed = phone
-        .sign_device_bundle(payload)
-        .expect("the phone signs its own device's");
-    {
-        let (q, signed) = (desktop.clone(), signed.clone());
-        tokio::task::spawn_blocking(move || q.take_signed_bundle(signed))
-            .await
-            .unwrap()
-            .expect("published");
-    }
-    assert!(desktop.bundle_to_sign().is_none());
-    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-    {
-        let view = node.view.lock().unwrap();
-        let b = view
-            .prekeys
-            .bundle_for(&sid("alice").public.keyhash, &presented)
-            .expect("the node holds the desktop's bundle");
-        assert_eq!(b, &signed);
-        let parsed = rhtn_archive::prekey::PrekeyBundle::parse(b).unwrap();
-        assert_eq!(parsed.device, presented);
-        assert_eq!(parsed.subject, sid("alice").public.keyhash);
-    }
+    assert!(
+        node.node.sessions().contains(&sid("alice").public.keyhash),
+        "the session is alice's"
+    );
+    // and the queued message is handed over, opened, and carol's
+    let got = {
+        let q = desktop.clone();
+        tokio::task::spawn_blocking(move || {
+            loop {
+                match q.next_event(5000) {
+                    Some(Event::Changed { .. }) | Some(Event::Connection(_)) => continue,
+                    other => break other,
+                }
+            }
+        })
+        .await
+        .unwrap()
+    };
+    assert_eq!(
+        got,
+        Some(Event::Payload {
+            from: id("carol"),
+            kind: KIND_APPLICATION,
+            bytes: b"for alice".to_vec()
+        }),
+        "opened on the desktop under alice's secrets, attributed to carol"
+    );
 }
 
 // functional: PAY-015
-/// A process restart with an established payload session and messages
-/// queued meanwhile: the kernel starts from what it wrote through the
-/// storage seam, the queued message opens on the restored ratchet, and the
-/// reply continues the same session.  State that does not open refuses
-/// the start; a backup made here restores into an empty kernel.
+/// A process restart with a conversation under way and a message queued
+/// meanwhile: the kernel starts from what it wrote through the storage
+/// seam, the queued message opens on the restored state, attributed to
+/// its sender, and the reply goes as before.  State that does not open
+/// refuses the start; a backup made here restores into an empty kernel.
 // acceptance: DMN-13
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_kernel_restarts_from_the_storage_seam_with_its_session_and_its_queue_intact() {
@@ -908,6 +950,14 @@ async fn a_kernel_restarts_from_the_storage_seam_with_its_session_and_its_queue_
         let addr = addr.clone();
         tokio::task::spawn_blocking(move || p.attach(id("bob"), vec![addr], pop))
     };
+    // each holds the other's card, as two who have met do
+    for (p, q) in [(&alice, &carol), (&carol, &alice)] {
+        let (p, intro) = (p.clone(), q.own_introduction().expect("a card"));
+        tokio::task::spawn_blocking(move || p.take_introduction(intro))
+            .await
+            .unwrap()
+            .expect("taken");
+    }
     attach(carol.clone(), vec![])
         .await
         .unwrap()
@@ -928,7 +978,7 @@ async fn a_kernel_restarts_from_the_storage_seam_with_its_session_and_its_queue_
         "what reaches the platform's storage is sealed, not the kernel's bytes"
     );
 
-    // a session both ways
+    // a message each way
     let send = |p: Arc<Participant>, to: Vec<u8>, what: &'static [u8]| {
         tokio::task::spawn_blocking(move || p.send(to, KIND_APPLICATION, what.to_vec()))
     };
@@ -979,11 +1029,11 @@ async fn a_kernel_restarts_from_the_storage_seam_with_its_session_and_its_queue_
     assert_eq!(
         node.node.queued(&sid("carol").public.keyhash),
         before + 1,
-        "queued for the device that is away"
+        "queued for the person, who is away"
     );
 
-    // a new process from the same storage: the session is there, the
-    // queued message opens on it, and the reply continues it
+    // a new process from the same storage: the queued message opens on
+    // what it read back, and the reply goes
     let carol2 = Arc::new(start("carol", carol_shell.clone()).await.unwrap());
     assert_eq!(
         carol_shell.read("payload".into()).unwrap(),
@@ -1002,7 +1052,7 @@ async fn a_kernel_restarts_from_the_storage_seam_with_its_session_and_its_queue_
             kind: 0,
             bytes: b"third".to_vec()
         }),
-        "decrypted on the ratchet the first process wrote"
+        "opened under the state the first process wrote"
     );
     send(carol2.clone(), id("alice"), b"fourth")
         .await
@@ -1015,7 +1065,7 @@ async fn a_kernel_restarts_from_the_storage_seam_with_its_session_and_its_queue_
             kind: 0,
             bytes: b"fourth".to_vec()
         }),
-        "the same session, continued"
+        "and the conversation continues"
     );
 
     // state that does not open refuses the start rather than starting
@@ -1693,4 +1743,171 @@ fn a_save_writes_only_the_relations_that_changed_and_the_one_blob_migrates_once(
         "nothing but the sibling list: {wrote:?}"
     );
     drop(r);
+}
+
+/// The direct messages a node holds for `to`, opened as `to` opens them:
+/// under its own secrets and the node's half. Each body as it was sealed,
+/// in queue order — what tells a first message from a later one.
+fn sealed_bodies(node: &Arc<LiveNode>, to: &str) -> Vec<rhtn_archive::sealed::SealedBody> {
+    let k = sid(to).public.keyhash;
+    let secret = rhtn_crypto::seal::EncryptionSecret::from_identity_root(sid(to).identity_root());
+    node.node
+        .queue_records(&k)
+        .into_iter()
+        .filter_map(|q| {
+            let sealed = rhtn_archive::sealed::Sealed::decode(&q.sealed).ok()?;
+            let ss_n = node
+                .view
+                .lock()
+                .unwrap()
+                .node_keys
+                .open_half(&k, q.n, &sealed.ct_n)?;
+            let r = rhtn_archive::submission::Relayed {
+                position: q.position,
+                sealed: q.sealed.clone(),
+                ss_n,
+            };
+            rhtn_client::payload::open_relayed(&secret, &k, &node.me(), &r)
+                .ok()
+                .map(|(_, body)| body)
+        })
+        .filter(|b| b.kind == KIND_APPLICATION)
+        .collect()
+}
+
+/// **Nobody the node can name** (`light-client-requirements.md` §3):
+/// alice is attached to the node that also serves carol, holds carol's
+/// card and has never had a message from her. Every fetch and every
+/// submission goes on a connection of its own under a key minted for it —
+/// the node binds each to nobody — and none rides the session alice holds
+/// there, which names her. Her introduction rides inside the seal until
+/// carol has written back, and not after.
+// acceptance: PAY-31
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_sender_attached_to_the_recipients_node_fetches_and_submits_as_nobody() {
+    use rhtn_transport::bind::Bound;
+    use rhtn_transport::session::Event as Wire;
+    let node = serving("bob");
+    let addr = node.addr.to_string();
+    let start = |name: &'static str, known: Vec<Vec<u8>>| {
+        tokio::task::spawn_blocking(move || {
+            Participant::start(seeds(name), known, platform_of(Arc::new(Shell::default())))
+                .expect("starts")
+        })
+    };
+    let alice = Arc::new(
+        start(
+            "alice",
+            vec![material("alice"), material("bob"), material("carol")],
+        )
+        .await
+        .unwrap(),
+    );
+    // carol knows nobody but the node: alice reaches her as a stranger
+    let carol = Arc::new(start("carol", vec![material("bob")]).await.unwrap());
+    {
+        let (q, intro) = (
+            alice.clone(),
+            carol.own_introduction().expect("carol's card"),
+        );
+        tokio::task::spawn_blocking(move || q.take_introduction(intro))
+            .await
+            .unwrap()
+            .expect("alice holds carol's card");
+    }
+    for p in [&carol, &alice] {
+        let (q, addr) = (p.clone(), addr.clone());
+        tokio::task::spawn_blocking(move || q.attach(id("bob"), vec![addr], vec![]))
+            .await
+            .unwrap()
+            .expect("attaches");
+    }
+    let alice_k = sid("alice").public.keyhash;
+    assert!(
+        node.node.sessions().contains(&alice_k),
+        "alice holds a session with carol's node, which names her"
+    );
+    let minted = || {
+        node.node
+            .log
+            .count(|e| matches!(e, Wire::Bound { how: Bound::Minted }))
+    };
+    let settle = || tokio::time::sleep(std::time::Duration::from_millis(400));
+    let send = |what: &'static [u8]| {
+        let q = alice.clone();
+        tokio::task::spawn_blocking(move || q.send(id("carol"), KIND_APPLICATION, what.to_vec()))
+    };
+    let next_payload = |p: Arc<Participant>| {
+        tokio::task::spawn_blocking(move || {
+            loop {
+                match p.next_event(5000) {
+                    Some(Event::Payload { from, bytes, .. }) => break Some((from, bytes)),
+                    Some(_) => continue,
+                    None => break None,
+                }
+            }
+        })
+    };
+
+    // the first two, back to back: a fetch, the two messages and the
+    // offer of a direct path after the first, each on a minted connection
+    // of its own. Anything of carol's — her own offer back is a message
+    // too — counts as having written back, so the two go before she can
+    let (m0, r0) = (minted(), node.node.relayed());
+    send(b"one").await.unwrap().expect("taken");
+    send(b"two").await.unwrap().expect("taken");
+    settle().await;
+    let (m2, r2) = (minted(), node.node.relayed());
+    assert!(r2 - r0 >= 3, "the node took both, and the offer");
+    assert!(
+        m2 - m0 > r2 - r0,
+        "a minted connection for each fetch and one for each submission: {} for {}",
+        m2 - m0,
+        r2 - r0
+    );
+    assert_eq!(
+        next_payload(carol.clone()).await.unwrap().map(|(f, _)| f),
+        Some(id("alice")),
+        "carol attributes it to alice by the introduction inside"
+    );
+
+    // carol writes back, which is what stops alice's introduction riding
+    {
+        let q = carol.clone();
+        tokio::task::spawn_blocking(move || {
+            q.send(id("alice"), KIND_APPLICATION, b"back".to_vec())
+        })
+        .await
+        .unwrap()
+        .expect("carol answers a party she now holds");
+    }
+    assert_eq!(
+        next_payload(alice.clone()).await.unwrap(),
+        Some((id("carol"), b"back".to_vec()))
+    );
+    settle().await;
+    let (m3, r3) = (minted(), node.node.relayed());
+    send(b"three").await.unwrap().expect("taken");
+    settle().await;
+    assert_eq!(
+        (minted() - m3, node.node.relayed() - r3),
+        (1, 1),
+        "the third as nobody too"
+    );
+
+    // what carol's queue holds from alice, opened as carol opens it
+    let bodies: Vec<(Vec<u8>, bool)> = sealed_bodies(&node, "carol")
+        .into_iter()
+        .filter(|b| b.sender == alice_k)
+        .map(|b| (b.bytes, b.introduction.is_some()))
+        .collect();
+    assert_eq!(
+        bodies,
+        vec![
+            (b"one".to_vec(), true),
+            (b"two".to_vec(), true),
+            (b"three".to_vec(), false)
+        ],
+        "her introduction rides until carol has written back, and not after"
+    );
 }

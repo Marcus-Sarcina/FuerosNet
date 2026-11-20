@@ -46,7 +46,7 @@ async fn a_replayed_first_flight_binds_nothing() {
 
     // S holds a queued item for C
     let item = b"queued for C".to_vec();
-    s.node.enqueue(kh("carol"), item.clone()).unwrap();
+    enqueue(&s.node, "carol", &item).unwrap();
     assert_eq!(s.node.queued(&kh("carol")), 1);
     let attaches_before = s.node.log.count(|e| matches!(e, Event::Attached { .. }));
 
@@ -84,7 +84,10 @@ async fn a_replayed_first_flight_binds_nothing() {
         vec![item.clone()],
         "the queued item is delivered on A alone"
     );
-    assert_eq!(s.node.queued(&kh("carol")), 0);
+    // delivery removes nothing (design §14.1.6): the item is held, its
+    // first delivery marked
+    let first = s.node.queue_records(&kh("carol"))[0].delivered_at;
+    assert!(first.is_some(), "marked delivered");
 
     // the recording is replayed as a second connection, from a fresh source
     // address, whose handshake nothing completes
@@ -102,8 +105,8 @@ async fn a_replayed_first_flight_binds_nothing() {
         "no AttachAck is ever sent for the replay"
     );
     assert_eq!(
-        s.node.queued(&kh("carol")),
-        0,
+        s.node.queue_records(&kh("carol"))[0].delivered_at,
+        first,
         "the queued item is not re-delivered"
     );
     assert!(

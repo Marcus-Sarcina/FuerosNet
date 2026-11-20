@@ -9,7 +9,7 @@ const GOOD: &str = r#"
 identity = "/var/lib/rhtn/identity.key"
 listen = "127.0.0.1:7431"
 queue = "/var/lib/rhtn/queue"
-prekeys = "/var/lib/rhtn/prekeys"
+keys = "/var/lib/rhtn/keys"
 topology = "/var/lib/rhtn/topology"
 archive = "/var/lib/rhtn/archive"
 heartbeat = 30
@@ -95,7 +95,7 @@ fn a_complete_configuration_reads_and_a_missing_key_has_no_default() {
         "identity",
         "listen",
         "queue",
-        "prekeys",
+        "keys",
         "topology",
         "archive",
         "heartbeat",

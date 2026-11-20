@@ -63,6 +63,21 @@ class FrontTest {
         assertEquals("hello", screen.lastThreads.single().messages.single().text)
     }
 
+    /** **An unattributed sender's thread is shown and not answered**
+     *  [author, 2026-11-19, 2026-11-20]: named by the alias it carried and
+     *  marked, and an attributed arrival from the same keyhash clears it. */
+    @Test
+    fun an_unverified_arrival_is_shown_under_its_alias_and_marked() {
+        val front = Front()
+        front.incoming(ME, "bb", "mallory (unverified)", "hi", unverified = true)
+        val t = front.thread(ME, "bb")!!
+        assertTrue("marked, so no reply is offered", t.unverified)
+        assertEquals("mallory (unverified)", t.peerName)
+        assertEquals("hi", t.messages.single().text)
+        front.incoming(ME, "bb", "mallory", "now you hold my card")
+        assertFalse("attributed now", front.thread(ME, "bb")!!.unverified)
+    }
+
     // functional: APP-013
     @Test
     fun a_gone_screen_is_a_null_sink_and_the_next_one_sees_the_state() {

@@ -1,7 +1,8 @@
 //! The serving node a light client reaches over a session
 //! (`wire-format.md` §7.10): the same five questions [`Serving`] asks of
-//! the node beside it, put on the wire as request types 9 to 12 and the
-//! prekey fetch of §7.8.
+//! the node beside it, put on the wire as the request types of §7.10 and
+//! §7.12. A node-key fetch and a sealed message go as nobody, on a
+//! connection minted for them, and never on this session (§9.1).
 //!
 //! This is the implementation a light client on its own host runs.  The
 //! one beside a node in the same process answers from memory; this one
@@ -11,7 +12,6 @@ use crate::actor::Handle;
 use crate::serving::{Answer, Inbound, Serving};
 use rhtn_archive::Keyhash;
 use rhtn_archive::catalog::REQUEST_RESOURCE;
-use rhtn_archive::prekey::REQUEST_PREKEY;
 use rhtn_archive::profile::REQUEST_PROFILE;
 use rhtn_archive::submission::*;
 use std::sync::Arc;
@@ -87,57 +87,11 @@ impl Serving for AttachedNode {
         *self.node.lock().unwrap()
     }
 
-    /// The key the serving node presented on the current session; all
-    /// zero where no session is up, which no device matches.
-    fn node_device(&self) -> [u8; 32] {
-        (self.session)()
-            .and_then(|s| rhtn_transport::tls::peer_key(&s.conn))
-            .unwrap_or([0; 32])
-    }
-
-    /// A node across a session tells nobody what it holds; a client finds
-    /// out by fetching (`wire-format.md` §7.8).
-    fn holds(&self, _subject: &Keyhash) -> bool {
-        false
-    }
-
     /// Nor whom it serves: a submission for a keyhash it holds no record
     /// of comes back refused, which is where a client learns it
     /// (`wire-format.md` §7.10).
     fn serves(&self, _client: &Keyhash) -> bool {
         false
-    }
-
-    fn publish<'a>(&'a self, bytes: &'a [u8]) -> Answer<'a, bool> {
-        Box::pin(async move {
-            let nonce = (self.nonce)();
-            let body = PrekeyPublication {
-                bundle: bytes.to_vec(),
-                nonce,
-            }
-            .encode();
-            self.submit(REQUEST_PREKEY_PUBLICATION, nonce, body).await
-        })
-    }
-
-    fn stock<'a>(&'a self, _subject: Keyhash, keys: Vec<Vec<u8>>) -> Answer<'a, bool> {
-        Box::pin(async move {
-            // the subject of a deposit is the client that sends it, which
-            // the node takes from the session and not from the body.  A
-            // deposit of nothing is not a message: the wire's smallest is
-            // one key (`wire-format.md` §7.10), and there is nothing here
-            // for the node to refuse
-            if keys.is_empty() {
-                return true;
-            }
-            let nonce = (self.nonce)();
-            let body = OneTimeDeposit { keys, nonce }.encode();
-            self.submit(REQUEST_ONE_TIME_DEPOSIT, nonce, body).await
-        })
-    }
-
-    fn prekey<'a>(&'a self, _from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
-        Box::pin(async move { self.ask(REQUEST_PREKEY, body.to_vec()).await })
     }
 
     fn publish_profile<'a>(&'a self, bytes: &'a [u8]) -> Answer<'a, bool> {
@@ -245,26 +199,6 @@ impl Serving for AttachedNode {
         })
     }
 
-    fn relay<'a>(
-        &'a self,
-        _from: Keyhash,
-        to: Keyhash,
-        bytes: Vec<u8>,
-        device: [u8; 32],
-    ) -> Answer<'a, bool> {
-        Box::pin(async move {
-            let nonce = (self.nonce)();
-            let body = RelaySubmission {
-                recipient: to,
-                ciphertext: bytes,
-                nonce,
-                device,
-            }
-            .encode();
-            self.submit(REQUEST_RELAY, nonce, body).await
-        })
-    }
-
     /// Frame 5 on stream 0, which is the one channel a transaction
     /// travels on (`wire-format.md` §10.1).  Not a request: §10.1.3
     /// defines no acknowledgement and the answer here is only whether the
@@ -364,23 +298,20 @@ pub fn follow(
 /// `TopologyPush` (`wire-format.md` §8.2).
 pub const FRAME_TOPOLOGY_PUSH: u64 = 5;
 
-/// Carry what the serving node delivers into the client.
+/// Carry what `node` delivers into the client.
 ///
-/// Each message is a `RelayedPayload` (`wire-format.md` §7.10): the
-/// submitter in front of the ciphertext.  **The name is a routing hint**,
-/// which is all the client uses it for — whose material to try — and never
-/// an attribution, which the material the message opens under decides.
-/// Bytes that are not that shape are dropped, since nothing can be done
-/// with a message whose sender is unknown.
+/// Each message is a `RelayedPayload` (`wire-format.md` §7.10): its
+/// position, the seal, and the node's half. **It names no sender**, which
+/// is inside the seal and the client's to attribute; what arrives is said
+/// to come from the node that delivered it.
 pub fn collect(
+    node: Keyhash,
     inbound: Inbound,
     mut deliveries: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         while let Some(bytes) = deliveries.recv().await {
-            if let Some((from, payload, binding)) = rhtn_archive::submission::unrelayed(&bytes) {
-                inbound(from, payload, binding);
-            }
+            inbound(node, bytes);
         }
     })
 }

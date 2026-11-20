@@ -489,41 +489,6 @@ fn dec_35_an_envelope_signed_under_a_delegated_key_fails_verification() {
     assert_eq!(fab.count(FRAME_TOPOLOGY_PUSH), 0);
 }
 
-#[test]
-fn sub_12_a_publication_naming_another_device_than_the_sessions_is_refused() {
-    use rhtn_archive::prekey::{CONSTRUCTION_PQXDH, PrekeyBundle};
-    use rhtn_archive::submission::{
-        PrekeyPublication, SUBMISSION_ACCEPTED, SUBMISSION_REFUSED, SubmissionReply,
-    };
-    let w = World::new();
-    let mut n = view("bob", Table::with_me(kh("bob")), "alice", &[]);
-    n.set_now(w.clock);
-    let s = id("carol");
-    let (d1, d2) = ([1u8; 32], [2u8; 32]);
-    // a valid bundle by S naming device d2, published on d1's session
-    let bundle = PrekeyBundle::build(&s, CONSTRUCTION_PQXDH, b"material", w.clock, &d2);
-    let body = PrekeyPublication {
-        bundle: bundle.clone(),
-        nonce: [5; 16],
-    }
-    .encode();
-    let reply =
-        rhtn_node::submissions::publication(&mut n, &ids(), &kh("carol"), &d1, &body).unwrap();
-    let r = SubmissionReply::decode(&reply).unwrap();
-    assert_eq!((r.nonce, r.code), ([5; 16], SUBMISSION_REFUSED));
-    assert!(
-        n.prekeys.bundle_for(&kh("carol"), &d2).is_none(),
-        "no bundle for (S, d2) from it"
-    );
-    assert!(n.prekeys.bundle(&kh("carol")).is_none());
-    // the same bundle on a session d2 presented is taken
-    let reply =
-        rhtn_node::submissions::publication(&mut n, &ids(), &kh("carol"), &d2, &body).unwrap();
-    let r = SubmissionReply::decode(&reply).unwrap();
-    assert_eq!(r.code, SUBMISSION_ACCEPTED);
-    assert_eq!(n.prekeys.bundle_for(&kh("carol"), &d2), Some(&bundle));
-}
-
 // acceptance: TOP-44
 #[test]
 fn top_44_a_running_node_issues_and_takes_acknowledgements_under_its_standing_policy() {

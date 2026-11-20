@@ -70,14 +70,14 @@ fn node(tag: &str, who: &str, port: u16, hosting: &str) -> Node {
     std::fs::write(
         &config,
         format!(
-            "identity = \"{}\"\nlisten = \"127.0.0.1:0\"\nqueue = \"{}\"\nprekeys = \"{}\"\n\
+            "identity = \"{}\"\nlisten = \"127.0.0.1:0\"\nqueue = \"{}\"\nkeys = \"{}\"\n\
              topology = \"{}\"\narchive = \"{}\"\nresources = \"{}\"\ngrants = \"{}\"\n\
              heartbeat = 30\ningestion = \"unverified-gossip\"\n\n[allowance]\nrequests = 120\n\
              seconds = 60\n\n[federation]\nlisten = \"127.0.0.1:{port}\"\n\
              store = \"{}\"\n",
             dir.join("identity.key").display(),
             dir.join("queue").display(),
-            dir.join("prekeys").display(),
+            dir.join("keys").display(),
             dir.join("topology").display(),
             dir.join("archive").display(),
             hosting_path.display(),

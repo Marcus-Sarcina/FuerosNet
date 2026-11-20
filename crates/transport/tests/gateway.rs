@@ -30,6 +30,7 @@ fn client_cfg(name: &str) -> ClientConfig {
         filter: None,
         sibling_cache: Arc::new(Mutex::new(Vec::new())),
         addresses: Arc::new(Mutex::new(Default::default())),
+        cursors: Default::default(),
         tls: Arc::new(Mutex::new(Default::default())),
         connect_timeout: Duration::from_millis(1500),
         on_reachability: None,
@@ -86,7 +87,7 @@ async fn a_resource_request_is_never_processed_from_early_data_and_a_stream_carr
     let (mut s0, _r0) = conn.open_bi().await.unwrap();
     s0.write_all(&control_frame(
         1,
-        &encode_attach(&ccfg.me.keyhash, None, &ccfg.capabilities, None),
+        &encode_attach(&ccfg.me.keyhash, None, &ccfg.capabilities, None, None),
     ))
     .await
     .unwrap();

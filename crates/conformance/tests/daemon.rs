@@ -1,7 +1,7 @@
 //! Persistence boundaries of the newly implemented daemon lifecycle.
 use rhtn_crypto::identity::testkit::test_identity;
 use rhtn_codec::cose;
-use rhtn_archive::{tx::*, prekey::*};
+use rhtn_archive::{tx::*, node_key::*};
 use rhtn_daemon::{config::Config, service::Service};
 use rhtn_node::{resolution::Ingestion, store::Decision};
 use std::path::PathBuf;
@@ -22,7 +22,7 @@ fn layout(tag: &str) -> Layout {
     let peers=dir.join("peers");
     let text=["alice","bob","carol"].iter().map(|n|test_identity(n).public.key_material().iter().map(|b|format!("{b:02x}")).collect::<String>()).collect::<Vec<_>>().join("\n");
     std::fs::write(&peers,text).unwrap();
-    let cfg=Config { log:None, resources:None, grants:None, horizon:None, state:None, resource_limits:Default::default(), identity:Some(identity), operator:None, transport_key:None, delegations:None, endpoint_record:None, anchor_entry:None, anchors:None, acknowledge:false, administration:None, federation:None, listen:"127.0.0.1:0".parse().unwrap(), upstream:None, queue:dir.join("queue"), archive:dir.join("archive"), queue_cap:None, heartbeat_secs:30, reconcile_secs:900, ingestion:Ingestion::UnverifiedGossip, request_allowance:(120,60), prekeys:dir.join("prekeys"), topology:dir.join("topology") };
+    let cfg=Config { log:None, resources:None, grants:None, horizon:None, state:None, resource_limits:Default::default(), identity:Some(identity), operator:None, transport_key:None, delegations:None, endpoint_record:None, anchor_entry:None, anchors:None, acknowledge:false, administration:None, federation:None, listen:"127.0.0.1:0".parse().unwrap(), upstream:None, queue:dir.join("queue"), archive:dir.join("archive"), queue_cap:None, heartbeat_secs:30, reconcile_secs:900, ingestion:Ingestion::UnverifiedGossip, request_allowance:(120,60), keys:dir.join("keys"), topology:dir.join("topology") };
     Layout { dir,cfg,peers }
 }
 
@@ -45,35 +45,37 @@ async fn d01_daemon_restart_must_restore_the_accepted_child_slot() {
     assert_eq!(slot,Some(0),"infra sections 4.1-4.3: restoring accepted topology must restore its current child slot, not just suppress its replay");
 }
 
+// 2026-11-20, slice 2: the one-time key this was filed against is gone;
+// what a node now deletes is a node key's private half, and the claim is
+// the same: a deletion must not come back from the last snapshot
 #[tokio::test]
-async fn d02_served_one_time_key_must_not_return_from_the_last_daemon_snapshot() {
-    let l=layout("prekeys");
-    let (subject,requester)=(test_identity("alice"),test_identity("carol"));
+async fn d02_a_deleted_node_key_must_not_return_from_the_last_daemon_snapshot() {
+    let l=layout("node-keys");
+    let subject=test_identity("alice");
     let service=Service::start(&l.cfg,&l.peers).await.unwrap();
-    let bundle=PrekeyBundle::build(&subject,1,b"opaque subject material",100, &[0u8; 32]);
-    let otk=b"one-time opaque key".to_vec();
-    {
-        let mut view=service.node.view.lock().unwrap();
-        view.prekeys.publish(&vec![subject.public.clone()],&bundle).unwrap();
-        assert!(view.prekeys.stock(subject.public.keyhash,vec![otk.clone()]));
-    }
     service.persist().unwrap();
-    let request=PrekeyRequest::One { subject:subject.public.keyhash,one_time:true,nonce:[7;16],device: Some([0u8; 32]) }.encode();
-    {
+    let (first,second)={
         let mut view=service.node.view.lock().unwrap();
-        let reply=PrekeyReply::decode(&view.prekeys.answer(&requester.public.keyhash,&request,101).unwrap()).unwrap();
-        assert_eq!(reply.one_time,Some(otk.clone()),"control: key served successfully");
-        assert_eq!(view.prekeys.pool_size(&subject.public.keyhash),0,"control: consumed in memory");
-    }
+        // the rotation and the grace as test parameters: every fetch rotates, and nothing is held past it
+        view.node_keys.cfg.rotate_secs=0;view.node_keys.cfg.grace_secs=0;
+        let signer=view.ack_signer().unwrap();let now=view.now();
+        let first=NodeKey::parse(&view.node_keys.newest(&*signer,&subject.public.keyhash,now)).unwrap().fields.n;
+        let second=NodeKey::parse(&view.node_keys.newest(&*signer,&subject.public.keyhash,now)).unwrap().fields.n;
+        (first,second)
+    };
+    assert_ne!(first,second,"control: rotated");
+    let (_,pruned)=service.maintain();
+    assert_eq!(pruned,1,"control: the retired key, sealed to by nothing, is deleted in memory");
+    assert_eq!(service.node.view.lock().unwrap().node_keys.held(&subject.public.keyhash),vec![second]);
     // Model loss of memory before the next periodic/clean-shutdown save.
     // This invokes the real startup path against exactly the persisted bytes;
     // it does not claim to simulate a torn filesystem write or power failure.
     service.node.endpoint.close(0u32.into(),b"abrupt stop");
     drop(service);
     let restored=Service::start(&l.cfg,&l.peers).await.unwrap();
-    let reply=PrekeyReply::decode(&restored.node.view.lock().unwrap().prekeys.answer(&requester.public.keyhash,&request,102).unwrap()).unwrap();
+    let held=restored.node.view.lock().unwrap().node_keys.held(&subject.public.keyhash);
     restored.node.endpoint.close(0u32.into(),b"done");
-    assert_eq!(reply.one_time,None,"wire section 7.8: a successfully served one-time key must remain consumed after restart");
+    assert_eq!(held,vec![second],"wire section 7.8: a node key deleted with the last message sealed to it must remain deleted after restart");
 }
 
 #[tokio::test]
@@ -131,17 +133,19 @@ async fn d01_restart_must_restore_the_reissued_own_locator_series() {
     assert_eq!(position.seqno.series,2,"wire sections 2.3 and 4.6.1: a stored countersigned reissue replaces the old locator series");
 }
 
+// 2026-11-20, slice 2: one-time issuance is gone; serving a node key is
+// what a node now answers, and it must not stop the daemon persisting
 #[tokio::test]
-async fn s05_daemon_persist_must_succeed_after_one_time_key_issuance() {
-    let l=layout("persist-issued");let subject=test_identity("alice");let requester=test_identity("carol");
+async fn s05_daemon_persist_must_succeed_after_serving_node_keys() {
+    let l=layout("persist-served");let subject=test_identity("alice");
     let service=Service::start(&l.cfg,&l.peers).await.unwrap();
     {
         let mut v=service.node.view.lock().unwrap();
-        v.prekeys.publish(&vec![subject.public.clone()],&PrekeyBundle::build(&subject,1,b"opaque",100, &[0u8; 32])).unwrap();
-        assert!(v.prekeys.stock(subject.public.keyhash,vec![vec![7]]));
-        let req=PrekeyRequest::One {subject:subject.public.keyhash,one_time:true,nonce:[1;16],device: Some([0u8; 32])}.encode();
-        assert_eq!(PrekeyReply::decode(&v.prekeys.answer(&requester.public.keyhash,&req,101).unwrap()).unwrap().one_time,Some(vec![7]));
+        let signer=v.ack_signer().unwrap();let now=v.now();
+        let req=NodeKeyRequest::One {recipient:subject.public.keyhash,nonce:[1;16]}.encode();
+        let reply=NodeKeyReply::decode(&v.node_keys.answer(&*signer,&|_|true,&req,now).unwrap()).unwrap();
+        assert!(reply.outcome.is_ok(),"control: a node key was served");
     }
     let saved=service.persist();service.node.endpoint.close(0u32.into(),b"done");
-    assert!(saved.is_ok(),"infra section 4.3: routine prekey issuance must not prevent daemon state persistence; got {saved:?}");
+    assert!(saved.is_ok(),"infra section 4.3: routine node-key service must not prevent daemon state persistence; got {saved:?}");
 }

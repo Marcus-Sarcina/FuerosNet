@@ -20,10 +20,10 @@
 //! - [`rotation`] is what a subject does with its own lines: seal on
 //!   rotation, seal then reissue on suspicion, never into a series it has
 //!   occupied, and keep the chain that proves its series.
-//! - [`payload`] is payload confidentiality: the prekey material published
-//!   and stocked, the prefetch and the one-time request, the session opened
-//!   on PQXDH, and the channel's framing.
-//! - [`ratchet`] is the Double Ratchet the session runs.
+//! - [`payload`] is payload confidentiality: the split seal a direct
+//!   message is sealed with and opened from, the node keys it is sealed
+//!   to, and the kinds that tell a protocol object from application
+//!   payload.
 //! - [`catalog`] is the client's catalog view, swept and cached, and the
 //!   brokered service matched against its signed entry.
 //! - [`notice`] is what the person is told, raised through one hook.
@@ -83,7 +83,6 @@ pub mod notice;
 pub mod offering;
 pub mod payload;
 pub mod query;
-pub mod ratchet;
 pub mod record;
 pub mod relocation;
 pub mod resource;

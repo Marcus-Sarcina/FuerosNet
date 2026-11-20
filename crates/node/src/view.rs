@@ -73,9 +73,9 @@ pub struct NodeView {
     pub locators: LocatorStore,
     /// Staples handed over with introductions, by subject (design §12.6.5).
     pub staples: BTreeMap<Keyhash, Vec<u8>>,
-    /// The prekey bundles and one-time pools this node serves for its
-    /// clients (`wire-format.md` §7.8).
-    pub prekeys: crate::prekeys::PrekeyService,
+    /// The node keys this node holds for the identities it serves
+    /// (`wire-format.md` §7.8).
+    pub node_keys: crate::node_keys::NodeKeyService,
     /// The profiles this node holds and serves (`wire-format.md` §7.11).
     pub profiles: crate::profiles::ProfileStore,
     /// The wake endpoints this node holds for the clients it serves
@@ -177,7 +177,7 @@ impl NodeView {
             horizon_dir: None,
             locators: LocatorStore::new(),
             staples: BTreeMap::new(),
-            prekeys: crate::prekeys::PrekeyService::default(),
+            node_keys: crate::node_keys::NodeKeyService::default(),
             profiles: crate::profiles::ProfileStore::default(),
             wake: crate::wake::WakeRegister::new(),
             rings: std::sync::Mutex::new(Vec::new()),

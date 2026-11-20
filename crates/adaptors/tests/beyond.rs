@@ -1,22 +1,28 @@
-//! Reaching a node that does not serve this client (design §12.6.3;
-//! `wire-format.md` §7.7, §7.10).
+//! Reaching the node that serves the recipient (design §12.6.3;
+//! `wire-format.md` §7.7, §7.8, §7.10, §9.1).
 //!
 //! **A light client does not need its patron or its serving node to
 //! address a distant node for which it holds a locator** [author,
 //! 2026-10-05].  Every party here is real: two running nodes, a client
-//! that is attached to neither of them, and the submission on the wire
-//! between it and the node that serves the recipient.
+//! that is attached to neither of them, and the fetch and the submission
+//! on the wire between it and the node that serves the recipient, each on
+//! a connection under a key minted for it.
 
 mod common;
 
 use common::*;
 use rhtn_adaptors::beyond::{Beyond, Beyonder};
 use rhtn_archive::Keyhash;
-use rhtn_archive::submission::unrelayed;
+use rhtn_archive::node_key::{FAIL_NOT_SERVED, NodeKeyReply, REQUEST_NODE_KEY};
+use rhtn_archive::submission::{
+    REQUEST_RELAY, RelaySubmission, SUBMISSION_ACCEPTED, SUBMISSION_REFUSED, SubmissionReply,
+    unrelayed,
+};
 use rhtn_archive::tx::{Locator, Seqno};
 use rhtn_node::resolution::{AnchorTable, Ingestion, Path};
 use rhtn_node::runtime::LiveNode;
 use rhtn_node::view::NodeView;
+use rhtn_transport::bind::Bound;
 use rhtn_transport::session::*;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -103,6 +109,32 @@ async fn collecting(
     (s, deliveries)
 }
 
+/// `name`'s connections bound to nobody: each a key minted for it.
+fn minted_on(node: &Arc<LiveNode>) -> usize {
+    node.node
+        .log
+        .count(|e| matches!(e, Event::Bound { how: Bound::Minted }))
+}
+
+/// Hand `sealed` for `to` to the node `reach` names, as nobody: the code
+/// it answered with, its echo of the nonce checked.
+async fn submit(b: &Beyond, to: &str, reach: rhtn_client::horizon::Reach, sealed: &[u8]) -> u64 {
+    let nonce = [0x5a; 16];
+    let body = RelaySubmission {
+        recipient: kh(to),
+        sealed: sealed.to_vec(),
+        nonce,
+    }
+    .encode();
+    let (_, reply) = b
+        .minted(kh(to), reach, REQUEST_RELAY, body)
+        .await
+        .expect("the node answered");
+    let r = SubmissionReply::decode(&reply).expect("a submission reply");
+    assert_eq!(r.nonce, nonce, "the reply echoes the submission's nonce");
+    r.code
+}
+
 // acceptance: PAY-24
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn payload_goes_to_the_node_that_serves_the_recipient_not_the_sender_s_own() {
@@ -110,80 +142,78 @@ async fn payload_goes_to_the_node_that_serves_the_recipient_not_the_sender_s_own
     let carol = node_serving("carol", &["w1"]);
     let alice = beyond("alice");
 
-    // **the counterfactual first.** w1 is carol's client, so bob holds no
-    // record of it: handed this submission, bob would refuse it, which is
-    // what a sender routed through its own node is left with
-    assert!(
-        !alice
-            .carry(
-                kh("w1"),
-                [0; 32],
-                b"sealed".to_vec(),
-                known("bob", &[bob.addr]),
-                None,
-            )
-            .await,
+    // the key w1's node holds for it, fetched from that node as nobody
+    let (up, reply) = alice
+        .minted(
+            kh("w1"),
+            known("carol", &[carol.addr]),
+            REQUEST_NODE_KEY,
+            node_key_request("w1", [1; 16]),
+        )
+        .await
+        .expect("carol answers");
+    assert_eq!(up.node, kh("carol"));
+    let sealed = seal_under("alice", "w1", &reply, b"for w1", None);
+
+    // **the counterfactual.** w1 is carol's client, so bob holds no
+    // record of it: asked for its key, bob has none to give, and handed
+    // the seal, bob refuses it — which is what a sender routed through its
+    // own node is left with
+    let (_, refused) = alice
+        .minted(
+            kh("w1"),
+            known("bob", &[bob.addr]),
+            REQUEST_NODE_KEY,
+            node_key_request("w1", [2; 16]),
+        )
+        .await
+        .expect("bob answers");
+    assert_eq!(
+        NodeKeyReply::decode(&refused).unwrap().outcome,
+        Err(FAIL_NOT_SERVED),
+        "bob serves nobody by that name"
+    );
+    assert_eq!(
+        submit(&alice, "w1", known("bob", &[bob.addr]), &sealed).await,
+        SUBMISSION_REFUSED,
         "a node that serves nobody by that name does not take it"
     );
     assert_eq!(bob.node.queued(&kh("w1")), 0);
 
-    // and the same payload, handed to the node that does serve w1
-    assert!(
-        alice
-            .carry(
-                kh("w1"),
-                [0; 32],
-                b"sealed".to_vec(),
-                known("carol", &[carol.addr]),
-                Some(kh("bob")),
-            )
-            .await,
+    // and the same seal, handed to the node that does serve w1
+    assert_eq!(
+        submit(&alice, "w1", known("carol", &[carol.addr]), &sealed).await,
+        SUBMISSION_ACCEPTED,
         "carol takes what is for its own client"
     );
     assert_eq!(carol.node.queued(&kh("w1")), 1, "taken, and waiting");
+    assert_eq!(bob.node.queued(&kh("w1")), 0, "and bob still holds nothing");
 
     // **alice is attached to neither node.** Nothing in this test opened
-    // a session with a serving node, which is the whole of the point: the
-    // dial is request-only (`wire-format.md` §8.2, §9.1) and no attach
-    // precedes it.
+    // a session with a serving node, which is the whole of the point:
+    // every ask went on a connection of its own, under a key minted for it
+    // (`wire-format.md` §9.1), and no attach preceded any of them
+    assert_eq!(
+        minted_on(&carol),
+        2,
+        "the fetch and the submission at carol"
+    );
+    assert_eq!(minted_on(&bob), 2, "the fetch and the submission at bob");
+    assert!(carol.node.sessions().is_empty() && bob.node.sessions().is_empty());
+
     let (_held, mut w1) = collecting("w1", &carol).await;
     let delivered = tokio::time::timeout(Duration::from_secs(3), w1.recv())
         .await
         .expect("delivered")
         .expect("bytes");
-    let (who, what, _) = unrelayed(&delivered).expect("a relayed payload");
+    let r = unrelayed(&delivered).expect("a relayed payload");
+    assert_eq!(r.sealed, sealed, "exactly the seal alice handed over");
+    assert_ne!(*r.ss_n, [0u8; 32], "with carol's half beside it");
+    let body = open_as("w1", &kh("carol"), &delivered).expect("opens and its tag verifies");
     assert_eq!(
-        (who, what),
-        (kh("alice"), b"sealed".to_vec()),
-        "alice named in front of her own ciphertext, by the node that took it"
-    );
-    assert_eq!(carol.node.queued(&kh("w1")), 0, "no copy outlives it");
-}
-
-// acceptance: PAY-25
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn the_node_already_serving_this_client_is_not_dialled_again() {
-    let carol = node_serving("carol", &["w1"]);
-    let alice = beyond("alice");
-
-    // carol serves w1 *and* this client: there is a session up already,
-    // and the caller's next term is the one that uses it
-    assert!(
-        !alice
-            .carry(
-                kh("w1"),
-                [0; 32],
-                b"sealed".to_vec(),
-                known("carol", &[carol.addr]),
-                Some(kh("carol")),
-            )
-            .await,
-        "the answer is no, so the caller falls through to its serving node"
-    );
-    assert_eq!(
-        carol.node.queued(&kh("w1")),
-        0,
-        "and nothing was dialled or submitted"
+        (body.sender, body.bytes.as_slice()),
+        (kh("alice"), b"for w1".as_slice()),
+        "attributed to alice on opening, by w1 and not by the node"
     );
 }
 
@@ -196,17 +226,20 @@ async fn a_node_s_endpoints_are_alternatives_and_a_dead_first_one_is_not_an_outa
     // requires the list be treated as alternatives, or a single
     // unreachable first entry becomes a permanent outage for that node
     let dead: SocketAddr = "127.0.0.1:9".parse().unwrap();
-    assert!(
-        alice
-            .carry(
-                kh("w1"),
-                [0; 32],
-                b"sealed".to_vec(),
-                known("carol", &[dead, carol.addr]),
-                Some(kh("bob")),
-            )
-            .await,
-        "the second endpoint answered"
+    let (_, reply) = alice
+        .minted(
+            kh("w1"),
+            known("carol", &[dead, carol.addr]),
+            REQUEST_NODE_KEY,
+            node_key_request("w1", [3; 16]),
+        )
+        .await
+        .expect("the second endpoint answered the fetch");
+    let sealed = seal_under("alice", "w1", &reply, b"sealed", None);
+    assert_eq!(
+        submit(&alice, "w1", known("carol", &[dead, carol.addr]), &sealed).await,
+        SUBMISSION_ACCEPTED,
+        "and the submission"
     );
     assert_eq!(carol.node.queued(&kh("w1")), 1);
 }

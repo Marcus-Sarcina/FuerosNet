@@ -62,22 +62,32 @@ fn h02_replay_must_not_restore_a_pruned_departed_locator() {
     assert!(h.places_of(&a.public.keyhash).is_empty(),"light-client section 4.2: rebuilding from retained records must not resurrect a place outside the current horizon");
 }
 
+// 2026-11-20, slice 2: the deposit this was filed against is retired; the
+// one submission a node now stores for somebody is a sealed message, and
+// accepted must mean it was stored
 #[test]
-fn s01_failed_prekey_deposit_must_not_be_acknowledged_as_accepted() {
-    use rhtn_archive::{submission::*,prekey::PrekeyBundle};
-    use rhtn_node::prekeys::{PrekeyService,PrekeyConfig};
+fn s01_a_relay_submission_the_store_cannot_take_must_not_be_acknowledged_as_accepted() {
+    use rhtn_archive::submission::*;
+    use rhtn_transport::session::{Node,NodeConfig};
     let dir=std::env::temp_dir().join(format!("rhtn-review-deposit-{}",std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let a=test_identity("alice");let b=Arc::new(test_identity("bob"));let mut v=view(b);
-    v.prekeys=PrekeyService::at(&dir,PrekeyConfig::default()).unwrap();
-    v.prekeys.publish(&vec![a.public.clone()],&PrekeyBundle::build(&a,1,b"opaque",100, &[0u8; 32])).unwrap();
-    std::fs::rename(dir.join("prekeys"),dir.join("saved-prekeys")).unwrap();
-    std::fs::write(dir.join("prekeys"),b"directory unavailable").unwrap();
-    let req=OneTimeDeposit {keys:vec![vec![7]],nonce:[1;16]};
-    let reply=SubmissionReply::decode(&rhtn_node::submissions::deposit(&mut v,&a.public.keyhash,&[0;32],&req.encode()).unwrap()).unwrap();
-    let held=v.prekeys.pool_size(&a.public.keyhash);std::fs::remove_dir_all(&dir).unwrap();
-    assert_eq!(held,0,"control: storage failure prevented stock");
-    assert_ne!(reply.code,SUBMISSION_ACCEPTED,"wire section 7.10: accepted must mean the node actually took the submitted keys");
+    let _=std::fs::remove_dir_all(&dir);std::fs::create_dir_all(&dir).unwrap();
+    let a=test_identity("alice");let b=Arc::new(test_identity("bob"));let mut v=view(b.clone());
+    let n=rhtn_archive::node_key::NodeKey::parse(&v.node_keys.newest(&*b,&a.public.keyhash,100)).unwrap().fields.n;
+    v.set_now(100);
+    let pins=rhtn_transport::tls::Pins::new();pins.pin_identity(&a.public);pins.pin_identity(&b.public);
+    let mut cfg=NodeConfig::defaults(b.clone(),pins,30);
+    cfg.queue=Arc::new(rhtn_node::queue::DirStore::new(dir.join("queue")));
+    let node=Node::new(cfg);
+    std::fs::rename(dir.join("queue"),dir.join("saved-queue")).unwrap();
+    std::fs::write(dir.join("queue"),b"directory unavailable").unwrap();
+    let sealed=rhtn_archive::sealed::Sealed {n,ct_r:Box::new([1;1120]),ct_n:Box::new([2;1120]),body:vec![3;40]}.encode();
+    let req=RelaySubmission {recipient:a.public.keyhash,sealed,nonce:[1;16]};
+    let v=std::sync::Mutex::new(v);
+    let reply=SubmissionReply::decode(&rhtn_node::submissions::relay(&v,Some(&node),&req.encode()).unwrap()).unwrap();
+    let held=node.queued(&a.public.keyhash);std::fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(reply.nonce,[1;16]);
+    assert_eq!(held,0,"control: storage failure prevented the queueing");
+    assert_ne!(reply.code,SUBMISSION_ACCEPTED,"wire section 7.10: accepted must mean the node actually took the submitted message");
 }
 
 #[test]
@@ -92,21 +102,24 @@ fn s02_departure_must_forget_the_clients_registered_wake_endpoint() {
     assert!(v.wake.get(&a.public.keyhash).is_none(),"infra section 6.1: the routable wake identifier must be forgotten when its relationship ends");
 }
 
+// 2026-11-20, slice 2: one-time issuance and its rate window are gone; a
+// node key is served under a minted key to an asker the service is never
+// told of, and what it keeps is the keys alone
 #[test]
-fn s04_prekey_issuance_must_not_persist_requester_subject_metadata() {
-    use rhtn_archive::prekey::*;
-    use rhtn_node::prekeys::{PrekeyService,PrekeyConfig};
+fn s04_node_key_service_must_not_persist_requester_subject_metadata() {
+    use rhtn_archive::node_key::*;
+    use rhtn_node::node_keys::{NodeKeyService,NodeKeyConfig};
     let dir=std::env::temp_dir().join(format!("rhtn-review-issuance-{}",std::process::id()));
-    let (s,r)=(test_identity("alice"),test_identity("carol"));
-    let mut pool=PrekeyService::at(&dir,PrekeyConfig::default()).unwrap();
-    pool.publish(&vec![s.public.clone()],&PrekeyBundle::build(&s,1,b"opaque",100, &[0u8; 32])).unwrap();
-    assert!(pool.stock(s.public.keyhash,vec![vec![7]]));
-    let req=PrekeyRequest::One {subject:s.public.keyhash,one_time:true,nonce:[1;16],device: Some([0u8; 32])}.encode();
-    assert_eq!(PrekeyReply::decode(&pool.answer(&r.public.keyhash,&req,101).unwrap()).unwrap().one_time,Some(vec![7]));
-    pool.expire(4000);
-    let text=std::fs::read_to_string(dir.join("prekeys/issued")).unwrap_or_default();
+    let _=std::fs::remove_dir_all(&dir);
+    let (n,s)=(test_identity("bob"),test_identity("alice"));
+    let mut keys=NodeKeyService::at(&dir,NodeKeyConfig::default()).unwrap();
+    for nonce in 1..=3u8 {
+        let req=NodeKeyRequest::One {recipient:s.public.keyhash,nonce:[nonce;16]}.encode();
+        assert!(NodeKeyReply::decode(&keys.answer(&n,&|_|true,&req,101).unwrap()).unwrap().outcome.is_ok(),"control: served");
+    }
+    let mut files=vec![];let mut stack=vec![dir.clone()];
+    while let Some(d)=stack.pop() { for e in std::fs::read_dir(&d).unwrap().flatten() { if e.path().is_dir() {stack.push(e.path())} else {files.push(e.path())} } }
     std::fs::remove_dir_all(&dir).unwrap();
     let hex=|k:&[u8]|k.iter().map(|b|format!("{b:02x}")).collect::<String>();
-    let prefix=format!("{} {} ",hex(&r.public.keyhash),hex(&s.public.keyhash));
-    assert!(!text.lines().any(|l|l.starts_with(&prefix)),"infra section 6: keep no record of who asked for whose bundle, including after the rate window expires");
+    assert_eq!(files,vec![dir.join("node-keys").join(hex(&s.public.keyhash)).join("1")],"infra section 6: keep no record of who asked for whose key, nor how often: the one key served is all that is kept");
 }

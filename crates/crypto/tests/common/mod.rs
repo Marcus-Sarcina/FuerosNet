@@ -114,7 +114,7 @@ pub fn family_by_name(name: &str) -> Option<Family> {
     Some(match name {
         "ResolveReply" => Family::ResolveReply,
         "ArchiveReply" => Family::ArchiveReply,
-        "PrekeyReply" => Family::PrekeyReply,
+        "NodeKeyReply" => Family::NodeKeyReply,
         "CatalogReply" => Family::CatalogReply,
         "ResourceResponse" => Family::ResourceResponse,
         "CurrencyReply" => Family::CurrencyReply,
@@ -131,7 +131,7 @@ pub fn unsigned_family(kind: &str) -> Option<Family> {
         "CatalogReply" => Family::CatalogReply,
         "ResourceResponse" => Family::ResourceResponse,
         "ArchiveRequest" => Family::ArchiveRequest,
-        "PrekeyBatchRequest" => Family::PrekeyRequestOrBatch,
+        "NodeKeyRequest" | "NodeKeyBatchRequest" => Family::NodeKeyRequestOrBatch,
         _ => return None,
     })
 }

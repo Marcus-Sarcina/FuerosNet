@@ -457,18 +457,25 @@ async fn the_kernel_joins_the_direct_path_honours_the_override_and_sweeps_the_ca
     // **and each holds the other as a contact**, which is what licenses the
     // direct path (design §12.6.3, the contact rule of 2026-10-24): the
     // horizon places them but no longer decides it
-    alice
-        .hold_contact(material("carol"))
-        .expect("alice holds carol");
-    carol
-        .hold_contact(material("alice"))
-        .expect("carol holds alice");
+    for (p, q) in [(&alice, &carol), (&carol, &alice)] {
+        let (p, card) = (p.clone(), q.own_introduction().expect("a card"));
+        tokio::task::spawn_blocking(move || p.take_introduction(card))
+            .await
+            .unwrap()
+            .expect("each holds the other's card");
+    }
 
     // the first send offers candidates over the relay and the path opens
-    // both ways; what follows goes around the node
-    let send = |p: Arc<Participant>, to: Vec<u8>, what: &'static [u8]| {
-        tokio::task::spawn_blocking(move || p.send(to, KIND_APPLICATION, what.to_vec()))
+    // both ways; what follows on the shell's own kind goes around the node,
+    // and a direct message, kind 0, passes the recipient's node always
+    // (design §14.2.2)
+    let send_as = |p: Arc<Participant>, to: Vec<u8>, kind: u64, what: &'static [u8]| {
+        tokio::task::spawn_blocking(move || p.send(to, kind, what.to_vec()))
     };
+    let send = |p: Arc<Participant>, to: Vec<u8>, what: &'static [u8]| {
+        send_as(p, to, KIND_APPLICATION, what)
+    };
+    const SHELL: u64 = 100;
     let next = |p: Arc<Participant>| tokio::task::spawn_blocking(move || p.next_event(5000));
     send(alice.clone(), idv("carol"), b"first")
         .await
@@ -493,7 +500,33 @@ async fn the_kernel_joins_the_direct_path_honours_the_override_and_sweeps_the_ca
         relayed >= 1,
         "the candidates and the first message went through bob"
     );
-    send(alice.clone(), idv("carol"), b"second")
+    send_as(alice.clone(), idv("carol"), SHELL, b"second")
+        .await
+        .unwrap()
+        .expect("sent");
+    assert_eq!(
+        next(carol.clone()).await.unwrap(),
+        Some(Event::Payload {
+            from: idv("alice"),
+            kind: SHELL,
+            bytes: b"second".to_vec()
+        })
+    );
+    send_as(carol.clone(), idv("alice"), SHELL, b"third")
+        .await
+        .unwrap()
+        .expect("sent");
+    assert_eq!(
+        next(alice.clone()).await.unwrap(),
+        Some(Event::Payload {
+            from: idv("carol"),
+            kind: SHELL,
+            bytes: b"third".to_vec()
+        })
+    );
+    assert_eq!(n.node.relayed(), relayed, "bob relayed none of it");
+    // and a direct message, with the path held, still passes bob
+    send(alice.clone(), idv("carol"), b"sealed")
         .await
         .unwrap()
         .expect("sent");
@@ -502,22 +535,11 @@ async fn the_kernel_joins_the_direct_path_honours_the_override_and_sweeps_the_ca
         Some(Event::Payload {
             from: idv("alice"),
             kind: 0,
-            bytes: b"second".to_vec()
+            bytes: b"sealed".to_vec()
         })
     );
-    send(carol.clone(), idv("alice"), b"third")
-        .await
-        .unwrap()
-        .expect("sent");
-    assert_eq!(
-        next(alice.clone()).await.unwrap(),
-        Some(Event::Payload {
-            from: idv("carol"),
-            kind: 0,
-            bytes: b"third".to_vec()
-        })
-    );
-    assert_eq!(n.node.relayed(), relayed, "bob relayed none of it");
+    assert_eq!(n.node.relayed(), relayed + 1, "sealed through bob");
+    let relayed = relayed + 1;
 
     // the catalog: swept over the session, held with the node that served
     // it, and shown as values
@@ -551,10 +573,15 @@ async fn the_kernel_joins_the_direct_path_honours_the_override_and_sweeps_the_ca
     }
     drop(carol);
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-    send(alice.clone(), idv("carol"), b"fourth")
+    let held = n.node.queued(&kh("carol"));
+    send_as(alice.clone(), idv("carol"), SHELL, b"fourth")
         .await
         .unwrap()
         .expect("relayed");
     assert_eq!(n.node.relayed(), relayed + 1);
-    assert_eq!(n.node.queued(&kh("carol")), 1, "waiting for carol at bob");
+    assert_eq!(
+        n.node.queued(&kh("carol")),
+        held + 1,
+        "sealed, and waiting for carol at bob"
+    );
 }

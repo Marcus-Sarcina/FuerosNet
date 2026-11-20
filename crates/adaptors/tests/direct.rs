@@ -14,7 +14,7 @@ use rhtn_adaptors::serving::{Answer, Inboxes, LocalNode, Serving};
 use rhtn_archive::Keyhash;
 use rhtn_archive::submission::WakeEndpoint;
 use rhtn_client::ceremony::{Config, Dispatched};
-use rhtn_client::payload::KIND_APPLICATION;
+use rhtn_client::payload::{KIND_APPLICATION, KIND_ARCHIVE_REQUEST};
 use rhtn_node::runtime::LiveNode;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -32,6 +32,7 @@ struct Party {
 struct Counting {
     inner: Arc<dyn Serving>,
     relays: AtomicUsize,
+    asked: AtomicUsize,
 }
 
 impl Counting {
@@ -39,22 +40,21 @@ impl Counting {
         Arc::new(Counting {
             inner,
             relays: AtomicUsize::new(0),
+            asked: AtomicUsize::new(0),
         })
     }
     fn relayed(&self) -> usize {
         self.relays.load(Ordering::SeqCst)
     }
+    /// Every request put as nobody: fetches and submissions alike.
+    fn asked(&self) -> usize {
+        self.asked.load(Ordering::SeqCst)
+    }
 }
 
 impl Serving for Counting {
-    fn node_device(&self) -> [u8; 32] {
-        [0; 32]
-    }
     fn me(&self) -> Keyhash {
         self.inner.me()
-    }
-    fn holds(&self, subject: &Keyhash) -> bool {
-        self.inner.holds(subject)
     }
     fn serves(&self, client: &Keyhash) -> bool {
         self.inner.serves(client)
@@ -68,15 +68,6 @@ impl Serving for Counting {
     fn catalog<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
         self.inner.catalog(from, body)
     }
-    fn publish<'a>(&'a self, bytes: &'a [u8]) -> Answer<'a, bool> {
-        self.inner.publish(bytes)
-    }
-    fn stock<'a>(&'a self, subject: Keyhash, keys: Vec<Vec<u8>>) -> Answer<'a, bool> {
-        self.inner.stock(subject, keys)
-    }
-    fn prekey<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
-        self.inner.prekey(from, body)
-    }
     fn publish_profile<'a>(&'a self, bytes: &'a [u8]) -> Answer<'a, bool> {
         self.inner.publish_profile(bytes)
     }
@@ -89,15 +80,13 @@ impl Serving for Counting {
     fn resource<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
         self.inner.resource(from, body)
     }
-    fn relay<'a>(
-        &'a self,
-        from: Keyhash,
-        to: Keyhash,
-        bytes: Vec<u8>,
-        device: [u8; 32],
-    ) -> Answer<'a, bool> {
-        self.relays.fetch_add(1, Ordering::SeqCst);
-        self.inner.relay(from, to, bytes, device)
+    /// Every sealed message handed over as nobody is counted.
+    fn minted<'a>(&'a self, request: u64, body: Vec<u8>) -> Answer<'a, Option<Vec<u8>>> {
+        self.asked.fetch_add(1, Ordering::SeqCst);
+        if request == rhtn_archive::submission::REQUEST_RELAY {
+            self.relays.fetch_add(1, Ordering::SeqCst);
+        }
+        self.inner.minted(request, body)
     }
     fn wake<'a>(&'a self, client: Keyhash, endpoint: Option<WakeEndpoint>) -> Answer<'a, bool> {
         self.inner.wake(client, endpoint)
@@ -164,8 +153,15 @@ fn light(
 /// path, each side for itself.
 fn hold(p: &Party, who: &str) {
     let i = id(who).public.clone();
-    p.handle
-        .with_blocking(move |c| c.contact(&i, rhtn_client::contacts::How::Introduced, true));
+    // with the encryption key every introduction carries, which a sealed
+    // message to the contact needs (`wire-format.md` §2.3)
+    let ek = rhtn_crypto::encryption_key::own(&id(who));
+    p.handle.with_blocking(move |c| {
+        c.contact(&i, rhtn_client::contacts::How::Introduced, true);
+        if let Some(contact) = c.store.contacts.get_mut(&i.keyhash) {
+            contact.encryption_key = Some(ek);
+        }
+    });
 }
 
 /// A light client whose local decision refuses every direct path: what a
@@ -223,6 +219,27 @@ fn infra(
     }
 }
 
+/// **What a test sends to show the direct path carrying something**: an
+/// archive request for the recipient's own archive (`wire-format.md` §7.9,
+/// kind 5). Application payload is a direct message and always passes the
+/// recipient's node, sealed (design §14.2.2); a protocol object between
+/// contacts takes the direct path where one is held.
+fn archive_request(of: &str) -> Vec<u8> {
+    rhtn_archive::chain::ArchiveRequest {
+        subject: kh(of),
+        frontier: Vec::new(),
+        max_records: 4,
+        stop_before: None,
+        nonce: [0x2c; 16],
+    }
+    .encode()
+}
+
+/// Whether `d` is the recipient's side of [`archive_request`]: served.
+fn served(d: &Dispatched) -> bool {
+    matches!(d, Dispatched::Served { .. })
+}
+
 async fn next(
     app: &mut UnboundedReceiver<(Keyhash, Dispatched)>,
     ms: u64,
@@ -264,19 +281,16 @@ async fn two_light_clients_beside_their_serving_node_join_the_direct_path_from_t
     );
     let relayed = counting.relayed();
     assert!(relayed >= 1, "the candidates went through the serving node");
-    // payload from the client's own send takes the direct path, and the
-    // serving node carries none of it
+    // a protocol object from the client's own send takes the direct path,
+    // and the serving node carries none of it
     carol
         .courier
-        .send(kh("w1"), KIND_APPLICATION, b"over the direct path".to_vec())
+        .send(kh("w1"), KIND_ARCHIVE_REQUEST, archive_request("w1"))
         .await
         .expect("sent");
     let (from, d) = next(&mut w1.app, 3000).await.expect("delivered");
     assert_eq!(from, kh("carol"));
-    assert!(
-        matches!(&d, Dispatched::Application { bytes, .. } if bytes == b"over the direct path"),
-        "{d:?}"
-    );
+    assert!(served(&d), "{d:?}");
     assert_eq!(counting.relayed(), relayed, "nothing more relayed");
     assert!(
         carol
@@ -300,15 +314,26 @@ async fn two_nodes_that_are_participants_join_the_direct_path_on_their_own_socke
     let n2 = live_node("w2", scene.table("w2", &["w1", "w2"]), "w1", &[0]);
     // each node is its own serving node, and reaches the other for what
     // it does not hold
-    let inboxes = Inboxes::default();
-    let s1 = LocalNode::new(n1.clone(), inboxes.clone());
-    let s2 = LocalNode::new(n2.clone(), inboxes.clone());
+    // **each hosts its own client**: a seal opens under the node that
+    // holds its key, so what is for w2 is queued and delivered at w2's
+    // node, which w1's reaches beyond itself to hand it over
+    let (i1, i2) = (Inboxes::default(), Inboxes::default());
+    let s1 = LocalNode::new(n1.clone(), i1.clone());
+    let s2 = LocalNode::new(n2.clone(), i2.clone());
     s1.reach_beyond(s2.clone());
     s2.reach_beyond(s1.clone());
     let (c1, c2) = (Counting::over(s1), Counting::over(s2));
     let (serving1, serving2): (Arc<dyn Serving>, Arc<dyn Serving>) = (c1.clone(), c2.clone());
-    let p1 = infra("w1", &n1, &serving1, &inboxes);
-    let mut p2 = infra("w2", &n2, &serving2, &inboxes);
+    let p1 = infra("w1", &n1, &serving1, &i1);
+    let mut p2 = infra("w2", &n2, &serving2, &i2);
+    // each holds the other's card, so the offer can be sealed to it; and
+    // each holds a session with the other's node as well, which serves the
+    // other and takes what is for it — neither client has been taught the
+    // topology that would place the other, so the session is the way
+    hold(&p1, "w2");
+    hold(&p2, "w1");
+    p1.courier.serve_also(serving2.clone());
+    p2.courier.serve_also(serving1.clone());
     p1.courier.attach(vec![kh("w2")]).await;
     p2.courier.attach(vec![kh("w1")]).await;
     p1.courier.sweep(vec![kh("w2")]).await;
@@ -321,15 +346,12 @@ async fn two_nodes_that_are_participants_join_the_direct_path_on_their_own_socke
     );
     let relayed = c1.relayed() + c2.relayed();
     p1.courier
-        .send(kh("w2"), KIND_APPLICATION, b"node to node".to_vec())
+        .send(kh("w2"), KIND_ARCHIVE_REQUEST, archive_request("w2"))
         .await
         .expect("sent");
     let (from, d) = next(&mut p2.app, 3000).await.expect("delivered");
     assert_eq!(from, kh("w1"));
-    assert!(
-        matches!(&d, Dispatched::Application { bytes, .. } if bytes == b"node to node"),
-        "{d:?}"
-    );
+    assert!(served(&d), "{d:?}");
     assert_eq!(c1.relayed() + c2.relayed(), relayed, "nothing more relayed");
     assert_eq!(n1.direct_state(&kh("w2")), Some(true));
     assert!(
@@ -355,6 +377,9 @@ async fn a_direct_path_the_local_decision_refuses_opens_in_neither_direction() {
     let carol = light_refusing("carol", &serving, &inboxes);
     let mut w1 = light("w1", &node, &serving, &inboxes);
     hold(&w1, "carol");
+    // carol holds w1's card, which her refusing gate does not consult:
+    // a sealed message needs it, the direct path is hers to refuse
+    hold(&carol, "w1");
     carol.courier.attach(vec![kh("w1")]).await;
     w1.courier.attach(vec![kh("carol")]).await;
     // w1's address under bob is served by bob's node — set by hand: a
@@ -611,24 +636,17 @@ async fn top_43_a_light_client_holds_delegations_and_binds_a_direct_peer_by_one(
     );
     carol
         .courier
-        .send(
-            kh("w1"),
-            KIND_APPLICATION,
-            b"to the desktop, directly".to_vec(),
-        )
+        .send(kh("w1"), KIND_ARCHIVE_REQUEST, archive_request("w1"))
         .await
         .expect("sent");
     let (from, d) = next(&mut desktop.app, 3000).await.expect("delivered");
     assert_eq!(from, kh("carol"));
-    assert!(
-        matches!(&d, Dispatched::Application { bytes, .. } if bytes == b"to the desktop, directly")
-    );
+    assert!(served(&d), "{d:?}");
 }
 
 /// A light client whose direct path runs the control streams off its own
-/// kernel (`wire-format.md` §9.1): it introduces itself on a dial, takes
-/// a dialler's introduction as a cold call, and answers a peer's prekey
-/// request from its own material.  `forget` names the parties this
+/// kernel (`wire-format.md` §9.1): it introduces itself on a dial and
+/// takes a dialler's introduction as a cold call.  `forget` names the parties this
 /// client is to know nothing of — neither pinned nor among what it
 /// verifies by — which is what a client restored from its phrase is to
 /// everybody.
@@ -657,7 +675,7 @@ fn light_with(
         }
     }
     let control = {
-        let (s1, s2, s3) = (slot.clone(), slot.clone(), slot.clone());
+        let (s1, s2) = (slot.clone(), slot.clone());
         Control {
             introduce: Arc::new(move || {
                 let h = s1.lock().unwrap().clone();
@@ -680,18 +698,6 @@ fn light_with(
                             .await
                         }
                         None => false,
-                    }
-                })
-            }),
-            answer: Arc::new(move |from, bytes| {
-                let h = s3.lock().unwrap().clone();
-                Box::pin(async move {
-                    match h {
-                        Some(h) => {
-                            h.with(move |c| c.answer_prekey_request(&from, &bytes))
-                                .await
-                        }
-                        None => None,
                     }
                 })
             }),
@@ -731,20 +737,22 @@ fn light_with(
 }
 
 /// **A dialler the acceptor cannot bind presents its introduction first on
-/// the connection, and is taken as a cold call; a peer's prekey request
-/// is answered over the path** (`wire-format.md` §9.1, §7.8; author,
-/// 2026-10-30: no node is needed for a recovery).  Bob knows nothing of
-/// alice — not pinned, not among what he verifies by — and holds no
-/// node.  Alice, holding bob as a contact, dials his socket: the handshake
-/// presents a key bob binds by nothing, her introduction follows on the
-/// first control stream, bob takes it, pins her and holds the path; and
-/// her request for his bundle, on the same path, comes back answered from
-/// his own material, one-time key and all.
+/// the connection, is taken as a cold call, and is asked for nothing
+/// more** (`wire-format.md` §9.1, §7.10.1; author, 2026-10-30: no node is
+/// needed for a recovery).  Bob knows nothing of alice — not pinned, not
+/// among what he verifies by — and holds no node.  Alice, holding bob as
+/// a contact, dials his socket: the handshake presents a key bob binds by
+/// nothing, her introduction follows on the first control stream, bob
+/// takes it, pins her and holds the path; and the application payload
+/// she sends on it, a kind and its bytes with no seal around them,
+/// reaches his application as hers. The introduction is all the path
+/// needed: nothing else was asked of either side or of any node.
 // acceptance: TRN-29
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_stranger_that_introduces_itself_on_the_dial_is_held_and_handed_a_bundle_over_the_path() {
+async fn a_stranger_that_introduces_itself_on_the_dial_is_held_and_asked_for_nothing_more() {
     let inboxes = Inboxes::default();
-    let serving: Arc<dyn Serving> = Arc::new(rhtn_adaptors::serving::Nobody);
+    let nobody = Counting::over(Arc::new(rhtn_adaptors::serving::Nobody));
+    let serving: Arc<dyn Serving> = nobody.clone();
     let (bob, bob_direct) = light_with("bob", &serving, &inboxes, &["alice"]);
     let (alice, alice_direct) = light_with("alice", &serving, &inboxes, &[]);
     hold(&alice, "bob");
@@ -768,47 +776,40 @@ async fn a_stranger_that_introduces_itself_on_the_dial_is_held_and_handed_a_bund
         "and so does bob"
     );
     assert!(
-        bob.handle
-            .with_blocking(|c| c.store.contacts.contains_key(&kh("alice"))),
-        "alice is a contact of bob's now, by the cold call"
+        bob.handle.with_blocking(|c| c
+            .store
+            .contacts
+            .get(&kh("alice"))
+            .is_some_and(|c| c.encryption_key.is_some())),
+        "alice is a contact of bob's now, by the cold call, her encryption \
+         key with her: the introduction carries everything a reply needs"
     );
-    // the bundle, asked of bob himself on the path he holds
-    let bob_device = *id("bob").public.ed.as_bytes();
-    let req = rhtn_client::payload::one_time_request(kh("bob"), bob_device, [7u8; 16]);
-    let reply = alice_direct
-        .request(kh("bob"), req)
-        .await
-        .expect("bob answered on the path");
-    let r = rhtn_archive::prekey::PrekeyReply::decode(&reply).expect("a prekey reply");
-    assert_eq!(r.nonce, [7u8; 16]);
-    assert_eq!(r.bundles.len(), 1, "his signed bundle");
-    assert!(r.one_time.is_some(), "and a one-time key");
-    // a request for somebody else's material is not answered
-    let other = rhtn_client::payload::one_time_request(kh("carol"), bob_device, [8u8; 16]);
-    assert!(alice_direct.request(kh("bob"), other).await.is_none());
-    // and a first message: alice opens on the bundle she was handed; bob,
-    // holding no bundle of hers, asks her for it on the path she opened
-    // and takes the message — a session with no node anywhere
-    alice
-        .handle
-        .with_blocking(move |c| c.take_prekey_reply(&reply))
-        .expect("kept");
-    alice
-        .courier
-        .send(
-            kh("bob"),
-            KIND_APPLICATION,
-            b"with nothing between us".to_vec(),
-        )
-        .await
-        .expect("sent on the direct path");
+    // application payload on the path: `uint kind || bytes`, the transport
+    // the only seal (`wire-format.md` §7.10.1)
+    assert!(
+        alice_direct
+            .deliver(
+                kh("bob"),
+                rhtn_client::payload::wrap(KIND_APPLICATION, b"with nothing between us"),
+            )
+            .await,
+        "delivered on the path alice holds"
+    );
     let mut bob = bob;
     let (from, d) = next(&mut bob.app, 5000).await.expect("delivered");
-    assert_eq!(from, kh("alice"));
+    assert_eq!(
+        from,
+        kh("alice"),
+        "attributed to the dialler the path bound"
+    );
     assert!(
         matches!(&d, Dispatched::Application { bytes, .. } if bytes == b"with nothing between us"),
         "{d:?}"
     );
+    // **asked for nothing more**: no node exists here, and nothing was put
+    // to one as nobody either — no fetch, no submission
+    assert_eq!(nobody.relayed(), 0);
+    assert_eq!(nobody.asked(), 0, "no node was asked anything");
 }
 
 // functional: PAY-017
@@ -826,11 +827,10 @@ async fn candidates_handed_over_on_the_ceremony_s_own_interfaces_open_the_direct
     let inboxes = Inboxes::default();
     let counting = Counting::over(LocalNode::new(node.clone(), inboxes.clone()));
     let serving: Arc<dyn Serving> = counting.clone();
-    // **`light_with`, so the session is nodeless as well as the path**:
-    // its control answers a prekey request on the connection itself, which
-    // is how two parties who have never written to each other open one
-    // without the node being asked for anything at all
-    let (alice, alice_direct) = light_with("alice", &serving, &inboxes, &[]);
+    // **`light_with`, so each introduces itself on the path it dials**:
+    // two parties who have never written to each other open one without
+    // the node being asked for anything at all
+    let (alice, _alice_direct) = light_with("alice", &serving, &inboxes, &[]);
     let (mut w1, _w1_direct) = light_with("w1", &serving, &inboxes, &[]);
     hold(&alice, "w1");
     hold(&w1, "alice");
@@ -912,35 +912,15 @@ async fn candidates_handed_over_on_the_ceremony_s_own_interfaces_open_the_direct
         "the candidates crossed the bearer: the serving node carried none of them"
     );
 
-    // the material for the session, asked of w1 itself on the path that
-    // just opened: nothing of this touches the node either
-    let w1_device = *id("w1").public.ed.as_bytes();
-    let req = rhtn_client::payload::one_time_request(kh("w1"), w1_device, [11u8; 16]);
-    let reply = alice_direct
-        .request(kh("w1"), req)
-        .await
-        .expect("w1 answered on the path");
-    alice
-        .handle
-        .with_blocking(move |c| c.take_prekey_reply(&reply))
-        .expect("kept");
-
-    // and the payload takes that path
+    // and what the two now say to each other directly takes that path
     alice
         .courier
-        .send(
-            kh("w1"),
-            KIND_APPLICATION,
-            b"met, then spoke directly".to_vec(),
-        )
+        .send(kh("w1"), KIND_ARCHIVE_REQUEST, archive_request("w1"))
         .await
         .expect("sent");
     let (from, d) = next(&mut w1.app, 3000).await.expect("delivered");
     assert_eq!(from, kh("alice"));
-    assert!(
-        matches!(&d, Dispatched::Application { bytes, .. } if bytes == b"met, then spoke directly"),
-        "{d:?}"
-    );
+    assert!(served(&d), "{d:?}");
     assert_eq!(
         counting.relayed(),
         before,
@@ -1055,22 +1035,29 @@ async fn nothing_else_is_taken_as_local_and_no_local_carriage_travels_the_networ
 /// node and a tab to alice's; w1 has an address in both subnets. Before
 /// anything of w1's has arrived, carol's first message floods — and the
 /// tab carries it, alice's node being the one known with an address. An
-/// arrival said to have come by alice's node makes that the way back.
+/// arrival by alice's node makes that the way back.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_payload_goes_over_the_tab_serving_the_address_the_last_message_came_by() {
     let mut scene = Scene::new();
     scene.adopt("carol", "bob", "bob", &[0]);
     scene.adopt("w1", "bob", "bob", &[1]);
     scene.adopt("w1", "alice", "alice", &[0]);
+    // and carol has one there too, which is what her tab serves
+    scene.adopt("carol", "alice", "alice", &[1]);
     let node = live_node("bob", scene.table("bob", &["bob"]), "bob", &[]);
     let other = live_node("alice", scene.table("alice", &["alice"]), "alice", &[]);
+    // **two nodes, each delivering what it holds a key for**: a seal opens
+    // under the node it was sealed to, so each node hosts its own view of
+    // the clients it serves
     let inboxes = Inboxes::default();
+    let tab_inboxes = Inboxes::default();
     let primary = Counting::over(LocalNode::new(node.clone(), inboxes.clone()));
-    let tab = Counting::over(LocalNode::new(other.clone(), inboxes.clone()));
+    let tab = Counting::over(LocalNode::new(other.clone(), tab_inboxes.clone()));
     let serving: Arc<dyn Serving> = primary.clone();
     let mut carol = light_refusing("carol", &serving, &inboxes);
     let mut w1 = light("w1", &node, &serving, &inboxes);
     hold(&w1, "carol");
+    hold(&carol, "w1");
     // what carol's horizon knows of w1: both addresses, as the records say
     let recs: Vec<Vec<u8>> = scene.records.iter().map(|r| r.bytes.clone()).collect();
     carol.handle.with_blocking(move |c| {
@@ -1092,12 +1079,29 @@ async fn a_payload_goes_over_the_tab_serving_the_address_the_last_message_came_b
             counter: 1,
         },
     );
+    let w1_rec = rec.clone();
     carol.handle.with_blocking(move |c| {
         c.take_endpoint(&rec).expect("alice's address taken");
         c.serve_at(kh("alice"), kh("alice"));
     });
-    // whatever reaches carol is said to have come by the tab
-    inboxes.host(kh("carol"), carol.courier.inbound_via(kh("alice")));
+    // and w1's: both of carol's addresses, alice's node known by address,
+    // and w1's own address there served by it
+    let recs: Vec<Vec<u8>> = scene.records.iter().map(|r| r.bytes.clone()).collect();
+    w1.handle.with_blocking(move |c| {
+        for r in &recs {
+            c.horizon.ingest(r, &ids());
+        }
+        c.take_endpoint(&w1_rec).expect("alice's address taken");
+        c.serve_at(kh("alice"), kh("alice"));
+    });
+    // carol and w1 each have an address alice's node serves: what it
+    // holds for them it delivers as itself, and w1 reaches it by a tab of
+    // its own
+    tab_inboxes.host(kh("carol"), carol.courier.inbound_via(kh("alice")));
+    tab_inboxes.host(kh("w1"), w1.courier.inbound_via(kh("alice")));
+    let w1_tab: Arc<dyn Serving> = tab.clone();
+    w1.courier.serve_also(w1_tab);
+
     carol.courier.sweep(vec![kh("w1")]).await;
 
     // a first message: nothing of w1's has arrived, so every address is

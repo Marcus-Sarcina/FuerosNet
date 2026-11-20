@@ -182,3 +182,103 @@ fn an_issued_encryption_key_matches_the_vectors_and_verifies_under_its_identity(
     let carol = test_identity("carol").public;
     assert!(verify::encryption_key(std::slice::from_ref(&carol), &issued).is_err());
 }
+
+fn corpus_hex(id: &str) -> Vec<u8> {
+    let corpus: serde_json::Value =
+        serde_json::from_str(include_str!("../../../test-vectors/corpus.json")).expect("corpus");
+    corpus["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["id"] == id)
+        .and_then(|e| e["hex"].as_str())
+        .map(|h| hex::decode(h).unwrap())
+        .unwrap_or_else(|| panic!("{id} is in the corpus"))
+}
+
+// acceptance: PAY-13
+/// **The canonical seal opens here** (`wire-format.md` §7.8.1;
+/// `test-vectors/records.md`): alice's first message to carol, sealed by the
+/// generator through kyber-py's ML-KEM and Python's own HKDF, HMAC and
+/// AES-GCM, is opened by this crate as carol and the node would open it —
+/// carol's half under the key her identity root derives, the node's under
+/// its key's seed — and the tag verifies under the key alice's introduction
+/// carries. Either half alone opens nothing.
+#[test]
+fn the_canonical_seal_opens_with_both_halves_and_its_tag_verifies() {
+    use rhtn_codec::cbor::{Item, array_item_ranges, parse_all};
+    use rhtn_crypto::identity::testkit::test_identity;
+    let sealed = corpus_hex("P-sealed");
+    let body = corpus_hex("P-sealed-body");
+    let item = parse_all(&sealed).unwrap();
+    let Item::Array(s) = &item else {
+        panic!("a Sealed is an array")
+    };
+    let bytes_of = |it: &Item| match it {
+        Item::Bytes(r) => sealed[r.clone()].to_vec(),
+        _ => panic!("bytes"),
+    };
+    let n = rhtn_codec::cbor::as_uint(&s[0]).unwrap();
+    let ct_r: [u8; xwing::CIPHERTEXT_BYTES] = bytes_of(&s[1]).try_into().unwrap();
+    let ct_n: [u8; xwing::CIPHERTEXT_BYTES] = bytes_of(&s[2]).try_into().unwrap();
+    let ciphertext = bytes_of(&s[3]);
+    let (alice, bob, carol) = (
+        test_identity("alice"),
+        test_identity("bob"),
+        test_identity("carol"),
+    );
+    let carols = EncryptionSecret::from_identity_root(carol.identity_root());
+    let node_seed: [u8; 32] =
+        rhtn_codec::cose::sha256(b"rhtn-test-vectors:node-key-seed:bob:carol:3");
+    let node = xwing::Secret::from_seed(node_seed);
+    let ss_r = carols.decapsulate(&ct_r);
+    let ss_n = node.decapsulate(&ct_n);
+    let key = seal::message_key(
+        &ss_r,
+        &ss_n,
+        &carol.public.keyhash,
+        &bob.public.keyhash,
+        n,
+        &ct_r,
+        &ct_n,
+    );
+    let opened = seal::open(&key, &ciphertext).expect("both halves open it");
+    assert_eq!(&opened[..], &body[..], "to the P-sealed-body fixture");
+    let wrong = seal::message_key(
+        &ss_r,
+        &[0; 32],
+        &carol.public.keyhash,
+        &bob.public.keyhash,
+        n,
+        &ct_r,
+        &ct_n,
+    );
+    assert!(
+        seal::open(&wrong, &ciphertext).is_none(),
+        "carol's half alone"
+    );
+    let wrong = seal::message_key(
+        &[0; 32],
+        &ss_n,
+        &carol.public.keyhash,
+        &bob.public.keyhash,
+        n,
+        &ct_r,
+        &ct_n,
+    );
+    assert!(
+        seal::open(&wrong, &ciphertext).is_none(),
+        "the node's half alone"
+    );
+    // the tag: fields 1 to 5 are the body less its head and its tag
+    let parts = array_item_ranges(&body, 0).unwrap();
+    let fields = &body[parts[0].start..parts[5].start];
+    let tag = &body[body.len() - 32..];
+    let alices = EncryptionSecret::from_identity_root(alice.identity_root());
+    let tk = carols.tag_key(
+        &alices.auth_public(),
+        &alice.public.keyhash,
+        &carol.public.keyhash,
+    );
+    assert!(seal::tag_verifies(&tk, &ct_r, &ct_n, fields, tag));
+}

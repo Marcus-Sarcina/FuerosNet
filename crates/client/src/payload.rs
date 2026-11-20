@@ -1,547 +1,30 @@
-//! Payload confidentiality on the client's side (design §14.2, §14.2.4;
-//! `wire-format.md` §7.8; `light-client-requirements.md` §3): the key
-//! agreement material a client publishes and keeps stocked, what it
-//! prefetches and what it asks for only when opening a session, the
-//! session itself, and the channel's framing that tells a protocol object
-//! from application payload.
+//! Payload on the client's side (design §14.2, §14.2.4; `wire-format.md`
+//! §7.8, §7.10; `light-client-requirements.md` §3): the split seal a direct
+//! message is sealed with and opened from, the node keys a sender seals
+//! to, what a recipient remembers so a replay opens once, and the kinds
+//! that tell a protocol object from application payload.
 //!
-//! What is decided here and not in the documents (design §22.2): the
-//! bundle's blob and the one-time key's encoding, both this
-//! construction's; the identity binding, classical, since the bundle's
-//! signature is classical by the wire and a post-quantum signature does
-//! not fit its bound; and the channel's framing, one tag on the initial
-//! message and one on every plaintext.
+//! **Sealed to the person, never to a device** [author, 2026-11-19]: a
+//! sender holds the recipient's encryption key from its card and fetches
+//! the newest key the recipient's node holds for it, and nothing here
+//! names a device of anybody's.
 
 use crate::Keyhash;
-use crate::ratchet::Ratchet;
-use rhtn_archive::prekey::{CONSTRUCTION_PQXDH, PrekeyBundle, PrekeyRequest};
+use rhtn_archive::sealed::{Sealed, SealedBody};
+use rhtn_archive::submission::Relayed;
 use rhtn_codec::cbor::*;
 use rhtn_codec::encode::*;
-use rhtn_crypto::SigningIdentity;
-use rhtn_crypto::pqxdh::{self, DhPublic, DhSecret, KemPublic, KemSecret, TheirBundle};
-use rhtn_crypto::verify::Lookup;
+use rhtn_crypto::seal::{self, EncryptionSecret};
+use rhtn_crypto::verify::EncryptionKey;
+use rhtn_crypto::xwing;
 use std::collections::{BTreeMap, BTreeSet};
+use zeroize::Zeroizing;
 
-/// The client's own numbers (`light-client-requirements.md` §3: cadence and
-/// last-resort policy are the client's).
-#[derive(Debug, Clone)]
-pub struct PayloadConfig {
-    /// How many one-time keys a fresh pool holds.
-    pub pool_target: usize,
-    /// Replenish when the pool the node reports falls below this.
-    pub replenish_below: usize,
-    /// How long a signed prekey serves before it is rotated.
-    pub signed_prekey_interval_s: u64,
-}
-
-impl Default for PayloadConfig {
-    fn default() -> Self {
-        PayloadConfig {
-            pool_target: 20,
-            replenish_below: 5,
-            signed_prekey_interval_s: 7 * 86_400,
-        }
-    }
-}
-
-/// A source of seeds: the device's randomness.
+/// Randomness, as the caller draws it.
 pub type Fresh<'a> = &'a mut dyn FnMut(&mut [u8]);
 
-fn seed32(fresh: Fresh) -> [u8; 32] {
-    let mut s = [0u8; 32];
-    fresh(&mut s);
-    s
-}
-
-fn seed64(fresh: Fresh) -> [u8; 64] {
-    let mut s = [0u8; 64];
-    fresh(&mut s);
-    s
-}
-
-/// One one-time key pair, of both kinds, held until served once.
-#[derive(Debug, Clone)]
-pub struct OneTimePair {
-    /// The id an initial message names it by.
-    pub id: u32,
-    /// The Diffie-Hellman half.
-    pub dh: DhSecret,
-    /// The key-encapsulation half.
-    pub kem: KemSecret,
-}
-
-/// Both halves wipe on drop.  Stated for the audit (APP-012).
-impl zeroize::ZeroizeOnDrop for OneTimePair {}
-
-/// The material a client holds for PQXDH: its identity DH key, the signed
-/// prekey and the post-quantum signed prekey in force, and the one-time
-/// pairs not yet served.
-#[derive(Debug, Clone)]
-pub struct PayloadKeys {
-    /// The identity Diffie-Hellman key.
-    pub ik: DhSecret,
-    /// The id of the signed prekey in force.
-    pub spk_id: u32,
-    /// That signed prekey.
-    pub spk: DhSecret,
-    /// When it came into force, which is what rotation is counted from.
-    pub spk_since: u64,
-    /// The id of the post-quantum signed prekey in force.
-    pub pqspk_id: u32,
-    /// That post-quantum signed prekey.
-    pub pqspk: KemSecret,
-    /// Signed prekeys retired but kept a while for sessions opened against them.
-    pub retired: BTreeMap<u32, (DhSecret, KemSecret)>,
-    /// The one-time pairs not yet served, by id.
-    pub one_time: BTreeMap<u32, OneTimePair>,
-    next_id: u32,
-    /// When the bundle was last published, where it has been.
-    pub published_at: Option<u64>,
-}
-
-/// Every secret here is a [`DhSecret`] or a [`KemSecret`], each wiping on
-/// drop, the retired and one-time pairs included.  Stated for the audit
-/// (APP-012).
-impl zeroize::ZeroizeOnDrop for PayloadKeys {}
-
-impl OneTimePair {
-    fn encode(&self, out: &mut Vec<u8>) {
-        emit_array_head(out, 3);
-        emit_uint(out, self.id as u64);
-        emit_bstr(out, &self.dh.to_bytes());
-        emit_bstr(out, &self.kem.seed());
-    }
-
-    fn decode(b: &[u8], it: &rhtn_codec::cbor::Item) -> Option<OneTimePair> {
-        use crate::durable::*;
-        let [id, dh, kem] = array(it)?.as_slice() else {
-            return None;
-        };
-        Some(OneTimePair {
-            id: u32::try_from(uint(id)?).ok()?,
-            dh: DhSecret::from_seed(fixed::<32>(b, dh)?),
-            kem: KemSecret::from_seed(fixed::<64>(b, kem)?),
-        })
-    }
-}
-
-impl PayloadKeys {
-    /// The material as it goes to the device's own storage
-    /// (`crate::durable`): the seeds and scalars, never the public halves,
-    /// which derive.
-    pub fn encode(&self) -> Vec<u8> {
-        use crate::durable::*;
-        let mut out = Vec::new();
-        emit_array_head(&mut out, 10);
-        emit_bstr(&mut out, &self.ik.to_bytes());
-        emit_uint(&mut out, self.spk_id as u64);
-        emit_bstr(&mut out, &self.spk.to_bytes());
-        emit_uint(&mut out, self.spk_since);
-        emit_uint(&mut out, self.pqspk_id as u64);
-        emit_bstr(&mut out, &self.pqspk.seed());
-        emit_array_head(&mut out, self.retired.len());
-        for (id, (dh, kem)) in &self.retired {
-            emit_array_head(&mut out, 3);
-            emit_uint(&mut out, *id as u64);
-            emit_bstr(&mut out, &dh.to_bytes());
-            emit_bstr(&mut out, &kem.seed());
-        }
-        emit_array_head(&mut out, self.one_time.len());
-        for pair in self.one_time.values() {
-            pair.encode(&mut out);
-        }
-        emit_uint(&mut out, self.next_id as u64);
-        emit_opt_uint(&mut out, self.published_at);
-        out
-    }
-
-    /// Read the keys back from what [`PayloadKeys::encode`] wrote.
-    pub fn decode(b: &[u8]) -> Option<PayloadKeys> {
-        use crate::durable::*;
-        let (_, f) = parse_array(b, 10)?;
-        let mut retired = BTreeMap::new();
-        for r in array(&f[6])? {
-            let [id, dh, kem] = array(r)?.as_slice() else {
-                return None;
-            };
-            retired.insert(
-                u32::try_from(uint(id)?).ok()?,
-                (
-                    DhSecret::from_seed(fixed::<32>(b, dh)?),
-                    KemSecret::from_seed(fixed::<64>(b, kem)?),
-                ),
-            );
-        }
-        let mut one_time = BTreeMap::new();
-        for p in array(&f[7])? {
-            let pair = OneTimePair::decode(b, p)?;
-            one_time.insert(pair.id, pair);
-        }
-        Some(PayloadKeys {
-            ik: DhSecret::from_seed(fixed::<32>(b, &f[0])?),
-            spk_id: u32::try_from(uint(&f[1])?).ok()?,
-            spk: DhSecret::from_seed(fixed::<32>(b, &f[2])?),
-            spk_since: uint(&f[3])?,
-            pqspk_id: u32::try_from(uint(&f[4])?).ok()?,
-            pqspk: KemSecret::from_seed(fixed::<64>(b, &f[5])?),
-            retired,
-            one_time,
-            next_id: u32::try_from(uint(&f[8])?).ok()?,
-            published_at: optional(&f[9], uint)?,
-        })
-    }
-
-    /// A fresh set of keys: identity, both signed prekeys at id one, and
-    /// no one-time pairs yet.
-    pub fn generate(fresh: Fresh, now: u64) -> Self {
-        PayloadKeys {
-            ik: DhSecret::from_seed(seed32(fresh)),
-            spk_id: 1,
-            spk: DhSecret::from_seed(seed32(fresh)),
-            spk_since: now,
-            pqspk_id: 1,
-            pqspk: KemSecret::from_seed(seed64(fresh)),
-            retired: BTreeMap::new(),
-            one_time: BTreeMap::new(),
-            next_id: 1,
-            published_at: None,
-        }
-    }
-
-    /// The reusable material as the bundle's blob carries it.
-    pub fn blob(&self) -> Blob {
-        Blob {
-            ik: self.ik.public(),
-            spk_id: self.spk_id,
-            spk: self.spk.public(),
-            pqspk_id: self.pqspk_id,
-            pqspk: self.pqspk.public(),
-        }
-    }
-
-    /// The signed bundle to publish (`wire-format.md` §7.8), naming
-    /// `device`: the key this device presents in a handshake, the
-    /// identity's classical member on the seed-holding device and the
-    /// delegated key on any other.  The identity signs it either way: a
-    /// desktop's public halves are signed on the ceremony device (design
-    /// §14.2.4).
-    pub fn bundle(&mut self, id: &SigningIdentity, device: &[u8; 32], now: u64) -> Vec<u8> {
-        self.published_at = Some(now);
-        PrekeyBundle::build(id, CONSTRUCTION_PQXDH, &self.blob().encode(), now, device)
-    }
-
-    /// The same bundle unsigned, for a device that holds no seed: the
-    /// ceremony device signs it and the device publishes what comes back
-    /// (design §23.3).
-    pub fn bundle_payload(&self, subject: &Keyhash, device: &[u8; 32], now: u64) -> Vec<u8> {
-        PrekeyBundle::payload(
-            subject,
-            CONSTRUCTION_PQXDH,
-            &self.blob().encode(),
-            now,
-            device,
-        )
-    }
-
-    /// Mint `n` one-time pairs and return their public halves, as uploaded.
-    pub fn one_time_keys(&mut self, n: usize, fresh: Fresh) -> Vec<Vec<u8>> {
-        let mut out = Vec::new();
-        for _ in 0..n {
-            let id = self.next_id;
-            self.next_id += 1;
-            let pair = OneTimePair {
-                id,
-                dh: DhSecret::from_seed(seed32(fresh)),
-                kem: KemSecret::from_seed(seed64(fresh)),
-            };
-            out.push(
-                OneTimeKey {
-                    id,
-                    dh: pair.dh.public(),
-                    kem: pair.kem.public(),
-                }
-                .encode(),
-            );
-            self.one_time.insert(id, pair);
-        }
-        out
-    }
-
-    /// The one-time pair `id` names, still held.  A receiver opens with
-    /// this and spends the key with `take_one_time` once the message it
-    /// opened has authenticated.
-    pub fn one_time(&self, id: u32) -> Option<&OneTimePair> {
-        self.one_time.get(&id)
-    }
-
-    /// Take a one-time pair by id: it is gone from the store, and a second
-    /// initial message naming it finds nothing.
-    pub fn take_one_time(&mut self, id: u32) -> Option<OneTimePair> {
-        self.one_time.remove(&id)
-    }
-
-    /// Whether the signed prekey's interval has elapsed.
-    pub fn due_for_rotation(&self, now: u64, cfg: &PayloadConfig) -> bool {
-        now.saturating_sub(self.spk_since) >= cfg.signed_prekey_interval_s
-    }
-
-    /// Rotate the signed prekeys: fresh keys under fresh ids, the old ones
-    /// retired but still answering sessions opened against them.
-    pub fn rotate_signed_prekey(&mut self, now: u64, fresh: Fresh) {
-        let old = (
-            std::mem::replace(&mut self.spk, DhSecret::from_seed(seed32(fresh))),
-            std::mem::replace(&mut self.pqspk, KemSecret::from_seed(seed64(fresh))),
-        );
-        self.retired.insert(self.spk_id, old);
-        self.spk_id += 1;
-        self.pqspk_id += 1;
-        self.spk_since = now;
-    }
-
-    fn signed_prekeys(&self, spk_id: u32) -> Option<(&DhSecret, &KemSecret)> {
-        if spk_id == self.spk_id {
-            Some((&self.spk, &self.pqspk))
-        } else {
-            self.retired.get(&spk_id).map(|(d, k)| (d, k))
-        }
-    }
-}
-
-/// The bundle's blob: the identity DH key, the signed prekey and the
-/// post-quantum signed prekey, each prekey under an id the initial message
-/// names.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Blob {
-    /// The identity Diffie-Hellman key.
-    pub ik: DhPublic,
-    /// The id of the signed prekey carried.
-    pub spk_id: u32,
-    /// That signed prekey.
-    pub spk: DhPublic,
-    /// The id of the post-quantum signed prekey carried.
-    pub pqspk_id: u32,
-    /// That post-quantum signed prekey.
-    pub pqspk: KemPublic,
-}
-
-impl Blob {
-    /// The bytes of this `Blob`, as the wire composes them.
-    pub fn encode(&self) -> Vec<u8> {
-        let mut out = Vec::new();
-        emit_map_head(&mut out, 5);
-        emit_uint(&mut out, 1);
-        emit_bstr(&mut out, &self.ik.0);
-        emit_uint(&mut out, 2);
-        emit_uint(&mut out, self.spk_id as u64);
-        emit_uint(&mut out, 3);
-        emit_bstr(&mut out, &self.spk.0);
-        emit_uint(&mut out, 4);
-        emit_uint(&mut out, self.pqspk_id as u64);
-        emit_uint(&mut out, 5);
-        emit_bstr(&mut out, &self.pqspk.0);
-        out
-    }
-
-    /// Read a `Blob` from `b`; an error naming what did not read.
-    pub fn decode(b: &[u8]) -> Result<Self, String> {
-        let item = parse_all(b).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else {
-            return Err("blob not a map".into());
-        };
-        let k32 = |k: u64| -> Result<DhPublic, String> {
-            match map_get(m, k) {
-                Some(Item::Bytes(r)) if r.len() == 32 => {
-                    Ok(DhPublic(<[u8; 32]>::try_from(&b[r.clone()]).unwrap()))
-                }
-                _ => Err(format!("blob field {k}")),
-            }
-        };
-        let pqspk = match map_get(m, 5) {
-            Some(Item::Bytes(r)) if r.len() == pqxdh::KEM_PUBLIC_BYTES => {
-                KemPublic(b[r.clone()].to_vec())
-            }
-            _ => return Err("blob field 5".into()),
-        };
-        Ok(Blob {
-            ik: k32(1)?,
-            spk_id: u32::try_from(map_get(m, 2).and_then(as_uint).ok_or("blob field 2")?)
-                .map_err(|_| "blob spk_id over u32")?,
-            spk: k32(3)?,
-            pqspk_id: u32::try_from(map_get(m, 4).and_then(as_uint).ok_or("blob field 4")?)
-                .map_err(|_| "blob pqspk_id over u32")?,
-            pqspk,
-        })
-    }
-}
-
-/// A one-time key as served: its id and both public halves.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OneTimeKey {
-    /// The id an initial message names it by.
-    pub id: u32,
-    /// The Diffie-Hellman half.
-    pub dh: DhPublic,
-    /// The key-encapsulation half.
-    pub kem: KemPublic,
-}
-
-impl OneTimeKey {
-    /// The bytes of this `OneTimeKey`, as the wire composes them.
-    pub fn encode(&self) -> Vec<u8> {
-        let mut out = Vec::new();
-        emit_map_head(&mut out, 3);
-        emit_uint(&mut out, 1);
-        emit_uint(&mut out, self.id as u64);
-        emit_uint(&mut out, 2);
-        emit_bstr(&mut out, &self.dh.0);
-        emit_uint(&mut out, 3);
-        emit_bstr(&mut out, &self.kem.0);
-        out
-    }
-
-    /// Read a `OneTimeKey` from `b`; an error naming what did not read.
-    pub fn decode(b: &[u8]) -> Result<Self, String> {
-        let item = parse_all(b).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else {
-            return Err("one-time key not a map".into());
-        };
-        let dh = match map_get(m, 2) {
-            Some(Item::Bytes(r)) if r.len() == 32 => {
-                DhPublic(<[u8; 32]>::try_from(&b[r.clone()]).unwrap())
-            }
-            _ => return Err("one-time key field 2".into()),
-        };
-        let kem = match map_get(m, 3) {
-            Some(Item::Bytes(r)) if r.len() == pqxdh::KEM_PUBLIC_BYTES => {
-                KemPublic(b[r.clone()].to_vec())
-            }
-            _ => return Err("one-time key field 3".into()),
-        };
-        Ok(OneTimeKey {
-            id: map_get(m, 1)
-                .and_then(as_uint)
-                .ok_or("one-time key field 1")
-                .and_then(|v| u32::try_from(v).map_err(|_| "one-time id over u32"))?,
-            dh,
-            kem,
-        })
-    }
-}
-
-/// A bundle read on the client's side: verified under the subject's
-/// identity, its blob decoded.
-#[derive(Debug, Clone)]
-pub struct Prefetched {
-    /// Whose material this is.
-    pub subject: Keyhash,
-    /// When the subject published it.
-    pub published_at: u64,
-    /// The decoded blob.
-    pub blob: Blob,
-    /// The device this material belongs to (`wire-format.md` §7.8): what a
-    /// one-time key is asked for and a relay submission is addressed to.
-    pub device: [u8; 32],
-}
-
-impl Prefetched {
-    fn encode(&self, out: &mut Vec<u8>) {
-        emit_array_head(out, 4);
-        emit_bstr(out, &self.subject);
-        emit_uint(out, self.published_at);
-        emit_bstr(out, &self.blob.encode());
-        emit_bstr(out, &self.device);
-    }
-
-    fn decode(b: &[u8], it: &rhtn_codec::cbor::Item) -> Option<Prefetched> {
-        use crate::durable::*;
-        let [s, at, blob, d] = array(it)?.as_slice() else {
-            return None;
-        };
-        Some(Prefetched {
-            subject: fixed::<32>(b, s)?,
-            published_at: uint(at)?,
-            blob: Blob::decode(&bytes(b, blob)?).ok()?,
-            device: fixed::<32>(b, d)?,
-        })
-    }
-}
-
-/// Read a bundle a serving node handed over: signed by the subject it
-/// names, PQXDH, and a blob this construction reads.
-pub fn read_bundle<L: Lookup + ?Sized>(ids: &L, bytes: &[u8]) -> Result<Prefetched, String> {
-    let b = PrekeyBundle::parse(bytes)?;
-    if b.verify(ids).is_err() {
-        return Err("bundle signature fails".into());
-    }
-    if b.construction != CONSTRUCTION_PQXDH {
-        return Err("not PQXDH".into());
-    }
-    Ok(Prefetched {
-        subject: b.subject,
-        published_at: b.published_at,
-        blob: Blob::decode(&b.blob)?,
-        device: b.device,
-    })
-}
-
-/// The batch request for a population, in ascending order and without
-/// repeats (`wire-format.md` §7.8).
-pub fn batch_request(population: &[Keyhash], nonce: [u8; 16]) -> Vec<u8> {
-    let mut subjects = population.to_vec();
-    subjects.sort();
-    subjects.dedup();
-    PrekeyRequest::Batch { subjects, nonce }.encode()
-}
-
-/// The one-time key request for one subject: sent only when a session is
-/// being opened.
-pub fn one_time_request(subject: Keyhash, device: [u8; 32], nonce: [u8; 16]) -> Vec<u8> {
-    PrekeyRequest::One {
-        subject,
-        one_time: true,
-        nonce,
-        device: Some(device),
-    }
-    .encode()
-}
-
-// --------------------------------------------------------- the channel
-
-/// The first message of a session: the initiator's identity and ephemeral
-/// keys, the KEM ciphertext, the ids of the prekeys used, and the first
-/// ratchet message.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InitialMessage {
-    /// The initiator's identity Diffie-Hellman key.
-    pub ik: DhPublic,
-    /// Its ephemeral key.
-    pub ek: DhPublic,
-    /// The encapsulation against the recipient's post-quantum prekey.
-    pub kem_ciphertext: Vec<u8>,
-    /// Which signed prekey of the recipient's was used.
-    pub spk_id: u32,
-    /// Which post-quantum signed prekey.
-    pub pqspk_id: u32,
-    /// Which one-time key, where one was served.
-    pub opk_id: Option<u32>,
-    /// The first ratchet message.
-    pub first: Vec<u8>,
-}
-
-/// Channel tags: what a byte string on the end-to-end channel is.
-pub const CHANNEL_INITIAL: u64 = 0;
-/// A ratchet message on an open session.
-pub const CHANNEL_MESSAGE: u64 = 1;
-
-/// Which construction this module's sessions run: read off the ratchet
-/// type in use here, so the answer moves if the type ever does and can
-/// never restate it wrongly.
-pub fn construction() -> crate::ratchet::Construction {
-    <Ratchet>::construction()
-}
-
-/// Plaintext kinds, the demultiplexing this construction settles on
-/// (design §14.2.4.6): a protocol object or application payload.
+/// Plaintext kinds (`wire-format.md` §7.10.1): a protocol object or
+/// application payload.
 pub const KIND_APPLICATION: u64 = 0;
 /// A `KeyGrant` (`wire-format.md` §7.3).
 pub const KIND_KEY_GRANT: u64 = 1;
@@ -660,712 +143,177 @@ pub fn unwrap(plaintext: &[u8]) -> Result<(u64, Vec<u8>), String> {
     }
 }
 
-/// The channel's framing, this construction's own: the tag, the sending
-/// device (the key it presents, `wire-format.md` §7.8), and the bytes.  A
-/// session is with a device (design §14.2.4), so what arrives says which
-/// of the sender's devices it is from.
-fn channel(tag: u64, device: &[u8; 32], bytes: &[u8]) -> Vec<u8> {
-    channel_with(tag, device, bytes, None)
-}
-
-/// The same frame with a fourth element: **the sender's own introduction
-/// on an initial message** [author, 2026-10-30], so a first message to a
-/// stranger carries what the stranger needs to attribute it — the
-/// material that hashes to the keyhash the channel names, and a locator
-/// to answer at. A recipient that already holds the sender ignores it.
-fn channel_with(tag: u64, device: &[u8; 32], bytes: &[u8], intro: Option<&[u8]>) -> Vec<u8> {
-    let mut out = Vec::new();
-    emit_array_head(&mut out, 3 + intro.is_some() as usize);
-    emit_uint(&mut out, tag);
-    emit_bstr(&mut out, device);
-    emit_bstr(&mut out, bytes);
-    if let Some(i) = intro {
-        emit_bstr(&mut out, i);
-    }
-    out
-}
-
-/// **The introduction an initial message carries**, where it carries one:
-/// what a recipient takes before anything else, so the binding and the
-/// message after it are attributable on arrival.
-#[must_use]
-pub fn introduction_in(b: &[u8]) -> Option<Vec<u8>> {
-    let f = unchannel(b).ok()?;
-    (f.tag == CHANNEL_INITIAL).then_some(f.intro).flatten()
-}
-
-/// A channel frame, read: the tag, the sending device, the bytes, and the
-/// introduction an initial message carries.
-pub struct Frame {
-    /// `CHANNEL_INITIAL` or `CHANNEL_MESSAGE`.
-    pub tag: u64,
-    /// The sending device, by the key it presents.
-    pub device: [u8; 32],
-    /// The channel's bytes: an initial message or a ratchet message.
-    pub bytes: Vec<u8>,
-    /// The sender's introduction, on an initial message to a stranger.
-    pub intro: Option<Vec<u8>>,
-}
-
-/// A ratchet message on the channel from `me`.
-pub fn channel_message(me: &[u8; 32], m: &[u8]) -> Vec<u8> {
-    channel(CHANNEL_MESSAGE, me, m)
-}
-
-/// A channel frame apart: the tag, the device, the bytes and the
-/// introduction where one rode along (`wire-format.md` §7.10.1).
-pub fn unchannel(b: &[u8]) -> Result<Frame, String> {
-    let parts = array_item_ranges(b, 0).ok_or("channel not an array")?;
-    if parts.len() != 3 && parts.len() != 4 {
-        return Err("channel is tag, device and bytes, with an introduction or without".into());
-    }
-    let p = Parser { b };
-    let (tg, _) = p.item(parts[0].start).map_err(|e| e.0)?;
-    let (d, _) = p.item(parts[1].start).map_err(|e| e.0)?;
-    let (v, _) = p.item(parts[2].start).map_err(|e| e.0)?;
-    let intro = match parts.get(3) {
-        None => None,
-        Some(r) => match &p.item(r.start).map_err(|e| e.0)?.0 {
-            Item::Bytes(ir) => Some(b[ir.clone()].to_vec()),
-            _ => return Err("the introduction is bytes".into()),
-        },
-    };
-    match (as_uint(&tg), &d, &v) {
-        (Some(tag), Item::Bytes(dr), Item::Bytes(r)) if dr.len() == 32 => Ok(Frame {
-            tag,
-            device: b[dr.clone()].try_into().unwrap(),
-            bytes: b[r.clone()].to_vec(),
-            intro,
-        }),
-        _ => Err("channel shape".into()),
-    }
-}
-
-impl InitialMessage {
-    /// The bytes of this message, as the channel composes them.
-    pub fn encode(&self) -> Vec<u8> {
-        let mut out = Vec::new();
-        emit_map_head(&mut out, 6 + self.opk_id.is_some() as usize);
-        emit_uint(&mut out, 1);
-        emit_bstr(&mut out, &self.ik.0);
-        emit_uint(&mut out, 2);
-        emit_bstr(&mut out, &self.ek.0);
-        emit_uint(&mut out, 3);
-        emit_bstr(&mut out, &self.kem_ciphertext);
-        emit_uint(&mut out, 4);
-        emit_uint(&mut out, self.spk_id as u64);
-        emit_uint(&mut out, 5);
-        emit_uint(&mut out, self.pqspk_id as u64);
-        if let Some(o) = self.opk_id {
-            emit_uint(&mut out, 6);
-            emit_uint(&mut out, o as u64);
-        }
-        emit_uint(&mut out, 7);
-        emit_bstr(&mut out, &self.first);
-        out
-    }
-
-    /// Read a `InitialMessage` from `b`; an error naming what did not read.
-    pub fn decode(b: &[u8]) -> Result<Self, String> {
-        let item = parse_all(b).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else {
-            return Err("initial message not a map".into());
-        };
-        let k32 = |k: u64| -> Result<DhPublic, String> {
-            match map_get(m, k) {
-                Some(Item::Bytes(r)) if r.len() == 32 => {
-                    Ok(DhPublic(<[u8; 32]>::try_from(&b[r.clone()]).unwrap()))
-                }
-                _ => Err(format!("initial message field {k}")),
-            }
-        };
-        let bytes = |k: u64| -> Result<Vec<u8>, String> {
-            match map_get(m, k) {
-                Some(Item::Bytes(r)) => Ok(b[r.clone()].to_vec()),
-                _ => Err(format!("initial message field {k}")),
-            }
-        };
-        Ok(InitialMessage {
-            ik: k32(1)?,
-            ek: k32(2)?,
-            kem_ciphertext: bytes(3)?,
-            spk_id: u32::try_from(map_get(m, 4).and_then(as_uint).ok_or("field 4")?)
-                .map_err(|_| "field 4 over u32")?,
-            pqspk_id: u32::try_from(map_get(m, 5).and_then(as_uint).ok_or("field 5")?)
-                .map_err(|_| "field 5 over u32")?,
-            opk_id: match map_get(m, 6).and_then(as_uint) {
-                None => None,
-                Some(v) => Some(u32::try_from(v).map_err(|_| "field 6 over u32")?),
-            },
-            first: bytes(7)?,
-        })
-    }
-}
-
-/// Why a session could not be opened or a message read.
+/// Why a message could not be sealed or opened.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PayloadError {
-    /// No open session with that peer device.
-    NoSession,
-    /// No prefetched bundle to open one with.
-    NoBundle,
-    /// An initial message whose identity key is not the one bound to the
-    /// sender it names (design §14.2.4.2).
-    NotTheSender,
-    /// An initial message received before: opening it again would replace
-    /// the session it already opened.
+    /// No encryption key is held for the recipient: it is no contact, or
+    /// one whose card carried none (`light-client-requirements.md` §3:
+    /// reply only to a sender you hold as a contact).
+    NoEncryptionKey,
+    /// The node's key for the recipient is not held yet.
+    NoNodeKey,
+    /// This device holds no encryption secret of the identity's.
+    NoSecret,
+    /// It does not open: a wrong half, a changed byte, or not a seal.
+    Unopened,
+    /// It opens and its tag does not verify for the sender it names, so it
+    /// is discarded and shown as nothing (`wire-format.md` §7.8.1).
+    TagFailed,
+    /// Opened before (`wire-format.md` §7.8.1): a replay opens once.
     Replayed,
     /// The bytes do not read as what they claim to be.
     Malformed(String),
-    /// A cryptographic operation failed.
-    Crypto(String),
 }
 
 impl std::fmt::Display for PayloadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PayloadError::NoSession => write!(f, "no session with that peer"),
-            PayloadError::NoBundle => write!(f, "no bundle for that peer"),
-            PayloadError::NotTheSender => write!(
-                f,
-                "the initial message's identity key is not the named sender's"
-            ),
+            PayloadError::NoEncryptionKey => write!(f, "no encryption key held for the recipient"),
+            PayloadError::NoNodeKey => write!(f, "no node key held for the recipient"),
+            PayloadError::NoSecret => write!(f, "this device holds no encryption secret"),
+            PayloadError::Unopened => write!(f, "the seal does not open"),
+            PayloadError::TagFailed => write!(f, "the tag does not verify for the sender named"),
+            PayloadError::Replayed => write!(f, "a message already opened"),
             PayloadError::Malformed(s) => write!(f, "malformed: {s}"),
-            PayloadError::Crypto(s) => write!(f, "{s}"),
-            PayloadError::Replayed => write!(f, "an initial message already received"),
         }
     }
 }
 
-/// A peer's device: the key it presents (`wire-format.md` §7.8).
-pub type PeerDevice = (Keyhash, [u8; 32]);
+/// **A node key as a sender holds it**: fetched from the recipient's node
+/// when the sender connects to write and verified under that node, never
+/// written to disk and never kept on the contact [author, 2026-11-20].
+#[derive(Clone, PartialEq, Eq)]
+pub struct NodeKeyHeld {
+    /// The node holding its private half.
+    pub node: Keyhash,
+    /// Its number.
+    pub n: u64,
+    /// The X-Wing encapsulation key.
+    pub public: Box<[u8; xwing::PUBLIC_BYTES]>,
+}
 
-/// One ciphertext per device it is for.
-pub type PerDevice = Vec<([u8; 32], Vec<u8>)>;
+impl std::fmt::Debug for NodeKeyHeld {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "NodeKeyHeld(n {})", self.n)
+    }
+}
 
-/// The sessions a client holds, one per peer device, and the bundles it
-/// prefetched, one per peer device (design §14.2.4: a session is with a
-/// device and never with an identity).
+/// What a sender puts in a seal besides the kind and the bytes.
+pub struct Sender<'a> {
+    /// The sender's identity.
+    pub keyhash: &'a Keyhash,
+    /// Its encryption secrets.
+    pub secret: &'a EncryptionSecret,
+    /// The alias shown with it, display only.
+    pub alias: &'a str,
+    /// Its own introduction, on a first message to this recipient.
+    pub introduction: Option<&'a [u8]>,
+}
+
+/// **Seal `kind` and `bytes` to `to`** (`wire-format.md` §7.8.1): an X-Wing
+/// encapsulation to the recipient's encryption key and one to its node's
+/// key, the message key over both, the tag over both ciphertexts and the
+/// body's fields, and the body under AES-256-GCM. The encoded `Sealed`.
+pub fn seal_to(
+    from: &Sender,
+    to: &Keyhash,
+    their: &EncryptionKey,
+    node_key: &NodeKeyHeld,
+    kind: u64,
+    bytes: &[u8],
+    fresh: Fresh,
+) -> Result<Vec<u8>, PayloadError> {
+    let mut eseed = Zeroizing::new([0u8; xwing::ESEED_BYTES]);
+    fresh(&mut eseed[..]);
+    let (ss_r, ct_r) =
+        xwing::encapsulate(&their.kem, &eseed).map_err(|e| PayloadError::Malformed(e.into()))?;
+    fresh(&mut eseed[..]);
+    let (ss_n, ct_n) = xwing::encapsulate(&node_key.public, &eseed)
+        .map_err(|e| PayloadError::Malformed(e.into()))?;
+    let key = seal::message_key(&ss_r, &ss_n, to, &node_key.node, node_key.n, &ct_r, &ct_n);
+    let fields = SealedBody::tagged(from.keyhash, from.alias, from.introduction, kind, bytes);
+    let tag_key = from.secret.tag_key(&their.auth, from.keyhash, to);
+    let tag = seal::tag(&tag_key, &ct_r, &ct_n, &fields);
+    let body = SealedBody {
+        sender: *from.keyhash,
+        alias: from.alias.to_string(),
+        introduction: from.introduction.map(<[u8]>::to_vec),
+        kind,
+        bytes: bytes.to_vec(),
+        tag,
+    };
+    let mut nonce = [0u8; seal::NONCE_BYTES];
+    fresh(&mut nonce);
+    Ok(Sealed {
+        n: node_key.n,
+        ct_r: Box::new(ct_r),
+        ct_n: Box::new(ct_n),
+        body: seal::seal(&key, nonce, &Zeroizing::new(body.encode())),
+    }
+    .encode())
+}
+
+/// **Open what a node delivered** (`wire-format.md` §7.8.1): the
+/// recipient's half under `secret`, the node's half as it came, the
+/// message key over both, and the body. Attribution is the caller's, which
+/// holds the contacts the tag is checked against.
+pub fn open_relayed(
+    secret: &EncryptionSecret,
+    me: &Keyhash,
+    node: &Keyhash,
+    relayed: &Relayed,
+) -> Result<(Sealed, SealedBody), PayloadError> {
+    let sealed =
+        Sealed::decode(&relayed.sealed).map_err(|e| PayloadError::Malformed(e.to_string()))?;
+    let ss_r = secret.decapsulate(&sealed.ct_r);
+    let key = seal::message_key(
+        &ss_r,
+        &relayed.ss_n,
+        me,
+        node,
+        sealed.n,
+        &sealed.ct_r,
+        &sealed.ct_n,
+    );
+    let plain = seal::open(&key, &sealed.body).ok_or(PayloadError::Unopened)?;
+    let body = SealedBody::decode(&plain).map_err(|e| PayloadError::Malformed(e.to_string()))?;
+    Ok((sealed, body))
+}
+
+/// Whether `body`'s tag verifies for its sender under `their`, the
+/// sender's encryption key.
+pub fn tag_verifies(
+    secret: &EncryptionSecret,
+    me: &Keyhash,
+    their: &EncryptionKey,
+    sealed: &Sealed,
+    body: &SealedBody,
+) -> bool {
+    let tag_key = secret.tag_key(&their.auth, &body.sender, me);
+    seal::tag_verifies(
+        &tag_key,
+        &sealed.ct_r,
+        &sealed.ct_n,
+        &body.fields(),
+        &body.tag,
+    )
+}
+
+/// How many of a node's newest keys a recipient remembers opened messages
+/// under (`wire-format.md` §7.8.1): an older one cannot be submitted again.
+pub const OPENED_KEYS: usize = 2;
+
+/// Everything the client keeps for payload: where it is attached and
+/// served, what waits for a node key, what it has opened, how far it has
+/// collected from each node, and the node keys fetched to seal with.
 #[derive(Default)]
-pub struct Sessions {
-    /// The open sessions, one per peer device.
-    pub ratchets: BTreeMap<PeerDevice, Ratchet>,
-    /// The bundles prefetched, one per peer device.
-    pub prefetched: BTreeMap<PeerDevice, Prefetched>,
-    /// The ephemeral keys of initial messages already received, most
-    /// recent last.  A one-time key spends itself, but an initial opened
-    /// on the reusable prekey alone can be captured and re-sent, and
-    /// accepting it again replaced a live session with a fresh one —
-    /// Signal's weak-replay caveat turned into session takeover.
-    /// **Persisted with the sessions** [2026-09-30]: held only in memory
-    /// it emptied on every restart, reopening the window it closes, so a
-    /// captured initial replayed after a restart took the session over
-    /// again.  Capped at [`SEEN_INITIALS`] on both the accept path and
-    /// decode, so a corrupt or oversized blob cannot grow it without bound.
-    pub seen_initials: std::collections::VecDeque<[u8; 32]>,
-    /// Sessions a newer one displaced, per peer device, newest first and
-    /// at most [`PREVIOUS_SESSIONS`] of them: what a message the peer
-    /// encrypted before it learned of the newer session still opens on.
-    /// **Two opens that cross** are where this is needed (design §22.2:
-    /// the construction's own): each side opened toward the other before
-    /// either's initial arrived, and each would otherwise replace the
-    /// session it had just sent on with one the other side does not hold
-    /// for sending.  Held in memory only: once both sides are on the one
-    /// session that stands, nothing more is sent on the other.
-    pub previous: BTreeMap<PeerDevice, Vec<Ratchet>>,
-    /// **This device's own introduction, carried on every initial message**
-    /// [author, 2026-10-30: a first message to a stranger carries it; a
-    /// keyhash binds its material, so it verifies]. None until this client
-    /// holds a position to be found at. **Not persisted**: refreshed from
-    /// the positions at attach and whenever they move.
-    pub card: Option<Vec<u8>>,
-}
-
-/// How many initial messages' ephemeral keys are remembered.
-const SEEN_INITIALS: usize = 256;
-
-/// How many displaced sessions are kept per peer device.
-const PREVIOUS_SESSIONS: usize = 2;
-
-impl Sessions {
-    /// The sessions as they go to the device's own storage: every ratchet
-    /// and every bundle held.
-    pub fn encode(&self) -> Vec<u8> {
-        let mut out = Vec::new();
-        emit_array_head(&mut out, 4);
-        emit_array_head(&mut out, self.ratchets.len());
-        for ((kh, dev), r) in &self.ratchets {
-            emit_array_head(&mut out, 3);
-            emit_bstr(&mut out, kh);
-            emit_bstr(&mut out, dev);
-            emit_bstr(&mut out, &r.encode());
-        }
-        emit_array_head(&mut out, self.prefetched.len());
-        for p in self.prefetched.values() {
-            p.encode(&mut out);
-        }
-        // **the replay cache is persisted** [2026-09-30].  Held only in
-        // memory, it emptied on every restart and the window it closes
-        // reopened with it: a captured initial message replayed after a
-        // restart would again replace the live session.
-        emit_array_head(&mut out, self.seen_initials.len());
-        for ek in &self.seen_initials {
-            emit_bstr(&mut out, ek);
-        }
-        // **displaced sessions are persisted too** [2026-10-12]: the rule
-        // holds one "for what was already sent on it", and what was sent
-        // on it is still in flight across a restart — a counterparty's
-        // message encrypted under the session it displaced read as
-        // "does not authenticate" after the holder restarted
-        emit_array_head(&mut out, self.previous.len());
-        for ((kh, dev), rs) in &self.previous {
-            emit_array_head(&mut out, 3);
-            emit_bstr(&mut out, kh);
-            emit_bstr(&mut out, dev);
-            emit_array_head(&mut out, rs.len());
-            for r in rs {
-                emit_bstr(&mut out, &r.encode());
-            }
-        }
-        out
-    }
-
-    /// The sessions held, as `(peer, device)` for a log line.
-    pub fn held(&self) -> Vec<(Keyhash, [u8; 32])> {
-        self.ratchets.keys().copied().collect()
-    }
-
-    /// The sessions back from what [`Sessions::encode`] wrote.  Displaced
-    /// sessions are held in memory only, so none come back.
-    pub fn decode(b: &[u8]) -> Option<Sessions> {
-        use crate::durable::*;
-        // three collections before displaced sessions were kept, four since
-        let f = match parse_array(b, 4) {
-            Some((_, f)) => f,
-            None => parse_array(b, 3)?.1,
-        };
-        let mut ratchets = BTreeMap::new();
-        for r in array(&f[0])? {
-            let [kh, dev, bytes_] = array(r)?.as_slice() else {
-                return None;
-            };
-            ratchets.insert(
-                (fixed::<32>(b, kh)?, fixed::<32>(b, dev)?),
-                <Ratchet>::decode(&bytes(b, bytes_)?)?,
-            );
-        }
-        let mut prefetched = BTreeMap::new();
-        for p in array(&f[1])? {
-            let p = Prefetched::decode(b, p)?;
-            prefetched.insert((p.subject, p.device), p);
-        }
-        let mut seen_initials = std::collections::VecDeque::new();
-        for ek in array(&f[2])? {
-            seen_initials.push_back(fixed::<32>(b, ek)?);
-            // the accept path caps this, but a stored blob is not trusted
-            // to have: drop the oldest past the cap rather than hold an
-            // unbounded list a corrupt file could grow
-            if seen_initials.len() > SEEN_INITIALS {
-                seen_initials.pop_front();
-            }
-        }
-        let mut previous: BTreeMap<PeerDevice, Vec<Ratchet>> = BTreeMap::new();
-        if let Some(p) = f.get(3) {
-            for entry in array(p)? {
-                let [kh, dev, rs] = array(entry)?.as_slice() else {
-                    return None;
-                };
-                let mut held = Vec::new();
-                for r in array(rs)? {
-                    held.push(<Ratchet>::decode(&bytes(b, r)?)?);
-                }
-                held.truncate(PREVIOUS_SESSIONS);
-                previous.insert((fixed::<32>(b, kh)?, fixed::<32>(b, dev)?), held);
-            }
-        }
-        Some(Sessions {
-            seen_initials,
-            ratchets,
-            prefetched,
-            previous,
-            card: None,
-        })
-    }
-
-    /// Set every session with `peer` aside, as a crossing sets one aside:
-    /// the next send opens afresh, and what the peer still sends on the
-    /// old ones opens on them a while.
-    ///
-    /// **How a sender gets past a peer that lost its half.** A process
-    /// that ended before it wrote holds no session the sender still
-    /// holds, and nothing it could send would say so — it has no session
-    /// to say it on.  The sender's only move is to open again, and this
-    /// is what makes the next send do that.  How many were set aside.
-    pub fn displace(&mut self, peer: &Keyhash) -> usize {
-        let keys: Vec<PeerDevice> = self
-            .ratchets
-            .range((*peer, [0; 32])..=(*peer, [0xff; 32]))
-            .map(|(k, _)| *k)
-            .collect();
-        for k in &keys {
-            if let Some(r) = self.ratchets.remove(k) {
-                self.keep_previous(*k, r);
-            }
-        }
-        keys.len()
-    }
-
-    /// Hold a session a newer one displaced, newest first, bounded.
-    fn keep_previous(&mut self, peer: PeerDevice, r: Ratchet) {
-        let held = self.previous.entry(peer).or_default();
-        held.insert(0, r);
-        held.truncate(PREVIOUS_SESSIONS);
-    }
-
-    /// Keep a bundle under the device it names.
-    pub fn prefetch(&mut self, p: Prefetched) {
-        self.prefetched.insert((p.subject, p.device), p);
-    }
-
-    /// Whether a binding is held for this subject's device: what decides
-    /// that one carried with a delivery is ignored (`wire-format.md`
-    /// §7.10).
-    pub fn holds_binding(&self, subject: &Keyhash, device: &[u8; 32]) -> bool {
-        self.prefetched.contains_key(&(*subject, *device))
-    }
-
-    /// The bundles held for `peer`, one per device.
-    pub fn prefetched_of(&self, peer: &Keyhash) -> Vec<&Prefetched> {
-        self.prefetched
-            .range((*peer, [0; 32])..=(*peer, [0xff; 32]))
-            .map(|(_, p)| p)
-            .collect()
-    }
-
-    /// The devices of `peer` this client holds a bundle for.
-    pub fn devices_of(&self, peer: &Keyhash) -> Vec<[u8; 32]> {
-        self.prefetched_of(peer).iter().map(|p| p.device).collect()
-    }
-
-    /// Whether a bundle is held for any device of `peer`.
-    pub fn has_bundle(&self, peer: &Keyhash) -> bool {
-        !self.prefetched_of(peer).is_empty()
-    }
-
-    /// Open a session to `to`'s device on its bundle and, where served, a
-    /// one-time key, and encrypt the first plaintext: the channel's
-    /// initial message, from `me`, this client's own device.
-    #[allow(clippy::too_many_arguments)]
-    pub fn open(
-        &mut self,
-        keys: &PayloadKeys,
-        me: &[u8; 32],
-        to: Keyhash,
-        their: &Prefetched,
-        one_time: Option<&OneTimeKey>,
-        fresh: Fresh,
-        plaintext: &[u8],
-    ) -> Result<Vec<u8>, PayloadError> {
-        let ek = DhSecret::from_seed(seed32(fresh));
-        let bundle = TheirBundle {
-            ik: &their.blob.ik,
-            spk: &their.blob.spk,
-            pqspk: &their.blob.pqspk,
-            opk: one_time.map(|o| &o.dh),
-            pqopk: one_time.map(|o| &o.kem),
-        };
-        let init =
-            pqxdh::initiate(&keys.ik, &ek, &bundle, seed32(fresh)).map_err(PayloadError::Crypto)?;
-        let ad = pqxdh::associated_data(&keys.ik.public(), &their.blob.ik);
-        let mut r = Ratchet::initiator(
-            init.sk,
-            their.blob.spk,
-            DhSecret::from_seed(seed32(fresh)),
-            ad,
-        );
-        let first = r.encrypt(plaintext).map_err(PayloadError::Crypto)?;
-        tracing::info!(
-            target: "pay",
-            state = "opened",
-            peer = %crate::diag::id8(&to),
-            device = %crate::diag::id8(&their.device),
-            one_time = one_time.is_some(),
-            "pay.session"
-        );
-        // **what this open replaces is held a while** [2026-11-15], as the
-        // receive side of a crossing holds the session it displaces
-        // (design §22.2): the peer may still be sending on it, and a
-        // message encrypted before the peer learned of this open must
-        // still read.  Nothing kept it on this side before, and a witness
-        // lost a proposed body that way.
-        if let Some(old) = self.ratchets.insert((to, their.device), r) {
-            self.keep_previous((to, their.device), old);
-        }
-        let msg = InitialMessage {
-            ik: keys.ik.public(),
-            ek: init.ek,
-            kem_ciphertext: init.kem_ciphertext,
-            spk_id: their.blob.spk_id,
-            pqspk_id: their.blob.pqspk_id,
-            opk_id: one_time.map(|o| o.id),
-            first,
-        };
-        Ok(channel_with(
-            CHANNEL_INITIAL,
-            me,
-            &msg.encode(),
-            self.card.as_deref(),
-        ))
-    }
-
-    /// Encrypt on every open session with `to`: one ciphertext per device,
-    /// each readable by that device alone (`wire-format.md` §7.10).
-    pub fn send(
-        &mut self,
-        me: &[u8; 32],
-        to: &Keyhash,
-        plaintext: &[u8],
-    ) -> Result<PerDevice, PayloadError> {
-        let devices: Vec<[u8; 32]> = self
-            .ratchets
-            .range((*to, [0; 32])..=(*to, [0xff; 32]))
-            .map(|((_, d), _)| *d)
-            .collect();
-        if devices.is_empty() {
-            return Err(PayloadError::NoSession);
-        }
-        let mut out = Vec::with_capacity(devices.len());
-        for d in devices {
-            let r = self
-                .ratchets
-                .get_mut(&(*to, d))
-                .ok_or(PayloadError::NoSession)?;
-            let m = r.encrypt(plaintext).map_err(PayloadError::Crypto)?;
-            out.push((d, channel(CHANNEL_MESSAGE, me, &m)));
-        }
-        Ok(out)
-    }
-
-    /// Whether any session with `peer` is open.
-    pub fn has_session(&self, peer: &Keyhash) -> bool {
-        self.ratchets
-            .range((*peer, [0; 32])..=(*peer, [0xff; 32]))
-            .next()
-            .is_some()
-    }
-
-    /// Whether a session is open with that one device of `peer`.
-    pub fn has_session_with(&self, peer: &Keyhash, device: &[u8; 32]) -> bool {
-        self.ratchets.contains_key(&(*peer, *device))
-    }
-
-    /// Read what arrived on the channel from `from`, at `holder`: an initial
-    /// message opens a session on this client's prekeys, consuming the
-    /// one-time pair it names; a message decrypts on the session held, or
-    /// on one a newer session displaced.
-    ///
-    /// **Two opens that cross** (this construction's call, design §22.2):
-    /// an initial from a peer this side has itself opened toward, and read
-    /// nothing from, is the peer's open crossing this side's.  The session
-    /// the lower keyhash opened stands at both ends, since both apply the
-    /// same rule, and the other is held a while for what was sent on it
-    /// before this was known.  A session this side has read on is one the
-    /// peer held and has since opened past: the new one is taken, and the
-    /// old held the same way.
-    pub fn receive(
-        &mut self,
-        keys: &mut PayloadKeys,
-        holder: &Keyhash,
-        from: Keyhash,
-        bytes: &[u8],
-        fresh: Fresh,
-    ) -> Result<Vec<u8>, PayloadError> {
-        let Frame {
-            tag,
-            device,
-            bytes: inner,
-            ..
-        } = unchannel(bytes).map_err(PayloadError::Malformed)?;
-        let mut next = |out: &mut [u8; 32]| fresh(out);
-        match tag {
-            CHANNEL_INITIAL => {
-                let m = InitialMessage::decode(&inner).map_err(PayloadError::Malformed)?;
-                // The sender is the keyhash the channel names and the device
-                // it says; the identity key is the one that keyhash
-                // published and signed for that device (design §14.2.4.2).
-                // An initial message whose key is not the one bound to the
-                // name is not that party's, whatever it decrypts to, and
-                // the transport authenticating a relay hop says nothing
-                // about who wrote this.  Held under no binding, it cannot
-                // be attributed and is not opened.
-                // the binding is the bundle held for the sending device;
-                // one held for another of the sender's devices still says
-                // whether the key is that party's at all
-                // **the device is the bundle's, never the channel's**: the
-                // channel names a device in the clear, and what a message
-                // is attributed to is decided by the material it opens
-                // under (`wire-format.md` §7.10).  The bundle whose key
-                // this message carries says which device published it,
-                // and a channel naming any other device is not that
-                // device's message
-                let held = self.prefetched_of(&from);
-                if held.is_empty() {
-                    return Err(PayloadError::NoBundle);
-                }
-                let Some(bound) = held.iter().find(|p| p.blob.ik == m.ik) else {
-                    return Err(PayloadError::NotTheSender);
-                };
-                if bound.device != device {
-                    return Err(PayloadError::NotTheSender);
-                }
-                let (spk, pqspk) = keys
-                    .signed_prekeys(m.spk_id)
-                    .ok_or(PayloadError::Crypto("unknown signed prekey".into()))?;
-                let (spk, pqspk) = (spk.clone(), pqspk.clone());
-                // Used now, spent later: the pair opens the message and is
-                // removed once that message authenticates.  Removing it
-                // first lets one corrupted copy destroy the key the real
-                // message needs, and PQXDH deletes it after decryption.
-                let one_time = match m.opk_id {
-                    Some(id) => Some(
-                        keys.one_time(id)
-                            .ok_or(PayloadError::Crypto(
-                                "one-time key already used or unknown".into(),
-                            ))?
-                            .clone(),
-                    ),
-                    None => None,
-                };
-                let me = pqxdh::Responder {
-                    ik: &keys.ik,
-                    spk: &spk,
-                    pqspk: &pqspk,
-                    opk: one_time.as_ref().map(|o| &o.dh),
-                    pqopk: one_time.as_ref().map(|o| &o.kem),
-                };
-                let sk = pqxdh::respond(&me, &m.ik, &m.ek, &m.kem_ciphertext)
-                    .map_err(PayloadError::Crypto)?;
-                let ad = pqxdh::associated_data(&m.ik, &keys.ik.public());
-                let mut r = Ratchet::responder(sk, spk, ad);
-                let mut seed = || {
-                    let mut s = [0u8; 32];
-                    next(&mut s);
-                    s
-                };
-                let pt = r
-                    .decrypt(&m.first, &mut seed)
-                    .map_err(PayloadError::Crypto)?;
-                // authenticated: the key is spent and the session committed
-                if let Some(o) = &one_time {
-                    keys.take_one_time(o.id);
-                }
-                // authenticated, and seen before: the session it opened is
-                // the live one, and this copy replaces nothing
-                if self.seen_initials.contains(&m.ek.0) {
-                    return Err(PayloadError::Replayed);
-                }
-                if self.seen_initials.len() >= SEEN_INITIALS {
-                    self.seen_initials.pop_front();
-                }
-                self.seen_initials.push_back(m.ek.0);
-                let state = match self.ratchets.remove(&(from, device)) {
-                    // crossed, and mine stands: theirs opens what they sent
-                    // before they learned so
-                    Some(held) if held.opened_unanswered() && *holder < from => {
-                        self.ratchets.insert((from, device), held);
-                        self.keep_previous((from, device), r);
-                        "kept"
-                    }
-                    // crossed and theirs stands, or they opened past the
-                    // one held: what was sent on the old one still opens
-                    Some(held) => {
-                        self.keep_previous((from, device), held);
-                        self.ratchets.insert((from, device), r);
-                        "displaced"
-                    }
-                    None => {
-                        self.ratchets.insert((from, device), r);
-                        "opened"
-                    }
-                };
-                tracing::info!(
-                    target: "pay",
-                    state,
-                    peer = %crate::diag::id8(&from),
-                    device = %crate::diag::id8(&device),
-                    one_time = m.opk_id.is_some(),
-                    "pay.session"
-                );
-                Ok(pt)
-            }
-            CHANNEL_MESSAGE => {
-                let mut seed = || {
-                    let mut s = [0u8; 32];
-                    next(&mut s);
-                    s
-                };
-                let on_current = match self.ratchets.get_mut(&(from, device)) {
-                    Some(r) => r.decrypt(&inner, &mut seed),
-                    None => {
-                        let held: Vec<String> = self
-                            .ratchets
-                            .range((from, [0; 32])..=(from, [0xff; 32]))
-                            .map(|((_, d), _)| crate::diag::id8(d))
-                            .collect();
-                        tracing::warn!(
-                            target: "pay",
-                            peer = %crate::diag::id8(&from),
-                            device = %crate::diag::id8(&device),
-                            ?held,
-                            "pay.no_session"
-                        );
-                        return Err(PayloadError::NoSession);
-                    }
-                };
-                match on_current {
-                    Ok(pt) => Ok(pt),
-                    Err(e) => {
-                        // a message from before the peer took the session
-                        // that stands opens on the one it displaced; the
-                        // ratchet leaves itself as it was on a failure, so
-                        // each is tried in turn
-                        for held in self.previous.get_mut(&(from, device)).into_iter().flatten() {
-                            if let Ok(pt) = held.decrypt(&inner, &mut seed) {
-                                tracing::debug!(
-                                    target: "pay",
-                                    state = "on_previous",
-                                    peer = %crate::diag::id8(&from),
-                                    device = %crate::diag::id8(&device),
-                                    "pay.session"
-                                );
-                                return Ok(pt);
-                            }
-                        }
-                        Err(PayloadError::Crypto(e))
-                    }
-                }
-            }
-            _ => Err(PayloadError::Malformed("unknown channel tag".into())),
-        }
-    }
-}
-
-/// Everything the client keeps for payload: its numbers, its material,
-/// its sessions, the serving node it publishes to, the plaintexts waiting
-/// for a one-time key to arrive, and the one-time requests in flight.
 pub struct PayloadState {
-    /// This client's own numbers.
-    pub cfg: PayloadConfig,
-    /// Its PQXDH material.
-    pub keys: PayloadKeys,
-    /// Its sessions and prefetched bundles.
-    pub sessions: Sessions,
     /// **Every node this client is attached to** — step 5 of the browser
     /// model [author, 2026-11-11]: a tab per subnet, and an attachment made
     /// before any position (a bench provision, a genesis) belongs to no
     /// subnet yet. There is no "the serving node" beside this set
-    /// [restructure step 1, 2026-11-14]: what a client publishes, sweeps
-    /// or asks goes to a node named by the address it serves.
+    /// [restructure step 1, 2026-11-14]: what a client sweeps or asks goes
+    /// to a node named by the address it serves.
     pub attachments: BTreeSet<Keyhash>,
     /// **The node serving each of this client's addresses**, by the anchor
     /// of the subnet: *"Each ID:Subnet is effectively a unique FN
@@ -1387,46 +335,47 @@ pub struct PayloadState {
     /// **A move said of a node agreed to, while it stands**
     /// ([`crate::relocation`]): one per node, the newest invitation's.
     pub relocations: BTreeMap<Keyhash, crate::relocation::Held>,
-    /// This device, by the key it presents (`wire-format.md` §7.8): what
-    /// its bundle names and what its messages say they are from.  The
-    /// identity's classical member until a device says otherwise.
-    pub device: [u8; 32],
-    /// On a device that holds no seed, the bundle the ceremony device
-    /// signed over this device's material, with the blob it was signed
-    /// over: published while the material is what it names, and made
-    /// again when the material rotates.
-    pub signed_bundle: Option<(Vec<u8>, Vec<u8>)>,
-    /// Plaintexts waiting for a session with one of a peer's devices.
-    pub pending: BTreeMap<PeerDevice, Vec<Vec<u8>>>,
-    /// One-time requests in flight, by nonce: the peer device asked for.
-    pub outstanding: BTreeMap<[u8; 16], PeerDevice>,
-    /// When each peer device was last asked for, so a request that got
-    /// no answer — a node that had no bundle yet, a path that dropped it
-    /// — is asked again after a patience rather than parking every
-    /// later message behind it [bench 61c672c-restore-kind30-1,
-    /// 2026-10-30: one such request held a peer unreachable for a run].
-    pub asked_at: BTreeMap<PeerDevice, u64>,
-    /// **One-time keys a counterparty handed over in person**
-    /// (`wire-format.md` §14.3.4), by the device they belong to: spent on
-    /// the first session opened with that device and gone with it.
-    ///
-    /// Not durable state, and deliberately: a key handed across a local
-    /// interface during a ceremony is for opening a channel with the
-    /// person who handed it over, and a restart that lost it costs a
-    /// one-time key's forward secrecy on a first message, which §7.8
-    /// already declares as the reusable-only case.
-    pub handed: BTreeMap<PeerDevice, Vec<u8>>,
-    /// What the node last reported of the pool, or what was uploaded.
-    pub pool_reported: usize,
-    /// **The pool at each tab's node**, as last stocked or reported — one
-    /// pool per address [author, 2026-11-11]. Not written: an attach
-    /// stocks a full pool, so a restart starts each over.
-    pub pools: BTreeMap<Keyhash, usize>,
-    /// Peers who sent an initial message this client could not attribute
-    /// for want of their binding.  Routine maintenance asks for it, so a
-    /// peer that published after this client's last sweep is reachable on
-    /// its next attempt (design §14.2.4.2).
-    pub wanted: BTreeSet<Keyhash>,
+    /// **The identity's encryption secrets on this device**: derived from
+    /// the root where the seed is held, handed over in a pairing where it
+    /// is not (`wire-format.md` §14.3.3). Written only on a device that
+    /// holds no seed, which could not derive them again.
+    pub secret: Option<EncryptionSecret>,
+    /// Whether [`PayloadState::secret`] came in a pairing, and so is
+    /// written.
+    pub secret_handed: bool,
+    /// **This device's own introduction**, carried in the seal on a first
+    /// message to a recipient (`wire-format.md` §7.8.1): refreshed at
+    /// attach and whenever the positions move, and never written.
+    pub card: Option<Vec<u8>>,
+    /// **Node keys fetched to seal with**, by recipient: never written and
+    /// never on the contact [author, 2026-11-20]. A refusal for a stale
+    /// key drops the one held and the next send fetches the newest.
+    pub node_keys: BTreeMap<Keyhash, NodeKeyHeld>,
+    /// Plaintexts waiting for a node key, by recipient, each `[kind,
+    /// bytes]` as [`wrap`] made it.
+    pub pending: BTreeMap<Keyhash, Vec<Vec<u8>>>,
+    /// **The parties a message has been attributed from**: a sender's
+    /// introduction rides its messages to a recipient until it has had a
+    /// reply from it (`wire-format.md` §7.10.1).
+    pub heard_from: BTreeSet<Keyhash>,
+    /// **What has been opened**, by the node that delivered it and the
+    /// node key's number, the [`OPENED_KEYS`] newest per node: a replay
+    /// opens once, across a restart too (`wire-format.md` §7.8.1).
+    pub opened: BTreeMap<Keyhash, BTreeMap<u64, BTreeSet<[u8; 32]>>>,
+    /// **The newest queue position collected from each node**
+    /// (`wire-format.md` §7.10): what an attach there carries as field 5.
+    pub cursors: BTreeMap<Keyhash, u64>,
+}
+
+impl std::fmt::Debug for PayloadState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PayloadState")
+            .field("attachments", &self.attachments.len())
+            .field("secret", &self.secret.is_some())
+            .field("pending", &self.pending.len())
+            .field("cursors", &self.cursors)
+            .finish()
+    }
 }
 
 /// A relocation's standing as the state writes it.
@@ -1453,42 +402,32 @@ fn standing_of(n: u64) -> Option<rhtn_model::Standing> {
 }
 
 impl PayloadState {
-    /// Everything of this state that a restart would otherwise lose: the
-    /// material, the sessions, the device, the signed bundle, what waits
-    /// for a session, and what the node was told of the pool.  Requests
-    /// in flight are not written: a reply to one never arrives at a new
-    /// process, and what it asked for is asked for again.
+    /// Whether `hash` was opened before under `node`'s key `n`, and
+    /// remember it if not: the node's [`OPENED_KEYS`] newest keys are kept
+    /// and older ones forgotten, since a message sealed to one of those is
+    /// refused at submission (`wire-format.md` §7.8).
+    pub fn first_opening(&mut self, node: &Keyhash, n: u64, hash: [u8; 32]) -> bool {
+        let keys = self.opened.entry(*node).or_default();
+        if keys.len() >= OPENED_KEYS && keys.keys().next().is_some_and(|oldest| n < *oldest) {
+            // older than every key remembered: it cannot have been
+            // submitted lately, so it is a replay
+            return false;
+        }
+        let fresh = keys.entry(n).or_default().insert(hash);
+        while keys.len() > OPENED_KEYS {
+            let oldest = *keys.keys().next().expect("non-empty");
+            keys.remove(&oldest);
+        }
+        fresh
+    }
+
+    /// Everything of this state that a restart would otherwise lose.
+    /// Node keys are not written, and the secrets only where they were
+    /// handed over.
     pub fn encode(&self) -> Vec<u8> {
-        use crate::durable::*;
         let mut out = Vec::new();
-        // twelve fields since the relocations; the eleven-, ten- and
-        // seven-field forms still read, the fields they lack as empty
-        emit_array_head(&mut out, 12);
-        emit_bstr(&mut out, &self.keys.encode());
-        emit_bstr(&mut out, &self.sessions.encode());
-        // slot 2 held "the serving node" until restructure step 1
-        // [2026-11-14]; written empty so an older reader still parses
-        emit_opt_bstr(&mut out, None);
-        emit_bstr(&mut out, &self.device);
-        match &self.signed_bundle {
-            Some((over, signed)) => {
-                emit_array_head(&mut out, 2);
-                emit_bstr(&mut out, over);
-                emit_bstr(&mut out, signed);
-            }
-            None => emit_null(&mut out),
-        }
-        emit_array_head(&mut out, self.pending.len());
-        for ((kh, dev), plains) in &self.pending {
-            emit_array_head(&mut out, 3);
-            emit_bstr(&mut out, kh);
-            emit_bstr(&mut out, dev);
-            emit_array_head(&mut out, plains.len());
-            for p in plains {
-                emit_bstr(&mut out, p);
-            }
-        }
-        emit_uint(&mut out, self.pool_reported as u64);
+        emit_array_head(&mut out, 11);
+        emit_uint(&mut out, 2);
         emit_array_head(&mut out, self.attachments.len());
         for n in &self.attachments {
             emit_bstr(&mut out, n);
@@ -1533,21 +472,61 @@ impl PayloadState {
                 None => emit_null(&mut out),
             }
         }
+        match (&self.secret, self.secret_handed) {
+            (Some(s), true) => {
+                emit_array_head(&mut out, 2);
+                emit_bstr(&mut out, s.kem_seed());
+                emit_bstr(&mut out, &s.auth_secret()[..]);
+            }
+            _ => emit_null(&mut out),
+        }
+        emit_array_head(&mut out, self.pending.len());
+        for (to, plains) in &self.pending {
+            emit_array_head(&mut out, 2);
+            emit_bstr(&mut out, to);
+            emit_array_head(&mut out, plains.len());
+            for p in plains {
+                emit_bstr(&mut out, p);
+            }
+        }
+        emit_array_head(&mut out, self.heard_from.len());
+        for k in &self.heard_from {
+            emit_bstr(&mut out, k);
+        }
+        emit_array_head(&mut out, self.opened.len());
+        for (node, keys) in &self.opened {
+            emit_array_head(&mut out, 2);
+            emit_bstr(&mut out, node);
+            emit_array_head(&mut out, keys.len());
+            for (n, hashes) in keys {
+                emit_array_head(&mut out, 2);
+                emit_uint(&mut out, *n);
+                emit_array_head(&mut out, hashes.len());
+                for h in hashes {
+                    emit_bstr(&mut out, h);
+                }
+            }
+        }
+        emit_array_head(&mut out, self.cursors.len());
+        for (node, c) in &self.cursors {
+            emit_array_head(&mut out, 2);
+            emit_bstr(&mut out, node);
+            emit_uint(&mut out, *c);
+        }
         out
     }
 
-    /// The state back under `cfg`, whole or not at all.
-    pub fn decode(cfg: PayloadConfig, b: &[u8]) -> Option<PayloadState> {
+    /// The state back, whole or not at all.
+    pub fn decode(b: &[u8]) -> Option<PayloadState> {
         use crate::durable::*;
-        // the seven-field form predates the address model and still reads
-        let (_, f) = parse_array(b, 12)
-            .or_else(|| parse_array(b, 11))
-            .or_else(|| parse_array(b, 10))
-            .or_else(|| parse_array(b, 7))?;
-        let keyhashes = |it: &rhtn_codec::cbor::Item| -> Option<Vec<Keyhash>> {
+        let (_, f) = parse_array(b, 11)?;
+        if uint(&f[0])? != 2 {
+            return None;
+        }
+        let keyhashes = |it: &Item| -> Option<Vec<Keyhash>> {
             array(it)?.iter().map(|x| fixed::<32>(b, x)).collect()
         };
-        let pairs = |it: &rhtn_codec::cbor::Item| -> Option<Vec<(Keyhash, Keyhash)>> {
+        let pairs = |it: &Item| -> Option<Vec<(Keyhash, Keyhash)>> {
             array(it)?
                 .iter()
                 .map(|p| {
@@ -1558,151 +537,124 @@ impl PayloadState {
                 })
                 .collect()
         };
-        let attachments: BTreeSet<Keyhash> = match f.get(7) {
-            Some(it) => keyhashes(it)?.into_iter().collect(),
-            None => BTreeSet::new(),
-        };
-        let serving_at: BTreeMap<Keyhash, Keyhash> = match f.get(8) {
-            Some(it) => pairs(it)?.into_iter().collect(),
-            None => BTreeMap::new(),
-        };
-        let last_from: BTreeMap<Keyhash, Keyhash> = match f.get(9) {
-            Some(it) => pairs(it)?.into_iter().collect(),
-            None => BTreeMap::new(),
-        };
-        let agreed: BTreeMap<Keyhash, Vec<String>> = match f.get(10) {
-            Some(it) => array(it)?
-                .iter()
-                .map(|p| {
-                    let [node, addrs] = array(p)?.as_slice() else {
-                        return None;
-                    };
-                    let addrs: Vec<String> = array(addrs)?
-                        .iter()
-                        .map(|a| match a {
-                            rhtn_codec::cbor::Item::Text(r) => {
-                                std::str::from_utf8(&b[r.clone()]).ok().map(str::to_string)
-                            }
-                            _ => None,
-                        })
-                        .collect::<Option<_>>()?;
-                    Some((fixed::<32>(b, node)?, addrs))
-                })
-                .collect::<Option<_>>()?,
-            None => BTreeMap::new(),
-        };
-        let text = |it: &rhtn_codec::cbor::Item| match it {
-            rhtn_codec::cbor::Item::Text(r) => {
-                std::str::from_utf8(&b[r.clone()]).ok().map(str::to_string)
-            }
+        let text = |it: &Item| match it {
+            Item::Text(r) => std::str::from_utf8(&b[r.clone()]).ok().map(str::to_string),
             _ => None,
         };
-        let opt_text = |it: &rhtn_codec::cbor::Item| match it {
-            rhtn_codec::cbor::Item::Null => Some(None),
+        let opt_text = |it: &Item| match it {
+            Item::Null => Some(None),
             it => text(it).map(Some),
         };
-        let relocations: BTreeMap<Keyhash, crate::relocation::Held> = match f.get(11) {
-            Some(it) => array(it)?
-                .iter()
-                .map(|p| {
-                    // six since the subnet; the five of before read with none
-                    let fields = array(p)?;
-                    let (node, to, standing, why, label) = match fields.as_slice() {
-                        [n, t, s, w, l] | [n, t, s, w, l, _] => (n, t, s, w, l),
-                        _ => return None,
-                    };
-                    let subnet = match fields.get(5) {
-                        None | Some(rhtn_codec::cbor::Item::Null) => None,
-                        Some(it) => Some(fixed::<32>(b, it)?),
-                    };
-                    Some((
-                        fixed::<32>(b, node)?,
-                        crate::relocation::Held {
-                            to: text(to)?,
-                            standing: standing_of(uint(standing)?)?,
-                            why: opt_text(why)?,
-                            label: opt_text(label)?,
-                            subnet,
-                        },
-                    ))
-                })
-                .collect::<Option<_>>()?,
-            None => BTreeMap::new(),
-        };
-        let signed_bundle = match &f[4] {
-            rhtn_codec::cbor::Item::Null => None,
-            it => {
-                let [over, signed] = array(it)?.as_slice() else {
+        let agreed: BTreeMap<Keyhash, Vec<String>> = array(&f[4])?
+            .iter()
+            .map(|p| {
+                let [node, addrs] = array(p)?.as_slice() else {
                     return None;
                 };
-                Some((bytes(b, over)?, bytes(b, signed)?))
+                let addrs: Vec<String> = array(addrs)?.iter().map(text).collect::<Option<_>>()?;
+                Some((fixed::<32>(b, node)?, addrs))
+            })
+            .collect::<Option<_>>()?;
+        let relocations: BTreeMap<Keyhash, crate::relocation::Held> = array(&f[5])?
+            .iter()
+            .map(|p| {
+                let [node, to, standing, why, label, subnet] = array(p)?.as_slice() else {
+                    return None;
+                };
+                let subnet = match subnet {
+                    Item::Null => None,
+                    it => Some(fixed::<32>(b, it)?),
+                };
+                Some((
+                    fixed::<32>(b, node)?,
+                    crate::relocation::Held {
+                        to: text(to)?,
+                        standing: standing_of(uint(standing)?)?,
+                        why: opt_text(why)?,
+                        label: opt_text(label)?,
+                        subnet,
+                    },
+                ))
+            })
+            .collect::<Option<_>>()?;
+        let secret = match &f[6] {
+            Item::Null => None,
+            it => {
+                let [k, a] = array(it)?.as_slice() else {
+                    return None;
+                };
+                Some(EncryptionSecret::from_secrets(
+                    &fixed::<32>(b, k)?,
+                    &fixed::<32>(b, a)?,
+                ))
             }
         };
-        let mut pending = BTreeMap::new();
-        for p in array(&f[5])? {
-            let [kh, dev, plains] = array(p)?.as_slice() else {
-                return None;
-            };
-            let plains: Vec<Vec<u8>> = array(plains)?
-                .iter()
-                .map(|x| bytes(b, x))
-                .collect::<Option<_>>()?;
-            pending.insert((fixed::<32>(b, kh)?, fixed::<32>(b, dev)?), plains);
-        }
+        let pending: BTreeMap<Keyhash, Vec<Vec<u8>>> = array(&f[7])?
+            .iter()
+            .map(|p| {
+                let [to, plains] = array(p)?.as_slice() else {
+                    return None;
+                };
+                let plains = array(plains)?
+                    .iter()
+                    .map(|x| bytes(b, x))
+                    .collect::<Option<_>>()?;
+                Some((fixed::<32>(b, to)?, plains))
+            })
+            .collect::<Option<_>>()?;
+        let opened = array(&f[9])?
+            .iter()
+            .map(|p| {
+                let [node, keys] = array(p)?.as_slice() else {
+                    return None;
+                };
+                let keys = array(keys)?
+                    .iter()
+                    .map(|k| {
+                        let [n, hashes] = array(k)?.as_slice() else {
+                            return None;
+                        };
+                        let hashes = array(hashes)?
+                            .iter()
+                            .map(|h| fixed::<32>(b, h))
+                            .collect::<Option<_>>()?;
+                        Some((uint(n)?, hashes))
+                    })
+                    .collect::<Option<_>>()?;
+                Some((fixed::<32>(b, node)?, keys))
+            })
+            .collect::<Option<_>>()?;
+        let cursors = array(&f[10])?
+            .iter()
+            .map(|p| {
+                let [node, c] = array(p)?.as_slice() else {
+                    return None;
+                };
+                Some((fixed::<32>(b, node)?, uint(c)?))
+            })
+            .collect::<Option<_>>()?;
         Some(PayloadState {
-            cfg,
-            keys: PayloadKeys::decode(&bytes(b, &f[0])?)?,
-            sessions: Sessions::decode(&bytes(b, &f[1])?)?,
-            attachments,
-            serving_at,
-            last_from,
+            attachments: keyhashes(&f[1])?.into_iter().collect(),
+            serving_at: pairs(&f[2])?.into_iter().collect(),
+            last_from: pairs(&f[3])?.into_iter().collect(),
             agreed,
             relocations,
-            device: fixed::<32>(b, &f[3])?,
-            signed_bundle,
+            secret_handed: secret.is_some(),
+            secret,
+            card: None,
+            node_keys: BTreeMap::new(),
             pending,
-            outstanding: BTreeMap::new(),
-            asked_at: BTreeMap::new(),
-            handed: BTreeMap::new(),
-            pool_reported: uint(&f[6])? as usize,
-            pools: BTreeMap::new(),
-            wanted: BTreeSet::new(),
+            heard_from: keyhashes(&f[8])?.into_iter().collect(),
+            opened,
+            cursors,
         })
     }
 
-    /// A fresh payload state under `cfg`: new material, no session.
-    pub fn new(cfg: PayloadConfig, fresh: Fresh, now: u64) -> Self {
-        PayloadState {
-            keys: PayloadKeys::generate(fresh, now),
-            cfg,
-            sessions: Sessions::default(),
-            attachments: BTreeSet::new(),
-            serving_at: BTreeMap::new(),
-            last_from: BTreeMap::new(),
-            agreed: BTreeMap::new(),
-            relocations: BTreeMap::new(),
-            device: [0; 32],
-            signed_bundle: None,
-            pending: BTreeMap::new(),
-            outstanding: BTreeMap::new(),
-            asked_at: BTreeMap::new(),
-            handed: BTreeMap::new(),
-            pool_reported: 0,
-            pools: BTreeMap::new(),
-            wanted: BTreeSet::new(),
-        }
-    }
-}
-
-impl PayloadState {
     /// **A ceremony's legs do not outlive the ceremony** [bench, 2026-10-24].
-    /// A step to a party with no session yet is queued for the session that
-    /// opens later; a conversation leg (kinds 9 to 24) so queued for a
-    /// ceremony that has since ended is a message to nobody — and two
-    /// phones that met again a day later each flushed 207 trace events of
-    /// an earlier exchange at the other, which the other rightly refused as
-    /// a stranger's. Drops them; what was queued for the application and
-    /// the rest stays. How many went.
+    /// A step to a party with no node key yet waits for one; a
+    /// conversation leg (kinds 9 to 24) so waiting for a ceremony that has
+    /// since ended is a message to nobody. Drops them; what waits for the
+    /// application and the rest stays. How many went.
     pub fn drop_legs(&mut self) -> usize {
         let mut dropped = 0;
         for waiting in self.pending.values_mut() {

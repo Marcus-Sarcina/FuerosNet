@@ -1,6 +1,6 @@
 # Test identities
 
-Generated against `wire-format.md` `6b8ecbaa3df46c10…`, `network-design.md` `f5143c59dc85cf3b…` and `light-client-requirements.md` `3b6ec31a89f1561a…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `2463498d5d2925f2…`, `network-design.md` `325815ea309dcd37…` and `light-client-requirements.md` `2125ca4680af75a2…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Canonical. Spec-derived, reproduced by the independent harness.** Derivation rules and
 status are in [README.md](README.md); regenerate with `tools/generate.py`.
@@ -66,7 +66,7 @@ RFC 8032.
 |---|---|---|
 | bob-instance | bob's infra instance, delegated by bob | `4e7155a88168080a59a432222b860ad2e5de5c4d16f50dd97e7c6f81ff87a792` |
 | carol-instance | carol's infra instance, delegated by carol | `874deac6d71fb6d081611b1194f3276692c78d437609521560d6a8fca164f4e8` |
-| alice-desktop | alice's desktop, a delegated device with prekeys of its own | `2ecba3992728f3bba8a1c8c5b74a7272e5ec070bd6e9da170855653b3db60c0b` |
+| alice-desktop | alice's desktop, a delegated device holding no seed | `2ecba3992728f3bba8a1c8c5b74a7272e5ec070bd6e9da170855653b3db60c0b` |
 
 The seed-holding device presents its identity's classical key and needs no
 delegation; as a device (`wire-format.md` §7.8) it is named by that key.

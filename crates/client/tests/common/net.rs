@@ -1,31 +1,57 @@
-//! **A network for the client's tests**: clients attached to serving
-//! nodes that hold their prekeys and their mail, every message carried
-//! where the client addressed it and whatever that causes carried in
-//! turn.
+//! **A network for the client's tests**: clients served by nodes that hold
+//! a node key for each recipient they serve and a queue of what was sealed
+//! to it, every message carried where the client addressed it and
+//! whatever that causes carried in turn.
 //!
 //! **It carries; it does not decide** [author, 2026-10-14]: "the harness
 //! should only drive actions as user or network inputs might and gather
 //! results". Nothing here knows the order of a ceremony's steps — the
-//! node's part is the real `PrekeyService` and the mail queue, the
-//! sessions are the clients' own, and [`Net::attend`] calls only what the
-//! shell calls, when the kernel's own `progress()` says it is due.
+//! node's part is the real `NodeKeyService` and a queue that delivers by
+//! position, the seals are the clients' own, and a node delivers on
+//! arrival to a recipient with a live session as the transport does
+//! (`wire-format.md` §7.10), or holds it until the recipient collects.
 
 use super::harness::*;
 use super::*;
-use rhtn_archive::prekey::*;
+use rhtn_archive::node_key::NodeKeyRequest;
+use rhtn_archive::sealed::Sealed;
+use rhtn_archive::submission::relayed;
 use rhtn_client::ceremony::*;
 use rhtn_client::payload::KIND_APPLICATION;
-use rhtn_node::prekeys::{PrekeyConfig, PrekeyService};
-use std::collections::{BTreeMap, VecDeque};
+use rhtn_node::node_keys::{NodeKeyConfig, NodeKeyService};
+use std::collections::{BTreeMap, BTreeSet};
 
-/// Mail waiting for one client: who sent each item and its bytes.
-pub type Mail = VecDeque<([u8; 32], Vec<u8>)>;
+/// One message a node holds for a recipient: its queue position, the
+/// node key it was sealed to, and the `Sealed` as submitted.
+#[derive(Debug, Clone)]
+pub struct Queued {
+    pub position: u64,
+    pub n: u64,
+    pub sealed: Vec<u8>,
+}
 
-/// A serving node as the harness stands it in: the prekeys it holds and
-/// the mail it queues for the clients it serves.
+/// A serving node as the harness stands it in: the node keys it holds for
+/// the recipients it serves and the queue of what was sealed to them.
+/// It speaks as the identity of its own name, which signs its node keys.
 pub struct ServingNode {
-    pub prekeys: PrekeyService,
-    pub queues: BTreeMap<[u8; 32], Mail>,
+    pub name: &'static str,
+    pub keys: NodeKeyService,
+    pub queues: BTreeMap<[u8; 32], Vec<Queued>>,
+    pub next: u64,
+}
+
+impl ServingNode {
+    /// The `RelayedPayload` this node hands `recipient` for `q`: the
+    /// position, the sealed bytes and the node's half beside them.
+    pub fn relayed(&self, recipient: &[u8; 32], q: &Queued) -> Vec<u8> {
+        let sealed = Sealed::decode(&q.sealed).expect("a seal the node took");
+        let ss_n = self
+            .keys
+            .open_half(recipient, q.n, &sealed.ct_n)
+            .map(|z| *z)
+            .expect("the node holds the key a queued message is sealed to");
+        relayed(q.position, &q.sealed, &ss_n)
+    }
 }
 
 /// Clients on a harness, each served by a node, every message moved by
@@ -34,13 +60,42 @@ pub struct Net {
     pub s: Setup,
     pub nodes: BTreeMap<&'static str, ServingNode>,
     pub served_by: BTreeMap<[u8; 32], &'static str>,
+    /// Every message a client handed the courier: `(from, where, msg)`.
     pub log: Vec<(String, String, Msg)>,
+    /// What arrived and was dispatched: `(sender, recipient, what)`.
     pub delivered: Vec<([u8; 32], [u8; 32], String)>,
+    /// What a recipient's node delivered and the recipient discarded:
+    /// `(recipient, why)`.
+    pub discarded: Vec<([u8; 32], String)>,
+    /// Every node-key fetch: the asker, the node asked and the request.
+    pub fetches: Vec<(String, &'static str, NodeKeyRequest)>,
+    /// Submissions a node refused for a node key it no longer accepts.
+    pub refused: Vec<([u8; 32], u64)>,
+    /// Clients holding no live session: what arrives for them waits at
+    /// their node until they collect.
+    pub away: BTreeSet<[u8; 32]>,
 }
 
 pub const CLIENTS: [&str; 5] = ["alice", "bob", "carol", "w1", "w2"];
 
+/// A network whose served clients each hold the others' introductions,
+/// as clients that exchanged cards do: every one of them can be written to.
 pub fn net(nodes: &[&'static str], serving: &[(&'static str, &'static str)]) -> Net {
+    let mut n = bare_net(nodes, serving);
+    let names: Vec<&'static str> = serving.iter().map(|(c, _)| *c).collect();
+    for a in &names {
+        for b in &names {
+            if a != b {
+                n.introduce(a, b);
+            }
+        }
+    }
+    n
+}
+
+/// The same with nobody introduced to anybody: each client holds the
+/// others' material and no encryption key of theirs.
+pub fn bare_net(nodes: &[&'static str], serving: &[(&'static str, &'static str)]) -> Net {
     let s = setup(&CLIENTS);
     net_of(s, nodes, serving)
 }
@@ -55,12 +110,10 @@ pub fn net_of(s: Setup, nodes: &[&'static str], serving: &[(&'static str, &'stat
             (
                 *n,
                 ServingNode {
-                    prekeys: PrekeyService::new(PrekeyConfig {
-                        one_time_per_requester_per_subject: 3,
-                        window_s: 3600,
-                        ..Default::default()
-                    }),
+                    name: n,
+                    keys: NodeKeyService::new(NodeKeyConfig::default()),
                     queues: BTreeMap::new(),
+                    next: 1,
                 },
             )
         })
@@ -72,6 +125,10 @@ pub fn net_of(s: Setup, nodes: &[&'static str], serving: &[(&'static str, &'stat
         served_by,
         log: Vec::new(),
         delivered: Vec::new(),
+        discarded: Vec::new(),
+        fetches: Vec::new(),
+        refused: Vec::new(),
+        away: BTreeSet::new(),
     }
 }
 
@@ -91,15 +148,10 @@ pub fn describe(d: &Dispatched) -> String {
         Dispatched::Response(r) => format!("Response({r:?})"),
         Dispatched::Conversation(c) => format!("Conversation({c})"),
         Dispatched::Peer(what) => format!("Peer({what})"),
+        Dispatched::Unverified { alias, bytes, .. } => {
+            format!("Unverified({alias}: {})", String::from_utf8_lossy(bytes))
+        }
     }
-}
-
-/// The device a seed-holding client presents: its classical member.
-pub fn phone_key(n: &str) -> [u8; 32] {
-    *rhtn_crypto::identity::testkit::test_identity(n)
-        .public
-        .ed
-        .as_bytes()
 }
 
 pub fn name(k: &[u8; 32]) -> String {
@@ -119,9 +171,23 @@ impl Net {
         self.served_by[client]
     }
 
-    /// The population a client at `node` prefetches: everyone served there and elsewhere.
+    /// The population a client prefetches: everyone served anywhere.
     pub fn population(&self) -> Vec<[u8; 32]> {
         self.served_by.keys().copied().collect()
+    }
+
+    /// `to` takes `from`'s introduction, as handed over out of band: its
+    /// material, its encryption key and where it sits.
+    pub fn introduce(&mut self, from: &str, to: &str) {
+        let card = self
+            .s
+            .client(from)
+            .own_introduction()
+            .expect("a client with a position introduces itself");
+        self.s
+            .client(to)
+            .take_introduction(&card)
+            .expect("an introduction verifies");
     }
 
     pub fn attach(&mut self, client: &str) {
@@ -131,9 +197,7 @@ impl Net {
         self.carry(kh(client), msgs);
     }
 
-    /// Sweep again: the first client to attach swept before the second had
-    /// published, and a recipient can only attribute an initial message
-    /// from a peer whose binding it holds.
+    /// Prefetch again: a sweep fetches the population's node keys.
     pub fn sweep(&mut self, client: &str) {
         let pop = self.population();
         let msgs = self.s.client(client).sweep(&pop);
@@ -144,164 +208,201 @@ impl Net {
     /// cause in turn.
     pub fn carry(&mut self, from: [u8; 32], msgs: Vec<Msg>) {
         for m in msgs {
-            let node = self.node_of(&from);
-            self.log.push((name(&from), node.to_string(), m.clone()));
+            let at = self
+                .served_by
+                .get(&from)
+                .map(|n| n.to_string())
+                .unwrap_or_else(|| "-".into());
+            self.log.push((name(&from), at, m.clone()));
             match m {
-                Msg::PublishBundle(b) => {
-                    self.nodes
-                        .get_mut(node)
-                        .unwrap()
-                        .prekeys
-                        .publish(&ids(), &b)
-                        .expect("a bundle by the client");
-                }
-                Msg::StockOneTime(keys) => {
-                    assert!(
-                        self.nodes.get_mut(node).unwrap().prekeys.stock(from, keys),
-                        "the pool takes the deposit"
-                    );
-                }
-                Msg::StockOneTimeAt { node: at, keys } => {
-                    // stocked at the node named: one pool per address
-                    let named = self
-                        .nodes
-                        .keys()
-                        .find(|n| kh(n) == at)
-                        .copied()
-                        .unwrap_or(node);
-                    assert!(
-                        self.nodes.get_mut(named).unwrap().prekeys.stock(from, keys),
-                        "the pool takes the deposit"
-                    );
-                }
-                Msg::PrekeyRequest(req) => {
-                    // a single-subject request goes to that subject's serving
-                    // node; a sweep to the requester's own
-                    let node = match PrekeyRequest::decode(&req).unwrap() {
-                        PrekeyRequest::One { subject, .. } => self.node_of(&subject),
-                        PrekeyRequest::Batch { .. } => node,
-                    };
-                    let now = self.now();
-                    let n = self.nodes.get_mut(node).unwrap();
-                    let reply = n.prekeys.answer(&from, &req, now).expect("a reply");
-                    let exhausted = n.prekeys.take_exhausted();
-                    self.log.push((
-                        node.to_string(),
-                        name(&from),
-                        Msg::PrekeyReply(reply.clone()),
-                    ));
-                    let more = self
-                        .s
-                        .h
-                        .client(&from)
-                        .take_prekey_reply(&reply)
-                        .expect("a reply the client can use");
-                    self.carry(from, more);
-                    for subject in exhausted {
-                        self.log
-                            .push((node.to_string(), name(&subject), Msg::PoolExhausted));
-                        let restock = self.s.h.client(&subject).on_pool_report(0);
-                        self.carry(subject, restock);
-                    }
-                }
-                Msg::Payload { to, bytes, .. } => {
-                    self.log.push((
-                        name(&from),
-                        name(&to),
-                        Msg::Payload {
-                            to,
-                            bytes: bytes.clone(),
-                            device: [0; 32],
-                        },
-                    ));
-                    // **as the courier delivers** (`adaptors/src/courier.rs`):
-                    // the introduction a first message carries is taken
-                    // first, then the submitter's binding the node attaches
-                    // where it holds one, then the message
-                    if let Some(i) = rhtn_client::payload::introduction_in(&bytes) {
-                        self.s.h.client(&to).take_cold_introduction(&from, &i);
-                    }
-                    if let Some(b) = self.nodes[node].prekeys.bundle(&from).cloned() {
-                        self.s.h.client(&to).take_binding(&b);
-                    }
+                Msg::NodeKeyRequest(recipients) => self.fetch(from, recipients),
+                Msg::Sealed { to, sealed, plain } => self.submit(from, to, sealed, plain),
+                Msg::Payload { to, bytes } => {
+                    // **the direct path**: the transport is end to end
+                    // between the two, so the peer is the sender
                     let d = self
                         .s
                         .h
                         .client(&to)
                         .receive_payload(from, &bytes)
-                        .expect("decrypts at the recipient");
+                        .expect("a direct message reads");
                     self.delivered.push((from, to, describe(&d)));
-                    // **what arriving caused goes out too**: a client
-                    // answering an archive fetch replies on the same
-                    // channel, and the reply is in its outbox
                     let back = self.s.h.client(&to).outbox();
                     self.carry(to, back);
                 }
-                Msg::Relay { to, bytes, .. } => {
-                    // my serving node hands it to the recipient's, which queues it
-                    let dest = self.node_of(&to);
-                    self.log.push((
-                        node.to_string(),
-                        dest.to_string(),
-                        Msg::Relay {
-                            to,
-                            bytes: bytes.clone(),
-                            device: [0; 32],
-                        },
-                    ));
-                    self.nodes
-                        .get_mut(dest)
-                        .unwrap()
-                        .queues
-                        .entry(to)
-                        .or_default()
-                        .push_back((from, bytes));
-                }
-                Msg::Transport(_) => {}
                 // a client's own records go up to its serving node, which
-                // is PRT-06's leg and not this harness's: here they are
-                // whatever the ceremony left in the outbox
-                Msg::Record(_) => {}
+                // is PRT-06's leg and not this harness's, and so do the
+                // profiles and horizon an attach publishes
+                Msg::Record(_)
+                | Msg::PublishProfile(_)
+                | Msg::AssertHorizon { .. }
+                | Msg::ProfileRequest(_) => {}
                 other => panic!("not a payload message: {other:?}"),
             }
         }
     }
 
-    /// The recipient collects its mail.
-    pub fn collect(&mut self, client: &str) -> Vec<String> {
-        let node = self.node_of(&kh(client));
+    /// **The courier's fetch** (`wire-format.md` §7.8): each recipient's
+    /// node asked about the recipients it serves, one request per node —
+    /// a batch where it serves several — and the reply handed back.
+    pub fn fetch(&mut self, from: [u8; 32], recipients: Vec<[u8; 32]>) {
+        let mut by_node: BTreeMap<&'static str, Vec<[u8; 32]>> = BTreeMap::new();
+        for r in recipients {
+            if let Some(node) = self.served_by.get(&r) {
+                by_node.entry(node).or_default().push(r);
+            }
+        }
+        for (node, rs) in by_node {
+            let mut nonce = [0u8; 16];
+            nonce[..8].copy_from_slice(&(self.fetches.len() as u64).to_be_bytes());
+            let req = NodeKeyRequest::for_recipients(rs, nonce).expect("a request");
+            self.fetches.push((name(&from), node, req.clone()));
+            let now = self.now();
+            let served = self.served_by.clone();
+            let reply = self
+                .nodes
+                .get_mut(node)
+                .unwrap()
+                .keys
+                .answer(
+                    &id(node),
+                    &|r| served.get(r) == Some(&node),
+                    &req.encode(),
+                    now,
+                )
+                .expect("a request the node reads");
+            let more =
+                self.s
+                    .h
+                    .client(&from)
+                    .take_node_key_reply(&kh(node), &req.recipients(), &reply);
+            self.carry(from, more);
+        }
+    }
+
+    /// **A relay submission** at the recipient's node: refused where it is
+    /// sealed to a node key the node no longer accepts, which the courier
+    /// meets by dropping the key, fetching the newest and sealing again;
+    /// otherwise queued, and delivered at once to a live session.
+    pub fn submit(&mut self, from: [u8; 32], to: [u8; 32], sealed: Vec<u8>, plain: Vec<u8>) {
+        let node = self.node_of(&to);
+        let n = Sealed::decode(&sealed).expect("a seal").n;
+        let now = self.now();
+        if !self.nodes[node].keys.accepts(&to, n, now) {
+            self.refused.push((to, n));
+            let c = self.s.h.client(&from);
+            c.node_key_refused(&to);
+            let again = c.reseal(to, plain).expect("sealed again");
+            self.carry(from, again);
+            return;
+        }
+        self.enqueue(to, n, sealed);
+    }
+
+    /// **A submission nobody will seal again**: `sealed` put to `to`'s
+    /// node as a captured copy would be. Whether the node took it.
+    pub fn inject(&mut self, to: [u8; 32], sealed: Vec<u8>) -> bool {
+        let node = self.node_of(&to);
+        let n = Sealed::decode(&sealed).expect("a seal").n;
+        let now = self.now();
+        if !self.nodes[node].keys.accepts(&to, n, now) {
+            self.refused.push((to, n));
+            return false;
+        }
+        self.enqueue(to, n, sealed);
+        true
+    }
+
+    /// Queued at `to`'s node, at the next position, and delivered at once
+    /// where `to` holds a live session.
+    fn enqueue(&mut self, to: [u8; 32], n: u64, sealed: Vec<u8>) {
+        let sn = self.nodes.get_mut(self.served_by[&to]).unwrap();
+        let position = sn.next;
+        sn.next += 1;
+        sn.queues.entry(to).or_default().push(Queued {
+            position,
+            n,
+            sealed,
+        });
+        if !self.away.contains(&to) {
+            self.deliver(&to);
+        }
+    }
+
+    /// What `client`'s node holds for it past its cursor, delivered in
+    /// order: each `RelayedPayload` handed to `receive_relayed`, and what
+    /// that causes carried. What each came to, or why it was discarded.
+    pub fn deliver(&mut self, client: &[u8; 32]) -> Vec<Result<String, String>> {
+        let node = self.node_of(client);
         let mut out = Vec::new();
-        while let Some((from, bytes)) = self
-            .nodes
-            .get_mut(node)
-            .unwrap()
-            .queues
-            .entry(kh(client))
-            .or_default()
-            .pop_front()
-        {
-            let d = self
+        loop {
+            let cursor = self
                 .s
+                .h
                 .client(client)
-                .receive_payload(from, &bytes)
-                .expect("decrypts at the recipient");
-            out.push(describe(&d));
+                .payload
+                .cursors
+                .get(&kh(node))
+                .copied()
+                .unwrap_or(0);
+            let sn = &self.nodes[node];
+            let Some(q) = sn
+                .queues
+                .get(client)
+                .and_then(|qs| qs.iter().find(|q| q.position > cursor))
+                .cloned()
+            else {
+                break;
+            };
+            let bytes = sn.relayed(client, &q);
+            match self.s.h.client(client).receive_relayed(kh(node), &bytes) {
+                Ok((sender, d)) => {
+                    let what = describe(&d);
+                    self.delivered.push((sender, *client, what.clone()));
+                    out.push(Ok(what));
+                }
+                Err(why) => {
+                    self.discarded.push((*client, why.clone()));
+                    out.push(Err(why));
+                }
+            }
+            let back = self.s.h.client(client).outbox();
+            self.carry(*client, back);
         }
         out
     }
 
-    /// The next item waiting for `client`, raw: what its serving node
-    /// would hand over, before the client reads it.
-    pub fn queued(&mut self, client: &str) -> ([u8; 32], Vec<u8>) {
+    /// The recipient collects what waits at its node: what each came to,
+    /// panicking on a discard.
+    pub fn collect(&mut self, client: &str) -> Vec<String> {
+        self.deliver(&kh(client))
+            .into_iter()
+            .map(|r| r.expect("opens at the recipient"))
+            .collect()
+    }
+
+    /// What `client`'s node would hand it now, raw, before the client
+    /// reads any of it: every `RelayedPayload` past its cursor.
+    pub fn queued(&mut self, client: &str) -> Vec<Vec<u8>> {
         let node = self.node_of(&kh(client));
-        self.nodes
-            .get_mut(node)
-            .unwrap()
-            .queues
-            .entry(kh(client))
-            .or_default()
-            .pop_front()
-            .expect("something waiting")
+        let cursor = self
+            .s
+            .client(client)
+            .payload
+            .cursors
+            .get(&kh(node))
+            .copied()
+            .unwrap_or(0);
+        let sn = &self.nodes[node];
+        sn.queues
+            .get(&kh(client))
+            .map(|qs| {
+                qs.iter()
+                    .filter(|q| q.position > cursor)
+                    .map(|q| sn.relayed(&kh(client), q))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     pub fn send(&mut self, from: &str, to: &str, text: &str) {
@@ -313,16 +414,24 @@ impl Net {
         self.carry(kh(from), msgs);
     }
 
-    pub fn requests(&self, from: &str) -> Vec<PrekeyRequest> {
+    /// The node-key requests `from` made, in order.
+    pub fn requests(&self, from: &str) -> Vec<NodeKeyRequest> {
+        self.fetches
+            .iter()
+            .filter(|(f, _, _)| f == from)
+            .map(|(_, _, r)| r.clone())
+            .collect()
+    }
+
+    /// The sealed submissions `from` made to `to`, in order.
+    pub fn sealed_to(&self, from: &str, to: &str) -> Vec<Vec<u8>> {
         self.log
             .iter()
-            .filter(|(f, _, m)| f == from && matches!(m, Msg::PrekeyRequest(_)))
-            .map(|(_, _, m)| {
-                if let Msg::PrekeyRequest(b) = m {
-                    PrekeyRequest::decode(b).unwrap()
-                } else {
-                    unreachable!()
+            .filter_map(|(f, _, m)| match m {
+                Msg::Sealed { to: t, sealed, .. } if f == from && *t == kh(to) => {
+                    Some(sealed.clone())
                 }
+                _ => None,
             })
             .collect()
     }

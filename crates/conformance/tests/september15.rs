@@ -55,14 +55,6 @@ fn t01_node_must_not_store_or_forward_a_second_occupant_of_a_filled_slot(){
  assert!(!held&&!sent,"D 3.1: filled-slot adoption is refused at storage, not stored and flooded before table refusal; decision={result:?}, stored={held}, sent={sent}");
 }
 #[test]
-fn s04_upgrade_must_remove_the_previously_written_requester_subject_log(){
- use rhtn_node::prekeys::{PrekeyService,PrekeyConfig};
- let dir=std::env::temp_dir().join(format!("rhtn-review-legacy-{}",std::process::id()));std::fs::create_dir_all(dir.join("prekeys")).unwrap();let path=dir.join("prekeys/issued");
- std::fs::write(&path,format!("{} {} 100 1\n","aa".repeat(32),"bb".repeat(32))).unwrap();
- let mut p=PrekeyService::at(&dir,PrekeyConfig::default()).unwrap();p.expire(10000);p.save(&dir).unwrap();let retained=std::fs::read_to_string(path).unwrap_or_default();std::fs::remove_dir_all(dir).unwrap();
- assert!(retained.is_empty(),"I 6: upgrading/expiring must not leave the old durable requester-subject log indefinitely");
-}
-#[test]
 fn s02_recovery_must_forget_the_superseded_clients_wake_endpoint(){
  let (old,p,former,new)=(test_identity("alice"),Arc::new(test_identity("bob")),test_identity("carol"),test_identity("alice2"));let ids=vec![old.public.clone(),p.public.clone(),former.public.clone(),new.public.clone()];let a=adoption(&old,&p,&former,0,100);
  let mut v=NodeView::new(p.clone(),Locator::root(p.public.keyhash,Seqno{series:1,counter:0}));let adj=Adj::default();assert_eq!(v.take_object(&adj,&p.public.keyhash,KIND_TRANSACTION,&a.bytes,&ids),Decision::Stored);

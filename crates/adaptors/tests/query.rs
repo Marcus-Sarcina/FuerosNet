@@ -33,7 +33,7 @@ fn host(name: &'static str, cfg: Config, serving: &Arc<dyn Serving>, inboxes: &I
     let handle = spawn_client(name, cfg, reachable.clone());
     let (courier, app) = Courier::new(handle.clone(), Arc::new(NoDirect(reachable)));
     courier.serve_also(serving.clone());
-    inboxes.host(kh(name), courier.inbound());
+    inboxes.host(kh(name), courier.inbound_via(serving.me()));
     Party {
         handle,
         courier,
@@ -70,6 +70,37 @@ async fn a_query_reaches_its_verifier_on_the_end_to_end_path_and_the_answer_come
     let mut alice = host("alice", buffered(400), &serving, &inboxes);
     let w1 = host("w1", buffered(400), &serving, &inboxes);
     let mut w2 = host("w2", buffered(400), &serving, &inboxes);
+    // alice holds w1's card: the query is sealed to its verifier, and a
+    // client writes only to a party whose encryption key it holds [author,
+    // 2026-11-20]. w1 learns alice from the introduction inside the seal
+    let (w1_id, w1_ek) = (
+        id("w1").public.clone(),
+        rhtn_crypto::encryption_key::own(&id("w1")),
+    );
+    alice
+        .handle
+        .with(move |c| {
+            c.contact(&w1_id, rhtn_client::contacts::How::Introduced, false);
+            if let Some(contact) = c.store.contacts.get_mut(&w1_id.keyhash) {
+                contact.encryption_key = Some(w1_ek);
+            }
+        })
+        .await;
+    // and w1 holds w2's: a verifier is one of the subject's prior
+    // counterparties (design §5.5), met and so held with its card, which is
+    // what the copy of its response to w2 is sealed to
+    let (w2_id, w2_ek) = (
+        id("w2").public.clone(),
+        rhtn_crypto::encryption_key::own(&id("w2")),
+    );
+    w1.handle
+        .with(move |c| {
+            c.contact(&w2_id, rhtn_client::contacts::How::Introduced, false);
+            if let Some(contact) = c.store.contacts.get_mut(&w2_id.keyhash) {
+                contact.encryption_key = Some(w2_ek);
+            }
+        })
+        .await;
     for p in [&alice, &w1, &w2] {
         p.courier
             .attach(vec![kh("alice"), kh("w1"), kh("w2")])

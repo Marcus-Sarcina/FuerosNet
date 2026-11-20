@@ -5,8 +5,8 @@
 //! §7.8.1) [author, 2026-11-20].
 //!
 //! What is here is the draft to the byte, checked against its Appendix C
-//! (`tests/xwing.rs`).  Randomness is the caller's, as it is in
-//! [`crate::pqxdh`]: [`encapsulate`] takes the 64 bytes the draft's
+//! (`tests/seal.rs`).  Randomness is the caller's, as it is
+//! everywhere in this crate: [`encapsulate`] takes the 64 bytes the draft's
 //! derandomised form takes, so the same function is what the vectors
 //! check and what a sender runs.
 

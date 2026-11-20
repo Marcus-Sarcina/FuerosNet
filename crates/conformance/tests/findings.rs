@@ -115,10 +115,10 @@ fn f09_queue_restart_in_same_second_must_not_overwrite() {
     use rhtn_node::queue::{DirStore, QueueStore, Queued};
     let dir = std::env::temp_dir().join(format!("rhtn-review-queue-{}", std::process::id()));
     let first = DirStore::new(&dir);
-    first.push(Queued { recipient: [7;32], device: [0;32], arrival: 100, ciphertext: vec![1] });
+    first.push(Queued { recipient: [7;32], position: first.next_position(&[7;32]), n: 1, arrival: 100, delivered_at: None, sealed: vec![1] });
     drop(first);
     let second = DirStore::new(&dir);
-    second.push(Queued { recipient: [7;32], device: [0;32], arrival: 100, ciphertext: vec![2] });
+    second.push(Queued { recipient: [7;32], position: second.next_position(&[7;32]), n: 1, arrival: 100, delivered_at: None, sealed: vec![2] });
     let got = second.list(&[7;32]);
     std::fs::remove_dir_all(dir).unwrap();
     assert_eq!(got.len(), 2, "accepted queued messages survive a restart in their arrival second");
@@ -324,7 +324,7 @@ async fn n06_fragmented_control_frame_survives_an_outbound_event() {
         let client=tls::client_endpoint("127.0.0.1:0".parse().unwrap()).unwrap();
         let conn=tls::dial(&client,&n,&pins,&p.public.keyhash,addr).unwrap().await.unwrap();
         let (mut send,mut recv)=conn.open_bi().await.unwrap();
-        send.write_all(&control_frame(FRAME_ATTACH,&encode_attach(&n.public.keyhash,None,&Default::default(), None))).await.unwrap();
+        send.write_all(&control_frame(FRAME_ATTACH,&encode_attach(&n.public.keyhash,None,&Default::default(), None, None))).await.unwrap();
         assert!(matches!(read_frame(&mut recv,1_000_000).await,FrameRead::Payload(_)));
         send.write_all(&control_frame(FRAME_HEARTBEAT,&encode_heartbeat(0,100))).await.unwrap();
         sleep(Duration::from_millis(80)).await;
@@ -352,8 +352,8 @@ fn n07_concurrent_enqueue_must_enforce_the_recipient_cap() {
     // the repaired implementation intentionally serialises that method.
     let start=std::sync::Barrier::new(2);
     let results=std::thread::scope(|s| {
-        let a=s.spawn(||{start.wait();node.enqueue([7;32],vec![1])});
-        let b=s.spawn(||{start.wait();node.enqueue([7;32],vec![2])});
+        let a=s.spawn(||{start.wait();node.enqueue([7;32],vec![1],1)});
+        let b=s.spawn(||{start.wait();node.enqueue([7;32],vec![2],1)});
         [a.join().unwrap(),b.join().unwrap()]
     });
     assert_eq!(results.iter().filter(|r|r.is_ok()).count(),1);

@@ -45,7 +45,7 @@ Three things this buys beyond interoperability:
   itself**, which this profile must supply. RFC 9052's `Sig_structure` context
   string is `"Signature"` or `"Signature1"`, distinguishing *COSE structure types*,
   not application roles. **COSE does not give role
-  separation for free**, and this protocol has **fifteen** signing roles, and will acquire more. See
+  separation for free**, and this protocol has **sixteen** signing roles, and will acquire more. See
   §1.1-§1.4 for the required profile rules.
 - **A place to put the algorithm identifier.** RFC 9052 requires `alg` to be
   authenticated but permits it either in the protected header **or as externally
@@ -3409,8 +3409,9 @@ SealedBody = [
                        ;   is the header that indexes a thread, two
                        ;   senders of one alias kept apart by the keyhash
                        ;   [author, 2026-11-20]; neither is an address
-  Introduction / nil,  ; the sender's own (§2.3), on its first message to this
-                       ;   recipient; nil otherwise
+  Introduction / nil,  ; the sender's own (§2.3), on its messages to this
+                       ;   recipient until it has had a reply from it, and
+                       ;   nil from then [author, 2026-11-20]
   uint,                ; the kind (§7.10.1)
   bstr,                ; the bytes
   bstr .size 32        ; the tag

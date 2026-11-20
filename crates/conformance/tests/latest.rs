@@ -1,29 +1,29 @@
 //! Additional checks of newly implemented or changed paths in this review.
 use rhtn_crypto::identity::testkit::test_identity;
-use rhtn_archive::{tx::*, prekey::*};
+use rhtn_archive::tx::*;
 use std::sync::Arc;
 
 /// The subnet the fixtures' positions are in (`wire-format.md` §2.3 field 4).
 const SUBNET: [u8; 32] = [0xdb; 32];
 
+// 2026-11-20, slice 2: the one-time pool this was filed against is gone;
+// a node key's private half is what a node deletes now, and it is unlinked
+// as it goes rather than at a save, so a reload is the whole claim
 #[test]
-fn r11_snapshot_save_must_remove_consumed_one_time_keys() {
-    use rhtn_node::prekeys::{PrekeyService,PrekeyConfig};
+fn r11_a_reload_must_not_resurrect_a_deleted_node_key() {
+    use rhtn_node::node_keys::{NodeKeyService,NodeKeyConfig};
     let dir=std::env::temp_dir().join(format!("rhtn-review-snapshot-{}",std::process::id()));
-    let (s,r)=(test_identity("alice"),test_identity("bob"));
-    let mut pool=PrekeyService::new(PrekeyConfig::default());
-    pool.publish(&vec![s.public.clone()],&PrekeyBundle::build(&s,1,b"opaque",100, &[0u8; 32])).unwrap();
-    assert!(pool.stock(s.public.keyhash,vec![vec![7]]));
-    pool.save(&dir).unwrap();
-    let mut pool=PrekeyService::load(&dir,PrekeyConfig::default()).unwrap();
-    let req=PrekeyRequest::One {subject:s.public.keyhash,one_time:true,nonce:[1;16],device: Some([0u8; 32])}.encode();
-    let reply=PrekeyReply::decode(&pool.answer(&r.public.keyhash,&req,101).unwrap()).unwrap();
-    assert_eq!(reply.one_time,Some(vec![7]),"control: the key was issued");
-    assert_eq!(pool.pool_size(&s.public.keyhash),0);
-    pool.save(&dir).unwrap();
-    let reloaded=PrekeyService::load(&dir,PrekeyConfig::default()).unwrap();
+    let _=std::fs::remove_dir_all(&dir);
+    let (n,r)=(test_identity("bob"),test_identity("alice"));
+    let cfg=||NodeKeyConfig {rotate_secs:0,grace_secs:0};
+    let mut keys=NodeKeyService::at(&dir,cfg()).unwrap();
+    keys.newest(&n,&r.public.keyhash,100);
+    keys.newest(&n,&r.public.keyhash,100);
+    assert_eq!(keys.held(&r.public.keyhash),vec![1,2],"control: rotated, the retired key held until pruned");
+    assert_eq!(keys.prune(&r.public.keyhash,&|_|false,100),1,"control: the key nothing is sealed to is deleted");
+    let reloaded=NodeKeyService::at(&dir,cfg()).unwrap();
     std::fs::remove_dir_all(&dir).unwrap();
-    assert_eq!(reloaded.pool_size(&s.public.keyhash),0,"wire section 7.8: even a completed explicit save must not resurrect a consumed key");
+    assert_eq!(reloaded.held(&r.public.keyhash),vec![2],"wire section 7.8: a reload must not resurrect a deleted node key");
 }
 
 #[tokio::test]

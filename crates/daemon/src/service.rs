@@ -9,7 +9,7 @@ use crate::config::Config;
 use rhtn_archive::Keyhash;
 use rhtn_archive::topology::{Restored, Snapshot};
 use rhtn_crypto::{Identity, SigningIdentity};
-use rhtn_node::prekeys::{PrekeyConfig, PrekeyService};
+use rhtn_node::node_keys::{NodeKeyConfig, NodeKeyService};
 use rhtn_node::resolution::AnchorTable;
 use rhtn_node::runtime::{LiveNode, RateLimit};
 use rhtn_node::store::TopologyStore;
@@ -156,7 +156,7 @@ pub struct Service {
     pub node: Arc<LiveNode>,
     /// Where the prekey pools and the topology store are kept.  Held so
     /// shutdown writes them to the same places startup read them from.
-    prekeys: std::path::PathBuf,
+    keys: std::path::PathBuf,
     topology: std::path::PathBuf,
     archive: std::path::PathBuf,
     /// Whether this node runs a backend of its own for any resource, which
@@ -505,15 +505,16 @@ impl Service {
         };
         // consumable state first, and its absence is a first start rather
         // than a failure: a directory that is not there yet is empty
-        // kept at its directory rather than snapshotted into it: a
-        // one-time key is spent on disk before its reply goes out, so a
-        // stop between snapshots cannot bring a served key back
-        let prekeys = PrekeyService::at(&cfg.prekeys, PrekeyConfig::default())
-            .map_err(|e| Startup::State(format!("{}: {e}", cfg.prekeys.display())))?;
-        // the profiles beside the prekeys: published to be read, written
+        // kept at its directory rather than snapshotted into it: a node
+        // key is written when it is made and unlinked when it goes, so a
+        // stop between snapshots neither loses one a queued message needs
+        // nor brings back one deleted
+        let node_keys = NodeKeyService::at(&cfg.keys, NodeKeyConfig::default())
+            .map_err(|e| Startup::State(format!("{}: {e}", cfg.keys.display())))?;
+        // the profiles beside the node keys: published to be read, written
         // as they are taken (`wire-format.md` §7.11)
-        let profiles = rhtn_node::profiles::ProfileStore::at(&cfg.prekeys)
-            .map_err(|e| Startup::State(format!("{}: {e}", cfg.prekeys.display())))?;
+        let profiles = rhtn_node::profiles::ProfileStore::at(&cfg.keys)
+            .map_err(|e| Startup::State(format!("{}: {e}", cfg.keys.display())))?;
         let store = match TopologyStore::load(&cfg.topology) {
             Ok(s) => s,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => TopologyStore::new(),
@@ -556,7 +557,7 @@ impl Service {
         if cfg.acknowledge {
             view.ack_policy = Some(Arc::new(|_, _| true));
         }
-        view.prekeys = prekeys;
+        view.node_keys = node_keys;
         view.profiles = profiles;
         // this key's own signed history, kept apart from the seen-set: the
         // horizon bounds one and nothing bounds the other [author,
@@ -965,7 +966,7 @@ impl Service {
             bell: crate::doorbell::Bell::native(None),
             node,
             presenter,
-            prekeys: cfg.prekeys.clone(),
+            keys: cfg.keys.clone(),
             topology: cfg.topology.clone(),
             archive: cfg.archive.clone(),
             hosts_resources,
@@ -1066,18 +1067,23 @@ impl Service {
         }
     }
 
-    /// Routine maintenance: one-time keys whose window has passed are
-    /// dropped (`wire-format.md` §7.8).
-    ///
-    /// **The subjects whose pools ran dry are drained and not delivered.**
-    /// `infra-client-requirements.md` §6 obliges a node to tell them, and
-    /// no wire object carries it. Until one is specified the daemon can
-    /// only take them off the list, which is recorded rather than hidden.
-    pub fn maintain(&self) -> Vec<Keyhash> {
+    /// **Routine maintenance** (design §14.1.6, §14.2.4.3): a delivered
+    /// message past its retention is removed, and a node key's private half
+    /// goes once its grace has run and no queued message is sealed to it.
+    /// How many messages and how many keys went.
+    pub fn maintain(&self) -> (usize, usize) {
+        // the queue first, outside the view: a removal tells the node-key
+        // service, which takes the view itself
+        let messages = self.node.node.expire();
+        let queue = self.node.node.cfg.queue.clone();
         let mut view = self.node.view.lock().unwrap();
         let now = view.now();
-        view.prekeys.expire(now);
-        view.prekeys.take_exhausted()
+        let mut keys = 0;
+        for r in view.node_keys.recipients() {
+            let held: Vec<u64> = queue.list(&r).iter().map(|m| m.n).collect();
+            keys += view.node_keys.prune(&r, &|n| held.contains(&n), now);
+        }
+        (messages, keys)
     }
 
     /// **§10.2's periodic pass over the role table**: where a grant's expiry
@@ -1172,8 +1178,7 @@ impl Service {
 
     fn write_back(&self) -> Result<(), std::io::Error> {
         let view = self.node.view.lock().unwrap();
-        view.prekeys.save(&self.prekeys)?;
-        view.profiles.save(&self.prekeys)?;
+        view.profiles.save(&self.keys)?;
         view.archive.save(&self.archive)?;
         view.store.save(&self.topology)?;
         // the derived state last, so it is never newer than the store it
@@ -1220,8 +1225,9 @@ impl Service {
                 _ = tick.tick() => {
                     self.ring_owed();
                     self.mind_the_run();
-                    for dry in self.maintain() {
-                        crate::say!("rhtnd: one-time pool exhausted for {}", hex8(&dry));
+                    let (messages, keys) = self.maintain();
+                    if messages + keys > 0 {
+                        tracing::info!(target: "daemon", step = "maintain", messages, keys, "daemon.lifecycle");
                     }
                     for why in self.federate().refused {
                         crate::say!("rhtnd: federation: {why}");
@@ -1284,6 +1290,7 @@ fn client_config(
         filter: None,
         sibling_cache: Arc::new(std::sync::Mutex::new(Vec::new())),
         addresses: Arc::new(std::sync::Mutex::new(book)),
+        cursors: Default::default(),
         tls: Arc::new(std::sync::Mutex::new(Default::default())),
         connect_timeout: Duration::from_secs(5),
         on_reachability: None,

@@ -6614,10 +6614,11 @@ the two together tell apart two senders who chose one alias wherever messages
 are indexed [author, 2026-11-20]. The header is not an address: **a recipient
 replies to a sender it holds as a contact, and to no other** [author,
 2026-11-20], which is wanted, since a stranger's mail that cannot be answered
-gives a spammer or an impostor nothing to work. And the sender's introduction rides on the first message to a
-recipient and not after, so a device that has lost what it held of a sender —
-one restored from the phrase, collecting mail still queued — opens a message it
-has no introduction to check the tag against. It shows it under the alias as
+gives a spammer or an impostor nothing to work. And the sender's introduction rides on its messages to a
+recipient until it has had a reply, and not after [author, 2026-11-20], so a
+device that has lost what it held of a sender — one restored from the phrase,
+collecting mail still queued — opens a later message it has no introduction to
+check the tag against. It shows it under the alias as
 unverified. A sender it holds as a contact it holds an introduction for, so
 what cannot be checked is a stranger's, and a stranger is not answered.
 

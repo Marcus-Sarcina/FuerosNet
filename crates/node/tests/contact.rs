@@ -35,6 +35,7 @@ fn requester(me: &str, pins: Pins, per_endpoint: Duration) -> ClientConfig {
         filter: None,
         sibling_cache: Arc::new(Mutex::new(Vec::new())),
         addresses: Arc::new(Mutex::new(Default::default())),
+        cursors: Default::default(),
         tls: Arc::new(Mutex::new(Default::default())),
         connect_timeout: per_endpoint,
         on_reachability: None,

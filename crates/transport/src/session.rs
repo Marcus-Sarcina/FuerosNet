@@ -528,17 +528,22 @@ fn field_bytes(b: &[u8], at: usize, key: u64) -> Option<Vec<u8>> {
 }
 
 /// An `Attach` (`wire-format.md` §8.2): field 4 carries the client's own
-/// delegation where the key it presented is a delegated one.
+/// delegation where the key it presented is a delegated one, and field 5
+/// the newest queue position this device holds, where it holds any
+/// (§7.10).
 pub fn encode_attach(
     keyhash: &[u8; 32],
     attestation: Option<&[u8]>,
     caps: &BTreeMap<u64, Vec<u8>>,
     delegation: Option<&[u8]>,
+    cursor: Option<u64>,
 ) -> Vec<u8> {
     let mut out = Vec::new();
     emit_map_head(
         &mut out,
-        2 + attestation.is_some() as usize + delegation.is_some() as usize,
+        2 + attestation.is_some() as usize
+            + delegation.is_some() as usize
+            + cursor.is_some() as usize,
     );
     emit_uint(&mut out, 1);
     emit_bstr(&mut out, keyhash);
@@ -551,6 +556,10 @@ pub fn encode_attach(
     if let Some(d) = delegation {
         emit_uint(&mut out, 4);
         out.extend_from_slice(d);
+    }
+    if let Some(c) = cursor {
+        emit_uint(&mut out, 5);
+        emit_uint(&mut out, c);
     }
     out
 }
@@ -1072,6 +1081,33 @@ pub type RequestHandler = Arc<
         + Sync,
 >;
 
+/// The node's half of one queued message (`wire-format.md` §7.10): the
+/// shared secret its `ctN` carries, decapsulated under the node key the
+/// message was sealed to, or nothing where that key is no longer held.
+pub type OpenHalf =
+    Arc<dyn Fn(&[u8; 32], &Queued) -> Option<zeroize::Zeroizing<[u8; 32]>> + Send + Sync>;
+
+/// A message left the queue: the recipient and the node key it was sealed
+/// to, so the key's holder can delete a private half no message needs any
+/// longer (design §14.2.4.3).
+pub type RemovedHook = Arc<dyn Fn(&[u8; 32], u64) + Send + Sync>;
+
+/// How long a delivered message is kept from its first delivery, as
+/// shipped: **thirty days** [author, 2026-11-19], each node's own to change
+/// (design §14.1.6, §21.1.1).
+pub const RETENTION_SECS: u64 = 30 * 86_400;
+
+/// **Who a minted connection speaks as: nobody** (`wire-format.md` §9.1).
+/// The keyhash a request handler is given for a request made under a
+/// transport key minted for it, which names no identity.
+pub const MINTED: [u8; 32] = [0; 32];
+
+/// What a minted connection may ask (`wire-format.md` §9.1): a node-key
+/// fetch or a relay submission, and nothing else.
+pub fn minted_may_ask(f: Family) -> bool {
+    matches!(f, Family::NodeKeyRequestOrBatch | Family::RelaySubmission)
+}
+
 /// A session's name: the identity it speaks for and the device it speaks
 /// from, the key the handshake presented (`wire-format.md` §8.2: an attach
 /// speaks for a device, and a subject's several devices are several
@@ -1113,6 +1149,14 @@ pub struct NodeConfig {
     /// Per-subordinate storage cap in bytes; unset by design §21.1, the
     /// operator's.  None is unbounded.
     pub queue_cap: Option<usize>,
+    /// How long a delivered message is kept from its first delivery, in
+    /// seconds ([`RETENTION_SECS`] as shipped).
+    pub retention_secs: u64,
+    /// The node's half of a queued message at delivery.  Absent, a
+    /// harness with no node keys, the half delivered is zeros.
+    pub open_half: Option<OpenHalf>,
+    /// Told when a message leaves the queue.
+    pub on_removed: Option<RemovedHook>,
     /// The node's clock, for arrival times.
     pub clock: Arc<dyn Fn() -> u64 + Send + Sync>,
     /// Whether this node holds a record of a keyhash at all.  A message for
@@ -1190,6 +1234,9 @@ impl NodeConfig {
             on_request: None,
             queue: Arc::new(queue::MemoryStore::default()),
             queue_cap: None,
+            retention_secs: RETENTION_SECS,
+            open_half: None,
+            on_removed: None,
             clock,
             log: Log::default(),
         }
@@ -1215,6 +1262,10 @@ impl NodeConfig {
 struct NodeState {
     /// One drain at a time per recipient's device.
     drains: HashMap<Peer, Arc<tokio::sync::Mutex<()>>>,
+    /// The newest position each session holds: what its `Attach` field 5
+    /// said, advanced with every delivery on it (`wire-format.md` §7.10).
+    /// The session's own and gone with it; nothing per device outlives it.
+    cursors: HashMap<Peer, u64>,
     reach: HashMap<Peer, Arc<Mutex<Reachability>>>,
     /// One session per device (`wire-format.md` §8.2).
     sessions: HashMap<Peer, Connection>,
@@ -1263,37 +1314,27 @@ impl Node {
         self.relayed.load(std::sync::atomic::Ordering::Relaxed)
     }
 
-    /// Accept material for a client: delivered now on a unidirectional
-    /// stream if a session is up, otherwise queued — unless the recipient's
-    /// queue is at its cap, when the newest is refused and the sender told
-    /// (design §14.1.6), or the credential is one this node has verified
-    /// superseded (design §12.6.5).
+    /// **Take a sealed message for a recipient** (design §14.1.6): stored,
+    /// then delivered on every live session the recipient holds.  Refused
+    /// for a recipient this node holds no record of or has verified
+    /// superseded, and at the cap where nothing delivered can make room.
+    /// `n` is the node key it was sealed to, which the caller has checked
+    /// it accepts (`wire-format.md` §7.8). The position it took, or why
+    /// not.
     pub fn enqueue(
         self: &Arc<Self>,
         keyhash: [u8; 32],
-        bytes: Vec<u8>,
-    ) -> Result<(), queue::Refusal> {
-        self.enqueue_for(keyhash, queue::ANY_DEVICE, bytes)
-    }
-
-    /// `enqueue` for the recipient's `device` (`wire-format.md` §7.10): the
-    /// ciphertext is readable by one device, and that device's session is
-    /// the one it is delivered on (design §14.1.6).  `ANY_DEVICE` is
-    /// delivered on whichever of the recipient's sessions drains first.
-    pub fn enqueue_for(
-        self: &Arc<Self>,
-        keyhash: [u8; 32],
-        device: [u8; 32],
-        bytes: Vec<u8>,
-    ) -> Result<(), queue::Refusal> {
-        let size = bytes.len();
-        let r = self.store_for(keyhash, device, bytes);
+        sealed: Vec<u8>,
+        n: u64,
+    ) -> Result<u64, queue::Refusal> {
+        let size = sealed.len();
+        let r = self.store(keyhash, sealed, n);
         tracing::debug!(
             target: "transport",
             recipient8 = %hex8(&keyhash),
             bytes = size,
             outcome = %match &r {
-                Ok(()) => "Stored".to_string(),
+                Ok(p) => format!("Stored({p})"),
                 Err(why) => format!("Refused({why:?})"),
             },
             "node.mailbox"
@@ -1301,71 +1342,146 @@ impl Node {
         r
     }
 
-    fn store_for(
+    fn store(
         self: &Arc<Self>,
         keyhash: [u8; 32],
-        device: [u8; 32],
-        bytes: Vec<u8>,
-    ) -> Result<(), queue::Refusal> {
+        sealed: Vec<u8>,
+        n: u64,
+    ) -> Result<u64, queue::Refusal> {
         if !(self.cfg.serves)(&keyhash) {
             return Err(queue::Refusal::NoRecord);
         }
-        let conn = {
-            let st = self.state.lock().unwrap();
-            if st.superseded.get(&keyhash).is_some_and(|s| *s != keyhash) {
-                return Err(queue::Refusal::Superseded);
-            }
-            // a client this node has marked unreachable is queued for, not
-            // delivered to: the material waits for its return (design
-            // §14.1.2).  A session object outlives the reachability the
-            // detector settled on, and the detector is what decides.
-            let live_session = st
-                .sessions
-                .iter()
-                .find(|((kh, d), _)| *kh == keyhash && queue::for_device_key(&device, d))
-                .map(|(peer, c)| (*peer, c.clone()));
-            match live_session {
-                Some((peer, c)) => {
-                    let live = st
-                        .reach
-                        .get(&peer)
-                        .map(|r| *r.lock().unwrap())
-                        .or_else(|| st.marked.get(&keyhash).copied());
-                    if live == Some(Reachability::Unreachable) {
-                        None
-                    } else {
-                        Some((peer, c))
-                    }
-                }
-                None => None,
-            }
-        };
-        // the cap is read and the message stored under one gate: capacity is
-        // reserved and taken as one step, so a concurrent submission sees
-        // the store this one leaves
-        let _gate = self.queue_gate.lock().unwrap();
-        if let Some(cap) = self.cfg.queue_cap
-            && self.cfg.queue.occupied(&keyhash) + bytes.len() > cap
+        if self
+            .state
+            .lock()
+            .unwrap()
+            .superseded
+            .get(&keyhash)
+            .is_some_and(|s| *s != keyhash)
         {
-            return Err(queue::Refusal::AtCap);
+            return Err(queue::Refusal::Superseded);
         }
-        // accepted means stored: the message enters the mailbox, and a live
-        // session drains it from there, so nothing is reported delivered
-        // before the peer has taken it
-        if !self.cfg.queue.push(Queued {
-            ciphertext: bytes,
-            recipient: keyhash,
-            device,
-            arrival: (self.cfg.clock)(),
-        }) {
-            return Err(queue::Refusal::NotStored);
-        }
+        let now = (self.cfg.clock)();
+        // the cap is read, room made and the message stored under one
+        // gate: capacity is reserved and taken as one step, so a
+        // concurrent submission sees the store this one leaves
+        let position = {
+            let _gate = self.queue_gate.lock().unwrap();
+            self.expire_for(&keyhash, now);
+            if let Some(cap) = self.cfg.queue_cap {
+                self.make_room(&keyhash, self.cfg.queue.cost(sealed.len()), cap)?;
+            }
+            let position = self.cfg.queue.next_position(&keyhash);
+            // accepted means stored: the message enters the mailbox, and a
+            // live session drains it from there
+            if !self.cfg.queue.push(Queued {
+                sealed,
+                recipient: keyhash,
+                n,
+                position,
+                arrival: now,
+                delivered_at: None,
+            }) {
+                return Err(queue::Refusal::NotStored);
+            }
+            position
+        };
         self.relayed
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        if let Some(((_, d), conn)) = conn {
-            tokio::spawn(drain(self.clone(), keyhash, d, conn));
+        for (peer, conn) in self.live_sessions(&keyhash) {
+            tokio::spawn(drain(self.clone(), peer.0, peer.1, conn));
+        }
+        Ok(position)
+    }
+
+    /// **At the ceiling, the oldest delivered message goes first** [author,
+    /// 2026-11-19]: delivered ones are removed oldest first until `need`
+    /// more fits under `cap`, and where removing every delivered message
+    /// would not make the room, nothing is removed and the newest is
+    /// refused (design §14.1.6). An undelivered message is never dropped.
+    fn make_room(&self, keyhash: &[u8; 32], need: usize, cap: usize) -> Result<(), queue::Refusal> {
+        let held = self.cfg.queue.list(keyhash);
+        let occupied: usize = held
+            .iter()
+            .map(|q| self.cfg.queue.cost(q.sealed.len()))
+            .sum();
+        if occupied + need <= cap {
+            return Ok(());
+        }
+        let reclaimable: usize = held
+            .iter()
+            .filter(|q| q.delivered_at.is_some())
+            .map(|q| self.cfg.queue.cost(q.sealed.len()))
+            .sum();
+        if occupied - reclaimable + need > cap {
+            return Err(queue::Refusal::AtCap);
+        }
+        let mut occupied = occupied;
+        for q in held.iter().filter(|q| q.delivered_at.is_some()) {
+            if occupied + need <= cap {
+                break;
+            }
+            self.remove(keyhash, q);
+            occupied -= self.cfg.queue.cost(q.sealed.len());
         }
         Ok(())
+    }
+
+    /// Remove one message and tell the key holder.
+    fn remove(&self, keyhash: &[u8; 32], q: &Queued) {
+        if self.cfg.queue.remove(keyhash, q.position)
+            && let Some(f) = &self.cfg.on_removed
+        {
+            f(keyhash, q.n);
+        }
+    }
+
+    /// Remove what has outlived its retention for `keyhash`: a delivered
+    /// message whose first delivery is the retention old (design §14.1.6).
+    fn expire_for(&self, keyhash: &[u8; 32], now: u64) -> usize {
+        let mut gone = 0;
+        for q in self.cfg.queue.list(keyhash) {
+            if q.delivered_at
+                .is_some_and(|at| now.saturating_sub(at) >= self.cfg.retention_secs)
+            {
+                self.remove(keyhash, &q);
+                gone += 1;
+            }
+        }
+        gone
+    }
+
+    /// **Remove every delivered message past its retention**, across every
+    /// recipient: what the node's maintenance runs. How many went.
+    pub fn expire(&self) -> usize {
+        let now = (self.cfg.clock)();
+        let _gate = self.queue_gate.lock().unwrap();
+        self.cfg
+            .queue
+            .recipients()
+            .iter()
+            .map(|k| self.expire_for(k, now))
+            .sum()
+    }
+
+    /// The recipient's sessions this node would deliver on now: every
+    /// device it holds a session for, less those the detector settled as
+    /// unreachable (design §14.1.2).
+    fn live_sessions(&self, keyhash: &[u8; 32]) -> Vec<(Peer, Connection)> {
+        let st = self.state.lock().unwrap();
+        st.sessions
+            .iter()
+            .filter(|((kh, _), _)| kh == keyhash)
+            .filter(|(peer, _)| {
+                let live = st
+                    .reach
+                    .get(*peer)
+                    .map(|r| *r.lock().unwrap())
+                    .or_else(|| st.marked.get(keyhash).copied());
+                live != Some(Reachability::Unreachable)
+            })
+            .map(|(peer, c)| (*peer, c.clone()))
+            .collect()
     }
 
     /// Resolves once `conn` is no longer the live session for `peer`: the
@@ -1402,14 +1518,15 @@ impl Node {
             .clone()
     }
 
-    /// What waits for `keyhash`, every device counted.
+    /// What this node holds for `keyhash`, delivered or not.
     pub fn queued(&self, keyhash: &[u8; 32]) -> usize {
         self.cfg.queue.count(keyhash)
     }
 
-    /// What waits for one of `keyhash`'s devices: what its AttachAck says.
-    pub fn queued_for(&self, keyhash: &[u8; 32], device: &[u8; 32]) -> usize {
-        self.cfg.queue.count_for(keyhash, device)
+    /// What is newer than `cursor`: what an AttachAck reports to a device
+    /// holding everything up to it.
+    pub fn queued_after(&self, keyhash: &[u8; 32], cursor: Option<u64>) -> usize {
+        self.cfg.queue.count_after(keyhash, cursor)
     }
 
     /// The node's record of what waits for `keyhash`, as it holds it.
@@ -1668,6 +1785,22 @@ impl Node {
                         return Err("known frame before attach".into());
                     }
                     other => {
+                        // **a key minted for the connection** binds to no
+                        // keyhash and carries a node-key fetch or a relay
+                        // submission and nothing else (`wire-format.md`
+                        // §9.1): the requester is not named, which is the
+                        // point of it (design §14.2.2)
+                        if authenticated.is_none()
+                            && self.bound_without_frame(&presented).is_none()
+                            && frame::parse_payload(Stream::Request, &p)
+                                .is_ok_and(|f| f.family.is_some_and(minted_may_ask))
+                        {
+                            self.log.push(Event::Bound { how: Bound::Minted });
+                            let Sender { send, .. } = sender;
+                            return self
+                                .serve_minted(conn, presented, Sender::detached(send), recv, p)
+                                .await;
+                        }
                         if let Some(peer) = self.bound_without_frame(&presented)
                             && frame::parse_payload(Stream::Request, &p).is_ok()
                         {
@@ -1739,7 +1872,10 @@ impl Node {
         } else {
             1
         };
-        let queued = self.queued_for(&claimed, &presented) as u64;
+        // field 5: the newest position this device already holds; absent,
+        // a first attach or a restored device, everything held is newer
+        let cursor = map_get(m, 5).and_then(as_uint);
+        let queued = self.queued_after(&claimed, cursor) as u64;
         let mut caps = self.cfg.capabilities.clone();
         let known: Vec<u64> = caps.keys().copied().collect();
         let (gid, gval) = grease(&known);
@@ -1768,14 +1904,18 @@ impl Node {
             st.sessions.insert(session_key, conn.clone());
             st.reach.insert(session_key, reach.clone());
             st.outbound.insert(session_key, otx);
+            match cursor {
+                Some(c) => st.cursors.insert(session_key, c),
+                None => st.cursors.remove(&session_key),
+            };
         }
         if let Some(f) = &self.cfg.on_attach {
             f(claimed, presented, true);
         }
-        // drain: each waiting message for this device goes out oldest
-        // first and leaves the store only once the peer has taken it, so a
-        // session that fails mid-drain leaves the rest where it was
-        // (design §14.1.6)
+        // drain: what is newer than the device's cursor goes out in order,
+        // each marked delivered once the peer has taken it, so a session
+        // that fails mid-drain leaves the rest to its next one (design
+        // §14.1.6)
         tokio::spawn(drain(self.clone(), claimed, presented, conn.clone()));
         // requests on bidirectional streams, answered for as long as the session lives
         let req_conn = conn.clone();
@@ -1878,6 +2018,40 @@ impl Node {
         })
     }
 
+    /// **A connection under a key minted for it** (`wire-format.md` §9.1):
+    /// served as [`MINTED`] and not as anybody, a node-key fetch or a relay
+    /// submission on each stream and any other request failing its stream.
+    async fn serve_minted(
+        self: Arc<Self>,
+        conn: Connection,
+        presented: [u8; 32],
+        control: Sender,
+        control_recv: RecvStream,
+        first: Vec<u8>,
+    ) -> Result<(), String> {
+        let inner = self.cfg.on_request.clone();
+        let only: Option<RequestHandler> = inner.map(|h| {
+            let f: RequestHandler = Arc::new(move |peer, device, fam, body| {
+                if minted_may_ask(fam) {
+                    h(peer, device, fam, body)
+                } else {
+                    Box::pin(async { None })
+                }
+            });
+            f
+        });
+        self.serve_requests_with(
+            conn,
+            MINTED,
+            presented,
+            control,
+            control_recv,
+            Some(first),
+            only,
+        )
+        .await
+    }
+
     /// A connection that opens no session (§8.2): every request stream is
     /// answered as `peer`'s until the connection closes.  Nothing is
     /// queued, drained or replicated for it, and the control stream, if
@@ -1893,8 +2067,23 @@ impl Node {
         control_recv: RecvStream,
         first: Option<Vec<u8>>,
     ) -> Result<(), String> {
-        self.log.push(Event::RequestOnly);
         let handler = self.cfg.on_request.clone();
+        self.serve_requests_with(conn, peer, device, control, control_recv, first, handler)
+            .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn serve_requests_with(
+        self: Arc<Self>,
+        conn: Connection,
+        peer: [u8; 32],
+        device: [u8; 32],
+        control: Sender,
+        control_recv: RecvStream,
+        first: Option<Vec<u8>>,
+        handler: Option<RequestHandler>,
+    ) -> Result<(), String> {
+        self.log.push(Event::RequestOnly);
         let mut control_recv = Some(control_recv);
         if let Some(p) = first {
             let Sender { send, .. } = control;
@@ -1933,16 +2122,56 @@ pub async fn deliver(conn: &Connection, bytes: Vec<u8>) -> bool {
     matches!(s.stopped().await, Ok(None))
 }
 
-/// Deliver what waits for `recipient` on `conn`, oldest first, each removed
-/// from the store once taken and not before (design §14.1.6,
-/// `infra-client-requirements.md` §2: delete on delivery).  One drain runs
-/// per recipient at a time; a failed delivery ends the drain, and the rest
-/// waits for the next session.
+/// Deliver what is newer than the session's cursor on `conn`, in position
+/// order, each a `RelayedPayload` carrying the node's half
+/// (`wire-format.md` §7.10). **Delivery removes nothing**: the first one
+/// starts the message's retention, and every device of the identity is
+/// served it until that runs out (design §14.1.6). One drain runs per
+/// session at a time; a failed delivery ends it, and the rest waits for the
+/// next session.
 async fn drain(node: Arc<Node>, recipient: [u8; 32], device: [u8; 32], conn: Connection) {
     let peer = (recipient, device);
     let lock = node.drain_lock(&peer);
     let _running = lock.lock().await;
-    while let Some(item) = node.cfg.queue.peek_oldest_for(&recipient, &device) {
+    loop {
+        // **nothing past its retention is handed over**, whether or not the
+        // node's maintenance has run since it ran out (design §14.1.6)
+        {
+            let _gate = node.queue_gate.lock().unwrap();
+            node.expire_for(&recipient, (node.cfg.clock)());
+        }
+        let cursor = node.state.lock().unwrap().cursors.get(&peer).copied();
+        let Some(item) = node
+            .cfg
+            .queue
+            .list(&recipient)
+            .into_iter()
+            .find(|q| cursor.is_none_or(|c| q.position > c))
+        else {
+            return;
+        };
+        let half = match &node.cfg.open_half {
+            Some(open) => open(&recipient, &item),
+            None => Some(zeroize::Zeroizing::new([0u8; 32])),
+        };
+        let Some(half) = half else {
+            // the key it was sealed to is gone, so nobody can open it: it
+            // is passed over on this session, and the retention or the cap
+            // takes it
+            tracing::warn!(
+                target: "transport",
+                recipient8 = %hex8(&recipient),
+                n = item.n,
+                "node.mailbox.unopenable"
+            );
+            node.state
+                .lock()
+                .unwrap()
+                .cursors
+                .insert(peer, item.position);
+            continue;
+        };
+        let payload = rhtn_archive::submission::relayed(item.position, &item.sealed, &half);
         // **a delivery ends with its session.** A peer that went silent is
         // judged unreachable after three intervals and never acknowledges
         // the stream, and QUIC's idle timer is hours away (design §14.1.2
@@ -1951,20 +2180,27 @@ async fn drain(node: Arc<Node>, recipient: [u8; 32], device: [u8; 32], conn: Con
         // session, and what is queued would wait behind a delivery that
         // cannot end
         let delivered = tokio::select! {
-            ok = deliver(&conn, item.ciphertext.clone()) => ok,
+            ok = deliver(&conn, payload) => ok,
             _ = node.until_stale(&peer, &conn) => false,
         };
         tracing::debug!(
             target: "transport",
             recipient8 = %hex8(&recipient),
-            bytes = item.ciphertext.len(),
+            bytes = item.sealed.len(),
             outcome = if delivered { "Delivered" } else { "Kept(session ended)" },
             "node.mailbox"
         );
         if !delivered {
             return;
         }
-        node.cfg.queue.remove(&recipient, &item);
+        node.cfg
+            .queue
+            .mark_delivered(&recipient, item.position, (node.cfg.clock)());
+        node.state
+            .lock()
+            .unwrap()
+            .cursors
+            .insert(peer, item.position);
     }
 }
 
@@ -2206,6 +2442,12 @@ pub struct ClientConfig {
     pub filter: Option<OutboundFilter>,
     /// The cached sibling list, persisted by the client (§8.2).
     pub sibling_cache: Arc<Mutex<Vec<SiblingRef>>>,
+    /// **The newest queue position held of each serving node**
+    /// (`wire-format.md` §7.10): what an attach to that node carries as
+    /// field 5. The client advances it as it takes deliveries and keeps it
+    /// with its own state; positions are one node's, so a sibling in
+    /// failover is sent none of another's.
+    pub cursors: Arc<Mutex<HashMap<[u8; 32], u64>>>,
     /// Endpoints to dial for a keyhash during failover; the test's address book.
     pub addresses: Arc<Mutex<HashMap<[u8; 32], Vec<std::net::SocketAddr>>>>,
     /// One TLS configuration per target, kept so its resumption store is
@@ -2401,11 +2643,13 @@ async fn attach_on(
     let (gid, gval) = grease(&known);
     caps.insert(gid, gval);
     let own = cfg.bind.own_delegation();
+    let cursor = cfg.cursors.lock().unwrap().get(&target).copied();
     let body = encode_attach(
         &cfg.me.keyhash,
         cfg.attestation.as_deref(),
         &caps,
         own.as_deref(),
+        cursor,
     );
     if let Err(e) = sender.frame(FRAME_ATTACH, &body).await {
         return AttachOutcome::EndpointFailure(e.to_string());
@@ -2781,6 +3025,44 @@ async fn dial_bound(
     addr: std::net::SocketAddr,
 ) -> Result<(Connection, Bound), Dialled> {
     let tls_cfg = cfg.tls_for(&target).ok_or("NotPinned")?;
+    dial_bound_with(cfg, endpoint, target, addr, tls_cfg).await
+}
+
+/// **A connection to `target` under a transport key minted for it**
+/// (`wire-format.md` §9.1): the key is drawn fresh for this connection and
+/// names no identity, so the node learns that somebody asked and not who
+/// (design §14.2.2). The node is bound as on any dial; what may be asked on
+/// it is a node-key fetch or a relay submission and nothing else. Never
+/// cached and never resumed, since either would tie two asks together.
+pub async fn connect_minted(
+    cfg: &ClientConfig,
+    endpoint: &quinn::Endpoint,
+    target: [u8; 32],
+    addr: std::net::SocketAddr,
+) -> Result<Connection, String> {
+    let fresh = tls::Presenter::Own {
+        keyhash: MINTED,
+        ed: Box::new(ed25519_dalek::SigningKey::from_bytes(&tls::random_bytes::<
+            32,
+        >())),
+    };
+    let tls_cfg = tls::client_config(fresh, &cfg.pins, &target).ok_or("not pinned")?;
+    dial_bound_with(cfg, endpoint, target, addr, tls_cfg)
+        .await
+        .map(|(c, _)| c)
+        .map_err(|f| match f {
+            Dialled::Unreached(e) => e,
+            Dialled::Refused(_, detail) => format!("unbound: {detail}"),
+        })
+}
+
+async fn dial_bound_with(
+    cfg: &ClientConfig,
+    endpoint: &quinn::Endpoint,
+    target: [u8; 32],
+    addr: std::net::SocketAddr,
+    tls_cfg: rustls::ClientConfig,
+) -> Result<(Connection, Bound), Dialled> {
     let connecting = tls::dial_with(endpoint, tls_cfg, addr).map_err(|e| format!("{e:?}"))?;
     let conn = match tokio::time::timeout(cfg.connect_timeout, connecting).await {
         Ok(Ok(c)) => c,

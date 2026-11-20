@@ -13,6 +13,33 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use tokio::time::{Duration, Instant, sleep};
 
+/// Room for a seal's nonce and GCM tag ahead of a test body.
+const SEAL_ROOM: usize = 12 + 16;
+
+/// A `Sealed` (`wire-format.md` §7.8.1) carrying `body` where its
+/// ciphertext goes: opaque to a node, which is all a session test needs.
+fn sealed(body: &[u8]) -> Vec<u8> {
+    use rhtn_crypto::xwing::CIPHERTEXT_BYTES;
+    let mut b = vec![0u8; SEAL_ROOM];
+    b.extend_from_slice(body);
+    rhtn_archive::sealed::Sealed {
+        n: 1,
+        ct_r: Box::new([1; CIPHERTEXT_BYTES]),
+        ct_n: Box::new([2; CIPHERTEXT_BYTES]),
+        body: b,
+    }
+    .encode()
+}
+
+/// The sealed message one delivery carries, its body read back.
+fn delivered_body(delivery: &[u8]) -> Vec<u8> {
+    let r = rhtn_archive::submission::unrelayed(delivery).expect("a RelayedPayload");
+    rhtn_archive::sealed::Sealed::decode(&r.sealed)
+        .unwrap()
+        .body[SEAL_ROOM..]
+        .to_vec()
+}
+
 fn loopback() -> SocketAddr {
     "127.0.0.1:0".parse().unwrap()
 }
@@ -52,6 +79,7 @@ fn client_cfg(name: &str) -> ClientConfig {
         filter: None,
         sibling_cache: Arc::new(Mutex::new(Vec::new())),
         addresses: Arc::new(Mutex::new(Default::default())),
+        cursors: Default::default(),
         tls: Arc::new(Mutex::new(Default::default())),
         connect_timeout: std::time::Duration::from_millis(1500),
         on_reachability: None,
@@ -163,9 +191,9 @@ async fn ses_02_accepts_a_client_whose_patron_is_a_light_client() {
 async fn trn_04_attach_naming_another_identity_gets_no_ack_and_no_delivery() {
     let (node, addr) = spawn_node(node_cfg("bob", 5));
     let b = test_identity("carol").public.keyhash;
-    node.enqueue(b, b"for carol".to_vec()).unwrap();
+    node.enqueue(b, sealed(b"for carol"), 1).unwrap();
     let (conn, mut send, mut recv) = raw_dial("alice", "bob", addr).await;
-    let body = encode_attach(&b, None, &BTreeMap::new(), None);
+    let body = encode_attach(&b, None, &BTreeMap::new(), None, None);
     send.write_all(&control_frame(FRAME_ATTACH, &body))
         .await
         .unwrap();
@@ -414,6 +442,7 @@ async fn trn_07_unknown_frame_at_the_bound_is_skipped_before_the_ack_and_mid_ses
             None,
             &BTreeMap::new(),
             None,
+            None,
         ),
     ))
     .await
@@ -519,6 +548,7 @@ async fn trn_08_declared_length_over_the_bound_ends_the_session() {
             &test_identity("alice").public.keyhash,
             None,
             &BTreeMap::new(),
+            None,
             None,
         ),
     ))
@@ -657,7 +687,13 @@ async fn node_acks_raw_attach(caps: BTreeMap<u64, Vec<u8>>) -> Arc<Node> {
     let (_conn, mut send, mut recv) = raw_dial("alice", "bob", addr).await;
     send.write_all(&control_frame(
         FRAME_ATTACH,
-        &encode_attach(&test_identity("alice").public.keyhash, None, &caps, None),
+        &encode_attach(
+            &test_identity("alice").public.keyhash,
+            None,
+            &caps,
+            None,
+            None,
+        ),
     ))
     .await
     .unwrap();
@@ -764,7 +800,7 @@ async fn trn_13_refusal_is_close_code_1_with_no_frame() {
     let (conn, mut send, mut recv) = raw_dial("alice", "bob", addr).await;
     send.write_all(&control_frame(
         FRAME_ATTACH,
-        &encode_attach(&alice, None, &BTreeMap::new(), None),
+        &encode_attach(&alice, None, &BTreeMap::new(), None, None),
     ))
     .await
     .unwrap();
@@ -1155,12 +1191,12 @@ async fn trn_15_the_session_survives_a_client_address_change_without_a_new_attac
         "node keeps receiving beats after the move: {}",
         beats_after(&node.log)
     );
-    node.enqueue(alice, b"after the move".to_vec()).unwrap();
+    node.enqueue(alice, sealed(b"after the move"), 1).unwrap();
     let item = tokio::time::timeout(Duration::from_secs(3), s.deliveries.recv())
         .await
         .expect("delivered")
         .unwrap();
-    assert_eq!(item, b"after the move");
+    assert_eq!(delivered_body(&item), b"after the move");
     assert_eq!(
         s.log
             .count(|e| matches!(e, Event::Sent { frame_type: 1, .. })),
@@ -1201,12 +1237,12 @@ async fn a_running_node_retains_no_session_history() {
     else {
         panic!("attached")
     };
-    node.enqueue(kh("bob"), b"hello".to_vec()).unwrap();
+    node.enqueue(kh("bob"), sealed(b"hello"), 1).unwrap();
     let got = tokio::time::timeout(std::time::Duration::from_secs(3), s.deliveries.recv())
         .await
         .expect("delivered")
         .unwrap();
-    assert_eq!(got, b"hello");
+    assert_eq!(delivered_body(&got), b"hello");
     tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
     assert!(node.has_session(&kh("bob")), "the session runs");
     assert_eq!(
@@ -1239,7 +1275,7 @@ async fn a_frame_half_received_when_an_outbound_frame_goes_is_finished_not_lost(
     let (conn, mut send, mut recv) = raw_dial("bob", "alice", addr).await;
     send.write_all(&control_frame(
         FRAME_ATTACH,
-        &encode_attach(&kh("bob"), None, &Default::default(), None),
+        &encode_attach(&kh("bob"), None, &Default::default(), None, None),
     ))
     .await
     .unwrap();

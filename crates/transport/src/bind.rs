@@ -103,6 +103,10 @@ pub enum Bound {
     Held,
     /// The delegation the peer presented on this connection.
     Presented,
+    /// Nothing: a key minted for the connection, which binds to no
+    /// keyhash and may ask for a node key or submit a sealed message and
+    /// nothing else (`wire-format.md` §9.1).
+    Minted,
 }
 
 /// Why a presented key bound to nothing.  Each is a refusal of the

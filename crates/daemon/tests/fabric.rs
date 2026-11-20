@@ -114,6 +114,84 @@ fn anchor_of(f: &Fabric, to: &str) -> Askable {
     }
 }
 
+/// A test identity's encryption secrets, which the fabric does not
+/// provision: the node opens nothing, so any will do for both ends.
+fn secret(name: &str) -> rhtn_crypto::seal::EncryptionSecret {
+    rhtn_crypto::seal::EncryptionSecret::from_identity_root(&rhtn_codec::cose::sha256(
+        format!("fabric root:{name}").as_bytes(),
+    ))
+}
+
+fn encryption_key(name: &str) -> rhtn_crypto::verify::EncryptionKey {
+    let s = secret(name);
+    rhtn_crypto::verify::EncryptionKey {
+        keyhash: kh(name),
+        kem: *s.kem_public(),
+        auth: s.auth_public(),
+    }
+}
+
+/// **`from` sends `bytes` to `to` as a client does** (`wire-format.md`
+/// §7.8, §7.10): the recipient's node key fetched from whichever node
+/// serves it, the message sealed to it and to `to`, and submitted there,
+/// each on a connection minted for it. The node that took it, or nothing.
+async fn send(
+    b: &Beyond,
+    from: &str,
+    to: &str,
+    bytes: &[u8],
+    reach: impl Fn() -> Reach,
+) -> Option<rhtn_archive::Keyhash> {
+    use rhtn_archive::node_key::*;
+    use rhtn_archive::submission::*;
+    use rhtn_client::payload::{KIND_APPLICATION, NodeKeyHeld, Sender, seal_to};
+    let ask = NodeKeyRequest::for_recipients(vec![kh(to)], [7; 16]).unwrap();
+    let (up, reply) = b
+        .minted(kh(to), reach(), REQUEST_NODE_KEY, ask.encode())
+        .await?;
+    let record = NodeKeyReply::decode(&reply).ok()?.outcome.ok()?;
+    let key = NodeKey::parse(&record).ok()?;
+    assert_eq!(
+        (key.fields.recipient, key.fields.node),
+        (kh(to), up.node),
+        "the key names the recipient and the node that served it"
+    );
+    let held = NodeKeyHeld {
+        node: key.fields.node,
+        n: key.fields.n,
+        public: Box::new(key.fields.public),
+    };
+    let me = secret(from);
+    let sender = Sender {
+        keyhash: &kh(from),
+        secret: &me,
+        alias: from,
+        introduction: None,
+    };
+    let sealed = seal_to(
+        &sender,
+        &kh(to),
+        &encryption_key(to),
+        &held,
+        KIND_APPLICATION,
+        bytes,
+        &mut |b: &mut [u8]| {
+            let r = rhtn_transport::tls::random_bytes::<64>();
+            b.copy_from_slice(&r[..b.len()]);
+        },
+    )
+    .ok()?;
+    let body = RelaySubmission {
+        recipient: kh(to),
+        sealed,
+        nonce: [8; 16],
+    }
+    .encode();
+    let (there, reply) = b.minted(kh(to), reach(), REQUEST_RELAY, body).await?;
+    let r = SubmissionReply::decode(&reply).ok()?;
+    (r.code == SUBMISSION_ACCEPTED && there.node == up.node).then_some(up.node)
+}
+
 // functional: RES-016
 // functional: RES-017
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -190,15 +268,13 @@ async fn the_provisioned_fabric_runs_as_daemons_and_a_client_descends_it() {
     // subnet but c1's entry, and c1, c2 and c3 answer from tables they
     // restored from disk
     let w1 = beyond(&f, "w1");
-    assert!(
-        w1.carry(
-            kh("c4"),
-            [0; 32],
-            b"across three daemons".to_vec(),
-            reach_by_anchor(&f, "c4", vec![anchor_of(&f, "c4")]),
-            Some(kh("bob")),
-        )
-        .await,
+    let took = send(&w1, "w1", "c4", b"across three daemons", || {
+        reach_by_anchor(&f, "c4", vec![anchor_of(&f, "c4")])
+    })
+    .await;
+    assert_eq!(
+        took,
+        Some(kh("c3")),
         "c3 took it:\n{}",
         said.lock().unwrap().join("\n")
     );
@@ -214,15 +290,13 @@ async fn the_provisioned_fabric_runs_as_daemons_and_a_client_descends_it() {
         ],
         key_material: Some(material("bob")),
     };
-    assert!(
-        w1.carry(
-            kh("c5"),
-            [0; 32],
-            b"by way of bob".to_vec(),
-            reach_by_anchor(&f, "c5", vec![bob]),
-            Some(kh("bob")),
-        )
-        .await,
+    let took = send(&w1, "w1", "c5", b"by way of bob", || {
+        reach_by_anchor(&f, "c5", vec![bob.clone()])
+    })
+    .await;
+    assert_eq!(
+        took,
+        Some(kh("c3")),
         "bob resolved c5 for w1:\n{}",
         said.lock().unwrap().join("\n")
     );
@@ -236,8 +310,25 @@ async fn the_provisioned_fabric_runs_as_daemons_and_a_client_descends_it() {
             .await
             .unwrap_or_else(|_| panic!("delivered to {who}"))
             .expect("bytes");
-        let (from, what, _) = unrelayed(&d).expect("a relayed payload");
-        assert_eq!((from, what), (kh("w1"), expect), "{who}'s delivery");
+        let relayed = unrelayed(&d).expect("a relayed payload");
+        let (sealed, body) =
+            rhtn_client::payload::open_relayed(&secret(who), &kh(who), &kh("c3"), &relayed)
+                .expect("opens with the half c3 delivered");
+        assert!(
+            rhtn_client::payload::tag_verifies(
+                &secret(who),
+                &kh(who),
+                &encryption_key("w1"),
+                &sealed,
+                &body
+            ),
+            "{who}'s delivery is w1's"
+        );
+        assert_eq!(
+            (body.sender, body.bytes),
+            (kh("w1"), expect),
+            "{who}'s delivery"
+        );
     }
     drop(running);
     let _ = std::fs::remove_dir_all(&out);

@@ -73,3 +73,8 @@ keyring = { version = "3.6", optional = true, default-features = false, features
 name = "rhtn-desktop"
 path = "src/main.rs"
 required-features = ["gui"]
+
+[dev-dependencies]
+# the identity root a phone derives its encryption secrets from, so a test
+# can hold the credential's secrets to what the phone holds
+rhtn-crypto = { path = "../crypto" }

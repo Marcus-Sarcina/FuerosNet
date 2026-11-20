@@ -1,8 +1,9 @@
-//! What a client hands the node serving it, over a session
-//! (`wire-format.md` §7.10): its bundle, its one-time keys, payload to
-//! carry, and where to be rung.  Every party here is real — a running
-//! node, a light client attached to it over QUIC, and the four request
-//! types on the wire between them.
+//! What a client hands a node (`wire-format.md` §7.10): over its session,
+//! its profile, its horizon and where to be rung; and as nobody, on a
+//! connection under a key minted for it (§9.1), a sealed message for a
+//! recipient the node serves.  Every party here is real — a running node,
+//! light clients attached to it over QUIC, and the request types on the
+//! wire between them.
 
 mod common;
 
@@ -10,7 +11,7 @@ use common::*;
 use rhtn_adaptors::attached::AttachedNode;
 use rhtn_adaptors::serving::Serving;
 use rhtn_archive::Keyhash;
-use rhtn_archive::prekey::*;
+use rhtn_archive::node_key::REQUEST_NODE_KEY;
 use rhtn_archive::profile::{KIND_OWN, Profile, ProfileReply, ProfileRequest};
 use rhtn_archive::submission::*;
 use rhtn_archive::tx::{Locator, Seqno};
@@ -25,8 +26,7 @@ use std::sync::atomic::{AtomicU8, Ordering};
 const SUBNET: [u8; 32] = [0xdb; 32];
 
 /// A node for `name` whose configuration a test may adjust before it
-/// starts: the served set and the prekey bounds are the two an operator
-/// chooses and these tests exercise.
+/// starts: the served set is the operator's, and these tests exercise it.
 fn node_with(name: &str, tweak: impl FnOnce(&mut NodeConfig, &mut NodeView)) -> Arc<LiveNode> {
     let p = Path::from_indices(&[]);
     let mut view = NodeView::new(
@@ -89,211 +89,44 @@ async fn attach_light(name: &str, node: &Arc<LiveNode>) -> Light {
     }
 }
 
-/// A bundle by `name` for its seed-holding device: the classical member,
-/// which is the key its session presents (`wire-format.md` §7.8).
-fn bundle(name: &str) -> Vec<u8> {
-    let me = id(name);
-    let device = *me.public.ed.as_bytes();
-    PrekeyBundle::build(
-        &me,
-        CONSTRUCTION_PQXDH,
-        b"reusable material",
-        1_800_000_000,
-        &device,
-    )
+/// **One request of `node` as nobody** (`wire-format.md` §9.1): a
+/// connection under a transport key minted for it, one request, closed.
+async fn as_nobody(node: &Arc<LiveNode>, request: u64, body: &[u8]) -> Option<Vec<u8>> {
+    // the identity in the configuration is never presented: the pins are
+    // what is used, to bind the node
+    let cfg = client_cfg("w4");
+    let conn = connect_minted(&cfg, &client_ep(), node.me(), node.addr)
+        .await
+        .expect("the node is reached and bound");
+    let reply = request_on(&conn, request, body).await.ok();
+    conn.close(quinn::VarInt::from_u32(0), b"minted");
+    reply
 }
 
-fn keys(n: usize) -> Vec<Vec<u8>> {
-    (0..n).map(|i| format!("otk-{i}").into_bytes()).collect()
+/// What `from` seals to `to` under the key `node` holds for `to`, fetched
+/// from it as nobody.
+async fn sealed_at(node: &Arc<LiveNode>, from: &str, to: &str, bytes: &[u8]) -> Vec<u8> {
+    let reply = as_nobody(node, REQUEST_NODE_KEY, &node_key_request(to, [0x4b; 16]))
+        .await
+        .expect("a node-key reply");
+    seal_under(from, to, &reply, bytes, None)
 }
 
-/// One submission by hand, so a test can see the reply's own code rather
-/// than the accepted-or-not the trait returns.
-async fn code(l: &Light, request_type: u64, nonce: [u8; 16], body: Vec<u8>) -> Option<u64> {
-    l.serving.reply(request_type, nonce, body).await
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_publication_is_taken_only_from_the_subject_the_bundle_names() {
-    let node = node_with("bob", |_, _| {});
-    let carol = attach_light("carol", &node).await;
-    // carol offers alice's bundle: the node it names is not the node that
-    // sent it
-    let n1 = [9u8; 16];
-    let alices = PrekeyPublication {
-        bundle: bundle("alice"),
-        nonce: n1,
+/// A relay submission's bytes.
+fn relay(to: &str, sealed: &[u8], nonce: [u8; 16]) -> Vec<u8> {
+    RelaySubmission {
+        recipient: kh(to),
+        sealed: sealed.to_vec(),
+        nonce,
     }
-    .encode();
-    assert_eq!(
-        code(&carol, REQUEST_PREKEY_PUBLICATION, n1, alices).await,
-        Some(SUBMISSION_REFUSED)
-    );
-    assert!(
-        node.view
-            .lock()
-            .unwrap()
-            .prekeys
-            .bundle(&kh("alice"))
-            .is_none(),
-        "nothing held for alice"
-    );
-    // carol's own is taken
-    let n2 = [10u8; 16];
-    let own = PrekeyPublication {
-        bundle: bundle("carol"),
-        nonce: n2,
-    }
-    .encode();
-    assert_eq!(
-        code(&carol, REQUEST_PREKEY_PUBLICATION, n2, own).await,
-        Some(SUBMISSION_ACCEPTED)
-    );
-    assert!(
-        node.view
-            .lock()
-            .unwrap()
-            .prekeys
-            .bundle(&carol.me)
-            .is_some(),
-        "carol's is held"
-    );
+    .encode()
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_publication_and_a_deposit_are_held_and_then_served_to_anyone() {
-    let node = node_with("bob", |_, _| {});
-    let carol = attach_light("carol", &node).await;
-    // field 1 is the bundle object `wire-format.md` §7.10 names, not a byte
-    // string wrapping it: a peer applying the CDDL would refuse the wrapping,
-    // and a round trip against ourselves cannot tell the difference
-    let published = PrekeyPublication {
-        bundle: bundle("carol"),
-        nonce: [1; 16],
-    }
-    .encode();
-    let rhtn_codec::cbor::Item::Map(ref m) = rhtn_codec::cbor::parse_all(&published).unwrap()
-    else {
-        panic!("a map")
-    };
-    assert!(
-        matches!(
-            rhtn_codec::cbor::map_get(m, 1),
-            Some(rhtn_codec::cbor::Item::Map(_))
-        ),
-        "field 1 is the bundle, spliced in"
-    );
-    assert_eq!(
-        PrekeyPublication::decode(&published).unwrap().bundle,
-        bundle("carol"),
-        "and it reads back whole"
-    );
-
-    assert!(
-        carol.serving.publish(&bundle("carol")).await,
-        "the node takes the bundle"
-    );
-    assert!(
-        carol.serving.stock(carol.me, keys(3)).await,
-        "and the deposit"
-    );
-    // a fetch by a different client returns what carol published, byte for
-    // byte, and one of the keys it deposited
-    let alice = attach_light("alice", &node).await;
-    let req = PrekeyRequest::One {
-        subject: carol.me,
-        one_time: true,
-        nonce: [1; 16],
-        device: Some(*id("carol").public.ed.as_bytes()),
-    }
-    .encode();
-    let reply = PrekeyReply::decode(
-        &alice
-            .session
-            .request(REQUEST_PREKEY, &req)
-            .await
-            .expect("answered"),
-    )
-    .unwrap();
-    assert_eq!(
-        reply.bundles.first().map(|b| b.as_slice()),
-        Some(bundle("carol").as_slice())
-    );
-    let served = reply.one_time.expect("a one-time key");
-    assert!(
-        keys(3).contains(&served),
-        "served {served:?}, deposited {:?}",
-        keys(3)
-    );
-    assert_eq!(
-        node.view.lock().unwrap().prekeys.pool_size(&carol.me),
-        2,
-        "one spent, two left"
-    );
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_deposit_past_the_nodes_bound_is_refused_whole() {
-    // this node lends a pool of five
-    let node = node_with("bob", |_, v| {
-        v.prekeys.cfg.pool = 5;
-        v.prekeys.cfg.per_deposit = 4;
-    });
-    let carol = attach_light("carol", &node).await;
-    let n1 = [1u8; 16];
-    assert_eq!(
-        code(
-            &carol,
-            REQUEST_ONE_TIME_DEPOSIT,
-            n1,
-            OneTimeDeposit {
-                keys: keys(3),
-                nonce: n1
-            }
-            .encode()
-        )
-        .await,
-        Some(SUBMISSION_ACCEPTED)
-    );
-    // three more would make six, past the pool it lends
-    let n2 = [2u8; 16];
-    assert_eq!(
-        code(
-            &carol,
-            REQUEST_ONE_TIME_DEPOSIT,
-            n2,
-            OneTimeDeposit {
-                keys: keys(3),
-                nonce: n2
-            }
-            .encode()
-        )
-        .await,
-        Some(SUBMISSION_OVER_BOUND)
-    );
-    assert_eq!(
-        node.view.lock().unwrap().prekeys.pool_size(&carol.me),
-        3,
-        "the pool is what it was: nothing was trimmed in"
-    );
-    // and one deposit larger than the per-deposit bound, whatever the pool
-    // holds, is refused on its own count
-    let n3 = [3u8; 16];
-    assert_eq!(
-        code(
-            &carol,
-            REQUEST_ONE_TIME_DEPOSIT,
-            n3,
-            OneTimeDeposit {
-                keys: keys(5),
-                nonce: n3
-            }
-            .encode()
-        )
-        .await,
-        Some(SUBMISSION_OVER_BOUND)
-    );
-    assert_eq!(node.view.lock().unwrap().prekeys.pool_size(&carol.me), 3);
+/// The code a reply carries, its nonce held to the one sent.
+fn reply_code(reply: &[u8], nonce: [u8; 16]) -> u64 {
+    let r = SubmissionReply::decode(reply).expect("a submission reply");
+    assert_eq!(r.nonce, nonce, "the reply echoes the nonce of the request");
+    r.code
 }
 
 // acceptance: SUB-04
@@ -302,73 +135,38 @@ async fn a_relay_submission_is_answered_on_taking_and_collected_later() {
     let node = node_with("bob", |_, _| {});
     let carol = attach_light("carol", &node).await;
     // w1 has never connected: the answer cannot be about delivery
+    let sealed = sealed_at(&node, "carol", "w1", b"for w1").await;
     let n = [7u8; 16];
-    let body = RelaySubmission {
-        recipient: kh("w1"),
-        ciphertext: b"sealed".to_vec(),
-        nonce: n,
-        device: [0; 32],
-    }
-    .encode();
-    assert_eq!(
-        code(&carol, REQUEST_RELAY, n, body).await,
-        Some(SUBMISSION_ACCEPTED)
+    let reply = as_nobody(&node, REQUEST_RELAY, &relay("w1", &sealed, n))
+        .await
+        .expect("answered");
+    assert_eq!(reply_code(&reply, n), SUBMISSION_ACCEPTED);
+    assert!(
+        !node.node.sessions().contains(&kh("w1")),
+        "answered with w1 nowhere"
     );
     assert_eq!(node.node.queued(&kh("w1")), 1, "taken, and waiting");
-    // w1 attaches and collects it, with carol named in front, unchanged
+    // w1 attaches and collects it: the seal carol made, unchanged, with
+    // the node's half beside it, and carol inside it
     let mut w1 = attach_light("w1", &node).await;
     let delivered = tokio::time::timeout(std::time::Duration::from_secs(3), w1.deliveries.recv())
         .await
         .expect("delivered")
         .expect("bytes");
-    let (who, what, binding) = unrelayed(&delivered).expect("a relayed payload");
-    assert_eq!((who, what), (carol.me, b"sealed".to_vec()));
-    // carol published no bundle in this fixture, so the node had none
-    // to name and delivered the two-element form (`wire-format.md` §7.10)
-    assert!(binding.is_none(), "no bundle held, none carried");
+    let r = unrelayed(&delivered).expect("a relayed payload");
+    assert_eq!(r.sealed, sealed, "the ciphertext unchanged");
+    let body = open_as("w1", &node.me(), &delivered).expect("opens, and its tag verifies");
     assert_eq!(
-        node.node.queued(&kh("w1")),
-        0,
-        "no copy outlives the delivery"
+        (body.sender, body.bytes.as_slice()),
+        (carol.me, b"for w1".as_slice()),
+        "carol named inside the seal, where only w1 reads it"
     );
-}
-
-/// The submitter's binding rides the delivery (`wire-format.md` §7.10,
-/// design §14.2.2): the node carries the bundle of the device on the
-/// session it authenticated, so a recipient that has never held one can
-/// attribute the first message instead of refusing it for want of a
-/// binding it had no occasion to ask for.
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_delivery_carries_the_submitters_binding_where_the_node_holds_one() {
-    let node = node_with("bob", |_, _| {});
-    let carol = attach_light("carol", &node).await;
+    // **delivery removes nothing** (design §14.1.6): the message is marked
+    // delivered and stays until the cap or the retention takes it
+    assert_eq!(node.node.queued(&kh("w1")), 1, "held after delivery");
     assert!(
-        carol.serving.publish(&bundle("carol")).await,
-        "the node holds carol's bundle for the device she presents"
-    );
-    let n = [8u8; 16];
-    let body = RelaySubmission {
-        recipient: kh("w1"),
-        ciphertext: b"sealed".to_vec(),
-        nonce: n,
-        device: [0; 32],
-    }
-    .encode();
-    assert_eq!(
-        code(&carol, REQUEST_RELAY, n, body).await,
-        Some(SUBMISSION_ACCEPTED)
-    );
-    let mut w1 = attach_light("w1", &node).await;
-    let delivered = tokio::time::timeout(std::time::Duration::from_secs(3), w1.deliveries.recv())
-        .await
-        .expect("delivered")
-        .expect("bytes");
-    let (who, what, binding) = unrelayed(&delivered).expect("a relayed payload");
-    assert_eq!((who, what), (carol.me, b"sealed".to_vec()));
-    assert_eq!(
-        binding.as_deref(),
-        Some(bundle("carol").as_slice()),
-        "carol's own bundle, byte for byte as she signed it"
+        node.node.queue_records(&kh("w1"))[0].delivered_at.is_some(),
+        "and marked delivered"
     );
 }
 
@@ -377,19 +175,16 @@ async fn a_delivery_carries_the_submitters_binding_where_the_node_holds_one() {
 async fn a_relay_for_a_keyhash_the_node_holds_no_record_of_is_refused() {
     // this node has no record of w2 and serves everyone else
     let node = node_with("bob", |c, _| c.serves = Arc::new(|k| *k != kh("w2")));
-    let carol = attach_light("carol", &node).await;
+    let _carol = attach_light("carol", &node).await;
+    // a seal for w2 under a key some other node holds for it: the most a
+    // sender could hold, since this node will make none for w2
+    let elsewhere = node_with("carol", |_, _| {});
+    let for_w2 = sealed_at(&elsewhere, "carol", "w2", b"x").await;
     let unknown = [1u8; 16];
-    let body = RelaySubmission {
-        recipient: kh("w2"),
-        ciphertext: b"sealed".to_vec(),
-        nonce: unknown,
-        device: [0; 32],
-    }
-    .encode();
-    assert_eq!(
-        code(&carol, REQUEST_RELAY, unknown, body).await,
-        Some(SUBMISSION_REFUSED)
-    );
+    let reply = as_nobody(&node, REQUEST_RELAY, &relay("w2", &for_w2, unknown))
+        .await
+        .expect("answered");
+    assert_eq!(reply_code(&reply, unknown), SUBMISSION_REFUSED);
     assert_eq!(
         node.node.queued(&kh("w2")),
         0,
@@ -397,19 +192,137 @@ async fn a_relay_for_a_keyhash_the_node_holds_no_record_of_is_refused() {
     );
     // w1 is served and merely absent: a different answer, and the message
     // waits (design §14.1.2)
+    let for_w1 = sealed_at(&node, "carol", "w1", b"x").await;
     let offline = [2u8; 16];
-    let body = RelaySubmission {
-        recipient: kh("w1"),
-        ciphertext: b"sealed".to_vec(),
-        nonce: offline,
-        device: [0; 32],
-    }
-    .encode();
-    assert_eq!(
-        code(&carol, REQUEST_RELAY, offline, body).await,
-        Some(SUBMISSION_ACCEPTED)
-    );
+    let reply = as_nobody(&node, REQUEST_RELAY, &relay("w1", &for_w1, offline))
+        .await
+        .expect("answered");
+    assert_eq!(reply_code(&reply, offline), SUBMISSION_ACCEPTED);
     assert_eq!(node.node.queued(&kh("w1")), 1);
+}
+
+/// A node that answers every sealed message under the nonce of another
+/// submission, having taken it: what a reply crossed with somebody
+/// else's looks like from the sender's side.
+struct Misanswering(Arc<dyn Serving>);
+
+impl Serving for Misanswering {
+    fn me(&self) -> Keyhash {
+        self.0.me()
+    }
+    fn serves(&self, client: &Keyhash) -> bool {
+        self.0.serves(client)
+    }
+    fn minted<'a>(
+        &'a self,
+        request: u64,
+        body: Vec<u8>,
+    ) -> rhtn_adaptors::serving::Answer<'a, Option<Vec<u8>>> {
+        Box::pin(async move {
+            let reply = self.0.minted(request, body).await?;
+            if request != REQUEST_RELAY {
+                return Some(reply);
+            }
+            let r = SubmissionReply::decode(&reply).ok()?;
+            Some(SubmissionReply::code([0xee; 16], r.code).encode())
+        })
+    }
+    fn teach<'a>(&'a self, f: Vec<Vec<u8>>) -> rhtn_adaptors::serving::Answer<'a, usize> {
+        self.0.teach(f)
+    }
+    fn publish_profile<'a>(&'a self, b: &'a [u8]) -> rhtn_adaptors::serving::Answer<'a, bool> {
+        self.0.publish_profile(b)
+    }
+    fn assert_horizon<'a>(
+        &'a self,
+        b: &'a [u8],
+        n: [u8; 16],
+    ) -> rhtn_adaptors::serving::Answer<'a, bool> {
+        self.0.assert_horizon(b, n)
+    }
+    fn profile<'a>(&'a self, b: &'a [u8]) -> rhtn_adaptors::serving::Answer<'a, Option<Vec<u8>>> {
+        self.0.profile(b)
+    }
+    fn catalog<'a>(
+        &'a self,
+        from: Keyhash,
+        b: &'a [u8],
+    ) -> rhtn_adaptors::serving::Answer<'a, Option<Vec<u8>>> {
+        self.0.catalog(from, b)
+    }
+    fn resource<'a>(
+        &'a self,
+        from: Keyhash,
+        b: &'a [u8],
+    ) -> rhtn_adaptors::serving::Answer<'a, Option<Vec<u8>>> {
+        self.0.resource(from, b)
+    }
+    fn wake<'a>(
+        &'a self,
+        client: Keyhash,
+        e: Option<WakeEndpoint>,
+    ) -> rhtn_adaptors::serving::Answer<'a, bool> {
+        self.0.wake(client, e)
+    }
+    fn propagate<'a>(&'a self, b: Vec<u8>) -> rhtn_adaptors::serving::Answer<'a, bool> {
+        self.0.propagate(b)
+    }
+}
+
+/// **A reply that echoes another submission's nonce is not this one's
+/// answer** (`wire-format.md` §7.10): the sender reports the message
+/// unsent rather than taken, though the node in fact took it — the nonce
+/// is all that ties a reply to what was sent. The same node answering
+/// under the right nonce is a message taken.
+// acceptance: PAY-24
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_reply_echoing_another_submissions_nonce_is_not_an_answer_to_this_one() {
+    let mut scene = Scene::new();
+    scene.adopt("alice", "bob", "bob", &[0]);
+    scene.adopt("w1", "bob", "bob", &[1]);
+    let node = live_node("bob", scene.table("bob", &["bob"]), "bob", &[]);
+    let inboxes = rhtn_adaptors::serving::Inboxes::default();
+    let honest: Arc<dyn Serving> =
+        rhtn_adaptors::serving::LocalNode::new(node.clone(), inboxes.clone());
+    let crossed: Arc<dyn Serving> = Arc::new(Misanswering(honest.clone()));
+    let alice = host("alice", &crossed, &inboxes, 0);
+    let w1 = host("w1", &honest, &inboxes, 0);
+    exchange_cards(&[("alice", &alice), ("w1", &w1)]).await;
+    for p in [&alice, &w1] {
+        p.courier.attach(vec![kh("alice"), kh("w1")]).await;
+    }
+    let before = node.node.queued(&kh("w1"));
+    let carried = alice
+        .courier
+        .send(
+            kh("w1"),
+            rhtn_client::payload::KIND_APPLICATION,
+            b"crossed".to_vec(),
+        )
+        .await
+        .expect("sealed");
+    assert!(
+        carried
+            .refused
+            .iter()
+            .any(|m| matches!(m, rhtn_client::ceremony::Msg::Sealed { to, .. } if *to == kh("w1"))),
+        "reported unsent: {carried:?}"
+    );
+    assert!(
+        node.node.queued(&kh("w1")) > before,
+        "though the node did take it, which the sender cannot know"
+    );
+    // the control: the same node, answering under the nonce sent
+    let carried = w1
+        .courier
+        .send(
+            kh("alice"),
+            rhtn_client::payload::KIND_APPLICATION,
+            b"straight".to_vec(),
+        )
+        .await
+        .expect("sealed");
+    assert!(carried.complete(), "{carried:?}");
 }
 
 // acceptance: SUB-06
@@ -489,42 +402,39 @@ async fn a_registration_with_no_endpoint_withdraws_and_a_key_without_one_is_malf
 // acceptance: SUB-08
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn every_reply_echoes_its_own_nonce_and_says_nothing_else() {
-    let node = node_with("bob", |c, v| {
-        v.prekeys.cfg.pool = 2;
+    // room for one small seal per recipient and not two, so a second for
+    // w1, with the first never delivered, is over the bound
+    let node = node_with("bob", |c, _| {
         c.serves = Arc::new(|k| *k != kh("w2"));
+        c.queue_cap = Some(3000);
     });
     let carol = attach_light("carol", &node).await;
-    let sent: Vec<(u64, [u8; 16], Vec<u8>)> = vec![
+    let elsewhere = node_with("carol", |_, _| {});
+    let for_w2 = sealed_at(&elsewhere, "carol", "w2", b"x").await;
+    let for_w1 = sealed_at(&node, "carol", "w1", b"x").await;
+    let again_w1 = sealed_at(&node, "carol", "w1", b"y").await;
+    assert!(for_w1.len() < 3000 && for_w1.len() + again_w1.len() > 3000);
+    let profile = |who: &str, nonce: [u8; 16]| {
+        ProfilePublication {
+            profile: Profile::build(&id(who), &SUBNET, KIND_OWN, who, None, 1_800_000_000),
+            nonce,
+        }
+        .encode()
+    };
+    // **the relay goes as nobody** (`wire-format.md` §9.1) and the rest on
+    // the session, which is where each is sent from; the reply's shape is
+    // the same on either
+    let sent: Vec<(bool, u64, [u8; 16], Vec<u8>)> = vec![
+        (true, REQUEST_RELAY, [3; 16], relay("w2", &for_w2, [3; 16])),
+        (true, REQUEST_RELAY, [6; 16], relay("w1", &for_w1, [6; 16])),
         (
-            REQUEST_PREKEY_PUBLICATION,
-            [1; 16],
-            PrekeyPublication {
-                bundle: bundle("carol"),
-                nonce: [1; 16],
-            }
-            .encode(),
-        ),
-        (
-            REQUEST_ONE_TIME_DEPOSIT,
-            [2; 16],
-            OneTimeDeposit {
-                keys: keys(9),
-                nonce: [2; 16],
-            }
-            .encode(),
-        ),
-        (
+            true,
             REQUEST_RELAY,
-            [3; 16],
-            RelaySubmission {
-                recipient: kh("w2"),
-                ciphertext: b"x".to_vec(),
-                nonce: [3; 16],
-                device: [0; 32],
-            }
-            .encode(),
+            [7; 16],
+            relay("w1", &again_w1, [7; 16]),
         ),
         (
+            false,
             REQUEST_WAKE,
             [4; 16],
             WakeRegistration::of(
@@ -538,10 +448,27 @@ async fn every_reply_echoes_its_own_nonce_and_says_nothing_else() {
             )
             .encode(),
         ),
+        (
+            false,
+            REQUEST_PROFILE_PUBLICATION,
+            [1; 16],
+            profile("carol", [1; 16]),
+        ),
+        // somebody else's profile, which the node will not take from carol
+        (
+            false,
+            REQUEST_PROFILE_PUBLICATION,
+            [2; 16],
+            profile("alice", [2; 16]),
+        ),
     ];
     let mut codes = Vec::new();
-    for (rt, nonce, body) in sent {
-        let bytes = carol.session.request(rt, &body).await.expect("answered");
+    for (minted, rt, nonce, body) in sent {
+        let bytes = if minted {
+            as_nobody(&node, rt, &body).await.expect("answered")
+        } else {
+            carol.session.request(rt, &body).await.expect("answered")
+        };
         let r = SubmissionReply::decode(&bytes).expect("a reply");
         assert_eq!(
             r.nonce, nonce,
@@ -559,10 +486,12 @@ async fn every_reply_echoes_its_own_nonce_and_says_nothing_else() {
     assert_eq!(
         codes,
         vec![
+            SUBMISSION_REFUSED,
             SUBMISSION_ACCEPTED,
             SUBMISSION_OVER_BOUND,
-            SUBMISSION_REFUSED,
-            SUBMISSION_ACCEPTED
+            SUBMISSION_ACCEPTED,
+            SUBMISSION_ACCEPTED,
+            SUBMISSION_REFUSED
         ],
         "one of each answer, and no reason with any of them"
     );

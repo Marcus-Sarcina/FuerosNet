@@ -5,7 +5,7 @@
 //! the encryption key's derivation, the message key, the AEAD and the
 //! sender's tag.  Which bytes the tag covers, and how a `SealedBody` is
 //! encoded, are the client's (`rhtn-client`); this crate takes them as
-//! bytes, as [`crate::pqxdh`] takes a bundle.
+//! bytes.
 //!
 //! Randomness is the caller's: an encapsulation takes its 64 bytes
 //! ([`crate::xwing::encapsulate`]) and a seal takes its nonce, so every

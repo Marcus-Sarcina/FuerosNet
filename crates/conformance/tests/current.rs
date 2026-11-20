@@ -1,7 +1,6 @@
 //! Retained and current assertions for implemented components.
 use rhtn_crypto::identity::testkit::test_identity;
 use rhtn_node::http;
-use rhtn_client::payload::{PayloadKeys,Sessions,read_bundle,OneTimeKey};
 use std::sync::Arc;
 
 fn fresh(out:&mut [u8]) { out.copy_from_slice(&vec![19;out.len()]); }
@@ -20,42 +19,26 @@ fn r01_oversized_chunk_length_must_return_an_error_without_panicking() {
 }
 
 #[test]
-fn r02_initial_payload_must_match_the_named_senders_bound_identity() {
-    let (sender,victim,recipient)=(test_identity("carol"),test_identity("alice"),test_identity("bob"));
-    let mut sender_keys=PayloadKeys::generate(&mut |b|b.fill(11),100);
-    let mut victim_keys=PayloadKeys::generate(&mut |b|b.fill(12),100);
-    let mut recipient_keys=PayloadKeys::generate(&mut |b|b.fill(13),100);
-    let ids=vec![sender.public.clone(),victim.public.clone(),recipient.public.clone()];
-    let recipient_bundle=read_bundle(&ids,&recipient_keys.bundle(&recipient,recipient.public.ed.as_bytes(),100)).unwrap();
-    let victim_bundle=read_bundle(&ids,&victim_keys.bundle(&victim,victim.public.ed.as_bytes(),100)).unwrap();
-    let mut sender_sessions=Sessions::default();
-    let initial=sender_sessions.open(&sender_keys,sender.public.ed.as_bytes(),recipient.public.keyhash,&recipient_bundle,None,&mut fresh,b"message from Carol").unwrap();
-    let mut control=Sessions::default();
-    control.prefetch(read_bundle(&ids,&sender_keys.bundle(&sender,sender.public.ed.as_bytes(),100)).unwrap());
-    assert_eq!(control.receive(&mut recipient_keys.clone(),&recipient.public.keyhash,sender.public.keyhash,&initial,&mut fresh).unwrap(),b"message from Carol");
-    let mut receiver=Sessions::default();
-    receiver.prefetch(victim_bundle);
-    assert!(receiver.receive(&mut recipient_keys,&recipient.public.keyhash,victim.public.keyhash,&initial,&mut fresh).is_err(),"design §14.2: a relay must not turn Carol's initial message into an authenticated session with Alice");
-}
-
-#[test]
-fn r03_failed_initial_message_must_not_consume_the_private_one_time_key() {
-    let (sender,recipient)=(test_identity("alice"),test_identity("bob"));
-    let mut sender_keys=PayloadKeys::generate(&mut |b|b.fill(11),100);
-    let mut recipient_keys=PayloadKeys::generate(&mut |b|b.fill(13),100);
-    let ids=vec![sender.public.clone(),recipient.public.clone()];
-    let bundle=read_bundle(&ids,&recipient_keys.bundle(&recipient,recipient.public.ed.as_bytes(),100)).unwrap();
-    let otk=OneTimeKey::decode(&recipient_keys.one_time_keys(1,&mut fresh)[0]).unwrap();
-    let mut tx=Sessions::default();let initial=tx.open(&sender_keys,sender.public.ed.as_bytes(),recipient.public.keyhash,&bundle,Some(&otk),&mut fresh,b"valid message").unwrap();
-    let mut receiver=Sessions::default();
-    receiver.prefetch(read_bundle(&ids,&sender_keys.bundle(&sender,sender.public.ed.as_bytes(),100)).unwrap());
-    let mut control=Sessions::default();
-    control.prefetched=receiver.prefetched.clone();
-    assert_eq!(control.receive(&mut recipient_keys.clone(),&recipient.public.keyhash,sender.public.keyhash,&initial,&mut fresh).unwrap(),b"valid message");
-    let mut corrupt=initial.clone();*corrupt.last_mut().unwrap()^=1;
-    let mut rx=receiver;
-    assert!(rx.receive(&mut recipient_keys,&recipient.public.keyhash,sender.public.keyhash,&corrupt,&mut fresh).is_err());
-    assert_eq!(rx.receive(&mut recipient_keys,&recipient.public.keyhash,sender.public.keyhash,&initial,&mut fresh).ok(),Some(b"valid message".to_vec()),"design §14.2: an unauthenticated packet must not destroy the key needed for the valid queued initial message");
+fn r02_a_sealed_message_must_match_the_named_senders_bound_identity() {
+    // 2026-11-20, slice 2: the seal replaced the session this finding was
+    // filed against; the claim stands, and the tag is what carries it
+    use rhtn_client::payload::{Sender,NodeKeyHeld,seal_to,open_relayed,tag_verifies};
+    use rhtn_crypto::{seal::EncryptionSecret,verify::EncryptionKey};
+    let (sender,victim,recipient,node)=(test_identity("carol"),test_identity("alice"),test_identity("bob"),test_identity("w1"));
+    let secret=|n:&str|EncryptionSecret::from_identity_root(&rhtn_codec::cose::sha256(n.as_bytes()));
+    let key_of=|kh:[u8;32],s:&EncryptionSecret|EncryptionKey{keyhash:kh,kem:*s.kem_public(),auth:s.auth_public()};
+    let (carol,alice,bob)=(secret("carol"),secret("alice"),secret("bob"));
+    let node_secret=rhtn_crypto::xwing::Secret::from_seed([21;32]);
+    let held=NodeKeyHeld{node:node.public.keyhash,n:1,public:Box::new(*node_secret.public())};
+    // Carol seals naming Alice as its sender, under Carol's own secret
+    let forged=seal_to(&Sender{keyhash:&victim.public.keyhash,secret:&carol,alias:"Alice",introduction:None},&recipient.public.keyhash,&key_of(recipient.public.keyhash,&bob),&held,0,b"message from Carol",&mut fresh).unwrap();
+    let honest=seal_to(&Sender{keyhash:&sender.public.keyhash,secret:&carol,alias:"Carol",introduction:None},&recipient.public.keyhash,&key_of(recipient.public.keyhash,&bob),&held,0,b"message from Carol",&mut fresh).unwrap();
+    let open=|sealed:&[u8]|{let s=rhtn_archive::sealed::Sealed::decode(sealed).unwrap();let half=node_secret.decapsulate(&s.ct_n);open_relayed(&bob,&recipient.public.keyhash,&node.public.keyhash,&rhtn_archive::submission::unrelayed(&rhtn_archive::submission::relayed(1,sealed,&half)).unwrap()).unwrap()};
+    let (s,b)=open(&honest);
+    assert!(tag_verifies(&bob,&recipient.public.keyhash,&key_of(sender.public.keyhash,&carol),&s,&b),"control: Carol's own message is attributed to Carol");
+    let (s,b)=open(&forged);
+    assert_eq!(b.sender,victim.public.keyhash,"control: the body names Alice");
+    assert!(!tag_verifies(&bob,&recipient.public.keyhash,&key_of(victim.public.keyhash,&alice),&s,&b),"design §14.2: a relay must not turn Carol's message into one authenticated as Alice");
 }
 
 #[tokio::test]
@@ -64,8 +47,8 @@ async fn r04_direct_open_must_honor_the_local_privacy_gate() {
     use rhtn_transport::{tls::Pins,traversal::{Candidate,CandidateKind}};
     let (a,b)=(Arc::new(test_identity("alice")),Arc::new(test_identity("bob")));
     let pins=Pins::new();pins.pin_identity(&a.public);pins.pin_identity(&b.public);
-    let a_socket=LightDirect::bind(rhtn_transport::tls::Party::of(a.clone()),pins.clone(),Default::default(),rhtn_adaptors::direct::Reachable::default(),"127.0.0.1:0".parse().unwrap(),None,None,Arc::new(|_|false),Arc::new(|_,_,_|{}),rhtn_adaptors::direct::Control::none()).unwrap();
-    let b_socket=LightDirect::bind(rhtn_transport::tls::Party::of(b.clone()),pins,Default::default(),rhtn_adaptors::direct::Reachable::default(),"127.0.0.1:0".parse().unwrap(),None,None,Arc::new(|_|true),Arc::new(|_,_,_|{}),rhtn_adaptors::direct::Control::none()).unwrap();
+    let a_socket=LightDirect::bind(rhtn_transport::tls::Party::of(a.clone()),pins.clone(),Default::default(),rhtn_adaptors::direct::Reachable::default(),"127.0.0.1:0".parse().unwrap(),None,None,Arc::new(|_|false),Arc::new(|_,_|{}),rhtn_adaptors::direct::Control::none()).unwrap();
+    let b_socket=LightDirect::bind(rhtn_transport::tls::Party::of(b.clone()),pins,Default::default(),rhtn_adaptors::direct::Reachable::default(),"127.0.0.1:0".parse().unwrap(),None,None,Arc::new(|_|true),Arc::new(|_,_|{}),rhtn_adaptors::direct::Control::none()).unwrap();
     assert!(a_socket.gather(b.public.keyhash).await.is_none(),"control: policy prohibits direct contact");
     let candidate=Candidate{kind:CandidateKind::Host,addr:b_socket.addr().unwrap()};
     assert!(!a_socket.open(b.public.keyhash,vec![candidate]).await,"design §12.6.3: receiving candidates cannot bypass the local direct-path policy");
@@ -82,7 +65,7 @@ async fn r05_malformed_resource_body_must_receive_status_three() {
         let pins=Pins::new();pins.pin_identity(&a.public);pins.pin_identity(&b.public);
         let view=NodeView::new(b.clone(),Locator::root(b.public.keyhash,Seqno{series:1,counter:0}));
         let live=LiveNode::start(NodeConfig::defaults(b.clone(),pins.clone(),30),view,vec![a.public.clone(),b.public.clone()],AnchorTable::new(0,Ingestion::UnverifiedGossip));
-        let cfg=ClientConfig{me:rhtn_transport::tls::Party::of(a),pins,bind:Default::default(),capabilities:Default::default(),attestation:None,filter:None,sibling_cache:Default::default(),addresses:Default::default(),tls:Default::default(),connect_timeout:Duration::from_secs(2),on_reachability:None,log:Log::default()};
+        let cfg=ClientConfig{me:rhtn_transport::tls::Party::of(a),pins,bind:Default::default(),capabilities:Default::default(),attestation:None,filter:None,sibling_cache:Default::default(),addresses:Default::default(),cursors:Default::default(),tls:Default::default(),connect_timeout:Duration::from_secs(2),on_reachability:None,log:Log::default()};
         let ep=tls::client_endpoint("127.0.0.1:0".parse().unwrap()).unwrap();
         let AttachOutcome::Attached(session)=attach(&cfg,&ep,b.public.keyhash,live.addr,false).await else {panic!("attach")};
         let reply=session.request(6,&[0xa0]).await; // valid outer framing, empty body map
@@ -129,7 +112,7 @@ async fn r04_node_direct_open_must_honor_the_horizon_gate() {
     let ids=vec![a.public.clone(),b.public.clone()];
     let start=|me:Arc<rhtn_crypto::SigningIdentity>|LiveNode::start(NodeConfig::defaults(me.clone(),pins.clone(),30),NodeView::new(me.clone(),Locator::root(me.public.keyhash,Seqno{series:1,counter:0})),ids.clone(),AnchorTable::new(0,Ingestion::UnverifiedGossip));
     let left=start(a);let right=start(b.clone());
-    let direct=NodeDirect::new(left,pins,Arc::new(|_,_,_|{}));
+    let direct=NodeDirect::new(left,pins,Arc::new(|_,_|{}));
     assert!(direct.gather(b.public.keyhash).await.is_none(),"control: unrelated roots are outside each other's horizon");
     assert!(!direct.open(b.public.keyhash,vec![Candidate{kind:CandidateKind::Host,addr:right.addr}]).await,"design §12.6.3: NodeDirect must enforce the same local boundary as LightDirect");
 }

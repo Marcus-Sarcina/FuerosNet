@@ -60,9 +60,10 @@ type Fut<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// **What the direct path asks of the client for its control streams**
 /// (`wire-format.md` §9.1): this side's own introduction to present on
-/// a dial, the taking of one a dialler presented — a cold call, admitted
-/// by the client's policy — and the answer to a peer's prekey request
-/// over a held path, so a session opens with no node asked.
+/// a dial, and the taking of one a dialler presented — a cold call,
+/// admitted by the client's policy. **The introduction is all a direct
+/// path needs**: the transport is end to end between the two, so nothing
+/// is sealed on it and no key material beyond it is asked for.
 #[derive(Clone)]
 pub struct Control {
     /// This side's introduction (`wire-format.md` §2.3), or none where it
@@ -71,37 +72,29 @@ pub struct Control {
     /// An introduction a dialler presented: whether the dialler is a
     /// party this client now holds.
     pub introduced: Introduced,
-    /// A prekey request (`wire-format.md` §7.8) from a peer on the path:
-    /// the reply, or none where this side will not answer it.
-    pub answer: Answer,
 }
 
 /// See [`Control::introduce`].
 pub type Introduce = Arc<dyn Fn() -> Fut<'static, Option<Vec<u8>>> + Send + Sync>;
 /// See [`Control::introduced`].
 pub type Introduced = Arc<dyn Fn(Keyhash, Vec<u8>) -> Fut<'static, bool> + Send + Sync>;
-/// See [`Control::answer`].
-pub type Answer = Arc<dyn Fn(Keyhash, Vec<u8>) -> Fut<'static, Option<Vec<u8>>> + Send + Sync>;
 
 impl Control {
-    /// Introduces nobody, takes no introduction, answers nothing: the
-    /// direct path as it was before control streams.
+    /// Introduces nobody and takes no introduction: the direct path as it
+    /// was before control streams.
     pub fn none() -> Control {
         Control {
             introduce: Arc::new(|| Box::pin(async { None })),
             introduced: Arc::new(|_, _| Box::pin(async { false })),
-            answer: Arc::new(|_, _| Box::pin(async { None })),
         }
     }
 }
 
-/// The first byte of a control stream: the dialler's introduction, or a
-/// prekey request answered on the same stream (`wire-format.md` §9.1).
+/// The first byte of a control stream: the dialler's introduction
+/// (`wire-format.md` §9.1).
 pub const CONTROL_INTRODUCTION: u8 = 2;
-/// See [`CONTROL_INTRODUCTION`].
-pub const CONTROL_PREKEY: u8 = 3;
 /// How long an acceptor waits for the introduction of a dialler it
-/// cannot bind otherwise, and a requester for a reply.
+/// cannot bind otherwise.
 const CONTROL_WAIT: Duration = Duration::from_secs(3);
 /// The most a control stream carries either way.
 const CONTROL_BYTES: usize = 1 << 20;
@@ -116,14 +109,8 @@ pub trait Direct: Send + Sync {
     /// Dial the peer's candidates and hold what opens.
     fn open(&self, peer: Keyhash, candidates: Vec<Candidate>) -> Fut<'_, bool>;
     /// Deliver on the path held; false leaves the message with the caller,
-    /// and the relay is next.
+    /// and the seal for the recipient's node is next.
     fn deliver(&self, peer: Keyhash, bytes: Vec<u8>) -> Fut<'_, bool>;
-    /// Ask `peer`, on the path held, for its prekey material
-    /// (`wire-format.md` §7.8) and hand the reply back; none where no
-    /// path is held or the peer did not answer.
-    fn request(&self, _peer: Keyhash, _bytes: Vec<u8>) -> Fut<'_, Option<Vec<u8>>> {
-        Box::pin(async { None })
-    }
 }
 
 /// No direct path to anyone.
@@ -380,8 +367,7 @@ impl LightDirect {
         }
         self.0.conns.lock().unwrap().insert(peer, conn.clone());
         self.0.reachable.set(peer, true);
-        // the control streams: an introduction (taken, or needed by
-        // nothing), and a prekey request answered on the same stream
+        // the control stream: an introduction, taken or needed by nothing
         let ctl = self.clone();
         let serving = conn.clone();
         tokio::spawn(async move {
@@ -389,18 +375,9 @@ impl LightDirect {
                 let Ok(bytes) = recv.read_to_end(CONTROL_BYTES).await else {
                     continue;
                 };
-                match bytes.split_first() {
-                    Some((&CONTROL_INTRODUCTION, body)) => {
-                        let _ = (ctl.0.control.introduced)(peer, body.to_vec()).await;
-                        let _ = send.write_all(&[1]).await;
-                    }
-                    Some((&CONTROL_PREKEY, body)) => {
-                        if let Some(reply) = (ctl.0.control.answer)(peer, body.to_vec()).await {
-                            tracing::info!(target: "pay", peer = %hex4(&peer), bytes = reply.len(), "pay.direct.prekey.answered");
-                            let _ = send.write_all(&reply).await;
-                        }
-                    }
-                    _ => {}
+                if let Some((&CONTROL_INTRODUCTION, body)) = bytes.split_first() {
+                    let _ = (ctl.0.control.introduced)(peer, body.to_vec()).await;
+                    let _ = send.write_all(&[1]).await;
                 }
                 let _ = send.finish();
             }
@@ -412,7 +389,7 @@ impl LightDirect {
                     // no binding: nothing relayed this, so there was no
                     // node in the path to carry one (`wire-format.md`
                     // §7.10)
-                    (l.0.inbound)(peer, bytes, None);
+                    (l.0.inbound)(peer, bytes);
                 }
             }
             // gone: the path is down unless a newer connection replaced this one
@@ -485,27 +462,6 @@ impl Direct for LightDirect {
         })
     }
 
-    fn request(&self, peer: Keyhash, bytes: Vec<u8>) -> Fut<'_, Option<Vec<u8>>> {
-        Box::pin(async move {
-            let conn = self.0.conns.lock().unwrap().get(&peer).cloned()?;
-            let mut frame = Vec::with_capacity(bytes.len() + 1);
-            frame.push(CONTROL_PREKEY);
-            frame.extend_from_slice(&bytes);
-            let reply = tokio::time::timeout(CONTROL_WAIT, async {
-                let (mut send, mut recv) = conn.open_bi().await.ok()?;
-                send.write_all(&frame).await.ok()?;
-                send.finish().ok()?;
-                recv.read_to_end(CONTROL_BYTES).await.ok()
-            })
-            .await
-            .ok()
-            .flatten()
-            .filter(|r| !r.is_empty());
-            tracing::info!(target: "pay", peer = %hex4(&peer), answered = reply.is_some(), "pay.direct.prekey.asked");
-            reply
-        })
-    }
-
     fn deliver(&self, peer: Keyhash, bytes: Vec<u8>) -> Fut<'_, bool> {
         Box::pin(async move {
             let conn = self.0.conns.lock().unwrap().get(&peer).cloned();
@@ -568,7 +524,7 @@ impl NodeDirect {
         tokio::spawn(async move {
             while let Some((peer, bytes)) = inbox.recv().await {
                 // direct again: no node carried it and none bound it
-                inbound(peer, bytes, None);
+                inbound(peer, bytes);
             }
         });
         Arc::new(NodeDirect {

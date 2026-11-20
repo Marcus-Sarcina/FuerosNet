@@ -67,7 +67,7 @@ pub const RUNNER_OPTIONS: &str =
 /// walked back to the seed that made it.
 pub fn host_control_seed(ed_seed: &[u8; 32]) -> Zeroizing<[u8; 32]> {
     let mut out = Zeroizing::new([0u8; 32]);
-    crate::pqxdh::hkdf_sha256(&[], ed_seed, HOST_CONTROL_TAG, &mut out[..]);
+    crate::kdf::hkdf_sha256(&[], ed_seed, HOST_CONTROL_TAG, &mut out[..]);
     out
 }
 
@@ -76,7 +76,7 @@ pub fn host_control_seed(ed_seed: &[u8; 32]) -> Zeroizing<[u8; 32]> {
 /// never is.
 pub fn host_runner_seed(ed_seed: &[u8; 32]) -> Zeroizing<[u8; 32]> {
     let mut out = Zeroizing::new([0u8; 32]);
-    crate::pqxdh::hkdf_sha256(&[], ed_seed, HOST_RUNNER_TAG, &mut out[..]);
+    crate::kdf::hkdf_sha256(&[], ed_seed, HOST_RUNNER_TAG, &mut out[..]);
     out
 }
 

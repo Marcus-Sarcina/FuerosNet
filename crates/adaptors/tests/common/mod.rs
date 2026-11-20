@@ -35,7 +35,7 @@ pub const SUBNET: [u8; 32] = [0xdb; 32];
 
 // four witnesses, so a four-nominee set can be pruned to three
 // [author, 2026-10-19]: a party absent from this cast is one the
-// node never knew, whose bundle it refuses and whom nobody can reach
+// node never knew, and whom nobody can reach
 pub const NAMES: [&str; 8] = ["alice", "bob", "carol", "w1", "w2", "w3", "w4", "witness"];
 
 pub fn id(n: &str) -> SigningIdentity {
@@ -58,6 +58,91 @@ pub fn pins() -> Pins {
     p
 }
 
+/// `name`'s encryption secrets, derived from its identity root as every
+/// device the phrase restores derives them.
+pub fn secret(name: &str) -> rhtn_crypto::seal::EncryptionSecret {
+    rhtn_crypto::seal::EncryptionSecret::from_identity_root(id(name).identity_root())
+}
+
+/// A node-key fetch for `to` alone, with `nonce`: the request and its body.
+pub fn node_key_request(to: &str, nonce: [u8; 16]) -> Vec<u8> {
+    rhtn_archive::node_key::NodeKeyRequest::for_recipients(vec![kh(to)], nonce)
+        .expect("one recipient")
+        .encode()
+}
+
+/// **What `from` seals to `to`** (`wire-format.md` §7.8.1) under the node
+/// key a `NodeKeyReply` carried, verified first under the node it names:
+/// built the way a client builds it, from the client's own functions, so
+/// that a node test submits a seal the node can open its half of.
+pub fn seal_under(
+    from: &str,
+    to: &str,
+    reply: &[u8],
+    bytes: &[u8],
+    introduction: Option<&[u8]>,
+) -> Vec<u8> {
+    let r = rhtn_archive::node_key::NodeKeyReply::decode(reply).expect("a node-key reply");
+    let key = rhtn_archive::node_key::NodeKey::parse(&r.outcome.expect("a key, not a refusal"))
+        .expect("a node key");
+    key.verify(&ids()).expect("signed by its node");
+    assert_eq!(
+        key.fields.recipient,
+        kh(to),
+        "the key is for the recipient asked about"
+    );
+    let held = rhtn_client::payload::NodeKeyHeld {
+        node: key.fields.node,
+        n: key.fields.n,
+        public: Box::new(key.fields.public),
+    };
+    let their =
+        rhtn_crypto::verify::encryption_key(&ids(), &rhtn_crypto::encryption_key::own(&id(to)))
+            .expect("the recipient's own key verifies");
+    let me = kh(from);
+    let mine = secret(from);
+    let sender = rhtn_client::payload::Sender {
+        keyhash: &me,
+        secret: &mine,
+        alias: from,
+        introduction,
+    };
+    let mut fresh = |out: &mut [u8]| {
+        for c in out.chunks_mut(32) {
+            let r = tls::random_bytes::<32>();
+            c.copy_from_slice(&r[..c.len()]);
+        }
+    };
+    rhtn_client::payload::seal_to(
+        &sender,
+        &kh(to),
+        &their,
+        &held,
+        rhtn_client::payload::KIND_APPLICATION,
+        bytes,
+        &mut fresh,
+    )
+    .expect("sealed")
+}
+
+/// **What `to` reads of a delivery from `node`**: the seal opened under
+/// its own secrets and the node's half, and the tag checked against the
+/// sender the body names. The body, where both hold.
+pub fn open_as(
+    to: &str,
+    node: &Keyhash,
+    delivered: &[u8],
+) -> Option<rhtn_archive::sealed::SealedBody> {
+    let r = rhtn_archive::submission::unrelayed(delivered)?;
+    let mine = secret(to);
+    let (sealed, body) = rhtn_client::payload::open_relayed(&mine, &kh(to), node, &r).ok()?;
+    let sender = NAMES.iter().find(|n| kh(n) == body.sender)?;
+    let their =
+        rhtn_crypto::verify::encryption_key(&ids(), &rhtn_crypto::encryption_key::own(&id(sender)))
+            .ok()?;
+    rhtn_client::payload::tag_verifies(&mine, &kh(to), &their, &sealed, &body).then_some(body)
+}
+
 pub fn loopback() -> SocketAddr {
     "127.0.0.1:0".parse().unwrap()
 }
@@ -72,6 +157,7 @@ pub fn client_cfg(name: &str) -> ClientConfig {
         filter: None,
         sibling_cache: Arc::new(Mutex::new(Vec::new())),
         addresses: Arc::new(Mutex::new(Default::default())),
+        cursors: Default::default(),
         tls: Arc::new(Mutex::new(Default::default())),
         connect_timeout: Duration::from_millis(1500),
         on_reachability: None,
@@ -629,7 +715,7 @@ pub fn host_with(
     let handle = spawn_client_keeping(name, cfg, reachable.clone(), skew_s, kept.clone());
     let (courier, app) = Courier::new(handle.clone(), Arc::new(NoDirect(reachable)));
     courier.serve_also(serving.clone());
-    inboxes.host(kh(name), courier.inbound());
+    inboxes.host(kh(name), courier.inbound_via(serving.me()));
     Party {
         handle,
         courier,
@@ -769,6 +855,35 @@ impl Who {
     }
 }
 
+/// **Each of `cast` holds every other's card**: the identity and the
+/// encryption key its introduction carries (`wire-format.md` §2.3), as a
+/// contact. A client writes only to a party whose encryption key it holds
+/// [author, 2026-11-20], so a harness whose parties write to one another
+/// supplies what a live client would already hold.
+pub async fn exchange_cards(cast: &[(&str, &Party)]) {
+    for (name, p) in cast {
+        let cards: Vec<(Identity, Vec<u8>)> = cast
+            .iter()
+            .filter(|(n, _)| n != name)
+            .map(|(n, _)| {
+                (
+                    id(n).public.clone(),
+                    rhtn_crypto::encryption_key::own(&id(n)),
+                )
+            })
+            .collect();
+        p.with(move |c| {
+            for (identity, ek) in cards {
+                c.contact(&identity, rhtn_client::contacts::How::Introduced, false);
+                if let Some(contact) = c.store.contacts.get_mut(&identity.keyhash) {
+                    contact.encryption_key = Some(ek);
+                }
+            }
+        })
+        .await;
+    }
+}
+
 /// A party holds `name` as a contact by material and locator: what a
 /// nominator accumulates in use, seeded by hand — the set travels by
 /// locator (kind 22), and a nominee the sender cannot introduce is not
@@ -860,8 +975,8 @@ pub async fn open_both(a: &Party, b: &Party) -> Result<(), Abort> {
 
 impl Meeting {
     /// `who` hosted beside the node `node`, which holds `table` and
-    /// serves them all; everyone attached and swept, so each holds the
-    /// others' prekeys.
+    /// serves them all; everyone attached and swept, each holding the
+    /// others' cards and their node keys.
     pub async fn open(who: Vec<Who>, node: &'static str, table: Table) -> Meeting {
         Self::open_with(who, node, table, ceremony_cfg()).await
     }
@@ -880,13 +995,23 @@ impl Meeting {
         for Who(name, skew) in who {
             parties.insert(name, host_with(name, &serving, &inboxes, skew, cfg.clone()));
         }
+        // **every party holds every other's card**, as the cast of a
+        // meeting would have exchanged them: a query is sealed to its
+        // verifier and a ceremony's legs to the counterparty and the
+        // witnesses (`wire-format.md` §7.8.1), and a client writes only
+        // to a party whose encryption key it holds [author, 2026-11-20].
+        // The verifier a subject names is one the querier has otherwise
+        // never met, so the harness supplies what a live client would
+        // have to hold already
+        let cast: Vec<(&str, &Party)> = parties.iter().map(|(n, p)| (*n, p)).collect();
+        exchange_cards(&cast).await;
         let population: Vec<Keyhash> = parties.keys().map(|n| kh(n)).collect();
         for p in parties.values() {
             p.courier.attach(population.clone()).await;
         }
-        // **swept again once everyone has published**: the first to attach
-        // swept before the last had a bundle, and a recipient can only
-        // attribute an initial message from a peer whose binding it holds
+        // **swept again once everyone has attached**: a sweep fetches the
+        // node keys of the parties each holds a card for (`light-client-
+        // requirements.md` §3), and a card learned since is swept for here
         for p in parties.values() {
             p.courier.sweep(population.clone()).await;
         }
@@ -914,25 +1039,44 @@ impl Meeting {
     /// rest `hold` later**, in the order sent: what a loaded network does
     /// to two messages that left together, held open long enough that a
     /// poll cannot miss the gap.
-    pub fn stagger(&self, to: &str, senders: &[&str], hold: Duration) {
-        let straight = self.party(to).courier.inbound();
+    ///
+    /// The node names no sender (`wire-format.md` §7.10), so the harness
+    /// reads it the way the recipient will: by opening the seal under the
+    /// recipient's own secrets. Only the routing is decided on it; the
+    /// bytes reach the recipient unchanged.
+    pub async fn stagger(&self, to: &str, senders: &[&str], hold: Duration) {
+        let node = self.serving.me();
+        let recipient = kh(to);
+        let (seed, auth) = self
+            .party(to)
+            .with(|c| c.encryption_secrets())
+            .await
+            .expect("a seed device holds its secrets");
+        let secret = rhtn_crypto::seal::EncryptionSecret::from_secrets(&seed, &auth);
+        let straight = self.party(to).courier.inbound_via(node);
         let senders: Vec<Keyhash> = senders.iter().map(|s| kh(s)).collect();
         let first = Mutex::new(std::collections::BTreeSet::new());
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let late = straight.clone();
         tokio::spawn(async move {
-            while let Some((from, bytes, binding)) = rx.recv().await {
+            while let Some((from, bytes)) = rx.recv().await {
                 tokio::time::sleep(hold).await;
-                late(from, bytes, binding);
+                late(from, bytes);
             }
         });
         self.inboxes.host(
-            kh(to),
-            Arc::new(move |from, bytes, binding| {
-                if senders.contains(&from) && !first.lock().unwrap().insert(from) {
-                    let _ = tx.send((from, bytes, binding));
-                } else {
-                    straight(from, bytes, binding);
+            recipient,
+            Arc::new(move |from, bytes: Vec<u8>| {
+                let sender = rhtn_archive::submission::unrelayed(&bytes).and_then(|r| {
+                    rhtn_client::payload::open_relayed(&secret, &recipient, &from, &r)
+                        .ok()
+                        .map(|(_, body)| body.sender)
+                });
+                match sender {
+                    Some(s) if senders.contains(&s) && !first.lock().unwrap().insert(s) => {
+                        let _ = tx.send((from, bytes));
+                    }
+                    _ => straight(from, bytes),
                 }
             }),
         );

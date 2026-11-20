@@ -1,182 +1,112 @@
-//! The node's mailbox on disk (QUE-04): what a restart leaves behind.
+//! The node's mailbox on disk (QUE-04, QUE-17): what a restart leaves
+//! behind, and what it finds.
 
-use rhtn_archive::Keyhash;
-use rhtn_crypto::identity::testkit::test_identity;
+mod common;
+
+use common::*;
+use rhtn_archive::submission::SUBMISSION_ACCEPTED;
+use rhtn_node::node_keys::NodeKeyConfig;
 use rhtn_node::queue::DirStore;
-use rhtn_transport::session::*;
-use rhtn_transport::tls::{self, Party, Pins};
-use std::collections::BTreeMap;
-use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
-use tokio::time::{Duration, timeout};
-
-const NAMES: [&str; 3] = ["alice", "bob", "carol"];
-
-fn loopback() -> SocketAddr {
-    "127.0.0.1:0".parse().unwrap()
-}
-
-fn pins() -> Pins {
-    let p = Pins::new();
-    for n in NAMES {
-        p.pin_identity(&test_identity(n).public);
-    }
-    p
-}
-
-fn kh(n: &str) -> Keyhash {
-    test_identity(n).public.keyhash
-}
-
-fn node_cfg(name: &str) -> NodeConfig {
-    let mut cfg = NodeConfig::defaults(Arc::new(test_identity(name)), pins(), 30);
-    cfg.log = Log::recording();
-    cfg
-}
-
-fn client_cfg(name: &str) -> ClientConfig {
-    ClientConfig {
-        me: Party::of(Arc::new(test_identity(name))),
-        pins: pins(),
-        bind: Default::default(),
-        capabilities: BTreeMap::new(),
-        attestation: None,
-        filter: None,
-        sibling_cache: Arc::new(Mutex::new(Vec::new())),
-        addresses: Arc::new(Mutex::new(Default::default())),
-        tls: Arc::new(Mutex::new(Default::default())),
-        connect_timeout: Duration::from_millis(1500),
-        on_reachability: None,
-        log: Log::recording(),
-    }
-}
-
-fn spawn_node(cfg: NodeConfig) -> (Arc<Node>, SocketAddr, quinn::Endpoint) {
-    let ep = tls::server_endpoint(cfg.presenter(), loopback()).unwrap();
-    let addr = ep.local_addr().unwrap();
-    let node = Node::new(cfg);
-    tokio::spawn(node.clone().serve(ep.clone()));
-    (node, addr, ep)
-}
-
-fn client_ep() -> quinn::Endpoint {
-    tls::client_endpoint(loopback()).unwrap()
-}
-
-async fn attach_ok(cfg: &ClientConfig, target: &str, addr: SocketAddr) -> Session {
-    match attach(cfg, &client_ep(), kh(target), addr, false).await {
-        AttachOutcome::Attached(s) => s,
-        other => panic!("{other:?}"),
-    }
-}
-
-/// Read every drain delivery that arrives within a short window.
-async fn drain(s: &mut Session) -> Vec<Vec<u8>> {
-    let mut got = Vec::new();
-    while let Ok(Some(b)) = timeout(Duration::from_millis(400), s.deliveries.recv()).await {
-        got.push(b);
-    }
-    got
-}
-
-fn messages(k: usize, tag: &str) -> Vec<Vec<u8>> {
-    (0..k)
-        .map(|i| format!("{tag}:{i}:{}", "x".repeat(40)).into_bytes())
-        .collect()
-}
+use rhtn_transport::queue::{QueueStore, Queued};
 
 // acceptance: QUE-04
-#[tokio::test]
-async fn no_crash_recovery_copy_outlives_a_delivery() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn no_crash_recovery_copy_outlives_a_removal() {
+    const T0: u64 = 1_900_000_000;
+    const DAY: u64 = 86_400;
+    // the retention a test parameter (thirty days as shipped)
+    const RETENTION: u64 = 3 * DAY;
     let dir = std::env::temp_dir().join(format!("rhtn-queue-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    let store = Arc::new(DirStore::new(&dir));
-    let mut cfg = node_cfg("alice");
-    cfg.queue = store.clone();
-    let (node, addr, ep) = spawn_node(cfg);
-    let sent = messages(3, "q4");
-    for m in &sent {
-        node.enqueue(kh("carol"), m.clone()).unwrap();
+    let b = Bench::start(T0, Some(&dir), NodeKeyConfig::default(), |cfg| {
+        cfg.retention_secs = RETENTION;
+    });
+    let carol = Recipient::of("carol");
+    let key = b.node_key(&kh("carol")).await;
+    let sent: Vec<Vec<u8>> = (0..3u8)
+        .map(|i| carol.seal(&key, format!("q4:{i}").as_bytes(), i))
+        .collect();
+    for (i, m) in sent.iter().enumerate() {
+        assert_eq!(
+            b.submit(&kh("carol"), m, i as u8).await,
+            SUBMISSION_ACCEPTED
+        );
     }
+    let store = DirStore::new(dir.join("queue"));
     assert_eq!(store.all_files().len(), 3, "persisted while waiting");
-    let mut s = attach_ok(&client_cfg("carol"), "alice", addr).await;
-    assert_eq!(drain(&mut s).await.len(), 3);
-    // each file goes as its delivery is taken, and the last acknowledgement
-    // may follow the last read by a moment
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
-    while !store.all_files().is_empty() && tokio::time::Instant::now() < deadline {
-        tokio::time::sleep(Duration::from_millis(20)).await;
+    // the key they were sealed to is rotated past, so it is held for them
+    // alone, and its private half is read off the disk to look for later
+    b.set(T0 + DAY);
+    b.node_key(&kh("carol")).await;
+    let key_dir = dir.join("node-keys").join(
+        kh("carol")
+            .iter()
+            .map(|x| format!("{x:02x}"))
+            .collect::<String>(),
+    );
+    let seed = std::fs::read(key_dir.join("1")).expect("key 1 on disk")[..32].to_vec();
+    // delivered, then their retention runs out and the node removes them
+    let (_, got) = b.collect("carol", None, 500).await;
+    assert_eq!(got.len(), 3);
+    b.set(T0 + DAY + RETENTION);
+    assert_eq!(b.live.node.expire(), 3);
+    assert!(store.all_files().is_empty());
+    // the process dies without warning, and a node starts from whatever
+    // the directory holds
+    let clock = b.kill();
+    let again = Bench::start_on(clock, Some(&dir), NodeKeyConfig::default(), |cfg| {
+        cfg.retention_secs = RETENTION;
+    });
+    let (queued, got) = again.collect("carol", None, 500).await;
+    assert_eq!(queued, 0);
+    assert!(got.is_empty(), "no delivery follows");
+    assert!(again.live.node.queue_records(&kh("carol")).is_empty());
+    let disk = bytes_under(&dir);
+    for m in &sent {
+        assert!(
+            !disk.windows(m.len()).any(|w| w == m.as_slice()),
+            "none of the ciphertexts is present after the restart"
+        );
     }
-    s.conn.close(0u32.into(), b"");
-    drop(s);
-    // the process dies without warning: the node and its endpoint go away,
-    // and a new node starts from whatever the directory holds
-    ep.close(0u32.into(), b"killed");
-    drop(node);
-    let mut cfg2 = node_cfg("alice");
-    cfg2.queue = Arc::new(DirStore::new(&dir));
-    let (node2, addr2, _ep2) = spawn_node(cfg2);
-    let mut s2 = attach_ok(&client_cfg("carol"), "alice", addr2).await;
-    assert_eq!(s2.ack.queued, 0);
-    assert!(drain(&mut s2).await.is_empty());
-    assert!(node2.queue_records(&kh("carol")).is_empty());
-    let mut leftover = Vec::new();
-    for entry in walkdir(&dir) {
-        leftover.push(entry);
-    }
+    assert!(!key_dir.join("1").exists());
     assert!(
-        leftover.is_empty(),
-        "none of the ciphertexts is present after the restart: {leftover:?}"
+        !mentions(&disk, &seed),
+        "nor the private half of the key held only for them"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-fn walkdir(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
-    let mut out = Vec::new();
-    if let Ok(rd) = std::fs::read_dir(dir) {
-        for e in rd.flatten() {
-            if e.path().is_dir() {
-                out.extend(walkdir(&e.path()));
-            } else {
-                out.push(e.path());
-            }
-        }
+fn item(store: &DirStore, recipient: [u8; 32], arrival: u64, sealed: &[u8]) -> Queued {
+    Queued {
+        sealed: sealed.to_vec(),
+        recipient,
+        n: 1,
+        position: store.next_position(&recipient),
+        arrival,
+        delivered_at: None,
     }
-    out
 }
 
 // acceptance: QUE-17
 #[test]
 fn a_restart_in_the_arrival_second_overwrites_nothing_accepted() {
-    use rhtn_node::queue::{QueueStore, Queued};
     let dir = std::env::temp_dir().join(format!("rhtn-queue-restart-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let first = DirStore::new(&dir);
-    first.push(Queued {
-        device: rhtn_transport::queue::ANY_DEVICE,
-        recipient: kh("carol"),
-        arrival: 100,
-        ciphertext: b"one".to_vec(),
-    });
-    first.push(Queued {
-        device: rhtn_transport::queue::ANY_DEVICE,
-        recipient: kh("carol"),
-        arrival: 100,
-        ciphertext: b"two".to_vec(),
-    });
+    let one = item(&first, kh("carol"), 100, b"one");
+    assert!(first.push(one));
+    let two = item(&first, kh("carol"), 100, b"two");
+    assert!(first.push(two));
     drop(first);
     // the node restarts within the same second and accepts a third
     let second = DirStore::new(&dir);
-    second.push(Queued {
-        device: rhtn_transport::queue::ANY_DEVICE,
-        recipient: kh("carol"),
-        arrival: 100,
-        ciphertext: b"three".to_vec(),
-    });
+    let three = item(&second, kh("carol"), 100, b"three");
+    assert_eq!(three.position, 3, "the sequence resumes past what is held");
+    assert!(second.push(three));
     let held: Vec<Vec<u8>> = second
         .list(&kh("carol"))
         .into_iter()
-        .map(|q| q.ciphertext)
+        .map(|q| q.sealed)
         .collect();
     assert_eq!(
         held,
@@ -188,32 +118,29 @@ fn a_restart_in_the_arrival_second_overwrites_nothing_accepted() {
 }
 
 // functional: MAIL-014
-/// The recipient's directory outlives a delivery: a push for the same
-/// recipient may be between its file write and its directory flush when a
-/// running drain delivers and removes what it just wrote, and the flush
-/// of a directory that has gone was reported as a refusal for a message
-/// the other side already held [2026-10-04, the first field run].
+/// The recipient's directory outlives a removal: a push for the same
+/// recipient may be between its file write and its directory flush when
+/// what it just wrote is removed, and the flush of a directory that has
+/// gone was reported as a refusal for a message the other side already
+/// held [2026-10-04, the first field run].
 #[test]
-fn a_delivery_leaves_the_recipients_directory_and_a_drained_push_is_not_a_refusal() {
-    use rhtn_node::queue::{QueueStore, Queued};
+fn a_removal_leaves_the_recipients_directory_and_a_later_push_is_not_a_refusal() {
     let dir = std::env::temp_dir().join(format!("rhtn-queue-dir-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let store = DirStore::new(&dir);
-    let item = |n: u8| Queued {
-        ciphertext: vec![n; 40],
-        recipient: kh("alice"),
-        device: [7u8; 32],
-        arrival: 1_000 + n as u64,
-    };
-    assert!(store.push(item(1)));
-    assert!(store.remove(&kh("alice"), &item(1)));
+    let first = item(&store, kh("alice"), 1_001, &[1; 40]);
+    assert!(store.push(first.clone()));
+    assert!(store.mark_delivered(&kh("alice"), first.position, 1_002));
+    assert!(store.remove(&kh("alice"), first.position));
     let recipient_dir = std::fs::read_dir(&dir)
         .unwrap()
         .flatten()
         .find(|e| e.path().is_dir())
         .map(|e| e.path());
     assert!(recipient_dir.is_some(), "the directory stays once emptied");
-    assert!(store.push(item(2)), "a push after a delivery is accepted");
+    let second = item(&store, kh("alice"), 1_003, &[2; 40]);
+    assert!(second.position > first.position, "never reused");
+    assert!(store.push(second), "a push after a removal is accepted");
     assert_eq!(store.list(&kh("alice")).len(), 1);
     let _ = std::fs::remove_dir_all(&dir);
 }

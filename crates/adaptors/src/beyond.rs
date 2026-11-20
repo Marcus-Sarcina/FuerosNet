@@ -19,12 +19,13 @@
 use crate::attached::Nonces;
 use crate::serving::Answer;
 use rhtn_archive::Keyhash;
-use rhtn_archive::submission::*;
 use rhtn_client::horizon::{Askable, Reach, Upstream};
 use rhtn_node::resolution::{
     Disposition, REQUEST_RESOLVE, ResolveReply, ResolveRequest, disposition,
 };
-use rhtn_transport::session::{ClientConfig, NetworkPoint, connect_request_only, request_on};
+use rhtn_transport::session::{
+    ClientConfig, NetworkPoint, connect_minted, connect_request_only, request_on,
+};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -67,6 +68,23 @@ pub trait Distant: Send + Sync {
         request: u64,
         body: Vec<u8>,
     ) -> Answer<'a, Option<Vec<u8>>>;
+
+    /// **One request of `node` as nobody** (`wire-format.md` §9.1): on a
+    /// connection under a transport key minted for it, never one held
+    /// and never kept, so the node learns that somebody asked and not who.
+    /// A node-key fetch or a sealed message and nothing else. Where `at`
+    /// is empty, the address of a session already held with the node is
+    /// dialled, fresh. A seam that dials nothing answers as [`Distant::ask`].
+    fn ask_minted<'a>(
+        &'a self,
+        node: Keyhash,
+        key_material: Option<Vec<u8>>,
+        at: Vec<Vec<u8>>,
+        request: u64,
+        body: Vec<u8>,
+    ) -> Answer<'a, Option<Vec<u8>>> {
+        self.ask(node, key_material, at, request, body)
+    }
 }
 
 /// Nothing beyond the serving node is reachable: what a client beside its
@@ -150,43 +168,6 @@ impl Beyond {
         }
     }
 
-    /// Hand `bytes` to the node that serves `to`, for `to`'s `device`.
-    /// Whether that node took it.
-    ///
-    /// **Taking it is the whole of the answer** (design §14.1.6): the node
-    /// answers on taking, not on delivering, because a sender made to wait
-    /// for delivery would be waiting on somebody who may be away for days.
-    pub async fn carry(
-        &self,
-        to: Keyhash,
-        device: [u8; 32],
-        bytes: Vec<u8>,
-        reach: Reach,
-        served_by: Option<Keyhash>,
-    ) -> bool {
-        let nonce = (self.nonce)();
-        let body = RelaySubmission {
-            recipient: to,
-            ciphertext: bytes,
-            nonce,
-            device,
-        }
-        .encode();
-        let Some(reply) = self
-            .ask_their_node(to, reach, served_by, REQUEST_RELAY, body)
-            .await
-        else {
-            return false;
-        };
-        // the reply must echo this submission's nonce, as every submission
-        // reply must (`wire-format.md` §7.10): an answer carrying another
-        // one's nonce says nothing about this one
-        match SubmissionReply::decode(&reply) {
-            Ok(r) => r.nonce == nonce && r.code == SUBMISSION_ACCEPTED,
-            Err(_) => false,
-        }
-    }
-
     /// One request of the node that serves `subject`, where this client
     /// can say who that is and reach them.
     ///
@@ -228,9 +209,51 @@ impl Beyond {
         answered
     }
 
+    /// **One request of the node that serves `subject`, as nobody**
+    /// (`wire-format.md` §9.1): resolved as any is, then put on a minted
+    /// connection — to this client's own node too, since the session held
+    /// there names it. The node asked, and its reply.
+    pub async fn minted(
+        &self,
+        subject: Keyhash,
+        reach: Reach,
+        request: u64,
+        body: Vec<u8>,
+    ) -> Option<(Upstreamed, Vec<u8>)> {
+        let up = self.upstream(subject, reach).await?;
+        let reply = self
+            .distant
+            .ask_minted(
+                up.node,
+                up.key_material.clone(),
+                up.endpoints.clone(),
+                request,
+                body,
+            )
+            .await;
+        tracing::debug!(
+            target: "pay",
+            node = %hex4(&up.node),
+            request,
+            answered = reply.is_some(),
+            "pay.minted"
+        );
+        Some((up, reply?))
+    }
+
+    /// **One request of `node` itself, as nobody** (`wire-format.md` §9.1):
+    /// no resolution, the node already named — a node this client holds a
+    /// session with, dialled afresh at that session's address under a key
+    /// minted for the connection. Its reply.
+    pub async fn minted_at(&self, node: Keyhash, request: u64, body: Vec<u8>) -> Option<Vec<u8>> {
+        self.distant
+            .ask_minted(node, None, Vec::new(), request, body)
+            .await
+    }
+
     /// Who serves `to`: what the client already held, what a cached
     /// resolution came to, or a resolution run now.
-    async fn upstream(&self, to: Keyhash, reach: Reach) -> Option<Upstreamed> {
+    pub async fn upstream(&self, to: Keyhash, reach: Reach) -> Option<Upstreamed> {
         match reach.upstream {
             Upstream::Known {
                 node,
@@ -531,6 +554,26 @@ impl Beyonder {
     }
 }
 
+impl Beyonder {
+    /// The addresses to dial `node` at for a minted connection: those
+    /// given, else the address of a session held with it.
+    fn minted_addresses(&self, node: &Keyhash, at: &[Vec<u8>]) -> Vec<std::net::SocketAddr> {
+        let given: Vec<std::net::SocketAddr> = at
+            .iter()
+            .filter_map(|p| NetworkPoint::decode_bytes(p).ok())
+            .map(|p| p.socket())
+            .collect();
+        if !given.is_empty() {
+            return given;
+        }
+        let session = self.held_sessions.lock().unwrap().clone();
+        session
+            .and_then(|h| h(node))
+            .map(|c| vec![c.remote_address()])
+            .unwrap_or_default()
+    }
+}
+
 impl Distant for Beyonder {
     /// One request of a node this client is not attached to.
     ///
@@ -588,11 +631,39 @@ impl Distant for Beyonder {
             None
         })
     }
+
+    fn ask_minted<'a>(
+        &'a self,
+        node: Keyhash,
+        key_material: Option<Vec<u8>>,
+        at: Vec<Vec<u8>>,
+        request: u64,
+        body: Vec<u8>,
+    ) -> Answer<'a, Option<Vec<u8>>> {
+        Box::pin(async move {
+            if let Some(km) = key_material {
+                let _ = self.cfg.pins.pin(node, &km);
+            }
+            for addr in self.minted_addresses(&node, &at) {
+                let Ok(conn) = connect_minted(&self.cfg, &self.endpoint, node, addr).await else {
+                    continue;
+                };
+                let reply = request_on(&conn, request, &body).await;
+                // never kept: a second ask on it would tie the two together
+                conn.close(quinn::VarInt::from_u32(0), b"minted");
+                if let Ok(reply) = reply {
+                    return Some(reply);
+                }
+            }
+            None
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rhtn_archive::submission::*;
     use rhtn_node::resolution::{Path, Referral, ServingInfra};
 
     fn kh(n: u8) -> Keyhash {
@@ -614,6 +685,8 @@ mod tests {
     struct Script {
         answers: HashMap<Keyhash, Vec<u8>>,
         asked: Mutex<Vec<(Keyhash, u64)>>,
+        /// The asks put as nobody, on a connection minted for them.
+        minted: Mutex<Vec<(Keyhash, u64)>>,
     }
 
     impl Distant for Script {
@@ -626,6 +699,19 @@ mod tests {
             _body: Vec<u8>,
         ) -> Answer<'a, Option<Vec<u8>>> {
             self.asked.lock().unwrap().push((node, request));
+            let answer = self.answers.get(&node).cloned();
+            Box::pin(async move { answer })
+        }
+
+        fn ask_minted<'a>(
+            &'a self,
+            node: Keyhash,
+            _key_material: Option<Vec<u8>>,
+            _at: Vec<Vec<u8>>,
+            request: u64,
+            _body: Vec<u8>,
+        ) -> Answer<'a, Option<Vec<u8>>> {
+            self.minted.lock().unwrap().push((node, request));
             let answer = self.answers.get(&node).cloned();
             Box::pin(async move { answer })
         }
@@ -671,48 +757,28 @@ mod tests {
     async fn a_held_position_is_carried_to_with_no_resolution_asked() {
         let script = Arc::new(Script {
             answers: HashMap::from([(kh(2), accepted())]),
-            asked: Mutex::new(Vec::new()),
+            ..Default::default()
         });
         let b = Beyond::new(script.clone(), nonces());
+        let (up, reply) = b
+            .minted(kh(3), known(kh(2)), REQUEST_RELAY, vec![1])
+            .await
+            .expect("answered");
+        assert_eq!(up.node, kh(2));
+        assert_eq!(
+            reply,
+            accepted(),
+            "the node's reply, handed back as it came"
+        );
         assert!(
-            b.carry(kh(3), [0; 32], vec![1, 2, 3], known(kh(2)), None)
-                .await
+            script.asked.lock().unwrap().is_empty(),
+            "nothing asked under this client's own key"
         );
         assert_eq!(
-            *script.asked.lock().unwrap(),
+            *script.minted.lock().unwrap(),
             vec![(kh(2), REQUEST_RELAY)],
-            "one submission to the node that serves the recipient, and nothing else"
+            "one submission, as nobody, to the node that serves the recipient, and nothing else"
         );
-    }
-
-    /// A node that refuses the submission is a node that did not take it,
-    /// and the caller is told so rather than told the message travelled.
-    #[tokio::test]
-    async fn a_refused_submission_is_not_a_delivery() {
-        let script = Arc::new(Script {
-            answers: HashMap::from([(
-                kh(2),
-                SubmissionReply::code([7; 16], SUBMISSION_REFUSED).encode(),
-            )]),
-            asked: Mutex::new(Vec::new()),
-        });
-        let b = Beyond::new(script, nonces());
-        assert!(!b.carry(kh(3), [0; 32], vec![1], known(kh(2)), None).await);
-    }
-
-    /// A reply carrying another submission's nonce says nothing about
-    /// this one.
-    #[tokio::test]
-    async fn a_reply_that_echoes_another_nonce_is_not_an_answer() {
-        let script = Arc::new(Script {
-            answers: HashMap::from([(
-                kh(2),
-                SubmissionReply::code([8; 16], SUBMISSION_ACCEPTED).encode(),
-            )]),
-            asked: Mutex::new(Vec::new()),
-        });
-        let b = Beyond::new(script, nonces());
-        assert!(!b.carry(kh(3), [0; 32], vec![1], known(kh(2)), None).await);
     }
 
     /// **Every node the descent went through is reported**, so the client
@@ -745,7 +811,7 @@ mod tests {
         .encode();
         let script = Arc::new(Script {
             answers: HashMap::from([(kh(4), referral), (kh(5), serving), (kh(6), accepted())]),
-            asked: Mutex::new(Vec::new()),
+            ..Default::default()
         });
         let b = Beyond::new(script, nonces());
         let seen: Arc<Mutex<Vec<(Keyhash, usize)>>> = Arc::new(Mutex::new(Vec::new()));
@@ -754,14 +820,14 @@ mod tests {
             noting.lock().unwrap().push((node, endpoints.len()));
         }));
         assert!(
-            b.carry(
+            b.minted(
                 kh(3),
-                [0; 32],
-                vec![1],
                 position(vec![askable(kh(4))]),
-                None
+                REQUEST_RELAY,
+                vec![1]
             )
             .await
+            .is_some()
         );
         assert_eq!(
             seen.lock()
@@ -804,27 +870,28 @@ mod tests {
         .encode();
         let script = Arc::new(Script {
             answers: HashMap::from([(kh(4), referral), (kh(5), serving), (kh(6), accepted())]),
-            asked: Mutex::new(Vec::new()),
+            ..Default::default()
         });
         let b = Beyond::new(script.clone(), nonces());
         assert!(
-            b.carry(
+            b.minted(
                 kh(3),
-                [0; 32],
-                vec![1],
                 position(vec![askable(kh(4))]),
-                None
+                REQUEST_RELAY,
+                vec![1]
             )
             .await
+            .is_some()
         );
         assert_eq!(
             *script.asked.lock().unwrap(),
-            vec![
-                (kh(4), REQUEST_RESOLVE),
-                (kh(5), REQUEST_RESOLVE),
-                (kh(6), REQUEST_RELAY)
-            ],
-            "asked, referred, then handed over to the node that serves the recipient"
+            vec![(kh(4), REQUEST_RESOLVE), (kh(5), REQUEST_RESOLVE)],
+            "asked, then referred"
+        );
+        assert_eq!(
+            *script.minted.lock().unwrap(),
+            vec![(kh(6), REQUEST_RELAY)],
+            "then handed over, as nobody, to the node that serves the recipient"
         );
     }
 
@@ -845,19 +912,19 @@ mod tests {
         .encode();
         let script = Arc::new(Script {
             answers: HashMap::from([(kh(4), serving), (kh(6), accepted())]),
-            asked: Mutex::new(Vec::new()),
+            ..Default::default()
         });
         let b = Beyond::new(script.clone(), nonces());
         for _ in 0..2 {
             assert!(
-                b.carry(
+                b.minted(
                     kh(3),
-                    [0; 32],
-                    vec![1],
                     position(vec![askable(kh(4))]),
-                    None
+                    REQUEST_RELAY,
+                    vec![1]
                 )
                 .await
+                .is_some()
             );
         }
         assert_eq!(
@@ -891,18 +958,18 @@ mod tests {
         .encode();
         let script = Arc::new(Script {
             answers: HashMap::from([(kh(5), serving), (kh(6), accepted())]),
-            asked: Mutex::new(Vec::new()),
+            ..Default::default()
         });
         let b = Beyond::new(script.clone(), nonces());
         assert!(
-            b.carry(
+            b.minted(
                 kh(3),
-                [0; 32],
-                vec![1],
                 position(vec![askable(kh(4)), askable(kh(5))]),
-                None
+                REQUEST_RELAY,
+                vec![1]
             )
             .await
+            .is_some()
         );
         assert_eq!(
             script.asked.lock().unwrap()[0],
@@ -932,18 +999,18 @@ mod tests {
         .encode();
         let script = Arc::new(Script {
             answers: HashMap::from([(kh(4), loopback)]),
-            asked: Mutex::new(Vec::new()),
+            ..Default::default()
         });
         let b = Beyond::new(script.clone(), nonces());
         assert!(
-            !b.carry(
+            b.minted(
                 kh(3),
-                [0; 32],
-                vec![1],
                 position(vec![askable(kh(4))]),
-                None
+                REQUEST_RELAY,
+                vec![1]
             )
             .await
+            .is_none()
         );
         assert_eq!(
             script.asked.lock().unwrap().len(),
@@ -962,7 +1029,12 @@ mod tests {
             upstream: Upstream::Unknown,
             ask: Vec::new(),
         };
-        assert!(!b.carry(kh(3), [0; 32], vec![1], reach, None).await);
+        assert!(
+            b.minted(kh(3), reach, REQUEST_RELAY, vec![1])
+                .await
+                .is_none()
+        );
         assert!(script.asked.lock().unwrap().is_empty());
+        assert!(script.minted.lock().unwrap().is_empty());
     }
 }

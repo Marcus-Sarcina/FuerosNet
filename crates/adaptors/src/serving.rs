@@ -1,7 +1,6 @@
 //! What a client asks of its serving node, answered by the node beside it.
 
 use rhtn_archive::Keyhash;
-use rhtn_archive::prekey::PrekeyRequest;
 use rhtn_archive::submission::WakeEndpoint;
 use rhtn_node::runtime::LiveNode;
 use std::collections::HashMap;
@@ -9,22 +8,22 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
-/// Where payload for a client goes, with the peer it came from.
-/// What a delivery hands the client: the submitter the node named, the
-/// ciphertext, and the submitter's binding where the node carried one
-/// (`wire-format.md` §7.10).
-pub type Inbound = Arc<dyn Fn(Keyhash, Vec<u8>, Option<Vec<u8>>) + Send + Sync>;
+/// Where payload for a client goes: who it came from and the bytes. On
+/// the direct path that is the peer and `[kind, bytes]`; from a node it
+/// is the node and a `RelayedPayload` (`wire-format.md` §7.10), whose
+/// sender is inside the seal.
+pub type Inbound = Arc<dyn Fn(Keyhash, Vec<u8>) + Send + Sync>;
 
 /// The clients hosted in this process, by keyhash, each with where its
-/// payload goes: what a node holds for a client beside it in place of a
-/// session.
+/// payload goes and how far it has collected: what a node holds for a
+/// client beside it in place of a session.
 #[derive(Clone, Default)]
-pub struct Inboxes(Arc<Mutex<HashMap<Keyhash, Inbound>>>);
+pub struct Inboxes(Arc<Mutex<HashMap<Keyhash, (Inbound, u64)>>>);
 
 impl Inboxes {
     /// Deliver `client`'s payload to `inbound` from now on.
     pub fn host(&self, client: Keyhash, inbound: Inbound) {
-        self.0.lock().unwrap().insert(client, inbound);
+        self.0.lock().unwrap().insert(client, (inbound, 0));
     }
 
     /// Whether this process hosts `client`.
@@ -32,28 +31,50 @@ impl Inboxes {
         self.0.lock().unwrap().contains_key(client)
     }
 
-    /// Deliver to a client hosted here; false where none is.
-    pub fn deliver(&self, to: &Keyhash, from: Keyhash, bytes: Vec<u8>) -> bool {
-        let inbound = self.0.lock().unwrap().get(to).cloned();
-        match inbound {
-            Some(f) => {
-                f(from, bytes, None);
-                true
-            }
-            None => false,
+    /// **Hand a hosted client what `node` holds for it** past what it has
+    /// collected, as a session's drain does (`wire-format.md` §7.10): each
+    /// a `RelayedPayload` with the node's half, its first delivery marked.
+    /// How many went; none where `to` is not hosted here.
+    pub fn deliver_queued(&self, node: &LiveNode, to: &Keyhash) -> usize {
+        let Some((inbound, cursor)) = self.0.lock().unwrap().get(to).cloned() else {
+            return 0;
+        };
+        let n = &node.node;
+        let mut last = cursor;
+        let mut went = 0;
+        for q in n
+            .queue_records(to)
+            .into_iter()
+            .filter(|q| q.position > cursor)
+        {
+            let half = match &n.cfg.open_half {
+                Some(open) => open(to, &q),
+                None => Some(zeroize::Zeroizing::new([0u8; 32])),
+            };
+            last = q.position;
+            let Some(half) = half else { continue };
+            inbound(
+                node.me(),
+                rhtn_archive::submission::relayed(q.position, &q.sealed, &half),
+            );
+            n.cfg.queue.mark_delivered(to, q.position, (n.cfg.clock)());
+            went += 1;
         }
+        if let Some(h) = self.0.lock().unwrap().get_mut(to) {
+            h.1 = h.1.max(last);
+        }
+        went
     }
 }
 
 /// An answer that may have to cross the wire before it exists.
 pub type Answer<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
-/// What a client asks of its serving node (design §14.1.2, §14.2.4.5):
-/// its prekey material published and stocked, a peer's fetched, payload
-/// carried to a peer it holds no direct path to, and where to be rung.
-/// `wire-format.md` §7.10 carries four of these as request types and §7.8
-/// the fetch, so a node beside the client and a node across a session
-/// answer the same questions.
+/// What a client asks of a node (design §14.1.2, §14.2.4): its profile
+/// published, its horizon asserted, a resource or the catalog asked, where
+/// to be rung — and, **as nobody** (`wire-format.md` §9.1), a recipient's
+/// node key fetched and a sealed message handed over. A node beside the
+/// client and a node across a session answer the same questions.
 ///
 /// The four that change something are asynchronous because one of the two
 /// implementations has to wait for an answer.  The two predicates are not:
@@ -62,17 +83,16 @@ pub type Answer<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 pub trait Serving: Send + Sync {
     /// The serving node's own identity.
     fn me(&self) -> Keyhash;
-    /// The serving node's own device: the key it presents in a handshake
-    /// (`wire-format.md` §8.2), which is where material for the node
-    /// itself is addressed.
-    fn node_device(&self) -> [u8; 32];
-    /// Whether this node is known here to hold `subject`'s prekey
-    /// material.
-    fn holds(&self, subject: &Keyhash) -> bool;
     /// Whether this node is known here to host or serve `client`.
     fn serves(&self, client: &Keyhash) -> bool;
-    /// Publish the caller's own bundle; whether the node took it.
-    fn publish<'a>(&'a self, bytes: &'a [u8]) -> Answer<'a, bool>;
+    /// **A request put to this node as nobody** (`wire-format.md` §9.1): a
+    /// node-key fetch or a sealed message, on a connection under a key
+    /// minted for it and never on the session held, which names the
+    /// client. The node's reply; none where this side cannot put it — a
+    /// node across a session is reached through the dialler instead.
+    fn minted<'a>(&'a self, _request: u64, _body: Vec<u8>) -> Answer<'a, Option<Vec<u8>>> {
+        Box::pin(async { None })
+    }
     /// **Teach this node what the client holds** (`wire-format.md`
     /// §10.1.1): the push frames of [`rhtn_client::ceremony::Client::replay_frames`],
     /// sent on the session's stream 0 as the node sends its own the other
@@ -84,12 +104,6 @@ pub trait Serving: Send + Sync {
     /// member the node has never heard of — so the topology would not
     /// survive a change of hosting, which it must.
     fn teach<'a>(&'a self, frames: Vec<Vec<u8>>) -> Answer<'a, usize>;
-    /// Stock `subject`'s one-time pool; whether the node took the
-    /// deposit, which a bound may refuse whole.
-    fn stock<'a>(&'a self, subject: Keyhash, keys: Vec<Vec<u8>>) -> Answer<'a, bool>;
-    /// A `PrekeyRequest` from `from` (`wire-format.md` §7.8): the node's
-    /// reply, or nothing where it answers none.
-    fn prekey<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>>;
     /// Publish the caller's own profile (`wire-format.md` §7.11); whether
     /// the node took it.
     fn publish_profile<'a>(&'a self, bytes: &'a [u8]) -> Answer<'a, bool>;
@@ -107,16 +121,6 @@ pub trait Serving: Send + Sync {
     /// A `ResourceRequest` from `from` (`wire-format.md` §11.1): the
     /// node's `ResourceResponse`, or nothing where it answers none.
     fn resource<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>>;
-    /// Carry `bytes` from `from` to `to`; whether anything took them.
-    /// `device`: the recipient's device the ciphertext is for
-    /// (`wire-format.md` §7.10 field 4).
-    fn relay<'a>(
-        &'a self,
-        from: Keyhash,
-        to: Keyhash,
-        bytes: Vec<u8>,
-        device: [u8; 32],
-    ) -> Answer<'a, bool>;
     /// Register, refresh or withdraw where this node rings the caller
     /// (design §14.1.5).  No endpoint withdraws.
     fn wake<'a>(&'a self, client: Keyhash, endpoint: Option<WakeEndpoint>) -> Answer<'a, bool>;
@@ -143,26 +147,11 @@ impl Serving for Nobody {
     fn me(&self) -> Keyhash {
         [0; 32]
     }
-    fn node_device(&self) -> [u8; 32] {
-        [0; 32]
-    }
-    fn holds(&self, _: &Keyhash) -> bool {
-        false
-    }
     fn serves(&self, _: &Keyhash) -> bool {
         false
     }
-    fn publish<'a>(&'a self, _: &'a [u8]) -> Answer<'a, bool> {
-        Box::pin(async { false })
-    }
     fn teach<'a>(&'a self, _: Vec<Vec<u8>>) -> Answer<'a, usize> {
         Box::pin(async { 0 })
-    }
-    fn stock<'a>(&'a self, _: Keyhash, _: Vec<Vec<u8>>) -> Answer<'a, bool> {
-        Box::pin(async { false })
-    }
-    fn prekey<'a>(&'a self, _: Keyhash, _: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
-        Box::pin(async { None })
     }
     fn publish_profile<'a>(&'a self, _: &'a [u8]) -> Answer<'a, bool> {
         Box::pin(async { false })
@@ -178,9 +167,6 @@ impl Serving for Nobody {
     }
     fn resource<'a>(&'a self, _: Keyhash, _: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
         Box::pin(async { None })
-    }
-    fn relay<'a>(&'a self, _: Keyhash, _: Keyhash, _: Vec<u8>, _: [u8; 32]) -> Answer<'a, bool> {
-        Box::pin(async { false })
     }
     fn wake<'a>(&'a self, _: Keyhash, _: Option<WakeEndpoint>) -> Answer<'a, bool> {
         Box::pin(async { false })
@@ -228,34 +214,47 @@ impl Serving for LocalNode {
         self.node.me()
     }
 
-    fn node_device(&self) -> [u8; 32] {
-        self.node.node.cfg.me.presenter.presented_key()
-    }
-
-    fn holds(&self, subject: &Keyhash) -> bool {
-        self.node
-            .view
-            .lock()
-            .unwrap()
-            .prekeys
-            .bundle(subject)
-            .is_some()
-    }
-
     fn serves(&self, client: &Keyhash) -> bool {
         self.inboxes.hosts(client) || self.node.node.has_session(client)
     }
 
-    fn publish<'a>(&'a self, bytes: &'a [u8]) -> Answer<'a, bool> {
+    /// **As nobody, in process** (`wire-format.md` §9.1): the node's own
+    /// request handler answers as it answers a minted connection, a
+    /// recipient this node neither hosts nor serves is put to the node
+    /// beyond where that one does, and a sealed message for a client hosted
+    /// here is handed to it from the queue, as a session's drain would.
+    fn minted<'a>(&'a self, request: u64, body: Vec<u8>) -> Answer<'a, Option<Vec<u8>>> {
         Box::pin(async move {
-            let mut view = self.node.view.lock().unwrap();
-            let ids = self.node.ids.lock().unwrap();
-            view.prekeys.publish(&*ids, bytes).is_ok()
+            use rhtn_archive::node_key::{NodeKeyRequest, REQUEST_NODE_KEY};
+            use rhtn_archive::submission::{REQUEST_RELAY, RelaySubmission};
+            let (family, recipient) = match request {
+                REQUEST_NODE_KEY => (
+                    rhtn_codec::schema::Family::NodeKeyRequestOrBatch,
+                    NodeKeyRequest::decode(&body)
+                        .ok()?
+                        .recipients()
+                        .first()
+                        .copied()?,
+                ),
+                REQUEST_RELAY => (
+                    rhtn_codec::schema::Family::RelaySubmission,
+                    RelaySubmission::decode(&body).ok()?.recipient,
+                ),
+                _ => return None,
+            };
+            if !self.serves(&recipient)
+                && let Some(b) = self.beyond()
+                && b.serves(&recipient)
+            {
+                return b.minted(request, body).await;
+            }
+            let handler = self.node.node.cfg.on_request.clone()?;
+            let reply = handler(rhtn_transport::session::MINTED, [0; 32], family, body).await;
+            if request == REQUEST_RELAY {
+                self.inboxes.deliver_queued(&self.node, &recipient);
+            }
+            reply
         })
-    }
-
-    fn stock<'a>(&'a self, subject: Keyhash, keys: Vec<Vec<u8>>) -> Answer<'a, bool> {
-        Box::pin(async move { self.node.view.lock().unwrap().prekeys.stock(subject, keys) })
     }
 
     /// **The in-process node takes the client's acts as a remote one
@@ -377,64 +376,6 @@ impl Serving for LocalNode {
         })
     }
 
-    fn prekey<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
-        Box::pin(async move {
-            // a subject this node holds no material for is another node's:
-            // asked of the node beyond only where that node holds it, so two
-            // nodes each beyond the other never bounce a fetch between them
-            if let Ok(PrekeyRequest::One { subject, .. }) = PrekeyRequest::decode(body)
-                && !self.holds(&subject)
-                && let Some(b) = self.beyond()
-                && b.holds(&subject)
-            {
-                return b.prekey(from, body).await;
-            }
-            let mut view = self.node.view.lock().unwrap();
-            let now = view.now();
-            view.prekeys.answer(&from, body, now)
-        })
-    }
-
-    fn relay<'a>(
-        &'a self,
-        from: Keyhash,
-        to: Keyhash,
-        bytes: Vec<u8>,
-        device: [u8; 32],
-    ) -> Answer<'a, bool> {
-        Box::pin(async move {
-            // hosted here: handed over, no queue between
-            if self.inboxes.deliver(&to, from, bytes.clone()) {
-                return true;
-            }
-            // served here: delivered on the session or queued for the next
-            // (design §14.1.6), the sender named in front for the
-            // recipient, as `wire-format.md` §7.10 composes it.
-            // **No binding goes with it here**: this path is handed the
-            // recipient's device and never the submitter's, so it cannot
-            // name the bundle §7.10's third element wants.  The session
-            // path that authenticated a submitting device carries one
-            // (`node/src/submissions.rs`)
-            if self.node.node.has_session(&to) {
-                return self
-                    .node
-                    .node
-                    .enqueue_for(to, device, framed(from, &bytes, None))
-                    .is_ok();
-            }
-            // a recipient the node beyond serves goes there; anyone else waits
-            // here for a session (design §14.1.6)
-            match self.beyond() {
-                Some(b) if b.serves(&to) => b.relay(from, to, bytes, device).await,
-                _ => self
-                    .node
-                    .node
-                    .enqueue_for(to, device, framed(from, &bytes, None))
-                    .is_ok(),
-            }
-        })
-    }
-
     fn wake<'a>(&'a self, client: Keyhash, endpoint: Option<WakeEndpoint>) -> Answer<'a, bool> {
         Box::pin(async move {
             let mut view = self.node.view.lock().unwrap();
@@ -444,7 +385,7 @@ impl Serving for LocalNode {
                 Some(e) => {
                     view.wake.register(
                         client,
-                        rhtn_node::prekeys::ANY_DEVICE,
+                        [0; 32],
                         Some(e.url),
                         Some(e.key),
                         e.lapses_at,
@@ -459,8 +400,3 @@ impl Serving for LocalNode {
         })
     }
 }
-
-/// Relayed payload as the wire composes it (`wire-format.md` §7.10): the
-/// submitter in front of the ciphertext.  A node beside its client and a
-/// node reached over a session put the same bytes in the mailbox.
-pub use rhtn_archive::submission::{relayed as framed, unrelayed as unframed};

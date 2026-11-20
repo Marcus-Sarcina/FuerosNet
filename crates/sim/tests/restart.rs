@@ -72,7 +72,7 @@ async fn a_recovery_the_node_applies_ends_the_old_credentials_service() {
         "a fresh attach as alice is refused"
     );
     assert_eq!(
-        n.node.enqueue(kh("alice"), b"late".to_vec()),
+        enqueue(&n.node, "alice", b"late"),
         Err(rhtn_transport::queue::Refusal::Superseded)
     );
 

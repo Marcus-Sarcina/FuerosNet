@@ -30,7 +30,6 @@ fn a_device_holding_no_seed_refuses_what_the_identity_key_signs() {
         d.delegate(&[7; 32], 1_790_000_000).unwrap_err(),
         Abort::NoSeed
     );
-    assert_eq!(d.sign_device_bundle(b"\xa0").unwrap_err(), Abort::NoSeed);
     assert!(matches!(d.signer(), Err(Abort::NoSeed)));
 
     // as subject: no consent, so no grant and no response copy taken

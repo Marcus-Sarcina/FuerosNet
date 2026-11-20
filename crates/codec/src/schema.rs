@@ -55,16 +55,16 @@ pub enum T {
     /// An array of catalog entries, each held to the `CatalogEntry` kind
     /// and to §1.3's byte bound.
     CatalogEntries,
-    /// One-time keys as deposited, opaque and bounded (`wire-format.md` §7.10).
-    OneTimeKeys,
     /// An array of transaction envelopes (§3).
     Envelopes,
     /// An array of keyhashes.
     Keyhashes,
     /// A currency attestation (§7.1), checked as its own kind.
     CurrencyAttestation,
-    /// A prekey bundle (§7.8), checked as its own kind.
-    PrekeyBundle,
+    /// A node's key for one recipient (§7.8), checked as its own kind.
+    NodeKey,
+    /// A sealed message (§7.8.1), checked as its own kind.
+    Sealed,
     /// A signed profile (§7.11), held to the `Profile` kind.
     Profile,
     /// One catalog entry (§6.1), checked as its own kind.
@@ -81,8 +81,6 @@ pub enum T {
     /// Archive entries: an envelope map or a presentation array each
     /// (`wire-format.md` §7.9).
     ArchiveEntries,
-    /// One bundle per device, at most eight (`wire-format.md` §7.8).
-    PrekeyBundles,
 }
 
 /// One schema: (key, required, type).
@@ -111,9 +109,9 @@ pub enum Family {
     ResolveRequest,
     /// Request frame 2: fetch archive entries (§7.9).
     ArchiveRequest,
-    /// Request frame 3: prekeys for one subject, or a batch across a
-    /// population (§7.8).
-    PrekeyRequestOrBatch,
+    /// Request frame 3: the node key for one recipient, or a batch across
+    /// a population (§7.8).
+    NodeKeyRequestOrBatch,
     /// Request frame 4: a query put to a verifier (§4.5).
     VerifierQuery,
     /// Request frame 5: a catalog query (§6.1).
@@ -122,10 +120,6 @@ pub enum Family {
     ResourceRequest,
     /// Request frame 7: registering a resource in the catalog.
     ResourceRegistration,
-    /// What a client hands its serving node (`wire-format.md` §7.10).
-    PrekeyPublication,
-    /// Request frame 10: one-time keys deposited with the serving node.
-    OneTimeDeposit,
     /// Request frame 11: a message handed to a node to relay (§7.10).
     RelaySubmission,
     /// Request frame 12: where to ring this client (§14.1.5).
@@ -154,9 +148,10 @@ pub enum Family {
     ResourceResponse,
     /// The answer to an [`ArchiveRequest`](Family::ArchiveRequest) (§7.9).
     ArchiveReply,
-    /// The answer to a [`PrekeyRequestOrBatch`](Family::PrekeyRequestOrBatch),
-    /// one bundle per device (§7.8).
-    PrekeyReply,
+    /// The answer to a single
+    /// [`NodeKeyRequestOrBatch`](Family::NodeKeyRequestOrBatch): the newest
+    /// node key for the recipient, or a failure code (§7.8).
+    NodeKeyReply,
     /// The answer to a [`CurrencyRequest`](Family::CurrencyRequest).
     CurrencyReply,
     /// The answer to a
@@ -179,6 +174,8 @@ const ATTACH: Fields = &[
     (2, false, CurrencyAttestation),
     (3, true, Capabilities),
     (4, false, Delegation),
+    // the newest queue position the attaching device holds (§7.10)
+    (5, false, Uint),
 ];
 const ATTACH_ACK: Fields = &[
     (1, true, Uint),
@@ -211,13 +208,8 @@ const ARCHIVE_REQUEST: Fields = &[
     (4, false, Uint),
     (5, true, Nonce16),
 ];
-const PREKEY_REQUEST: Fields = &[
-    (1, true, Keyhash),
-    (2, true, Uint),
-    (3, true, Nonce16),
-    (4, false, Bytes32),
-];
-const PREKEY_BATCH_REQUEST: Fields = &[(1, true, Keyhashes), (2, true, Nonce16)];
+const NODE_KEY_REQUEST: Fields = &[(1, true, Keyhash), (2, true, Nonce16)];
+const NODE_KEY_BATCH_REQUEST: Fields = &[(1, true, Keyhashes), (2, true, Nonce16)];
 const CATALOG_QUERY: Fields = &[(1, false, Tstr(64)), (2, true, Nonce16)];
 const RESOURCE_REQUEST: Fields = &[(1, true, Keyhash), (2, true, Bstr)];
 const RESOURCE_REGISTRATION: Fields = &[
@@ -225,16 +217,10 @@ const RESOURCE_REGISTRATION: Fields = &[
     (2, false, Scope),
     (3, true, Nonce16),
 ];
-// §7.10: what a client hands its serving node.  The bundle and the keys are
-// opaque here, as §7.8 makes them everywhere else.
-const PREKEY_PUBLICATION: Fields = &[(1, true, PrekeyBundle), (2, true, Nonce16)];
-const ONE_TIME_DEPOSIT: Fields = &[(1, true, OneTimeKeys), (2, true, Nonce16)];
-const RELAY_SUBMISSION: Fields = &[
-    (1, true, Keyhash),
-    (2, true, Bstr),
-    (3, true, Nonce16),
-    (4, true, Bytes32),
-];
+// §7.10: what a client hands its serving node.  A relay submission names
+// the recipient and nothing of the sender; the seal is checked as its own
+// kind
+const RELAY_SUBMISSION: Fields = &[(1, true, Keyhash), (2, true, Sealed), (3, true, Nonce16)];
 const WAKE_REGISTRATION: Fields = &[
     (1, true, Nonce16),
     (2, false, Tstr(2048)),
@@ -300,11 +286,15 @@ const ARCHIVE_REPLY: Fields = &[
     (3, true, Bool),
     (4, false, Txids),
 ];
-const PREKEY_REPLY: Fields = &[
-    (1, true, Nonce16),
-    (2, false, PrekeyBundles),
-    (3, false, Bstr),
-    (4, false, Uint),
+const NODE_KEY_REPLY: Fields = &[(1, true, Nonce16), (2, false, NodeKey), (3, false, Uint)];
+// §7.8: a node's key for one recipient, signed by the node, classical only
+const NODE_KEY: Fields = &[
+    (1, true, Keyhash),
+    (2, true, Keyhash),
+    (3, true, Uint),
+    (4, true, Bstr),
+    (5, true, Uint),
+    (6, true, Any),
 ];
 // §8.2: the transport key, the delegating keyhash, the window, and a hybrid
 // `COSE_Sign` over fields 1 to 4; a signed map, so extensions above 5 are
@@ -400,8 +390,6 @@ pub fn fields(f: Family) -> Option<Fields> {
         CatalogQuery => CATALOG_QUERY,
         ResourceRequest => RESOURCE_REQUEST,
         ResourceRegistration => RESOURCE_REGISTRATION,
-        PrekeyPublication => PREKEY_PUBLICATION,
-        OneTimeDeposit => ONE_TIME_DEPOSIT,
         RelaySubmission => RELAY_SUBMISSION,
         WakeRegistration => WAKE_REGISTRATION,
         ProfilePublication => PROFILE_PUBLICATION,
@@ -414,13 +402,13 @@ pub fn fields(f: Family) -> Option<Fields> {
         CatalogReply => CATALOG_REPLY,
         ResourceResponse => RESOURCE_RESPONSE,
         ArchiveReply => ARCHIVE_REPLY,
-        PrekeyReply => PREKEY_REPLY,
+        NodeKeyReply => NODE_KEY_REPLY,
         CurrencyReply => CURRENCY_REPLY,
         ResourceRegistrationReply => RESOURCE_REGISTRATION_REPLY,
         KeyGrant => KEY_GRANT,
         LateResponse => LATE_RESPONSE,
         Delegation => DELEGATION,
-        PrekeyRequestOrBatch | VerifierQuery => return None,
+        NodeKeyRequestOrBatch | VerifierQuery => return None,
     })
 }
 
@@ -721,17 +709,6 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
                 return Err(Error("referral advances nothing"));
             }
         }
-        OneTimeKeys => {
-            let Item::Array(ref a) = v else {
-                return Err(Error("one-time keys not array"));
-            };
-            if a.is_empty() || a.len() > 256 {
-                return Err(Error("a deposit is 1 to 256 keys"));
-            }
-            if !a.iter().all(|k| matches!(k, Item::Bytes(_))) {
-                return Err(Error("a one-time key is a byte string"));
-            }
-        }
         CatalogEntries => {
             let entries = array_item_ranges(b, at).ok_or(Error("entries not array"))?;
             if entries.len() > CATALOG_REPLY_ENTRIES {
@@ -772,7 +749,8 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
             }
         }
         CurrencyAttestation => nested("CurrencyAttestation")?,
-        PrekeyBundle => nested("PrekeyBundle")?,
+        NodeKey => nested("NodeKey")?,
+        Sealed => nested("Sealed")?,
         Profile => nested("Profile")?,
         Delegation => nested("Delegation")?,
         Txids => {
@@ -817,16 +795,6 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
                 }
             }
         }
-        PrekeyBundles => {
-            let bundles = array_item_ranges(b, at).ok_or(Error("bundles not array"))?;
-            if bundles.is_empty() || bundles.len() > PREKEY_BUNDLES_PER_REPLY {
-                return Err(Error("one to eight bundles"));
-            }
-            for r in bundles {
-                let s = &b[r.clone()];
-                check_kind(s, "PrekeyBundle", &parse_all(s)?)?;
-            }
-        }
         CatalogEntry => nested("CatalogEntry")?,
         Scope => nested("Scope")?,
         VerifierResponse => nested("VerifierResponse")?,
@@ -843,28 +811,18 @@ pub fn check_unsigned(f: Family, b: &[u8], at: usize) -> Result<(), Error> {
             let (item, end) = p.item(at)?;
             check_kind(&b[at..end], "Delegation", &item)
         }
-        Family::PrekeyRequestOrBatch => {
+        Family::NodeKeyRequestOrBatch => {
             let (Item::Map(ref m), _) = p.item(at)? else {
                 return Err(Error("not a map"));
             };
+            // the two forms are structurally distinct (§7.8): a population
+            // is an array, one recipient a keyhash
             let schema = if matches!(map_get(m, 1), Some(Item::Array(_))) {
-                PREKEY_BATCH_REQUEST
+                NODE_KEY_BATCH_REQUEST
             } else {
-                PREKEY_REQUEST
+                NODE_KEY_REQUEST
             };
-            check_map(b, at, schema)?;
-            if schema.len() == 4 {
-                let mode = map_get(m, 2).and_then(as_uint).unwrap_or(0);
-                if mode > 1 {
-                    return Err(Error("prekey request mode"));
-                }
-                // a one-time key is consumed from one device's pool, so the
-                // device is required when one is asked for (§7.8 field 4)
-                if mode == 1 && map_get(m, 4).is_none() {
-                    return Err(Error("a one-time key request names its device"));
-                }
-            }
-            Ok(())
+            check_map(b, at, schema)
         }
         Family::VerifierQuery => {
             let parts = array_item_ranges(b, at).ok_or(Error("request-4 body not array"))?;
@@ -937,11 +895,11 @@ pub fn check_unsigned(f: Family, b: &[u8], at: usize) -> Result<(), Error> {
                         return Err(Error("frontier present iff more remain"));
                     }
                 }
-                Family::PrekeyReply => {
-                    if map_get(m, 2).is_some() == map_get(m, 4).is_some() {
-                        return Err(Error("bundle and failure code are alternatives"));
+                Family::NodeKeyReply => {
+                    if map_get(m, 2).is_some() == map_get(m, 3).is_some() {
+                        return Err(Error("a node key and a failure code are alternatives"));
                     }
-                    if map_get(m, 4).and_then(as_uint).unwrap_or(0) > 1 {
+                    if map_get(m, 3).and_then(as_uint).unwrap_or(0) > 1 {
                         return Err(Error("failure code out of range"));
                     }
                 }
@@ -1071,7 +1029,7 @@ pub fn sign1_profile(kind: &str) -> Option<(u64, &'static [u8], u64)> {
         "AbuseReport" => (5, aad::ABUSE, 1),
         "AnchorEntry" => (5, aad::ANCHOR, 1),
         "SubtreeAck" => (5, aad::SUBTREE_ACK, 2),
-        "PrekeyBundle" => (6, aad::PREKEY, 1),
+        "NodeKey" => (6, aad::NODE_KEY, 2),
         "Profile" => (7, aad::PROFILE, 1),
         "EndpointRecord" => (4, aad::ENDPOINTS, 1),
         "SignedLocator" => (3, aad::LOCATOR, 1),
@@ -1139,7 +1097,7 @@ fn record_extension_bounds(b: &[u8], kind: &str, item: &Item) -> Result<(), Erro
     }
     let top: Option<u64> = match kind {
         "CurrencyAttestation" => Some(8),
-        "PrekeyBundle" => Some(6),
+        "NodeKey" => Some(6),
         "Profile" => Some(7),
         "AnchorEntry" | "SubtreeAck" | "AbuseReport" | "Witness" | "Delegation" => Some(5),
         "EncryptionKey" => Some(4),
@@ -1220,60 +1178,64 @@ fn cose_signature_shape(it: &Item) -> Result<(), Error> {
     }
 }
 
-/// A `PrekeyBundle`'s payload, fields 1 to 5 (`wire-format.md` §7.8): the
-/// subject and the device each 32 bytes, the construction and the
-/// publication time uints, the reusable material a byte string within the
-/// blob bound.  Its signature slot is the business of whoever knows
-/// whether the bundle in hand is signed yet.
-fn prekey_bundle_payload_ok(b: &[u8], m: &[(Item, Item)]) -> Result<(), Error> {
-    if keyhash_at(b, m, 1).is_none() {
-        return Err(Error("subject keyhash width"));
+/// An X-Wing ciphertext, in bytes (§7.8.1).
+pub const XWING_CIPHERTEXT_BYTES: usize = 1120;
+/// The AES-256-GCM nonce in front of a seal's ciphertext, in bytes, and
+/// the GCM tag after it (§7.8.1).
+const SEAL_NONCE_BYTES: usize = 12;
+const SEAL_GCM_TAG_BYTES: usize = 16;
+
+/// A `Sealed` (§7.8.1): the node key's number, the two X-Wing ciphertexts
+/// at their fixed width, and a nonce-prefixed AES-GCM ciphertext at least
+/// long enough to carry its nonce and tag.
+fn sealed_ok(item: &Item) -> Result<(), Error> {
+    let Item::Array(a) = item else {
+        return Err(Error("a sealed message is an array"));
+    };
+    if a.len() != 4 {
+        return Err(Error("a sealed message has four elements"));
     }
-    map_get(m, 2)
-        .and_then(as_uint)
-        .ok_or(Error("construction required"))?;
-    match map_get(m, 3) {
-        Some(Item::Bytes(r)) if r.len() <= PREKEY_BUNDLE_BLOB => {}
-        Some(Item::Bytes(_)) => return Err(Error("blob over 4KB")),
-        _ => return Err(Error("material required")),
+    as_uint(&a[0]).ok_or(Error("a node key's number is a uint"))?;
+    for c in &a[1..3] {
+        match c {
+            Item::Bytes(r) if r.len() == XWING_CIPHERTEXT_BYTES => {}
+            _ => return Err(Error("an X-Wing ciphertext is 1120 bytes")),
+        }
     }
-    map_get(m, 4)
-        .and_then(as_uint)
-        .ok_or(Error("published_at required"))?;
-    // field 5, the device, under the signature (§7.8)
-    if keyhash_at(b, m, 5).is_none() {
-        return Err(Error("device key width"));
+    match &a[3] {
+        Item::Bytes(r) if r.len() >= SEAL_NONCE_BYTES + SEAL_GCM_TAG_BYTES => Ok(()),
+        _ => Err(Error("a seal carries its nonce and tag")),
     }
-    Ok(())
 }
 
-/// A carried `PrekeyBundle` blob (`wire-format.md` §14.3.3): parses as a
-/// map, within the ceiling, its signature slot present or absent as the
-/// carriage requires, and its payload a `PrekeyBundle`'s on either side
-/// of the signature: a credential's is the whole signed record, an
-/// introduction's the same map before the identity signs it.
-fn device_bundle_ok(b: &[u8], f: &Item, signed: bool) -> Result<(), Error> {
-    let Item::Bytes(r) = f else {
-        return Err(Error("bundle not bstr"));
+/// A `SealedBody` (§7.8.1): the sender, its alias, its introduction or
+/// nil, the kind, the bytes and the 32-byte tag.
+fn sealed_body_ok(b: &[u8], item: &Item) -> Result<(), Error> {
+    let Item::Array(a) = item else {
+        return Err(Error("a sealed body is an array"));
     };
-    if r.is_empty() || r.len() > DEVICE_BUNDLE_BYTES {
-        return Err(Error("bundle over the ceiling"));
+    if a.len() != 6 {
+        return Err(Error("a sealed body has six elements"));
     }
-    let bundle = &b[r.clone()];
-    let inner = parse_all(bundle).map_err(|_| Error("bundle does not parse"))?;
-    let Item::Map(m) = &inner else {
-        return Err(Error("bundle not a map"));
-    };
-    match (signed, map_get(m, 6).is_some()) {
-        (true, true) | (false, false) => {}
-        (true, false) => return Err(Error("a credential's bundle carries field 6")),
-        (false, true) => return Err(Error("an introduction's bundle omits field 6")),
+    match &a[0] {
+        Item::Bytes(r) if r.len() == 32 => {}
+        _ => return Err(Error("the sender is a keyhash")),
     }
-    if signed {
-        check_kind(bundle, "PrekeyBundle", &inner)
-    } else {
-        record_extension_bounds(bundle, "PrekeyBundle", &inner)?;
-        prekey_bundle_payload_ok(bundle, m)
+    match &a[1] {
+        Item::Text(r) if !r.is_empty() && r.len() <= crate::bounds::PROFILE_ALIAS_BYTES => {}
+        _ => return Err(Error("an alias is 1 to 64 bytes of text")),
+    }
+    if !matches!(a[2], Item::Null) {
+        let parts = array_item_ranges(b, 0).ok_or(Error("array walk"))?;
+        introduction_ok(b, parts[2].start)?;
+    }
+    as_uint(&a[3]).ok_or(Error("a kind is a uint"))?;
+    if !matches!(a[4], Item::Bytes(_)) {
+        return Err(Error("the bytes are a byte string"));
+    }
+    match &a[5] {
+        Item::Bytes(r) if r.len() == 32 => Ok(()),
+        _ => Err(Error("a tag is 32 bytes")),
     }
 }
 
@@ -1542,7 +1504,10 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             if bs(b, map_get(m, 1).ok_or(Error("subject"))?).map(|s| s.len()) != Some(32) {
                 return Err(Error("keyhash width"));
             }
-            Ok(())
+            // field 2 is a `Locator` (§2.3), path and all: a signature over
+            // a locator a holder cannot read places nobody
+            let r = value_slice(b, 2).ok_or(Error("field 2"))?;
+            check_type(b, r.start, Locator)
         }
         "NetworkPoint" => {
             let Item::Map(m) = item else {
@@ -1763,65 +1728,27 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             }
             Ok(())
         }
-        // `wire-format.md` §14.3.4: the sender's prekey material, carried
-        // across the local session so a co-present pair can open an
-        // end-to-end channel afterwards with no node's help.  The bundle
-        // and the one-time key are opaque here: each is the bytes §7.8
-        // publishes and verifies under its own signature, which is where
-        // their shape is checked.  The one-time key is optional because
-        // §7.8 lets a pool run dry.
-        "PrekeyHandover" => {
-            let Item::Array(a) = item else {
-                return Err(Error("not array"));
-            };
-            if a.len() != 4 && a.len() != 5 {
-                return Err(Error("four fields, or five with a one-time key"));
-            }
-            if as_uint(&a[0]) != Some(1) {
-                return Err(Error("version 1"));
-            }
-            match &a[1] {
-                Item::Bytes(r) if r.len() == 32 => {}
-                _ => return Err(Error("a ceremony-id is 32 bytes")),
-            }
-            match &a[2] {
-                Item::Bytes(r) if r.len() == 32 => {}
-                _ => return Err(Error("a device is 32 bytes")),
-            }
-            match &a[3] {
-                Item::Bytes(r) if !r.is_empty() => {}
-                _ => return Err(Error("a bundle is a non-empty byte string")),
-            }
-            if let Some(k) = a.get(4) {
-                match k {
-                    Item::Bytes(r) if !r.is_empty() => {}
-                    _ => return Err(Error("a one-time key is a non-empty byte string")),
-                }
-            }
-            Ok(())
-        }
         "DeviceIntroduction" => {
             let Item::Array(a) = item else {
                 return Err(Error("not array"));
             };
-            if a.len() != 3 {
-                return Err(Error("three fields"));
+            if a.len() != 2 {
+                return Err(Error("two fields"));
             }
             if as_uint(&a[0]) != Some(1) {
                 return Err(Error("version 1"));
             }
             match &a[1] {
-                Item::Bytes(r) if r.len() == 32 => {}
-                _ => return Err(Error("a device key is 32 bytes")),
+                Item::Bytes(r) if r.len() == 32 => Ok(()),
+                _ => Err(Error("a device key is 32 bytes")),
             }
-            device_bundle_ok(b, &a[2], false)
         }
         "DeviceCredential" => {
             let Item::Array(a) = item else {
                 return Err(Error("not array"));
             };
-            if a.len() != 3 {
-                return Err(Error("three fields"));
+            if a.len() != 4 {
+                return Err(Error("four fields"));
             }
             if as_uint(&a[0]) != Some(1) {
                 return Err(Error("version 1"));
@@ -1838,7 +1765,17 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
                     _ => return Err(Error("a delegation entry over the ceiling")),
                 }
             }
-            device_bundle_ok(b, &a[2], true)
+            // the identity's two encryption secrets (§14.3.3)
+            for (f, what) in [
+                (2, "an X-Wing seed is 32 bytes"),
+                (3, "a sealing-authentication key is 32 bytes"),
+            ] {
+                match &a[f] {
+                    Item::Bytes(r) if r.len() == 32 => {}
+                    _ => return Err(Error(what)),
+                }
+            }
+            Ok(())
         }
         // ---- the ceremony's conversation (`wire-format.md` §7.10.2)
         "ConsentReply" => {
@@ -2312,8 +2249,20 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
         "ResourceResponse" => check_unsigned(Family::ResourceResponse, b, 0),
         "ArchiveRequest" => check_unsigned(Family::ArchiveRequest, b, 0),
         "ArchiveReply" => check_unsigned(Family::ArchiveReply, b, 0),
-        "PrekeyReply" => check_unsigned(Family::PrekeyReply, b, 0),
-        "PrekeyBatchRequest" => check_unsigned(Family::PrekeyRequestOrBatch, b, 0),
+        "NodeKeyReply" => check_unsigned(Family::NodeKeyReply, b, 0),
+        "NodeKeyRequest" | "NodeKeyBatchRequest" => {
+            check_unsigned(Family::NodeKeyRequestOrBatch, b, 0)
+        }
+        "NodeKeyBatchReply" => {
+            let replies = array_item_ranges(b, 0).ok_or(Error("not an array"))?;
+            if replies.is_empty() || replies.len() > 256 {
+                return Err(Error("one to 256 replies"));
+            }
+            for r in replies {
+                check_unsigned(Family::NodeKeyReply, &b[r.clone()], 0)?;
+            }
+            Ok(())
+        }
         "CatalogReply" => check_unsigned(Family::CatalogReply, b, 0),
         "SubtreeAck" => {
             let Item::Map(m) = item else {
@@ -2337,12 +2286,20 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
                 .ok_or(Error("a subtree ack carries its timestamp"))?;
             Ok(())
         }
-        "PrekeyBundle" => {
+        "NodeKey" => {
+            check_map_signed(b, 0, NODE_KEY)?;
             let Item::Map(m) = item else {
                 return Err(Error("not map"));
             };
-            prekey_bundle_payload_ok(b, m)
+            if bs(b, map_get(m, 4).ok_or(Error("field 4"))?).map(|s| s.len())
+                != Some(XWING_PUBLIC_BYTES)
+            {
+                return Err(Error("an X-Wing encapsulation key is 1216 bytes"));
+            }
+            Ok(())
         }
+        "Sealed" => sealed_ok(item),
+        "SealedBody" => sealed_body_ok(b, item),
         "Profile" => {
             let Item::Map(m) = item else {
                 return Err(Error("not map"));
@@ -2396,19 +2353,23 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             Ok(())
         }
         "body" => check_body(b, item),
-        // what a node delivers for a relay submission (`wire-format.md`
-        // §7.10): the submitter in front of the ciphertext, an array and
-        // not a map.  The submitter's binding is a third element where the
-        // node holds one, and optional because it holds none for a device
-        // that published none
-        "RelayedPayload" => match item {
-            Item::Array(a) if a.len() == 2 || a.len() == 3 => match (&a[0], &a[1], a.get(2)) {
-                (Item::Bytes(f), Item::Bytes(_), None) if f.len() == 32 => Ok(()),
-                (Item::Bytes(f), Item::Bytes(_), Some(Item::Bytes(_))) if f.len() == 32 => Ok(()),
-                _ => Err(Error("relayed payload shape")),
-            },
-            _ => Err(Error("relayed payload is a two- or three-element array")),
-        },
+        // what a node delivers for a submission (`wire-format.md` §7.10):
+        // the message's position in the recipient's queue, the seal
+        // unchanged, and the node's own half opened
+        "RelayedPayload" => {
+            let Item::Array(a) = item else {
+                return Err(Error("a relayed payload is an array"));
+            };
+            if a.len() != 3 {
+                return Err(Error("a relayed payload has three elements"));
+            }
+            as_uint(&a[0]).ok_or(Error("a position is a uint"))?;
+            sealed_ok(&a[1])?;
+            match &a[2] {
+                Item::Bytes(r) if r.len() == 32 => Ok(()),
+                _ => Err(Error("the node's half is 32 bytes")),
+            }
+        }
         _ => Ok(()),
     }
 }
@@ -3111,64 +3072,32 @@ mod shapes {
         assert!(checked("ProposedBody", &proposed_body(&[])).is_err());
     }
 
-    /// A `PrekeyBundle` with fields 1 to 5, 6 as well when `signed`, less
-    /// the one `drop` names.
-    fn bundle(signed: bool, drop: Option<u64>) -> Vec<u8> {
-        let last = if signed { 6 } else { 5 };
-        let keys: Vec<u64> = (1..=last).filter(|k| Some(*k) != drop).collect();
+    fn introduction(device_bytes: usize) -> Vec<u8> {
         let mut o = Vec::new();
-        emit_map_head(&mut o, keys.len());
-        for k in keys {
-            emit_uint(&mut o, k);
-            match k {
-                1 | 5 => bstr(&mut o, 32, k as u8),
-                2 => emit_uint(&mut o, 1),
-                3 => bstr(&mut o, 100, 3),
-                4 => emit_uint(&mut o, 1_700_000_000),
-                _ => sign1(&mut o, 0),
-            }
-        }
-        o
-    }
-
-    fn introduction(bundle: &[u8]) -> Vec<u8> {
-        let mut o = Vec::new();
-        emit_array_head(&mut o, 3);
+        emit_array_head(&mut o, 2);
         emit_uint(&mut o, 1);
-        bstr(&mut o, 32, 8);
-        emit_bstr(&mut o, bundle);
+        bstr(&mut o, device_bytes, 8);
         o
     }
 
-    fn credential(bundle: &[u8]) -> Vec<u8> {
+    fn credential(seed_bytes: usize, auth_bytes: usize) -> Vec<u8> {
         let mut o = Vec::new();
-        emit_array_head(&mut o, 3);
+        emit_array_head(&mut o, 4);
         emit_uint(&mut o, 1);
         emit_array_head(&mut o, 1);
         bstr(&mut o, 40, 9);
-        emit_bstr(&mut o, bundle);
+        bstr(&mut o, seed_bytes, 3);
+        bstr(&mut o, auth_bytes, 4);
         o
     }
 
     #[test]
-    fn a_carried_bundle_is_a_prekey_bundle_on_either_side_of_its_signature() {
-        assert!(checked("DeviceIntroduction", &introduction(&bundle(false, None))).is_ok());
-        assert!(checked("DeviceCredential", &credential(&bundle(true, None))).is_ok());
-        // an empty map parses and carries no field 6, and is no bundle
-        assert!(checked("DeviceIntroduction", &introduction(&[0xa0])).is_err());
-        for k in 1..=5 {
-            assert!(
-                checked("DeviceIntroduction", &introduction(&bundle(false, Some(k)))).is_err(),
-                "an introduction's bundle without field {k}"
-            );
-            assert!(
-                checked("DeviceCredential", &credential(&bundle(true, Some(k)))).is_err(),
-                "a credential's bundle without field {k}"
-            );
-        }
-        // the signature slot stays on the side the carriage puts it
-        assert!(checked("DeviceIntroduction", &introduction(&bundle(true, None))).is_err());
-        assert!(checked("DeviceCredential", &credential(&bundle(false, None))).is_err());
+    fn a_device_is_introduced_by_its_key_and_credentialled_with_the_two_secrets() {
+        assert!(checked("DeviceIntroduction", &introduction(32)).is_ok());
+        assert!(checked("DeviceIntroduction", &introduction(31)).is_err());
+        assert!(checked("DeviceCredential", &credential(32, 32)).is_ok());
+        assert!(checked("DeviceCredential", &credential(31, 32)).is_err());
+        assert!(checked("DeviceCredential", &credential(32, 33)).is_err());
     }
 
     #[test]

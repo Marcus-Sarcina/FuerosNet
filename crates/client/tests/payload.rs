@@ -1,340 +1,426 @@
-//! Payload on the harness (design §14.2; `wire-format.md` §7.8;
-//! `light-client-requirements.md` §3): clients attached to serving nodes
-//! that hold their prekeys and their mail, sessions opened on PQXDH with
-//! and without a one-time key, the direct path and the relay, and the
-//! channel's dispatch.
+//! Payload on the harness (design §14.2, §14.2.4; `wire-format.md` §7.8,
+//! §7.8.1, §7.10; `light-client-requirements.md` §3): clients served by
+//! nodes that hold a key for each recipient they serve, messages sealed to
+//! the person and to that node's key, the direct path for what is not a
+//! direct message, and the channel's dispatch once a seal is opened.
 
 mod common;
 
+use common::harness::device;
 use common::net::*;
 use common::*;
-use rhtn_archive::prekey::*;
+use rhtn_archive::node_key::{NodeKey, NodeKeyReply, NodeKeyRequest, decode_batch_reply};
+use rhtn_archive::sealed::{Sealed, SealedBody};
+use rhtn_archive::submission::{relayed, unrelayed};
 use rhtn_client::ceremony::*;
-use rhtn_client::notice::Notice;
+use rhtn_client::local::DeviceCredential;
 use rhtn_client::payload::*;
 use rhtn_client::query::KeyGrant;
 use rhtn_client::store::{Capture, Frame, SealParams, seal};
+use rhtn_codec::cose::sha256;
+use rhtn_crypto::seal::EncryptionSecret;
+use rhtn_crypto::verify::EncryptionKey;
+use rhtn_crypto::xwing;
 
-#[test]
-fn attaching_publishes_a_signed_bundle_and_stocks_the_pool() {
-    let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);
-    n.attach("alice");
-    let node = &n.nodes["w1"];
-    let b = PrekeyBundle::parse(
-        node.prekeys
-            .bundle(&kh("alice"))
-            .expect("N holds a bundle for S"),
-    )
-    .unwrap();
-    assert_eq!(
-        (b.subject, b.construction),
-        (kh("alice"), 1),
-        "field 2 equal to 1"
-    );
-    assert_eq!(
-        b.verify(&ids()),
-        Ok(()),
-        "a signature by S under the prekey tag over fields 1 to 5"
-    );
-    // field 5: the device, the seed-holding device's classical key, which is
-    // the key S's session presented (`wire-format.md` §7.8)
-    assert_eq!(
-        b.device,
-        *rhtn_crypto::identity::testkit::test_identity("alice")
-            .public
-            .ed
-            .as_bytes(),
-        "field 5 equal to the key S's session presented"
-    );
-    assert!(
-        node.prekeys.pool_size(&kh("alice")) > 0,
-        "a non-empty one-time pool"
-    );
-    assert_eq!(
-        node.prekeys.pool_size(&kh("alice")),
-        n.s.client("alice").payload.cfg.pool_target
-    );
-    // the blob reads as this construction's material
-    let blob = Blob::decode(&b.blob).unwrap();
-    assert_eq!(blob.pqspk.0.len(), 1184);
+/// `who`'s encryption secrets, as every device its phrase restores derives
+/// them.
+fn secret_of(who: &str) -> EncryptionSecret {
+    EncryptionSecret::from_identity_root(id(who).identity_root())
 }
 
-#[test]
-fn the_pool_is_replenished_before_exhaustion_and_the_signed_prekey_rotated_on_its_interval() {
-    let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1"), ("carol", "w1")]);
-    n.s.client("alice").payload.cfg = PayloadConfig {
-        pool_target: 4,
-        replenish_below: 2,
-        signed_prekey_interval_s: 3600,
-    };
-    n.attach("alice");
-    assert_eq!(n.nodes["w1"].prekeys.pool_size(&kh("alice")), 4);
-    let first_bundle = n.nodes["w1"].prekeys.bundle(&kh("alice")).unwrap().clone();
-    // requesters draw: the node reports the pool as it shrinks
-    for (who, nonce) in [("bob", 1u8), ("carol", 2), ("w2", 3)] {
-        let req = PrekeyRequest::One {
-            subject: kh("alice"),
-            one_time: true,
-            nonce: [nonce; 16],
-            device: Some(phone_key("alice")),
-        }
-        .encode();
-        let r = PrekeyReply::decode(
-            &n.nodes
-                .get_mut("w1")
-                .unwrap()
-                .prekeys
-                .answer(&kh(who), &req, 0)
-                .unwrap(),
-        )
-        .unwrap();
-        assert!(r.one_time.is_some());
-        let left = n.nodes["w1"].prekeys.pool_size(&kh("alice"));
-        let msgs = n.s.client("alice").on_pool_report(left);
-        if left < 2 {
-            assert!(
-                matches!(msgs.as_slice(), [Msg::StockOneTime(_)]),
-                "below the threshold S uploads more, before zero"
-            );
-        } else {
-            assert!(msgs.is_empty());
-        }
-        n.carry(kh("alice"), msgs);
-        assert!(
-            n.nodes["w1"].prekeys.pool_size(&kh("alice")) > 0,
-            "never reaches zero"
-        );
+/// `who`'s encryption key, as its card carries it, verified.
+fn key_of(who: &str) -> EncryptionKey {
+    rhtn_crypto::verify::encryption_key(&ids()[..], &rhtn_crypto::encryption_key::own(&id(who)))
+        .expect("verifies under its own material")
+}
+
+/// What a `RelayedPayload` for `to` from `node` opens to, under `to`'s own
+/// secrets: the seal and its body, before any attribution.
+fn opened(to: &str, node: &str, bytes: &[u8]) -> (Sealed, SealedBody) {
+    let r = unrelayed(bytes).expect("a relayed payload");
+    open_relayed(&secret_of(to), &kh(to), &kh(node), &r).expect("opens")
+}
+
+/// The newest key `node` holds for `to`, as a sender holds it.
+fn node_key_for(n: &mut Net, to: &str) -> NodeKeyHeld {
+    let node = n.node_of(&kh(to));
+    let now = n.now();
+    let record = n
+        .nodes
+        .get_mut(node)
+        .unwrap()
+        .keys
+        .newest(&id(node), &kh(to), now);
+    let k = NodeKey::parse(&record).expect("a node key");
+    NodeKeyHeld {
+        node: kh(node),
+        n: k.fields.n,
+        public: Box::new(k.fields.public),
     }
-    // the interval elapses: a new bundle with a later field 4
-    n.s.clock.set(n.s.clock.get() + 3_600_000 + 1000);
-    let msgs = n.s.client("alice").maintain();
-    assert!(msgs.iter().any(|m| matches!(m, Msg::PublishBundle(_))));
-    n.carry(kh("alice"), msgs);
-    let second = PrekeyBundle::parse(n.nodes["w1"].prekeys.bundle(&kh("alice")).unwrap()).unwrap();
-    assert!(second.published_at > PrekeyBundle::parse(&first_bundle).unwrap().published_at);
-    assert_ne!(
-        Blob::decode(&second.blob).unwrap().spk,
-        Blob::decode(&PrekeyBundle::parse(&first_bundle).unwrap().blob)
-            .unwrap()
-            .spk,
-        "a new signed prekey"
-    );
+}
+
+/// Randomness for a hand-made seal: the bytes of a counter, never twice
+/// the same.
+fn counter(start: u8) -> impl FnMut(&mut [u8]) {
+    let mut i = start;
+    move |out: &mut [u8]| {
+        for b in out {
+            i = i.wrapping_add(1);
+            *b = i;
+        }
+    }
+}
+
+/// `who` restarted from what it wrote, on a device of its own: the client
+/// the harness holds for it is replaced.
+fn restart(n: &mut Net, who: &'static str, seed: u64) {
+    let blob = n.s.client(who).durable();
+    let (dev, handles) = device(n.s.clock.clone(), seed, 0);
+    handles.reach.0.set(n.s.handles[who].reach.0.get());
+    let mut c = Client::new(id(who), ids(), Config::default(), dev);
+    c.restore_durable(&blob).expect("opens whole");
+    n.s.h.clients.insert(kh(who), c);
+    n.s.handles.insert(who, handles);
+}
+
+/// What was delivered to `to`, as it came to.
+fn said_to(n: &Net, from: &str, to: &str) -> Vec<String> {
+    n.delivered
+        .iter()
+        .filter(|(f, t, _)| *f == kh(from) && *t == kh(to))
+        .map(|(_, _, d)| d.clone())
+        .collect()
 }
 
 // acceptance: PAY-07
+// functional: MAIL-023
+// functional: PAY-013
+/// **The population's node keys, prefetched as one sweep** at attach:
+/// one batch to the node that serves several of them, in ascending
+/// keyhash order, and no single-recipient request for any; only those
+/// this client holds an encryption key for are asked about, since nobody
+/// else can be written to.
 #[test]
-fn reusable_material_is_prefetched_for_the_whole_org_as_one_sweep() {
-    let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1"), ("carol", "w1")]);
-    n.attach("bob");
-    n.attach("carol");
+fn node_keys_are_prefetched_for_the_whole_horizon_as_one_sweep() {
+    let mut n = net(
+        &["w1", "w2"],
+        &[("alice", "w2"), ("bob", "w1"), ("carol", "w1")],
+    );
+    // somebody served at the same node whose card alice does not hold
+    n.served_by.insert(kh("w2"), "w1");
     n.attach("alice");
-    n.sweep("bob");
-    n.sweep("carol");
     let reqs = n.requests("alice");
-    let batches: Vec<&PrekeyRequest> = reqs
-        .iter()
-        .filter(|r| matches!(r, PrekeyRequest::Batch { .. }))
-        .collect();
-    assert_eq!(batches.len(), 1, "one sweep");
-    let PrekeyRequest::Batch { subjects, .. } = batches[0] else {
-        unreachable!()
+    assert_eq!(reqs.len(), 1, "one sweep, to the one node serving them");
+    assert_eq!(n.fetches[0].1, "w1", "asked of the node that serves them");
+    let NodeKeyRequest::Batch { recipients, .. } = &reqs[0] else {
+        panic!("a batch: {:?}", reqs[0])
     };
     let mut want = vec![kh("bob"), kh("carol")];
     want.sort();
     assert_eq!(
-        *subjects, want,
-        "the population in ascending keyhash order, without S itself"
+        *recipients, want,
+        "the population in ascending keyhash order, without S itself or a party it cannot write to"
     );
-    assert!(
-        reqs.iter().all(|r| !matches!(
-            r,
-            PrekeyRequest::One {
-                one_time: false,
-                ..
-            }
-        )),
-        "no single-subject reusable request for any of them"
-    );
-    assert!(n.s.client("alice").payload.sessions.has_bundle(&kh("bob")));
-    assert!(
-        n.s.client("alice")
-            .payload
-            .sessions
-            .has_bundle(&kh("carol"))
+    let held = &n.s.client("alice").payload.node_keys;
+    for who in ["bob", "carol"] {
+        let k = held.get(&kh(who)).expect("a key held for each");
+        assert_eq!(k.node, kh("w1"), "the node serving {who}");
+    }
+    assert!(!held.contains_key(&kh("w2")));
+    // and a send to either seals at once: nothing more is asked
+    n.send("alice", "bob", "no fetch needed");
+    assert_eq!(n.requests("alice").len(), 1, "no further request");
+    assert_eq!(
+        said_to(&n, "alice", "bob"),
+        vec!["Application(no fetch needed)"]
     );
 }
 
+// acceptance: PAY-32
+/// **A batch is answered one reply per recipient in the request's own
+/// order**, each echoing the one nonce, a failure in place of a key the
+/// node cannot give; and the client holds a key for each recipient answered
+/// and none for the one refused.
 #[test]
-fn a_one_time_key_is_requested_only_when_opening_a_session() {
-    let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);
-    n.attach("bob");
-    n.attach("alice");
-    n.sweep("bob");
-    // idle
-    n.s.clock.set(n.s.clock.get() + 600_000);
-    let msgs = n.s.client("alice").maintain();
-    n.carry(kh("alice"), msgs);
-    assert!(
-        n.requests("alice")
-            .iter()
-            .all(|r| !matches!(r, PrekeyRequest::One { one_time: true, .. })),
-        "none while idle"
-    );
-    // the first message to T
-    n.send("alice", "bob", "hello");
-    let reqs = n.requests("alice");
-    let ones: Vec<&PrekeyRequest> = reqs
-        .iter()
-        .filter(|r| matches!(r, PrekeyRequest::One { one_time: true, .. }))
-        .collect();
-    assert_eq!(ones.len(), 1, "exactly one");
-    assert!(
-        matches!(ones[0], PrekeyRequest::One { subject, .. } if *subject == kh("bob")),
-        "naming T"
-    );
-    let pos_req = n
-        .log
-        .iter()
-        .position(|(f, _, m)| {
-            f == "alice"
-                && matches!(m, Msg::PrekeyRequest(_))
-                && matches!(
-                    PrekeyRequest::decode(if let Msg::PrekeyRequest(b) = m {
-                        b
-                    } else {
-                        unreachable!()
-                    })
-                    .unwrap(),
-                    PrekeyRequest::One { one_time: true, .. }
-                )
-        })
-        .unwrap();
-    let pos_msg = n
-        .log
-        .iter()
-        .position(|(f, _, m)| f == "alice" && matches!(m, Msg::Payload { .. }))
-        .unwrap();
-    assert!(pos_req < pos_msg, "immediately before the first message");
-    assert_eq!(n.delivered.len(), 1);
-    assert!(n.delivered[0].2.contains("hello"));
-    // a second message: no further request
-    n.send("alice", "bob", "again");
+fn a_batch_is_answered_in_order_with_a_failure_in_place_and_the_client_takes_what_came() {
+    let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1"), ("carol", "w1")]);
+    // R1 < R2 < R3 by keyhash, the node serving R1 and R3 and not R2
+    let mut rs = [kh("bob"), kh("carol"), kh("w2")];
+    rs.sort();
+    let (r1, r2, r3) = (rs[0], rs[1], rs[2]);
+    let nonce = [0x5a; 16];
+    let req = NodeKeyRequest::for_recipients(vec![r3, r1, r2], nonce).unwrap();
     assert_eq!(
-        n.requests("alice")
-            .iter()
-            .filter(|r| matches!(r, PrekeyRequest::One { one_time: true, .. }))
-            .count(),
-        1
+        req.recipients(),
+        vec![r1, r2, r3],
+        "ascending keyhash order"
     );
-    assert_eq!(n.delivered.len(), 2);
+    let now = n.now();
+    let keys = &mut n.nodes.get_mut("w1").unwrap().keys;
+    let reply = keys
+        .answer(&id("w1"), &|r| *r != r2, &req.encode(), now)
+        .expect("answered");
+    let replies = decode_batch_reply(&reply).expect("a batch reply");
+    assert_eq!(replies.len(), 3);
+    assert!(replies.iter().all(|r| r.nonce == nonce), "the one nonce");
+    let newest =
+        |keys: &mut rhtn_node::node_keys::NodeKeyService, r| keys.newest(&id("w1"), &r, now);
+    assert_eq!(replies[0].outcome, Ok(newest(keys, r1)), "R1's newest key");
+    assert_eq!(
+        replies[1],
+        NodeKeyReply {
+            nonce,
+            outcome: Err(rhtn_archive::node_key::FAIL_NOT_SERVED)
+        },
+        "no key and failure code 0"
+    );
+    assert_eq!(replies[2].outcome, Ok(newest(keys, r3)), "R3's newest key");
+    // the client takes the two keys, each naming its recipient and the node
+    let out =
+        n.s.client("alice")
+            .take_node_key_reply(&kh("w1"), &req.recipients(), &reply);
+    assert!(out.is_empty(), "nothing was waiting");
+    let held = &n.s.client("alice").payload.node_keys;
+    assert!(held.contains_key(&r1) && held.contains_key(&r3));
+    assert!(!held.contains_key(&r2), "nothing for the one refused");
+}
+
+/// **A node key that does not verify under the node it came from is not
+/// held**: one signed by another, or naming another recipient, is refused,
+/// and what waits for it still waits.
+#[test]
+fn a_node_key_that_is_not_the_nodes_or_not_the_recipients_is_not_held() {
+    let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);
+    let msgs =
+        n.s.client("alice")
+            .send_payload(kh("bob"), KIND_APPLICATION, b"waits")
+            .unwrap();
+    assert_eq!(msgs, vec![Msg::NodeKeyRequest(vec![kh("bob")])]);
+    let now = n.now();
+    let req = NodeKeyRequest::for_recipients(vec![kh("bob")], [1; 16]).unwrap();
+    // carol's node key for bob, answered as though w1 had sent it
+    let mut other = rhtn_node::node_keys::NodeKeyService::new(Default::default());
+    let forged = other
+        .answer(&id("carol"), &|_| true, &req.encode(), now)
+        .unwrap();
+    assert!(
+        n.s.client("alice")
+            .take_node_key_reply(&kh("w1"), &[kh("bob")], &forged)
+            .is_empty(),
+        "nothing sealed under a key w1 did not sign"
+    );
+    // w1's key for carol, offered as bob's
+    let carols = n
+        .nodes
+        .get_mut("w1")
+        .unwrap()
+        .keys
+        .answer(
+            &id("w1"),
+            &|_| true,
+            &NodeKeyRequest::for_recipients(vec![kh("carol")], [1; 16])
+                .unwrap()
+                .encode(),
+            now,
+        )
+        .unwrap();
+    assert!(
+        n.s.client("alice")
+            .take_node_key_reply(&kh("w1"), &[kh("bob")], &carols)
+            .is_empty(),
+        "nothing sealed under a key for somebody else"
+    );
+    let a = n.s.client("alice");
+    assert!(!a.payload.node_keys.contains_key(&kh("bob")));
+    assert_eq!(a.payload.pending[&kh("bob")].len(), 1, "it still waits");
 }
 
 // acceptance: PAY-11
+// functional: PAY-020
+/// **Every identity is a leaf, the patron included**: a client attached
+/// at the node its patron operates — which speaks as the patron — seals
+/// to the patron as to any leaf, through the node that serves the patron;
+/// nothing goes to the node as material of its own, and each recipient
+/// opens its own and nobody else's.
 #[test]
-fn the_patron_is_reached_by_the_construction_like_any_leaf() {
-    // the node w1 speaks as its operator w1, who is also a leaf on a device
-    // of their own — the shape a launched node has
+fn the_patron_is_sealed_to_like_any_leaf() {
     let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1"), ("w1", "w1")]);
     n.attach("w1");
     n.attach("bob");
     n.attach("alice");
-    n.sweep("alice");
-    // to the patron: the construction, through the node holding P's bundle,
-    // and never bare material for the node
-    let msgs =
+    assert!(
+        n.requests("alice")
+            .iter()
+            .any(|r| r.recipients().contains(&kh("w1"))),
+        "a node-key request names P"
+    );
+    n.away.insert(kh("w1"));
+    n.away.insert(kh("bob"));
+    let to_patron =
         n.s.client("alice")
             .send_payload(kh("w1"), KIND_APPLICATION, b"to my patron")
             .unwrap();
-    assert!(
-        msgs.iter().all(|m| !matches!(m, Msg::Transport(_))),
-        "nothing rides the transport session as material for the node"
-    );
-    n.carry(kh("alice"), msgs);
-    assert!(
-        n.requests("alice").iter().any(
-            |r| matches!(r, PrekeyRequest::One { subject, one_time: true, .. } if *subject == kh("w1"))
-        ),
-        "a one-time key request names P"
-    );
-    assert!(n.delivered.iter().any(|d| d.2.contains("to my patron")));
-    // to a leaf: the same construction
-    n.send("alice", "bob", "to a leaf");
-    assert!(n.requests("alice").iter().any(
-        |r| matches!(r, PrekeyRequest::One { subject, one_time: true, .. } if *subject == kh("bob"))
-    ));
-    assert!(n.delivered.iter().any(|d| d.2.contains("to a leaf")));
+    let to_leaf =
+        n.s.client("alice")
+            .send_payload(kh("bob"), KIND_APPLICATION, b"to a leaf")
+            .unwrap();
+    for (msgs, to) in [(&to_patron, "w1"), (&to_leaf, "bob")] {
+        assert!(
+            matches!(msgs.as_slice(), [Msg::Sealed { to: t, .. }] if *t == kh(to)),
+            "one relay submission for {to}, sealed: {msgs:?}"
+        );
+    }
+    n.carry(kh("alice"), to_patron);
+    n.carry(kh("alice"), to_leaf);
+    // each sealed to its recipient's encryption key and w1's key for it
+    let for_patron = n.queued("w1");
+    let for_leaf = n.queued("bob");
+    let (sealed, body) = opened("w1", "w1", &for_patron[0]);
+    assert_eq!(sealed.n, n.s.client("alice").payload.node_keys[&kh("w1")].n);
+    assert_eq!(body.bytes, b"to my patron");
+    // the leaf's seal does not open as the patron's, nor the other way
+    for (bytes, wrong) in [(&for_leaf[0], "w1"), (&for_patron[0], "bob")] {
+        let r = unrelayed(bytes).unwrap();
+        assert_eq!(
+            open_relayed(&secret_of(wrong), &kh(wrong), &kh("w1"), &r).err(),
+            Some(PayloadError::Unopened),
+            "{wrong} cannot open another's"
+        );
+    }
+    assert_eq!(n.collect("w1"), vec!["Application(to my patron)"]);
+    assert_eq!(n.collect("bob"), vec!["Application(to a leaf)"]);
 }
 
+// functional: PAY-001
+/// **The seal through the client reproduces the canonical vector, and
+/// opens only with both halves** (`wire-format.md` §7.8.1;
+/// `test-vectors/records.md`, "The seal"). The primitives are held to
+/// their own specifications' vectors in `rhtn-crypto`; this is the
+/// composition as the client makes it — the body's fields, the tag over
+/// them, the message key over both halves — fed the vector's randomness.
 #[test]
-fn a_session_opens_on_reusable_material_alone_when_no_one_time_key_remains() {
-    let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);
-    n.attach("bob");
-    n.attach("alice");
-    n.sweep("bob");
-    // T's pool at N is drained
-    let mut drained = 0;
-    loop {
-        let left = n.nodes["w1"].prekeys.pool_size(&kh("bob"));
-        if left == 0 {
-            break;
-        }
-        let req = PrekeyRequest::One {
-            subject: kh("bob"),
-            one_time: true,
-            nonce: [drained; 16],
-            device: Some(phone_key("bob")),
-        }
-        .encode();
-        let now = n.now();
-        let requester = kh(&format!("w{}", 2 + drained % 2));
-        let reply = n
-            .nodes
-            .get_mut("w1")
-            .unwrap()
-            .prekeys
-            .answer(&requester, &req, now + drained as u64 * 4000)
-            .unwrap();
-        let r = PrekeyReply::decode(&reply).unwrap();
-        assert!(r.one_time.is_some());
-        drained += 1;
-    }
-    n.nodes.get_mut("w1").unwrap().prekeys.take_exhausted();
-    assert_eq!(n.nodes["w1"].prekeys.pool_size(&kh("bob")), 0);
-    n.send("alice", "bob", "without a one-time key");
-    let (_, _, reply) = n
-        .log
-        .iter()
-        .find(|(f, t, m)| f == "w1" && t == "alice" && matches!(m, Msg::PrekeyReply(_)))
-        .unwrap();
-    let Msg::PrekeyReply(rb) = reply else {
-        unreachable!()
+fn the_seal_reproduces_the_canonical_vector_and_opens_only_with_both_halves() {
+    let canonical = fixture("P-sealed");
+    let canonical_body = fixture("P-sealed-body");
+    let body = SealedBody::decode(&canonical_body).expect("the body decodes");
+    let node_key = NodeKey::parse(&fixture("P-node-key")).expect("the node key");
+    node_key.verify(&ids()[..]).expect("signed by bob's node");
+    assert_eq!(
+        (
+            node_key.fields.recipient,
+            node_key.fields.node,
+            node_key.fields.n
+        ),
+        (kh("carol"), kh("bob"), 3)
+    );
+    let held = NodeKeyHeld {
+        node: kh("bob"),
+        n: 3,
+        public: Box::new(node_key.fields.public),
     };
-    let r = PrekeyReply::decode(rb).unwrap();
-    assert!(
-        !r.bundles.is_empty() && r.one_time.is_none(),
-        "field 2 and no field 3"
+    // the vector's own randomness, in the order a seal draws it
+    let mut stream: Vec<u8> = Vec::new();
+    for label in ["r-1", "r-2", "n-1", "n-2"] {
+        stream.extend_from_slice(&sha256(
+            format!("rhtn-test-vectors:seal-eseed-{label}").as_bytes(),
+        ));
+    }
+    stream.extend_from_slice(&sha256(b"rhtn-test-vectors:seal-nonce")[..12]);
+    let mut at = 0;
+    let mut fresh = |out: &mut [u8]| {
+        out.copy_from_slice(&stream[at..at + out.len()]);
+        at += out.len();
+    };
+    let alice = secret_of("alice");
+    let from = Sender {
+        keyhash: &kh("alice"),
+        secret: &alice,
+        alias: "alice",
+        introduction: body.introduction.as_deref(),
+    };
+    let sealed = seal_to(
+        &from,
+        &kh("carol"),
+        &key_of("carol"),
+        &held,
+        KIND_APPLICATION,
+        b"hello carol",
+        &mut fresh,
+    )
+    .expect("sealed");
+    assert_eq!(sealed, canonical, "byte equality with P-sealed");
+
+    // the node's half: what bob's node decapsulates under key 3
+    let read = Sealed::decode(&sealed).unwrap();
+    let node_secret =
+        xwing::Secret::from_seed(sha256(b"rhtn-test-vectors:node-key-seed:bob:carol:3"));
+    let ss_n = node_secret.decapsulate(&read.ct_n);
+    let delivery = relayed(7, &sealed, &ss_n);
+    assert_eq!(
+        delivery,
+        fixture("P-relayed"),
+        "byte equality with P-relayed"
+    );
+
+    // carol opens it with both halves, to the canonical body, and its tag
+    // verifies for alice
+    let carol = secret_of("carol");
+    let r = unrelayed(&delivery).unwrap();
+    let (s, b) = open_relayed(&carol, &kh("carol"), &kh("bob"), &r).expect("opens");
+    assert_eq!(b.encode(), canonical_body, "to the P-sealed-body fixture");
+    assert!(tag_verifies(&carol, &kh("carol"), &key_of("alice"), &s, &b));
+    // ... and not with either half replaced
+    let mut wrong_half = r.clone();
+    wrong_half.ss_n = zeroize::Zeroizing::new([0; 32]);
+    assert_eq!(
+        open_relayed(&carol, &kh("carol"), &kh("bob"), &wrong_half).err(),
+        Some(PayloadError::Unopened),
+        "the node's half replaced"
     );
     assert_eq!(
-        n.delivered.len(),
-        1,
-        "S still opens the session and delivers"
+        open_relayed(&secret_of("bob"), &kh("carol"), &kh("bob"), &r).err(),
+        Some(PayloadError::Unopened),
+        "the recipient's half replaced: another identity's secrets"
     );
-    assert!(n.delivered[0].2.contains("without a one-time key"));
-    assert!(n.s.client("bob").payload.sessions.has_session(&kh("alice")));
-    // and it runs on
-    n.send("bob", "alice", "reply");
-    assert!(n.delivered[1].2.contains("reply"));
+    assert_eq!(
+        open_relayed(&carol, &kh("carol"), &kh("w1"), &r).err(),
+        Some(PayloadError::Unopened),
+        "the node named otherwise: the key binds it"
+    );
+    // and its tag does not verify for anybody but its sender
+    assert!(!tag_verifies(&carol, &kh("carol"), &key_of("bob"), &s, &b));
+    // **and a recipient holding nothing of alice attributes it by what it
+    // carries**: the introduction in the body is alice's, its locator reads,
+    // and its encryption key is the one the tag verified under
+    let intro = rhtn_archive::locator::Introduction::parse(
+        b.introduction
+            .as_deref()
+            .expect("a first message carries it"),
+    )
+    .expect("the carried introduction reads");
+    assert_eq!(intro.identity.keyhash, kh("alice"));
+    assert!(tag_verifies(
+        &carol,
+        &kh("carol"),
+        &intro.encryption,
+        &s,
+        &b
+    ));
 }
 
 // acceptance: PAY-14
+/// **Protocol objects and application payload reach their handlers once
+/// opened**: a `KeyGrant` and an application message sealed to the same
+/// verifier, the one to the grant handler and the other to the
+/// application.
 #[test]
 fn protocol_objects_and_application_payload_reach_their_handlers() {
     let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);
     n.attach("bob");
     n.attach("alice");
-    n.sweep("bob");
-    // bob, a verifier, holds a capture of alice under a record both hold;
-    // alice grants against it over the same session as an application message
+    // no direct path, so both are sealed and both pass bob's node
+    n.s.handles["alice"].reach.0.set(false);
+    // bob, a verifier, holds a capture of alice under a record both hold
     let mut w = World::new();
     let rec = w.meet("alice", "bob");
     let c = [11u8; 32];
@@ -379,25 +465,20 @@ fn protocol_objects_and_application_payload_reach_their_handlers() {
         n.s.client("alice")
             .send_payload(kh("bob"), KIND_KEY_GRANT, &grant)
             .unwrap();
+    assert!(matches!(msgs.as_slice(), [Msg::Sealed { .. }]), "{msgs:?}");
     n.carry(kh("alice"), msgs);
     n.send("alice", "bob", "an application message");
-    assert_eq!(n.delivered.len(), 2);
+    let got = said_to(&n, "alice", "bob");
+    assert_eq!(got.len(), 2);
     assert!(
-        n.delivered[0].2.starts_with("Grant("),
-        "the grant reached the grant handler: {}",
-        n.delivered[0].2
+        got[0].starts_with("Grant(") && got[0].contains("Buffered"),
+        "the grant reached the grant handler, buffered awaiting its query: {}",
+        got[0]
     );
-    assert!(
-        n.delivered[0].2.contains("Buffered"),
-        "buffered awaiting its query, the named capture in reach: {}",
-        n.delivered[0].2
+    assert_eq!(
+        got[1], "Application(an application message)",
+        "the application message reached the application"
     );
-    assert!(
-        n.delivered[1].2.starts_with("Application("),
-        "{}",
-        n.delivered[1].2
-    );
-    assert!(!n.delivered[1].2.starts_with("Grant("));
     assert_eq!(
         n.s.client("bob").verifier.buffered(),
         vec![qid],
@@ -406,149 +487,701 @@ fn protocol_objects_and_application_payload_reach_their_handlers() {
 }
 
 // acceptance: PAY-15
+// functional: PAY-005
+/// **A direct message always passes the recipient's node; other payload
+/// takes the direct path where one is held, and the node where it is
+/// not.** Application payload goes sealed through the recipient's node
+/// though the two can reach each other; a protocol object goes direct;
+/// and once the NATs defeat hole punching the same object goes through
+/// the node serving the recipient — not the sender's — and opens there.
 #[test]
-fn payload_is_relayed_through_the_serving_node_when_no_direct_path_exists() {
+fn a_direct_message_always_passes_the_node_and_other_payload_falls_back_to_it() {
     let mut n = net(&["w1", "w2"], &[("alice", "w1"), ("bob", "w2")]);
     n.attach("bob");
     n.attach("alice");
-    n.sweep("bob");
-    // the NATs defeat hole punching
+    const KIND_OTHER: u64 = 99;
+    // the path is held: the direct message is sealed to bob's node anyway
+    let msgs =
+        n.s.client("alice")
+            .send_payload(kh("bob"), KIND_APPLICATION, b"a direct message")
+            .unwrap();
+    assert!(
+        matches!(msgs.as_slice(), [Msg::Sealed { to, .. }] if *to == kh("bob")),
+        "sealed for bob's node, not the path: {msgs:?}"
+    );
+    n.carry(kh("alice"), msgs);
+    // other payload takes the path, and nothing is sealed on it
+    let msgs =
+        n.s.client("alice")
+            .send_payload(kh("bob"), KIND_OTHER, b"on the path")
+            .unwrap();
+    assert_eq!(
+        msgs,
+        vec![Msg::Payload {
+            to: kh("bob"),
+            bytes: wrap(KIND_OTHER, b"on the path")
+        }]
+    );
+    n.carry(kh("alice"), msgs);
+    // the NATs defeat hole punching: the same goes through bob's node
     n.s.handles["alice"].reach.0.set(false);
     n.s.handles["bob"].reach.0.set(false);
-    n.send("alice", "bob", "over the relay");
+    n.away.insert(kh("bob"));
+    let msgs =
+        n.s.client("alice")
+            .send_payload(kh("bob"), KIND_OTHER, b"over the relay")
+            .unwrap();
     assert!(
-        n.log
-            .iter()
-            .all(|(_, _, m)| !matches!(m, Msg::Payload { .. })),
-        "the direct candidates failed: nothing on the direct path"
+        matches!(msgs.as_slice(), [Msg::Sealed { .. }]),
+        "the direct candidates failed: {msgs:?}"
     );
+    n.carry(kh("alice"), msgs);
     assert!(
-        n.log
-            .iter()
-            .any(|(f, t, m)| f == "w1" && t == "w2" && matches!(m, Msg::Relay { .. })),
-        "relayed serving node to serving node"
+        n.nodes["w1"].queues.is_empty(),
+        "the sender's own node queues nothing"
     );
-    assert!(
-        n.delivered.is_empty(),
-        "nothing until the recipient collects"
-    );
-    let got = n.collect("bob");
-    assert_eq!(got.len(), 1);
-    assert!(
-        got[0].contains("over the relay"),
-        "the recipient decrypts it: {}",
-        got[0]
+    assert_eq!(n.queued("bob").len(), 1, "it waits at the node serving bob");
+    assert_eq!(n.collect("bob").len(), 1, "and the recipient opens it");
+    assert_eq!(
+        said_to(&n, "alice", "bob"),
+        vec![
+            "Application(a direct message)",
+            "Application(on the path)",
+            "Application(over the relay)"
+        ]
     );
     // and the reply comes back the same way
-    n.send("bob", "alice", "back over the relay");
-    assert!(n.collect("alice")[0].contains("back over the relay"));
+    n.away.remove(&kh("bob"));
+    n.s.client("bob");
+    let back =
+        n.s.client("bob")
+            .send_payload(kh("alice"), KIND_OTHER, b"back over the relay")
+            .unwrap();
+    n.carry(kh("bob"), back);
+    assert_eq!(
+        said_to(&n, "bob", "alice"),
+        vec!["Application(back over the relay)"]
+    );
 }
 
 // acceptance: PAY-16
+// functional: PAY-004
+/// **A sealed message is attributed only to the sender whose tag
+/// verifies; one that does not open, or whose tag fails, is discarded.**
+/// Bob holds alice's introduction. Carol seals to bob naming alice, under
+/// her own key: discarded, nothing shown. Carol's own, with her
+/// introduction: attributed to her. A copy of that with a byte of its body
+/// flipped: does not open, discarded.
 #[test]
-fn an_initial_session_opens_only_under_the_identity_key_bound_to_its_named_sender() {
-    // one node, so a sweep reaches every bundle: bob holds alice's
-    // verified bundle and carol's
-    let mut n = net(&["w1"], &[("alice", "w1"), ("carol", "w1"), ("bob", "w1")]);
+fn a_seal_is_attributed_only_by_a_verifying_tag_and_what_fails_is_discarded() {
+    let mut n = bare_net(&["w1"], &[("alice", "w1"), ("bob", "w1"), ("carol", "w1")]);
+    n.introduce("alice", "bob");
+    n.introduce("bob", "carol");
+    n.s.client("bob").known.retain(|i| i.keyhash != kh("carol"));
     n.attach("bob");
     n.attach("carol");
+    // carol's seal naming alice, the tag under carol's own secret
+    let node_key = node_key_for(&mut n, "bob");
+    let carol = secret_of("carol");
+    let forged = seal_to(
+        &Sender {
+            keyhash: &kh("alice"),
+            secret: &carol,
+            alias: "alice",
+            introduction: None,
+        },
+        &kh("bob"),
+        &key_of("bob"),
+        &node_key,
+        KIND_APPLICATION,
+        b"not from alice",
+        &mut counter(1),
+    )
+    .unwrap();
+    assert!(
+        n.inject(kh("bob"), forged),
+        "the node takes any seal to its key"
+    );
+    assert_eq!(
+        n.discarded,
+        vec![(kh("bob"), PayloadError::TagFailed.to_string())],
+        "the tag fails for the sender it names"
+    );
+    assert!(
+        n.delivered.is_empty(),
+        "nothing dispatched and nothing shown"
+    );
+    assert!(
+        n.s.notices("bob").is_empty(),
+        "and nothing said of it: {:?}",
+        n.s.notices("bob")
+    );
+
+    // carol's own, naming herself, her introduction carried
+    n.send("carol", "bob", "from carol");
+    assert_eq!(said_to(&n, "carol", "bob"), vec!["Application(from carol)"]);
+    let (sealed_bytes, plain) = match n.log.iter().rev().find_map(|(_, _, m)| match m {
+        Msg::Sealed { sealed, plain, .. } => Some((sealed.clone(), plain.clone())),
+        _ => None,
+    }) {
+        Some(x) => x,
+        None => panic!("carol's submission"),
+    };
+    assert_eq!(plain, wrap(KIND_APPLICATION, b"from carol"));
+    // a copy with one byte of the body's ciphertext flipped
+    let mut copy = Sealed::decode(&sealed_bytes).unwrap();
+    copy.body[20] ^= 1;
+    assert!(n.inject(kh("bob"), copy.encode()));
+    assert_eq!(
+        n.discarded.last(),
+        Some(&(kh("bob"), PayloadError::Unopened.to_string())),
+        "it does not open"
+    );
+    assert_eq!(
+        said_to(&n, "carol", "bob").len(),
+        1,
+        "and nothing more is shown"
+    );
+
+    // a body whose carried introduction is somebody else's is not carol's
+    let alices = n.s.client("alice").own_introduction().unwrap();
+    let wrong_intro = seal_to(
+        &Sender {
+            keyhash: &kh("carol"),
+            secret: &carol,
+            alias: "carol",
+            introduction: Some(&alices),
+        },
+        &kh("bob"),
+        &key_of("bob"),
+        &node_key,
+        KIND_APPLICATION,
+        b"under alice's card",
+        &mut counter(2),
+    )
+    .unwrap();
+    assert!(n.inject(kh("bob"), wrong_intro));
+    assert!(
+        n.discarded
+            .last()
+            .is_some_and(|(_, why)| why.contains("not the sender's")),
+        "{:?}",
+        n.discarded
+    );
+    assert_eq!(said_to(&n, "carol", "bob").len(), 1);
+}
+
+// acceptance: PAY-23
+// functional: PAY-023
+/// **A replay opens once, across a restart too**: a captured submission
+/// put to the node again within the grace after it rotated is delivered
+/// and discarded, and so it is once the recipient has restarted from what
+/// it wrote; past the grace the node refuses it outright. The message
+/// opened first stands.
+#[test]
+fn a_replayed_seal_is_discarded_within_the_run_and_after_a_restart() {
+    let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1"), ("carol", "w1")]);
+    n.attach("bob");
     n.attach("alice");
-    n.sweep("bob");
+    n.send("alice", "bob", "first");
+    assert_eq!(said_to(&n, "alice", "bob"), vec!["Application(first)"]);
+    let captured = n.sealed_to("alice", "bob")[0].clone();
+    let n1 = Sealed::decode(&captured).unwrap().n;
+    // the rotation interval passes and somebody fetches bob's key: the
+    // node rotates to n + 1 and accepts n for its grace
+    n.s.clock.set(n.s.clock.get() + 86_400_000 + 1000);
     n.sweep("carol");
-    // carol composes an initial message to bob under carol's own keys, and
-    // it waits at bob's serving node
-    n.s.handles["carol"].reach.0.set(false);
-    n.send("carol", "bob", "not from alice");
-    let (sender, carols) = n.queued("bob");
-    assert_eq!(sender, kh("carol"));
-    // delivered under alice's name: refused, nothing opened, nothing said
-    let refused =
-        n.s.client("bob")
-            .receive_payload(kh("alice"), &carols)
-            .unwrap_err();
-    assert!(refused.contains("not the named sender's"), "{refused}");
-    assert!(
-        !n.s.client("bob").payload.sessions.has_session(&kh("alice")),
-        "no session for the name it claimed"
+    assert_eq!(
+        n.nodes["w1"].keys.held(&kh("bob")),
+        vec![n1, n1 + 1],
+        "rotated, the previous kept for its grace"
     );
-    assert!(
-        n.s.notices("bob").iter().any(
-            |(_, x)| matches!(x, Notice::PayloadUnattributable { from } if *from == kh("alice"))
-        )
+    assert!(n.inject(kh("bob"), captured.clone()), "within the grace");
+    assert_eq!(
+        n.discarded,
+        vec![(kh("bob"), PayloadError::Replayed.to_string())],
+        "the copy is discarded"
     );
-    // the same bytes under carol's name decrypt: the message is well formed
-    // and it is carol's
-    let d =
-        n.s.client("bob")
-            .receive_payload(kh("carol"), &carols)
-            .expect("carol's own message");
-    assert!(
-        matches!(&d, Dispatched::Application { bytes, .. } if bytes == b"not from alice"),
-        "{d:?}"
+    // bob restarts from what it wrote, and the copy comes again
+    restart(&mut n, "bob", 93);
+    assert!(n.inject(kh("bob"), captured.clone()));
+    assert_eq!(
+        n.discarded.last(),
+        Some(&(kh("bob"), PayloadError::Replayed.to_string())),
+        "a replay after a restart is discarded too"
     );
-    // a sender whose binding this client does not hold: refused, and the
-    // binding asked for, so the peer's next attempt is attributable
-    let mut m = net(&["w1", "w2"], &[("alice", "w1"), ("bob", "w2")]);
-    m.attach("alice");
-    m.attach("bob");
-    m.s.handles["bob"].reach.0.set(false);
-    m.send("bob", "alice", "first contact");
-    let (_, first) = m.queued("alice");
-    assert!(
-        m.s.client("alice")
-            .receive_payload(kh("bob"), &first)
-            .unwrap_err()
-            .contains("no bundle")
+    assert_eq!(
+        said_to(&n, "alice", "bob"),
+        vec!["Application(first)"],
+        "neither copy dispatched; the one opened stands"
     );
-    assert!(
-        m.s.client("alice").payload.wanted.contains(&kh("bob")),
-        "the binding is wanted"
-    );
-    let asks = m.s.client("alice").maintain();
-    assert!(
-        asks.iter().any(|x| matches!(x, Msg::PrekeyRequest(_))),
-        "maintenance asks for it"
+    // past the grace the node takes nothing sealed to n
+    n.s.clock.set(n.s.clock.get() + 31_000);
+    assert!(!n.inject(kh("bob"), captured), "refused at the node");
+    // and the restarted client goes on: a fresh message opens
+    n.send("alice", "bob", "second");
+    assert_eq!(
+        said_to(&n, "alice", "bob"),
+        vec!["Application(first)", "Application(second)"]
     );
 }
 
+/// **A sender holding a stale node key is refused and seals again**: the
+/// courier drops the key, fetches the newest and the same plaintext goes
+/// under it (`wire-format.md` §7.8).
 #[test]
-fn a_one_time_prekey_is_spent_only_when_the_message_it_opened_authenticates() {
+fn a_seal_to_a_key_the_node_no_longer_accepts_is_refused_and_sealed_again() {
+    let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1"), ("carol", "w1")]);
+    n.attach("bob");
+    n.attach("alice");
+    let old = n.s.client("alice").payload.node_keys[&kh("bob")].n;
+    // a day on, carol's sweep rotates bob's key; past the grace alice
+    // still holds the old one
+    n.s.clock.set(n.s.clock.get() + 86_400_000 + 1000);
+    n.sweep("carol");
+    n.s.clock.set(n.s.clock.get() + 31_000);
+    n.send("alice", "bob", "after the rotation");
+    assert_eq!(n.refused, vec![(kh("bob"), old)], "the stale seal refused");
+    assert_eq!(
+        n.s.client("alice").payload.node_keys[&kh("bob")].n,
+        old + 1,
+        "the newest fetched"
+    );
+    assert_eq!(
+        said_to(&n, "alice", "bob"),
+        vec!["Application(after the rotation)"],
+        "and the same plaintext delivered under it"
+    );
+}
+
+// functional: PAY-015
+/// **The state a seal needs survives a restart**: the queue position
+/// collected from each node and the hashes opened, so a message handed
+/// again is discarded; what waits for a node key, and the parties heard
+/// from. Node keys and the device's own card are never written, and the
+/// identity's secrets only where a pairing handed them over.
+#[test]
+fn the_payload_state_writes_what_a_restart_needs_and_nothing_else() {
+    let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);
+    n.attach("bob");
+    n.attach("alice");
+    n.send("bob", "alice", "before the restart");
+    let delivered = n.queued("alice");
+    assert!(delivered.is_empty(), "collected already");
+    let handed = {
+        let q = n.nodes["w1"].queues[&kh("alice")][0].clone();
+        n.nodes["w1"].relayed(&kh("alice"), &q)
+    };
+    let position = unrelayed(&handed).unwrap().position;
+    restart(&mut n, "alice", 91);
+    let a = n.s.client("alice");
+    assert_eq!(
+        a.payload.cursors.get(&kh("w1")),
+        Some(&position),
+        "the newest position it held"
+    );
+    assert!(a.payload.heard_from.contains(&kh("bob")));
+    assert!(a.payload.node_keys.is_empty(), "node keys are not written");
+    assert_eq!(
+        a.encryption_secrets().map(|(k, _)| k),
+        Some(*secret_of("alice").kem_seed()),
+        "derived again from the seed"
+    );
+    assert_eq!(
+        a.receive_relayed(kh("w1"), &handed).unwrap_err(),
+        PayloadError::Replayed.to_string(),
+        "handed again, it is discarded"
+    );
+
+    // the state's own round trip
+    let mut p = PayloadState {
+        secret: Some(secret_of("carol")),
+        card: Some(b"a card".to_vec()),
+        ..PayloadState::default()
+    };
+    p.node_keys.insert(
+        kh("bob"),
+        NodeKeyHeld {
+            node: kh("w1"),
+            n: 3,
+            public: Box::new([7; xwing::PUBLIC_BYTES]),
+        },
+    );
+    p.pending
+        .insert(kh("bob"), vec![wrap(KIND_APPLICATION, b"waits")]);
+    p.heard_from.insert(kh("carol"));
+    assert!(p.first_opening(&kh("w1"), 1, [1; 32]));
+    p.cursors.insert(kh("w1"), 9);
+    let back = PayloadState::decode(&p.encode()).expect("reads");
+    assert!(back.secret.is_none(), "a derived secret is not written");
+    assert!(back.card.is_none() && back.node_keys.is_empty());
+    assert_eq!(back.pending, p.pending, "what waits for a key");
+    assert_eq!(back.heard_from, p.heard_from);
+    assert_eq!(back.opened, p.opened);
+    assert_eq!(back.cursors, p.cursors);
+    p.secret_handed = true;
+    let back = PayloadState::decode(&p.encode()).expect("reads");
+    let s = back.secret.as_ref().expect("a handed secret is written");
+    assert!(back.secret_handed);
+    assert_eq!(s.kem_seed(), secret_of("carol").kem_seed());
+    assert_eq!(*s.auth_secret(), *secret_of("carol").auth_secret());
+    // a blob cut short, or one of another shape, is refused whole
+    let bytes = p.encode();
+    assert!(PayloadState::decode(&bytes[..bytes.len() / 2]).is_none());
+    assert!(PayloadState::decode(b"\x80").is_none());
+}
+
+// functional: PAY-023
+/// **What was opened is remembered under the node's two newest keys**: a
+/// message under an older key than both cannot be submitted again, so it
+/// is taken as a replay without a record of it; the same hash under a key
+/// held opens once.
+#[test]
+fn what_was_opened_is_remembered_under_the_two_newest_keys() {
+    let mut p = PayloadState::default();
+    let node = kh("w1");
+    assert!(p.first_opening(&node, 1, [1; 32]));
+    assert!(!p.first_opening(&node, 1, [1; 32]), "the same, again");
+    assert!(p.first_opening(&node, 2, [2; 32]));
+    assert!(p.first_opening(&node, 3, [3; 32]));
+    assert_eq!(
+        p.opened[&node].keys().copied().collect::<Vec<_>>(),
+        vec![2, 3],
+        "the {OPENED_KEYS} newest"
+    );
+    assert!(
+        !p.first_opening(&node, 1, [9; 32]),
+        "older than every key remembered: a replay"
+    );
+    assert!(!p.first_opening(&node, 3, [3; 32]));
+    assert!(
+        p.first_opening(&kh("w2"), 1, [1; 32]),
+        "another node's numbers are its own"
+    );
+}
+
+// acceptance: PAY-29
+/// **The encryption key derives from the seed**, so a device restored from
+/// the phrase holds the same key to the byte and opens what was sealed
+/// to the person before it existed; and an introduction whose encryption
+/// key is not the person's is not taken, so nothing is sealed to it.
+#[test]
+fn a_device_restored_from_the_phrase_opens_what_was_sealed_before_it() {
     let mut n = net(&["w1", "w2"], &[("alice", "w1"), ("bob", "w2")]);
     n.attach("bob");
     n.attach("alice");
-    n.sweep("bob");
-    n.s.handles["alice"].reach.0.set(false);
-    n.send("alice", "bob", "the real one");
-    let (_, good) = n.queued("bob");
-    // one ciphertext byte flipped: the copy fails. **Inside the message**
-    // and not at the frame's end, which since 2026-10-30 is the sender's
-    // introduction, ignored by a recipient that holds the sender
-    let mut corrupt = good.clone();
-    let inside = 100;
-    corrupt[inside] ^= 1;
+    let first_key = n.s.client("bob").own_encryption_key().unwrap();
+    n.away.insert(kh("bob"));
+    n.send("alice", "bob", "sealed before the restore");
+    // a second device from bob's phrase: nothing written, no cursor
+    let (dev, handles) = device(n.s.clock.clone(), 94, 0);
+    let restored = Client::new(id("bob"), ids(), Config::default(), dev);
+    assert_eq!(
+        restored.own_encryption_key().unwrap(),
+        first_key,
+        "byte for byte the first device's"
+    );
+    assert_eq!(
+        restored.encryption_secrets().map(|(k, a)| (k, *a)),
+        n.s.client("bob").encryption_secrets().map(|(k, a)| (k, *a))
+    );
     assert!(
-        n.s.client("bob")
-            .receive_payload(kh("alice"), &corrupt)
+        restored.payload.cursors.is_empty(),
+        "attaches with no field 5"
+    );
+    n.s.h.clients.insert(kh("bob"), restored);
+    n.s.handles.insert("bob", handles);
+    assert_eq!(
+        n.collect("bob"),
+        vec!["Application(sealed before the restore)"],
+        "handed everything still held, and it opens"
+    );
+
+    // the malformed introductions of bob, handed to carol, who holds nothing
+    // of him
+    let mut m = bare_net(&["w1"], &[("bob", "w1"), ("carol", "w1")]);
+    let good = m.s.client("bob").own_introduction().unwrap();
+    let read = rhtn_archive::locator::Introduction::parse(&good).unwrap();
+    let another_keyhash = rhtn_archive::locator::introduction(
+        &read.material,
+        &rhtn_crypto::encryption_key::own(&id("carol")),
+        &read.locator.bytes,
+    );
+    let mut bad_signature = rhtn_crypto::encryption_key::own(&id("bob"));
+    let last = bad_signature.len() - 1;
+    bad_signature[last] ^= 1;
+    let unsigned =
+        rhtn_archive::locator::introduction(&read.material, &bad_signature, &read.locator.bytes);
+    for bad in [another_keyhash, unsigned] {
+        assert!(
+            m.s.client("carol").take_introduction(&bad).is_err(),
+            "not taken"
+        );
+        assert_eq!(
+            m.s.client("carol")
+                .send_payload(kh("bob"), KIND_APPLICATION, b"to bob")
+                .unwrap_err(),
+            PayloadError::NoEncryptionKey,
+            "nothing sealed to the key it carried"
+        );
+    }
+    assert!(m.log.is_empty());
+}
+
+// acceptance: PAY-30
+/// **A paired device holds the person's two encryption secrets**, handed
+/// in its credential, and with them opens what is sealed to the person and
+/// sends as the person; the card others hold is unchanged by the pairing.
+#[test]
+fn a_paired_device_opens_and_sends_as_the_person() {
+    let mut n = net(&["w1", "w2"], &[("alice", "w1"), ("bob", "w2")]);
+    n.attach("bob");
+    n.attach("alice");
+    let card_before = n.s.client("bob").store.contacts[&kh("alice")]
+        .encryption_key
+        .clone()
+        .expect("bob holds alice's card");
+    // the desktop presents a key of its own and holds no seed
+    let d2 = [0x42u8; 32];
+    let (dev, _h) = device(n.s.clock.clone(), 77, 0);
+    let mut desktop = Client::delegated(id("alice").public, d2, ids(), Config::default(), dev);
+    assert!(!desktop.holds_seed());
+    assert!(
+        desktop.encryption_secrets().is_none(),
+        "nothing to open with yet"
+    );
+    // the phone answers its introduction with the credential
+    let now = n.now();
+    let phone = n.s.client("alice");
+    let (kem_seed, auth) = phone.encryption_secrets().expect("the phone holds them");
+    let credential = DeviceCredential {
+        run: phone.delegate_run(&d2, now, 3).unwrap(),
+        kem_seed: zeroize::Zeroizing::new(kem_seed),
+        auth,
+    };
+    let carried = DeviceCredential::decode(&credential.encode()).expect("reads");
+    assert_eq!(carried.run.len(), 3, "the run of delegations");
+    assert_eq!(*carried.kem_seed, *secret_of("alice").kem_seed());
+    assert_eq!(*carried.auth, *secret_of("alice").auth_secret());
+    desktop.take_encryption_secrets(&carried.kem_seed, &carried.auth);
+    let bobs = n.s.client("bob").own_introduction().unwrap();
+    desktop.take_introduction(&bobs).unwrap();
+
+    // bob seals to alice: the desktop opens it from the node, as the phone does
+    n.away.insert(kh("alice"));
+    n.send("bob", "alice", "to every device");
+    let waiting = n.queued("alice");
+    let (from, got) = desktop
+        .receive_relayed(kh("w1"), &waiting[0])
+        .expect("the desktop opens it");
+    assert_eq!(
+        (from, describe(&got)),
+        (kh("bob"), "Application(to every device)".into())
+    );
+    assert_eq!(n.collect("alice"), vec!["Application(to every device)"]);
+
+    // the desktop writes to bob, as alice
+    let asked = desktop
+        .send_payload(kh("bob"), KIND_APPLICATION, b"from the desktop")
+        .unwrap();
+    assert_eq!(asked, vec![Msg::NodeKeyRequest(vec![kh("bob")])]);
+    let req = NodeKeyRequest::for_recipients(vec![kh("bob")], [9; 16]).unwrap();
+    let now = n.now();
+    let reply = n
+        .nodes
+        .get_mut("w2")
+        .unwrap()
+        .keys
+        .answer(&id("w2"), &|_| true, &req.encode(), now)
+        .unwrap();
+    let out = desktop.take_node_key_reply(&kh("w2"), &req.recipients(), &reply);
+    let [Msg::Sealed { sealed, .. }] = out.as_slice() else {
+        panic!("sealed: {out:?}")
+    };
+    assert!(n.inject(kh("bob"), sealed.clone()));
+    assert_eq!(
+        said_to(&n, "alice", "bob"),
+        vec!["Application(from the desktop)"],
+        "bob attributes it to alice"
+    );
+    assert_eq!(
+        n.s.client("bob").store.contacts[&kh("alice")].encryption_key,
+        Some(card_before),
+        "alice's card as bob holds it is the same"
+    );
+}
+
+// acceptance: PAY-33
+// functional: PAY-023
+/// **A sender not held as a contact is shown unverified, under its alias,
+/// and cannot be answered**: alice, restored from her phrase holding
+/// nothing of bob, collects a later message of his — no introduction in
+/// it — and one from carol under bob's alias; each is unverified, kept
+/// apart by the keyhash it names, dispatched as nothing of anybody's, and
+/// a reply to bob is refused before anything is sealed.
+#[test]
+fn an_unattributed_sender_is_shown_unverified_and_cannot_be_answered() {
+    let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1"), ("carol", "w1")]);
+    n.attach("bob");
+    n.attach("alice");
+    // alice wrote to bob first, so his next carries no introduction
+    n.send("alice", "bob", "hello bob");
+    assert!(n.s.client("bob").payload.heard_from.contains(&kh("alice")));
+    n.away.insert(kh("alice"));
+    n.send("bob", "alice", "a later message");
+    let waiting = n.queued("alice");
+    let (_, body) = opened("alice", "w1", &waiting[0]);
+    assert_eq!(body.introduction, None, "field 3 is nil");
+    let alias = body.alias.clone();
+
+    // alice restored from her phrase: her own material and nothing else
+    let (dev, handles) = device(n.s.clock.clone(), 95, 0);
+    let mut restored = Client::new(id("alice"), ids(), Config::default(), dev);
+    restored.known.retain(|k| k.keyhash == kh("alice"));
+    n.s.h.clients.insert(kh("alice"), restored);
+    n.s.handles.insert("alice", handles);
+
+    // carol, holding alice's card, chooses bob's alias for a message of hers
+    let node_key = node_key_for(&mut n, "alice");
+    let carol = secret_of("carol");
+    let same_alias = seal_to(
+        &Sender {
+            keyhash: &kh("carol"),
+            secret: &carol,
+            alias: &alias,
+            introduction: None,
+        },
+        &kh("alice"),
+        &key_of("alice"),
+        &node_key,
+        KIND_APPLICATION,
+        b"under bob's alias",
+        &mut counter(3),
+    )
+    .unwrap();
+    assert!(n.inject(kh("alice"), same_alias));
+    let mut shown = Vec::new();
+    for bytes in n.queued("alice") {
+        shown.push(
+            n.s.client("alice")
+                .receive_relayed(kh("w1"), &bytes)
+                .expect("opened and shown"),
+        );
+    }
+    let threads: Vec<([u8; 32], String, Vec<u8>)> = shown
+        .iter()
+        .map(|(from, d)| match d {
+            Dispatched::Unverified {
+                sender,
+                alias,
+                kind,
+                bytes,
+            } => {
+                assert_eq!(sender, from);
+                assert_eq!(*kind, KIND_APPLICATION);
+                (*sender, alias.clone(), bytes.clone())
+            }
+            other => panic!("shown as somebody's: {}", describe(other)),
+        })
+        .collect();
+    assert_eq!(
+        threads,
+        vec![
+            (kh("bob"), alias.clone(), b"a later message".to_vec()),
+            (kh("carol"), alias.clone(), b"under bob's alias".to_vec()),
+        ],
+        "one alias, two threads, apart by the keyhash"
+    );
+    // no reply: alice holds no contact for bob
+    let a = n.s.client("alice");
+    assert!(!a.store.contacts.contains_key(&kh("bob")));
+    assert_eq!(
+        a.send_payload(kh("bob"), KIND_APPLICATION, b"who are you?")
+            .unwrap_err(),
+        PayloadError::NoEncryptionKey
+    );
+    assert!(a.payload.pending.is_empty(), "nothing waits to be sealed");
+    assert!(a.outbox().is_empty(), "nothing submitted");
+    // and a protocol object from somebody unattributed is nothing at all
+    let grant = seal_to(
+        &Sender {
+            keyhash: &kh("carol"),
+            secret: &carol,
+            alias: &alias,
+            introduction: None,
+        },
+        &kh("alice"),
+        &key_of("alice"),
+        &node_key,
+        KIND_KEY_GRANT,
+        b"a grant",
+        &mut counter(4),
+    )
+    .unwrap();
+    assert!(n.inject(kh("alice"), grant));
+    let bytes = n.queued("alice").pop().unwrap();
+    assert!(
+        n.s.client("alice")
+            .receive_relayed(kh("w1"), &bytes)
             .is_err(),
-        "the corrupted copy fails"
+        "discarded"
     );
-    // and the pair it named is still there, so the original still opens
-    let d =
-        n.s.client("bob")
-            .receive_payload(kh("alice"), &good)
-            .expect("the original still opens");
+}
+
+// functional: PAY-021
+/// **A first message from a stranger is attributed on arrival** by the
+/// introduction inside its seal, which rides every message to the
+/// recipient until the recipient has written back; the recipient takes
+/// the sender as a contact from it, and can answer.
+#[test]
+fn a_stranger_is_attributed_by_the_introduction_in_the_seal_until_it_hears_back() {
+    use rhtn_client::contacts::How;
+    let mut n = bare_net(&["w1", "w2"], &[("alice", "w1"), ("bob", "w2")]);
+    n.introduce("bob", "alice");
+    n.s.client("bob").known.retain(|i| i.keyhash != kh("alice"));
+    n.attach("bob");
+    n.attach("alice");
     assert!(
-        matches!(&d, Dispatched::Application { bytes, .. } if bytes == b"the real one"),
-        "{d:?}"
+        n.s.client("alice").payload.card.is_some(),
+        "an attached client with a position carries its introduction"
     );
-    // spent now: the same bytes a second time find no pair and no session
-    // is reopened
+    n.away.insert(kh("bob"));
+    n.send("alice", "bob", "hello, stranger");
+    n.send("alice", "bob", "and again");
+    for bytes in n.queued("bob") {
+        let (_, body) = opened("bob", "w2", &bytes);
+        let intro = body.introduction.expect("her introduction rides");
+        let read = rhtn_archive::locator::Introduction::parse(&intro).unwrap();
+        assert_eq!(read.identity.keyhash, kh("alice"));
+    }
+    assert_eq!(
+        n.collect("bob"),
+        vec!["Application(hello, stranger)", "Application(and again)"],
+        "each attributed on arrival"
+    );
+    let bob = n.s.client("bob");
     assert!(
-        n.s.client("bob")
-            .receive_payload(kh("alice"), &good)
-            .is_err(),
-        "the pair is gone once its message authenticated"
+        bob.known.iter().any(|i| i.keyhash == kh("alice")),
+        "bob holds alice now"
     );
+    let c = bob.store.contacts.get(&kh("alice")).expect("as a contact");
+    assert_eq!(c.how, How::Introduced);
+    assert!(c.locator.is_some(), "with a locator to answer at");
+    assert!(c.encryption_key.is_some(), "and her encryption key");
+    // bob answers, which he can only because he holds her now
+    n.away.remove(&kh("bob"));
+    n.send("bob", "alice", "hello, alice");
+    assert_eq!(
+        said_to(&n, "bob", "alice"),
+        vec!["Application(hello, alice)"]
+    );
+    // and alice's introduction stops riding
+    n.away.insert(kh("bob"));
+    n.send("alice", "bob", "no card now");
+    let later = n.queued("bob");
+    let (_, body) = opened("bob", "w2", &later[0]);
+    assert_eq!(body.introduction, None, "nil once she has heard back");
+    assert_eq!(n.collect("bob"), vec!["Application(no card now)"]);
 }
 
 /// **The subject holds their archive, so a patron evaluating you fetches
@@ -565,9 +1198,6 @@ fn a_client_serves_its_own_archive_and_an_evaluator_verifies_the_walk_it_gets() 
     }
     // alice and bob meet: the record is in both their archives and in
     // nobody else's, because attestation is never flooded
-    for c in ["alice", "bob", "carol"] {
-        n.sweep(c);
-    }
     let pop = n.s.met("alice", "bob", "w1");
 
     // carol holds no acquaintance edge for the pair it was not party to
@@ -627,9 +1257,6 @@ fn an_unsolicited_reply_is_not_taken_and_a_subject_answers_only_for_itself() {
     for c in ["alice", "bob", "carol"] {
         n.attach(c);
     }
-    for c in ["alice", "bob", "carol"] {
-        n.sweep(c);
-    }
     let pop = n.s.met("alice", "bob", "w1");
 
     // **an attestation delivery carries the nonce the evaluator generated**
@@ -664,14 +1291,13 @@ fn an_unsolicited_reply_is_not_taken_and_a_subject_answers_only_for_itself() {
             .expect("asks");
     n.carry(kh("carol"), msgs);
     n.delivered.clear();
-    let mut req = rhtn_archive::chain::ArchiveRequest {
+    let req = rhtn_archive::chain::ArchiveRequest {
         subject: kh("bob"),
         frontier: vec![pop],
         max_records: 8,
         stop_before: None,
         nonce: [3; 16],
     };
-    req.subject = kh("bob");
     let msgs =
         n.s.client("carol")
             .send_payload(kh("alice"), KIND_ARCHIVE_REQUEST, &req.encode())
@@ -688,751 +1314,9 @@ fn an_unsolicited_reply_is_not_taken_and_a_subject_answers_only_for_itself() {
     );
 }
 
-#[test]
-fn pay_20_a_bundle_per_device_a_session_with_each_and_a_ciphertext_to_each() {
-    let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);
-    n.attach("bob"); // bob's phone, d1: its bundle names bob's classical member
-    let d1 = *rhtn_crypto::identity::testkit::test_identity("bob")
-        .public
-        .ed
-        .as_bytes();
-    // bob's desktop, d2: its own material, its bundle signed by bob's
-    // identity (on the phone) and published under its own device
-    let d2 = [0x42u8; 32];
-    let (dev, _handles) = common::harness::device(n.s.clock.clone(), 77, 0);
-    let mut desktop = Client::new(id("bob"), ids(), Config::default(), dev);
-    desktop.as_device(d2);
-    let pop = n.population();
-    for m in desktop.attach(kh("w1"), &pop) {
-        match m {
-            Msg::PublishBundle(b) => {
-                let parsed = PrekeyBundle::parse(&b).unwrap();
-                assert_eq!(parsed.device, d2);
-                n.nodes
-                    .get_mut("w1")
-                    .unwrap()
-                    .prekeys
-                    .publish(&ids(), &b)
-                    .unwrap();
-            }
-            Msg::StockOneTime(keys) | Msg::StockOneTimeAt { keys, .. } => {
-                assert!(
-                    n.nodes
-                        .get_mut("w1")
-                        .unwrap()
-                        .prekeys
-                        .stock_for(kh("bob"), d2, keys)
-                );
-            }
-            _ => {}
-        }
-    }
-    // S fetches T's material with field 4 absent: two bundles, one per device
-    let now = n.now();
-    let req = PrekeyRequest::One {
-        subject: kh("bob"),
-        one_time: false,
-        nonce: [3; 16],
-        device: None,
-    }
-    .encode();
-    let reply = PrekeyReply::decode(
-        &n.nodes
-            .get_mut("w1")
-            .unwrap()
-            .prekeys
-            .answer(&kh("alice"), &req, now)
-            .unwrap(),
-    )
-    .unwrap();
-    let mut devices: Vec<[u8; 32]> = reply
-        .bundles
-        .iter()
-        .map(|b| {
-            let p = PrekeyBundle::parse(b).unwrap();
-            assert_eq!(p.verify(&ids()), Ok(()), "each verifying under T");
-            p.device
-        })
-        .collect();
-    devices.sort();
-    let mut expected = vec![d1, d2];
-    expected.sort();
-    assert_eq!(
-        devices, expected,
-        "field 2 carries two bundles, one naming d1 and one d2"
-    );
-    n.s.client("alice")
-        .take_prekey_reply(&reply.encode())
-        .unwrap();
-    // both of T's devices hold S's bundle, as a sweep leaves them
-    n.attach("alice");
-    n.sweep("bob");
-    for m in desktop.sweep(&pop) {
-        if let Msg::PrekeyRequest(req) = m {
-            let now = n.now();
-            let reply = n
-                .nodes
-                .get_mut("w1")
-                .unwrap()
-                .prekeys
-                .answer(&kh("bob"), &req, now)
-                .unwrap();
-            desktop.take_prekey_reply(&reply).unwrap();
-        }
-    }
-    // S sends T one message: a one-time key is asked for each device, a
-    // session opened with each, and a ciphertext submitted to each
-    let msgs =
-        n.s.client("alice")
-            .send_payload(kh("bob"), KIND_APPLICATION, b"to every device")
-            .unwrap();
-    let mut asked = Vec::new();
-    let mut ciphertexts: Vec<([u8; 32], Vec<u8>)> = Vec::new();
-    for m in msgs {
-        let Msg::PrekeyRequest(req) = m else {
-            panic!("{m:?}")
-        };
-        let PrekeyRequest::One {
-            device: Some(d), ..
-        } = PrekeyRequest::decode(&req).unwrap()
-        else {
-            panic!()
-        };
-        asked.push(d);
-        let now = n.now();
-        let reply = n
-            .nodes
-            .get_mut("w1")
-            .unwrap()
-            .prekeys
-            .answer(&kh("alice"), &req, now)
-            .unwrap();
-        for out in n.s.client("alice").take_prekey_reply(&reply).unwrap() {
-            match out {
-                Msg::Relay { to, bytes, device } | Msg::Payload { to, bytes, device } => {
-                    assert_eq!(to, kh("bob"));
-                    ciphertexts.push((device, bytes));
-                }
-                other => panic!("{other:?}"),
-            }
-        }
-    }
-    asked.sort();
-    assert_eq!(asked, expected, "one one-time request per device");
-    assert_eq!(
-        ciphertexts.len(),
-        2,
-        "two ciphertexts, one naming d1 and one d2"
-    );
-    // each device decrypts the one addressed to it and cannot decrypt the other
-    for (device, bytes) in &ciphertexts {
-        let (mine, other): (&mut Client, &mut Client) = if *device == d1 {
-            (n.s.client("bob"), &mut desktop)
-        } else {
-            assert_eq!(*device, d2);
-            (&mut desktop, n.s.client("bob"))
-        };
-        let got = mine
-            .receive_payload(kh("alice"), bytes)
-            .expect("its own device decrypts");
-        assert_eq!(describe(&got), "Application(to every device)");
-        assert!(
-            other.receive_payload(kh("alice"), bytes).is_err(),
-            "the other device cannot decrypt it"
-        );
-    }
-}
-
-/// A desktop that holds no seed (design §23.3): its own payload material,
-/// signed on the phone and published under its own device; a session with
-/// it is a session with a device, and the phone cannot read what it was
-/// sent.
-#[test]
-fn a_device_holding_no_seed_publishes_what_the_ceremony_device_signed_and_receives_on_it() {
-    let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);
-    n.attach("bob");
-    let d1 = *id("bob").public.ed.as_bytes();
-    // the desktop presents a delegated transport key and holds no seed
-    let d2 = [0x42u8; 32];
-    let (dev, _handles) = common::harness::device(n.s.clock.clone(), 77, 0);
-    let mut desktop = Client::delegated(id("bob").public, d2, ids(), Config::default(), dev);
-    assert!(!desktop.holds_seed());
-    assert_eq!(desktop.keyhash(), kh("bob"));
-
-    // attaching stocks the pool and sweeps, but publishes no bundle: there
-    // is no signature over the material yet
-    let pop = n.population();
-    let attach = desktop.attach(kh("w1"), &pop);
-    assert!(
-        !attach.iter().any(|m| matches!(m, Msg::PublishBundle(_))),
-        "nothing to publish before the ceremony device signs"
-    );
-    for m in attach {
-        if let Msg::StockOneTime(keys) | Msg::StockOneTimeAt { keys, .. } = m {
-            assert!(
-                n.nodes
-                    .get_mut("w1")
-                    .unwrap()
-                    .prekeys
-                    .stock_for(kh("bob"), d2, keys)
-            );
-        }
-    }
-    assert!(n.nodes["w1"].prekeys.bundle_for(&kh("bob"), &d2).is_none());
-
-    // the unsigned payload names bob and the desktop; alice's phone will
-    // not sign it, bob's does
-    let payload = desktop
-        .bundle_to_sign()
-        .expect("material awaiting a signature");
-    assert_eq!(
-        PrekeyBundle::payload_names(&payload).unwrap(),
-        (kh("bob"), d2)
-    );
-    assert_eq!(
-        n.s.client("alice")
-            .sign_device_bundle(&payload)
-            .unwrap_err(),
-        Abort::NotMine("another subject")
-    );
-    assert!(
-        n.s.client("bob").bundle_to_sign().is_none(),
-        "a device holding the seed signs its own"
-    );
-    let signed = n.s.client("bob").sign_device_bundle(&payload).unwrap();
-
-    // alice's signature over it would not be bob's; a bundle over other
-    // material is not this device's; the right one is published
-    let forged = PrekeyBundle::sign(&id("alice"), &payload);
-    assert_eq!(
-        desktop.take_signed_bundle(&forged).unwrap_err(),
-        Abort::NotMine("does not verify under me")
-    );
-    let now = n.now();
-    let other_material =
-        n.s.client("bob")
-            .sign_device_bundle(&PrekeyBundle::payload(
-                &kh("bob"),
-                CONSTRUCTION_PQXDH,
-                b"not this blob",
-                now,
-                &d2,
-            ))
-            .unwrap();
-    assert_eq!(
-        desktop.take_signed_bundle(&other_material).unwrap_err(),
-        Abort::NotMine("not this device's current material")
-    );
-    let Some(Msg::PublishBundle(b)) = desktop.take_signed_bundle(&signed).unwrap() else {
-        panic!("attached, so the signed bundle is the publication")
-    };
-    let parsed = PrekeyBundle::parse(&b).unwrap();
-    assert_eq!(parsed.device, d2);
-    assert_eq!(parsed.verify(&ids()), Ok(()), "bob's identity signed it");
-    n.nodes
-        .get_mut("w1")
-        .unwrap()
-        .prekeys
-        .publish(&ids(), &b)
-        .unwrap();
-    assert!(
-        desktop.bundle_to_sign().is_none(),
-        "the material held is signed over: nothing more to sign"
-    );
-    // a later attach republishes the signed bundle as the material stands
-    assert!(
-        desktop
-            .attach(kh("w1"), &pop)
-            .iter()
-            .any(|m| matches!(m, Msg::PublishBundle(x) if *x == b)),
-        "the same signed bundle goes up again"
-    );
-
-    // alice's fetch sees two devices and sends to each; only the desktop
-    // reads what was addressed to it
-    let now = n.now();
-    let req = PrekeyRequest::One {
-        subject: kh("bob"),
-        one_time: false,
-        nonce: [3; 16],
-        device: None,
-    }
-    .encode();
-    let reply = n
-        .nodes
-        .get_mut("w1")
-        .unwrap()
-        .prekeys
-        .answer(&kh("alice"), &req, now)
-        .unwrap();
-    n.s.client("alice").take_prekey_reply(&reply).unwrap();
-    n.attach("alice");
-    for m in desktop.sweep(&pop) {
-        if let Msg::PrekeyRequest(req) = m {
-            let now = n.now();
-            let reply = n
-                .nodes
-                .get_mut("w1")
-                .unwrap()
-                .prekeys
-                .answer(&kh("bob"), &req, now)
-                .unwrap();
-            desktop.take_prekey_reply(&reply).unwrap();
-        }
-    }
-    let msgs =
-        n.s.client("alice")
-            .send_payload(kh("bob"), KIND_APPLICATION, b"to the desktop too")
-            .unwrap();
-    let mut ciphertexts: Vec<([u8; 32], Vec<u8>)> = Vec::new();
-    for m in msgs {
-        let Msg::PrekeyRequest(req) = m else {
-            panic!("{m:?}")
-        };
-        let now = n.now();
-        let reply = n
-            .nodes
-            .get_mut("w1")
-            .unwrap()
-            .prekeys
-            .answer(&kh("alice"), &req, now)
-            .unwrap();
-        for out in n.s.client("alice").take_prekey_reply(&reply).unwrap() {
-            match out {
-                Msg::Relay { to, bytes, device } | Msg::Payload { to, bytes, device } => {
-                    assert_eq!(to, kh("bob"));
-                    ciphertexts.push((device, bytes));
-                }
-                other => panic!("{other:?}"),
-            }
-        }
-    }
-    let mut devices: Vec<[u8; 32]> = ciphertexts.iter().map(|(d, _)| *d).collect();
-    devices.sort();
-    let mut expected = vec![d1, d2];
-    expected.sort();
-    assert_eq!(devices, expected, "one ciphertext per device");
-    let (_, to_desktop) = ciphertexts.iter().find(|(d, _)| *d == d2).unwrap();
-    assert!(
-        n.s.client("bob")
-            .receive_payload(kh("alice"), to_desktop)
-            .is_err(),
-        "the phone cannot read the desktop's"
-    );
-    let got = desktop
-        .receive_payload(kh("alice"), to_desktop)
-        .expect("the desktop decrypts its own");
-    assert_eq!(describe(&got), "Application(to the desktop too)");
-
-    // the desktop's reply travels as its device, on a session the phone
-    // does not hold
-    let back = desktop
-        .send_payload(kh("alice"), KIND_APPLICATION, b"from the desktop")
-        .unwrap();
-    let mut delivered = false;
-    for m in back {
-        if let Msg::Relay { to, bytes, device } | Msg::Payload { to, bytes, device } = m {
-            assert_eq!(to, kh("alice"));
-            assert_eq!(
-                device,
-                *id("alice").public.ed.as_bytes(),
-                "alice's one device"
-            );
-            let got =
-                n.s.client("alice")
-                    .receive_payload(kh("bob"), &bytes)
-                    .unwrap();
-            assert_eq!(describe(&got), "Application(from the desktop)");
-            delivered = true;
-        }
-    }
-    assert!(delivered);
-}
-
-// functional: OPS-001
-/// A restart with an established session: what the device wrote is what
-/// it starts from, the ratchet continues in both directions, and a blob
-/// that does not open leaves the client as it was.
-#[test]
-fn a_client_restarts_from_its_own_storage_with_its_sessions_intact() {
-    let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);
-    n.attach("bob");
-    n.attach("alice");
-    n.sweep("bob");
-    n.sweep("alice");
-    // one message each way: a session is established on both sides
-    n.send("alice", "bob", "first");
-    n.send("bob", "alice", "second");
-    assert!(
-        n.delivered
-            .iter()
-            .any(|(_, _, m)| m == "Application(first)")
-    );
-    assert!(
-        n.delivered
-            .iter()
-            .any(|(_, _, m)| m == "Application(second)")
-    );
-
-    // alice's process ends: what it wrote is all that survives
-    let blob = n.s.client("alice").durable();
-    let (dev, _handles) = common::harness::device(n.s.clock.clone(), 91, 0);
-    let mut alice2 = Client::new(id("alice"), ids(), Config::default(), dev);
-    let restored = alice2.restore_durable(&blob).expect("opens whole");
-    assert_eq!(restored.sessions, 1, "the session with bob's one device");
-    assert_eq!(restored.horizon, rhtn_client::horizon::Woke::Current);
-    assert_eq!(
-        alice2.durable(),
-        blob,
-        "what it wrote is what a restored client writes again"
-    );
-
-    // bob's next message opens on the restored ratchet, and alice's reply
-    // on the same session reaches bob
-    let msgs =
-        n.s.client("bob")
-            .send_payload(kh("alice"), KIND_APPLICATION, b"third")
-            .unwrap();
-    let mut got = None;
-    for m in msgs {
-        if let Msg::Relay { to, bytes, .. } | Msg::Payload { to, bytes, .. } = m {
-            assert_eq!(to, kh("alice"));
-            got = Some(
-                alice2
-                    .receive_payload(kh("bob"), &bytes)
-                    .expect("decrypts after restart"),
-            );
-        }
-    }
-    assert_eq!(describe(&got.unwrap()), "Application(third)");
-    let back = alice2
-        .send_payload(kh("bob"), KIND_APPLICATION, b"fourth")
-        .unwrap();
-    let mut delivered = false;
-    for m in back {
-        if let Msg::Relay { to, bytes, .. } | Msg::Payload { to, bytes, .. } = m {
-            assert_eq!(to, kh("bob"));
-            let g =
-                n.s.client("bob")
-                    .receive_payload(kh("alice"), &bytes)
-                    .unwrap();
-            assert_eq!(describe(&g), "Application(fourth)");
-            delivered = true;
-        }
-    }
-    assert!(delivered);
-
-    // a blob cut short, or one that is not a state at all, is refused and
-    // nothing of the client changes
-    let before = alice2.durable();
-    assert!(alice2.restore_durable(&blob[..blob.len() / 2]).is_err());
-    assert!(alice2.restore_durable(b"not a state").is_err());
-    assert_eq!(alice2.durable(), before);
-}
-
-// acceptance: PAY-23
-#[test]
-fn a_replayed_initial_message_is_refused_and_the_live_session_stands() {
-    let mut n = net(&["w1"], &[("alice", "w1"), ("carol", "w1"), ("bob", "w1")]);
-    n.attach("bob");
-    n.attach("carol");
-    n.sweep("bob");
-    n.sweep("carol");
-    n.s.handles["carol"].reach.0.set(false);
-    n.send("carol", "bob", "first");
-    let (sender, initial) = n.queued("bob");
-    assert_eq!(sender, kh("carol"));
-    let d =
-        n.s.client("bob")
-            .receive_payload(kh("carol"), &initial)
-            .expect("the initial opens a session");
-    assert!(matches!(&d, Dispatched::Application { bytes, .. } if bytes == b"first"));
-    let live = n.s.client("bob").payload.sessions.encode();
-    // the same bytes again — a captured initial re-sent.  Refused, and the
-    // session it opened is untouched: accepting it replaced the live
-    // ratchet with a fresh one, Signal's weak-replay caveat turned into a
-    // session takeover.  A one-time key spends itself; the reusable-prekey
-    // path is what the replay cache is for, and either refusal will do
-    let e =
-        n.s.client("bob")
-            .receive_payload(kh("carol"), &initial)
-            .unwrap_err();
-    assert!(
-        e.contains("already received") || e.contains("one-time"),
-        "{e}"
-    );
-    assert_eq!(
-        n.s.client("bob").payload.sessions.encode(),
-        live,
-        "the live session stands as it was"
-    );
-    // and the next message rides that session, not a reset one
-    n.send("carol", "bob", "second");
-    let (_, next) = n.queued("bob");
-    let d =
-        n.s.client("bob")
-            .receive_payload(kh("carol"), &next)
-            .expect("the session continues");
-    assert!(matches!(&d, Dispatched::Application { bytes, .. } if bytes == b"second"));
-    // **and the refusal survives a restart** [2026-09-30].  Held only in
-    // memory, the cache emptied on every start and the window reopened
-    // with it: the same captured bytes would take the session over on the
-    // far side of a restart.  Round-trip the persisted state and replay.
-    let persisted = n.s.client("bob").payload.sessions.encode();
-    let restored =
-        rhtn_client::payload::Sessions::decode(&persisted).expect("the sessions come back");
-    n.s.client("bob").payload.sessions = restored;
-    let e =
-        n.s.client("bob")
-            .receive_payload(kh("carol"), &initial)
-            .unwrap_err();
-    assert!(
-        e.contains("already received") || e.contains("one-time"),
-        "a replay after a restart is refused too: {e}"
-    );
-}
-
-/// Two peers open toward each other before either has read anything: each
-/// receives an initial while holding a fresh open of its own.  The session
-/// the lower keyhash opened stands at both ends, what either sent on the
-/// other before learning so still opens, and from then on one session
-/// carries both directions.
-#[test]
-fn two_opens_that_cross_settle_on_one_session_and_nothing_sent_meanwhile_is_lost() {
-    let mut n = net(&["w1"], &[("alice", "w1"), ("carol", "w1"), ("bob", "w1")]);
-    n.attach("bob");
-    n.attach("carol");
-    n.sweep("bob");
-    n.sweep("carol");
-    // no direct path either way, so everything queues at the node and
-    // each side reads the other's only when it collects
-    n.s.handles["carol"].reach.0.set(false);
-    n.s.handles["bob"].reach.0.set(false);
-    n.send("carol", "bob", "from carol, first");
-    n.send("bob", "carol", "from bob, first");
-    // and each says more on the session it opened, still unaware
-    n.send("carol", "bob", "from carol, second");
-    n.send("bob", "carol", "from bob, second");
-    // each reads the other's initial, which crosses its own open, and the
-    // message sent after it on the session that may not stand
-    assert_eq!(
-        n.collect("bob"),
-        vec![
-            "Application(from carol, first)",
-            "Application(from carol, second)"
-        ]
-    );
-    assert_eq!(
-        n.collect("carol"),
-        vec![
-            "Application(from bob, first)",
-            "Application(from bob, second)"
-        ]
-    );
-    // one session stands at both ends: with the displaced one forgotten,
-    // what each sends now still opens, in both directions
-    for c in ["bob", "carol"] {
-        let s = &mut n.s.client(c).payload.sessions;
-        assert_eq!(s.ratchets.len(), 1, "{c} holds one session");
-        s.previous.clear();
-    }
-    n.send("carol", "bob", "from carol, third");
-    n.send("bob", "carol", "from bob, third");
-    assert_eq!(n.collect("bob"), vec!["Application(from carol, third)"]);
-    assert_eq!(n.collect("carol"), vec!["Application(from bob, third)"]);
-    n.send("bob", "carol", "from bob, fourth");
-    n.send("carol", "bob", "from carol, fourth");
-    assert_eq!(n.collect("carol"), vec!["Application(from bob, fourth)"]);
-    assert_eq!(n.collect("bob"), vec!["Application(from carol, fourth)"]);
-}
-
-#[test]
-fn a_step_queued_before_a_session_travels_when_the_peer_opens_one() {
-    // **the defect this closes.** A send with no session queues its
-    // plaintext and asks for a one-time key; the queue is drained when the
-    // reply opens the session.  Where the ask is answered with no bundle,
-    // nothing opens and the queue stays — and a session established the
-    // other way round, by the peer writing first, never looked at it.  The
-    // gate caught it as a witness that missed the opening of a
-    // conversation and a sender that was told nothing [2026-10-06].
-    let mut n = net(&["bob"], &[("alice", "bob"), ("w1", "bob")]);
-    n.attach("alice");
-
-    // alice writes to w1, which has published nothing: the plaintext waits
-    // and a one-time key is asked for
-    let msgs =
-        n.s.client("alice")
-            .send_payload(kh("w1"), KIND_APPLICATION, b"the opening step")
-            .expect("queued, not refused");
-    let req = msgs
-        .iter()
-        .find_map(|m| match m {
-            Msg::PrekeyRequest(b) => Some(b.clone()),
-            _ => None,
-        })
-        .expect("a one-time key asked for");
-    assert!(
-        !msgs
-            .iter()
-            .any(|m| matches!(m, Msg::Payload { .. } | Msg::Relay { .. })),
-        "nothing travels before the session exists"
-    );
-
-    // the node answers with no bundle, w1 having published none
-    let now = n.now();
-    let reply = n
-        .nodes
-        .get_mut("bob")
-        .unwrap()
-        .prekeys
-        .answer(&kh("alice"), &req, now)
-        .expect("a reply");
-    assert!(
-        n.s.client("alice").take_prekey_reply(&reply).is_err(),
-        "nothing in it to open a session with"
-    );
-
-    // w1 arrives and writes first, so alice's session with it comes from
-    // the other direction.  Both sides sweep once w1 has published: a
-    // recipient can only attribute an initial message from a peer whose
-    // binding it holds, and a sweep prefetches reusable material without
-    // opening anything (`wire-format.md` §7.8).
-    n.attach("w1");
-    n.sweep("w1");
-    n.sweep("alice");
-    let msgs =
-        n.s.client("w1")
-            .send_payload(kh("alice"), KIND_APPLICATION, b"from the witness")
-            .expect("w1 can write to alice");
-    n.carry(kh("w1"), msgs);
-    let said = |from: &str, to: &str| {
-        n.delivered
-            .iter()
-            .filter(|(f, t, _)| *f == kh(from) && *t == kh(to))
-            .map(|(_, _, d)| d.clone())
-            .collect::<Vec<_>>()
-    };
-    assert_eq!(
-        said("w1", "alice"),
-        vec!["Application(from the witness)".to_string()],
-        "alice holds a session with w1 now, opened by w1"
-    );
-
-    // **and what was waiting went out on it.** The flush puts it in the
-    // outbox, which this harness drains after a delivery exactly as the
-    // courier does, so nothing in the test had to ask for it.
-    assert_eq!(
-        said("alice", "w1"),
-        vec!["Application(the opening step)".to_string()],
-        "w1 receives the step queued before it had published"
-    );
-}
-
-/// **A sender gets past a peer that lost its half of a session.** A
-/// process that ends before it writes holds no session the sender still
-/// holds; everything sent on it reads "no session with that peer", and
-/// the peer has no session to say so on — on the bench a verifier
-/// refused both queries of a ceremony this way (2026-10-12). The sender's
-/// only move is to open again: the sessions it holds with that peer are
-/// set aside, the next send asks for a one-time key and opens afresh,
-/// and the peer takes the open as it takes any first message.
-/// **The reply to a key asked for before any session lands after the peer
-/// wrote first**: the session the peer opened stands, nothing opens on the
-/// reply, and what the peer sent on that session meanwhile still reads.
-/// Before, the reply opened a second session with an empty message in it,
-/// replacing the ratchet the peer was still sending on and keeping nothing:
-/// the witness that lost a proposed body in the ceremony across subnets
-/// [sim, 2026-11-15].
-// functional: PAY-022
-#[test]
-fn a_key_reply_after_the_peer_opened_first_opens_nothing_and_what_the_peer_sent_still_reads() {
-    let mut n = net(&["bob"], &[("alice", "bob"), ("w1", "bob")]);
-    n.attach("alice");
-    n.attach("w1");
-    n.sweep("alice");
-    n.sweep("w1");
-    // alice asks for w1's one-time key; the reply is held back
-    let msgs =
-        n.s.client("alice")
-            .send_payload(kh("w1"), KIND_APPLICATION, b"from alice, queued")
-            .expect("queued");
-    let req = msgs
-        .iter()
-        .find_map(|m| match m {
-            Msg::PrekeyRequest(b) => Some(b.clone()),
-            _ => None,
-        })
-        .expect("a key asked for");
-    assert!(
-        !msgs
-            .iter()
-            .any(|m| matches!(m, Msg::Payload { .. } | Msg::Relay { .. }))
-    );
-    // w1 writes first: its initial opens the session at alice, and the
-    // queued step travels back on it (PAY-026)
-    n.send("w1", "alice", "from w1, first");
-    let said = |n: &Net, from: &str, to: &str| {
-        n.delivered
-            .iter()
-            .filter(|(f, t, _)| *f == kh(from) && *t == kh(to))
-            .map(|(_, _, d)| d.clone())
-            .collect::<Vec<_>>()
-    };
-    assert_eq!(said(&n, "w1", "alice"), vec!["Application(from w1, first)"]);
-    assert_eq!(
-        said(&n, "alice", "w1"),
-        vec!["Application(from alice, queued)"]
-    );
-    // no direct path from w1 now: what it sends waits at bob, encrypted
-    // on the session that stands
-    n.s.handles["w1"].reach.0.set(false);
-    n.send("w1", "alice", "from w1, second");
-    // the reply lands at alice meanwhile: nothing opens on it
-    let now = n.now();
-    let reply = n
-        .nodes
-        .get_mut("bob")
-        .unwrap()
-        .prekeys
-        .answer(&kh("alice"), &req, now)
-        .expect("a reply");
-    let more =
-        n.s.client("alice")
-            .take_prekey_reply(&reply)
-            .expect("taken");
-    assert!(
-        !more
-            .iter()
-            .any(|m| matches!(m, Msg::Payload { .. } | Msg::Relay { .. })),
-        "no second opener: {more:?}"
-    );
-    {
-        let s = &n.s.client("alice").payload.sessions;
-        assert_eq!(s.ratchets.len(), 1, "one session with w1");
-        assert!(s.previous.is_empty(), "nothing displaced");
-    }
-    // what waited at bob reads on the session that stands
-    assert_eq!(n.collect("alice"), vec!["Application(from w1, second)"]);
-    // and both directions go on, on that one session
-    n.s.handles["w1"].reach.0.set(true);
-    n.send("alice", "w1", "from alice, after");
-    assert_eq!(
-        said(&n, "alice", "w1").last().map(String::as_str),
-        Some("Application(from alice, after)")
-    );
-    n.send("w1", "alice", "from w1, after");
-    assert_eq!(
-        said(&n, "w1", "alice").last().map(String::as_str),
-        Some("Application(from w1, after)")
-    );
-}
-
 /// **A party this client knows and cannot place is placed by the
-/// introduction its opener carries** [2026-11-15]: the material stays as
-/// pinned, the locator is taken, and a bundle fetch has somewhere to go.
-/// Before, a known party's cold introduction was dropped whole, and a
-/// witness that knew a participant's material from the start could ask
-/// nobody for its bundle.
+/// introduction its first message carries** [2026-11-15]: the material
+/// stays as pinned, and the locator and the encryption key are taken.
 // functional: PAY-021
 #[test]
 fn a_cold_introduction_from_a_known_party_places_it() {
@@ -1441,7 +1325,6 @@ fn a_cold_introduction_from_a_known_party_places_it() {
     let card =
         n.s.client("alice")
             .payload
-            .sessions
             .card
             .clone()
             .expect("alice carries her introduction once attached");
@@ -1465,122 +1348,29 @@ fn a_cold_introduction_from_a_known_party_places_it() {
         ),
         "placed by the introduction"
     );
-}
-
-#[test]
-fn a_sender_opens_a_fresh_session_past_a_peer_that_lost_its_half() {
-    let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);
-    n.attach("bob");
-    n.attach("alice");
-    n.sweep("bob");
-    n.sweep("alice");
-    // through the node, so that what bob cannot read waits where a test
-    // can look at it
-    n.s.handles["alice"].reach.0.set(false);
-    n.s.handles["bob"].reach.0.set(false);
-    // what bob has written so far is all that will survive it
-    let blob = n.s.client("bob").durable();
-    n.send("alice", "bob", "first");
-    assert_eq!(n.collect("bob"), vec!["Application(first)".to_string()]);
-
-    // bob's process ends before it wrote the session alice opened
-    let (dev, handles) = common::harness::device(n.s.clock.clone(), 92, 0);
-    handles.reach.0.set(false);
-    let mut bob2 = Client::new(id("bob"), ids(), Config::default(), dev);
-    let restored = bob2.restore_durable(&blob).expect("opens whole");
-    assert_eq!(restored.sessions, 0, "no session with alice survived");
-    n.s.h.clients.insert(kh("bob"), bob2);
-    n.s.handles.insert("bob", handles);
-
-    // alice, holding the session still, writes on it: refused, and bob
-    // cannot say so
-    n.send("alice", "bob", "second");
-    let (from, bytes) = n.queued("bob");
-    assert_eq!(from, kh("alice"));
-    let refused = n.s.client("bob").receive_payload(kh("alice"), &bytes);
-    assert_eq!(
-        refused.as_ref().map(describe).unwrap_err(),
-        "no session with that peer"
+    // a second cold call from a party already placed does nothing, and a
+    // card that names somebody else is not taken for alice
+    assert!(!n.s.client("w1").take_cold_introduction(&kh("alice"), &card));
+    assert!(
+        !n.s.client("w1").take_cold_introduction(&kh("carol"), &card),
+        "the material must hash to the keyhash the channel names"
     );
-
-    // alice sets the session aside and writes again: a one-time key is
-    // asked for bob, a session opens on it, and the message arrives
-    let asked = n.requests("alice").len();
-    assert_eq!(n.s.client("alice").payload.sessions.displace(&kh("bob")), 1);
-    n.send("alice", "bob", "third");
-    assert_eq!(
-        n.requests("alice").len(),
-        asked + 1,
-        "a one-time key asked for bob"
-    );
-    assert_eq!(n.collect("bob"), vec!["Application(third)".to_string()]);
-    // and the two are in step both ways on the session that opened
-    n.send("bob", "alice", "fourth");
-    assert_eq!(n.collect("alice"), vec!["Application(fourth)".to_string()]);
-    n.send("alice", "bob", "fifth");
-    assert_eq!(n.collect("bob"), vec!["Application(fifth)".to_string()]);
-}
-
-/// **A displaced session survives a restart.** Two opens cross; the
-/// lower keyhash's stands and the other's is held for what was already
-/// sent on it (`wire-format.md` §7.10). What was sent on it is still in
-/// flight when the holder restarts — on the bench a counterparty's
-/// message read as "does not authenticate" after one did (2026-10-12) —
-/// so the held session is persisted with the rest, bounded as before.
-#[test]
-fn a_message_sent_on_a_displaced_session_still_opens_after_the_holder_restarts() {
-    let mut n = net(&["w1"], &[("bob", "w1"), ("carol", "w1")]);
-    n.attach("bob");
-    n.attach("carol");
-    n.sweep("bob");
-    n.sweep("carol");
-    n.s.handles["carol"].reach.0.set(false);
-    n.s.handles["bob"].reach.0.set(false);
-    let (low, high) = if kh("bob") < kh("carol") {
-        ("bob", "carol")
-    } else {
-        ("carol", "bob")
-    };
-    n.send(low, high, "low first");
-    n.send(high, low, "high first");
-    // sent on high's own session, before high learns which stands
-    n.send(high, low, "high second");
-    assert_eq!(n.collect(high), vec!["Application(low first)"]);
-    // low takes high's initial: its own stands, high's is held
-    let (from, h1) = n.queued(low);
-    let d =
-        n.s.client(low)
-            .receive_payload(from, &h1)
-            .expect("high's initial opens on low");
-    assert_eq!(describe(&d), "Application(high first)");
-    // low restarts between the two
-    let blob = n.s.client(low).durable();
-    let (dev, _h) = common::harness::device(n.s.clock.clone(), 77, 0);
-    let mut again = Client::new(id(low), ids(), Config::default(), dev);
-    again.restore_durable(&blob).expect("opens whole");
-    let (from, h2) = n.queued(low);
-    let got = again
-        .receive_payload(from, &h2)
-        .expect("the displaced session came back with the restart");
-    assert_eq!(describe(&got), "Application(high second)");
 }
 
 /// **A ceremony's legs do not outlive the ceremony** [bench, 2026-10-24]:
-/// what was queued for a peer with no session yet — a trace, a request —
+/// what was queued for a peer with no node key yet — a trace, a request —
 /// goes when the ceremony ends, and what the application queued stays.
 /// Two phones that met again a day later each flushed 207 trace events of
 /// an earlier exchange at the other on the first direct send after the
 /// record (run a5a2f39-a2-nodeless-2).
 #[test]
 fn legs_queued_for_an_unreached_peer_go_with_the_ceremony() {
-    use rhtn_client::payload::{KIND_APPLICATION, KIND_EXCHANGE_TRACE, KIND_WITNESS_REQUEST, wrap};
     let mut s = common::harness::setup(&["alice", "bob", "w1"]);
     s.client("alice")
         .begin(Some(kh("bob")), vec![kh("w1")], true)
         .expect("alice begins");
-    let device = [7u8; 32];
     s.client("alice").payload.pending.insert(
-        (kh("w1"), device),
+        kh("w1"),
         vec![
             wrap(KIND_EXCHANGE_TRACE, b"shape"),
             wrap(KIND_WITNESS_REQUEST, b"ask"),
@@ -1592,110 +1382,12 @@ fn legs_queued_for_an_unreached_peer_go_with_the_ceremony() {
         .client("alice")
         .payload
         .pending
-        .get(&(kh("w1"), device))
+        .get(&kh("w1"))
         .cloned()
         .unwrap_or_default();
     assert_eq!(
-        left.len(),
-        1,
-        "the legs went, the application's word stays: {left:?}"
-    );
-    assert_eq!(left[0], wrap(KIND_APPLICATION, b"a word for later"));
-}
-
-/// **A first message to a stranger carries the sender's introduction, and
-/// the stranger takes it** [author, 2026-10-30: anyone with a locator can
-/// cold-call its user; a keyhash binds its material, so it verifies].
-/// Bob has never heard of alice — no material, no bundle — and her first
-/// message opens at him once the frame's introduction is taken, in the
-/// order the courier takes things: the introduction, then the binding the
-/// node carried, then the message. Without the introduction the binding
-/// verifies under nothing and the message is refused, as design §14.2.4.2
-/// requires.
-#[test]
-fn a_first_message_to_a_stranger_carries_an_introduction_the_stranger_takes() {
-    use rhtn_client::contacts::How;
-    let mut n = net(&["w1", "w2"], &[("alice", "w1"), ("bob", "w2")]);
-    n.attach("bob");
-    n.attach("alice");
-    n.sweep("alice");
-    assert!(
-        n.s.client("alice").payload.sessions.card.is_some(),
-        "an attached client with a position carries its introduction"
-    );
-    // bob forgets alice entirely
-    {
-        let bob = n.s.client("bob");
-        bob.known.retain(|i| i.keyhash != kh("alice"));
-        bob.payload
-            .sessions
-            .prefetched
-            .retain(|(k, _), _| *k != kh("alice"));
-        bob.store.contacts.remove(&kh("alice"));
-    }
-    // the sender holds no direct path, so the message goes by the node
-    // and waits there, where this test can look at it
-    n.s.handles["alice"].reach.0.set(false);
-    n.send("alice", "bob", "hello, stranger");
-    let (_, first) = n.queued("bob");
-    let intro =
-        rhtn_client::payload::introduction_in(&first).expect("the frame carries her introduction");
-    let binding = n.nodes["w1"]
-        .prekeys
-        .bundle(&kh("alice"))
-        .cloned()
-        .expect("the node holds her bundle");
-
-    // the binding alone verifies under nobody bob holds
-    assert!(
-        !n.s.client("bob").take_binding(&binding),
-        "a stranger's binding is not taken"
-    );
-    let err =
-        n.s.client("bob")
-            .receive_payload(kh("alice"), &first)
-            .unwrap_err();
-    assert!(
-        err.contains("no bundle"),
-        "refused for want of material: {err}"
-    );
-
-    // the courier's order: the introduction, the binding, the message
-    assert!(
-        n.s.client("bob")
-            .take_cold_introduction(&kh("alice"), &intro),
-        "the cold call is taken"
-    );
-    assert!(
-        n.s.client("bob").take_binding(&binding),
-        "and now the binding verifies"
-    );
-    n.s.client("bob")
-        .receive_payload(kh("alice"), &first)
-        .expect("and the message opens");
-    let bob = n.s.client("bob");
-    assert!(
-        bob.known.iter().any(|i| i.keyhash == kh("alice")),
-        "bob holds alice now"
-    );
-    let c = bob
-        .store
-        .contacts
-        .get(&kh("alice"))
-        .expect("and as a contact");
-    assert_eq!(c.how, How::Introduced);
-    assert!(c.locator.is_some(), "with a locator to answer at");
-    // a second cold call from a party already held does nothing
-    assert!(
-        !n.s.client("bob")
-            .take_cold_introduction(&kh("alice"), &intro)
-    );
-
-    // and a card that names somebody else is not taken for alice
-    let forged = n.s.client("alice").payload.sessions.card.clone().unwrap();
-    assert!(
-        !n.s.client("bob")
-            .take_cold_introduction(&kh("carol"), &forged),
-        "the material must hash to the keyhash the channel names"
+        left,
+        vec![wrap(KIND_APPLICATION, b"a word for later")],
+        "the legs went, the application's word stays"
     );
 }

@@ -75,8 +75,9 @@ therefore build different image bytes on different days.
 `infra-client-requirements.md` §9.1 takes digest-not-tag as the stance for
 what a host installs; whether the base images follow it is open, and the
 cost runs the other way too: a digest pin stops a rebuild picking up
-Debian's security fixes until somebody bumps it. **The author's call**,
-not changed here.
+Debian's security fixes until somebody bumps it. **Fixed 2026-11-20**: the
+author ruled to pin ("front-load variability in the test and release
+process"); both Containerfiles now name each base by tag and digest.
 
 ## The accepted trade-off
 
@@ -92,7 +93,9 @@ Row 20: `DiagStream.kt` streams diagnostics in plaintext to the bench over
 the tester's LAN. Marked noise because it exists only in the fieldtest
 flavour and the releasable flavour never constructs it, but no root
 section accepts it: diagnostics are tooling outside the specification, so
-it is not a design trade-off in this file's sense.
+it is not a design trade-off in this file's sense. **Ruled 2026-11-20**:
+acceptable in the fieldtest build only; a finding of it reaching the
+releasable flavour would be a real defect.
 
 ## What the run did not see
 

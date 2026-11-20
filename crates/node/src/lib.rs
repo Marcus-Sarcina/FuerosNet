@@ -36,12 +36,12 @@ pub mod grant;
 /// The hosted-session surface a resource is reached through
 /// (`resource-requirements.md` §2).
 pub mod http;
+/// The key a node holds for each identity it serves, half of the split
+/// seal (`wire-format.md` §7.8).
+pub mod node_keys;
 /// Peering records and the direct payload path (design §6.3, §12.6.3,
 /// §12.7.5; `wire-format.md` §4.4).
 pub mod peering;
-/// The prekey pool a node serves on a subject's behalf
-/// (`wire-format.md` §7.8).
-pub mod prekeys;
 /// The profiles a node holds and serves (`wire-format.md` §7.11).
 pub mod profiles;
 /// The forwarding rule and the rootward memo (`wire-format.md` §10.1,

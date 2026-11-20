@@ -3,7 +3,7 @@
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).
 
-**Pinned**: wire-format.md `6b8ecbaa3df46c10e0b65bcb4cfd854201ea72093d923622175f42c59c5636bf` · network-design.md `f5143c59dc85cf3b345b233f40c90ac3a39f5125714d9c2f218464473ddf7d84`
+**Pinned**: wire-format.md `2463498d5d2925f273ef3cf567a14c8a93afe731516239dab9c8ea049e0b0230` · network-design.md `325815ea309dcd3760b837ef561a41312cdcfd4b37e8749eac49370c1a7c71b6`
 
 ## The result model is structured, not a single status
 
@@ -199,14 +199,22 @@ decoder's rather than a node's policy:
 |---|---|---|
 | T32 | A `WakeRegistration` with field 2 absent and field 3 or field 4 present | §7.10: a withdrawal carries no key and no lapse. The key and the lapse describe an endpoint, so either without one is a shape with no meaning |
 | T33 | A `WakeRegistration` carrying field 2 with field 3 absent | §7.10's mirror: the body is encrypted to the key before it is posted, so an endpoint with no key is an endpoint nothing can be sent to |
-| T34 | A `PrekeyPublication` whose field 1 is a byte string wrapping the bundle rather than the bundle map | §7.10 declares field 1 as `PrekeyBundle`, the object §7.8 defines, spliced in as `PrekeyReply` field 2 splices it. The wrapping round-trips against itself and fails against every conformant peer |
-| T35 | An `OneTimeDeposit` whose field 1 is an empty array, or carries more than 256 entries, or holds an entry that is not a byte string | §7.10's `[ 1*256 bstr ]` |
+| T34 | ~~a `PrekeyPublication` whose field 1 wraps the bundle~~ | **Retired 2026-11-20**: request type 9 is retired with the prekey bundles it carried (§9.2); a frame of type 9 is now rejected as unassigned (`N-frame-request-9-retired`). The id is not reused |
+| T35 | ~~an `OneTimeDeposit` with an empty, oversized or non-bytes field 1~~ | **Retired 2026-11-20**: request type 10 is retired with the one-time pools (§9.2); a frame of type 10 is rejected as unassigned (`N-frame-request-10-retired`). The id is not reused |
 | T36 | A `SubmissionReply` whose field 2 is outside 0–2 | §7.10: accepted, refused, over a bound, and §1's unknown-enum rule on a closed enumeration |
-| T40 | A `RelaySubmission` without field 4 | §7.10 [2026-09-22]: a session is with a device, and the node cannot tell from the ciphertext which; the recipient device is required |
-| T41 | A `PrekeyRequest` with field 2 = 1 and field 4 absent | §7.8 [2026-09-22]: a one-time key is consumed from one device's pool, so the device is required when one is asked for |
-| T42 | A `PrekeyReply` whose field 2 carries nine bundles | §7.8: at most eight, a chosen ceiling beside design §23.3's count of about three |
+| T40 | ~~a `RelaySubmission` without field 4~~ | **Retired 2026-11-20**: a submission names no device since a message is sealed to the person (§7.10); the old shape is now rejected whole (T64). The id is not reused |
+| T41 | ~~a `PrekeyRequest` with field 2 = 1 and field 4 absent~~ | **Retired 2026-11-20**: the request is a node-key request naming one recipient or a population (§7.8), with no mode and no device. The id is not reused |
+| T42 | ~~a `PrekeyReply` carrying nine bundles~~ | **Retired 2026-11-20**: a node-key reply carries one key or a failure code (§7.8). The id is not reused |
 | T43 | An `ArchiveRequest` whose field 2 is an empty array | §7.9 [2026-09-17]: the frontier is `[ + txid ]`; absent means the holder's newest record, empty means nothing |
 | T44 | An `ArchiveReply` with field 4 present and field 3 false | §7.9: the frontier is present iff more remain |
+| T64 | A `RelaySubmission` whose field 2 is a byte string rather than a `Sealed`, or which carries a field 4 naming a device (`N-shape-relay-unsealed`) | §7.10 [author, 2026-11-19]: the submission carries the seal itself and names the recipient and nothing else |
+| T65 | A `Sealed` whose `ctR` or `ctN` is not exactly 1,120 bytes (`N-sealed-ct-r-1119`, `N-sealed-ct-n-1121`) | §7.8.1: each half is an X-Wing ciphertext, ML-KEM-768's 1,088 bytes and X25519's 32 |
+| T66 | A `Sealed` whose last element is shorter than its 12-byte nonce and 16-byte GCM tag (`N-sealed-short-body`) | §7.8.1: the nonce sits in front of the AES-256-GCM ciphertext, which ends in its tag |
+| T67 | A `SealedBody` whose tag is not 32 bytes, or whose alias is empty (`N-sealed-body-tag-31`, `N-sealed-body-alias-empty`) | §7.8.1: an HMAC-SHA-256 tag; an alias of 1 to 64 bytes |
+| T68 | A `RelayedPayload` whose node half is not 32 bytes, or in the retired shape with a sender in front (`N-relayed-half-31`, `N-relayed-sender-named`) | §7.10 [author, 2026-11-19]: position, the seal, and the node's 32-byte shared secret; the node names no sender |
+| T69 | A `NodeKey` whose encapsulation key is not 1,216 bytes (`B-node-key-1215`), or which verifies under a node other than field 2 (`N-wrong-signer-node-key`) | §7.8 |
+| T70 | A `NodeKeyReply` carrying both a key and a failure code (`N-node-key-reply-both`); a `NodeKeyBatchRequest` naming one recipient (`B-batch-1-recipient`); a batch reply of more than 256 (`B-node-key-batch-reply-257`) | §7.8: the forms are structurally distinct, one recipient being the targeted request |
+| T71 | A `DeviceIntroduction` carrying anything after the device key, or a `DeviceCredential` whose secrets are not 32 bytes each (`N-device-introduction-bundle`, `N-device-credential-seed-31`) | §14.3.3 [author, 2026-11-19] |
 
 ### Transport delegation (§8.2)
 
@@ -330,6 +338,6 @@ lists 0/1 and 8/9 per endpoint record** (the list is `1*8` — both bounds have
 an invalid neighbour), the `NetworkPoint` port at 65535/65536,
 u32/u64 edges, epoch saturation, ordinal transitions, **the presence
 finalization gap at 0 / 86,400 / 86,401 seconds (D10/D11/R3)**, and
-fixed-width keyhash fields at 31/32/33 bytes wherever one appears. Bounds of genuinely uncovered objects (prekey blobs, catalog
+fixed-width keyhash fields at 31/32/33 bytes wherever one appears. Bounds of genuinely uncovered objects (catalog
 sizes, capabilities, sibling lists, scope lists, corroborations, asserted
 locations, recovery responses) join when their objects do.

@@ -81,12 +81,12 @@ fn layout_bound(tag: &str, listen: &str, extra: &str) -> Layout {
     std::fs::write(
         &config,
         format!(
-            "operator = \"{}\"\ntransport-key = \"{}\"\ndelegations = \"{}\"\nlisten = \"{listen}\"\nqueue = \"{}\"\nprekeys = \"{}\"\ntopology = \"{}\"\narchive = \"{}\"\nheartbeat = 30\ningestion = \"unverified-gossip\"\n{extra}\n[allowance]\nrequests = 120\nseconds = 60\n",
+            "operator = \"{}\"\ntransport-key = \"{}\"\ndelegations = \"{}\"\nlisten = \"{listen}\"\nqueue = \"{}\"\nkeys = \"{}\"\ntopology = \"{}\"\narchive = \"{}\"\nheartbeat = 30\ningestion = \"unverified-gossip\"\n{extra}\n[allowance]\nrequests = 120\nseconds = 60\n",
             dir.join("operator").display(),
             key.display(),
             delegations.display(),
             dir.join("queue").display(),
-            dir.join("prekeys").display(),
+            dir.join("keys").display(),
             dir.join("topology").display(),
             dir.join("archive").display(),
         ),
@@ -192,6 +192,7 @@ fn client_cfg(name: &str) -> ClientConfig {
         filter: None,
         sibling_cache: Arc::new(Mutex::new(Vec::new())),
         addresses: Arc::new(Mutex::new(Default::default())),
+        cursors: Default::default(),
         tls: Arc::new(Mutex::new(Default::default())),
         connect_timeout: Duration::from_secs(120),
         on_reachability: None,

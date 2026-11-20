@@ -137,8 +137,21 @@ async fn scene(mapping: Mapping, filtering: Filtering) -> Scene {
 /// recipient's serving node, which queues or delivers.
 fn relay(sc: &Scene, to: &str, bytes: Vec<u8>) {
     let node = if to == "carol" { &sc.s1 } else { &sc.s2 };
+    // the node's newest key for the recipient, made as a sender's fetch
+    // makes it, so the node has its half at delivery (`wire-format.md`
+    // §7.10)
+    let n = {
+        let mut v = node.view.lock().unwrap();
+        let signer = v.ack_signer().expect("a node signs its keys");
+        let now = v.now();
+        let record = v.node_keys.newest(&*signer, &kh(to), now);
+        rhtn_archive::node_key::NodeKey::parse(&record)
+            .expect("a node key")
+            .fields
+            .n
+    };
     node.node
-        .enqueue(kh(to), bytes)
+        .enqueue(kh(to), sealed_to(&bytes, n), n)
         .expect("the serving node relays");
 }
 
@@ -147,6 +160,7 @@ async fn next_delivery(s: &mut Session) -> Option<Vec<u8>> {
         .await
         .ok()
         .flatten()
+        .map(|d| opened(&d))
 }
 
 // functional: PAY-007
@@ -235,6 +249,9 @@ async fn the_direct_path_is_attempted_first_and_the_relay_taken_when_the_checks_
     } else {
         (&sc.l2, "carol", &mut inbox1)
     };
+    // delivery removes nothing (design §14.1.6), so what the candidates'
+    // exchange left queued is counted first
+    let held = sc.s1.node.queued(&kh("carol")) + sc.s2.node.queued(&kh("w1"));
     let relayed = std::cell::Cell::new(0);
     let d = sender
         .send_payload_live(kh(receiver), b"direct".to_vec(), &|_| {
@@ -250,7 +267,7 @@ async fn the_direct_path_is_attempted_first_and_the_relay_taken_when_the_checks_
     assert_eq!(relayed.get(), 0);
     assert_eq!(
         sc.s1.node.queued(&kh("carol")) + sc.s2.node.queued(&kh("w1")),
-        0,
+        held,
         "neither serving node carries the bytes"
     );
     drop(sc);

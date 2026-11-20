@@ -716,7 +716,8 @@ does not reinvent its parts.
   connection, never your identity's (`wire-format.md` §7.8, §7.10), **and do
   so where you are attached to that node yourself** [author, 2026-11-19]: the
   session you hold there names you. Your introduction rides inside the seal on
-  your first message to a recipient.
+  your messages to a recipient until you have had a reply from it [author,
+  2026-11-20].
 - **Every identity is a leaf.** A patron is a person on devices that may be
   offline, and a patron who runs no node is a light client like any other
   [author, 2026-11-14]: a message to one takes this construction, through
@@ -1174,7 +1175,9 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   holds a locator**; your own serving node is the fallback, for a client that
   cannot open an outbound connection at all and needs it to traverse a proxy. A
   node that already serves you is reached on the session that is up rather than
-  dialled a second time.
+  dialled a second time, **except for a node-key fetch and a sealed message**,
+  which go to it under a key minted for the connection as to any other node
+  (§3) [author, 2026-11-19].
 - **Bound what you keep open to nodes that do not serve you, and close an idle
   one.** An open connection to a stranger's node is a standing statement about
   who you are talking to (design §19.4), and the bound is yours to choose and
@@ -1644,7 +1647,7 @@ has a retention window (design §7.5.1). The names are the storage names.
 |---|---|---|
 | `archive` | the records this identity signed or holds, each as its bytes; loaded in chain order whatever order they were kept in | design §10 for the chain, design §7.5.1 for the captures kept apart |
 | `store` | contacts, hints, the pruning checkpoint, the captures held and their windows (§2) | §2, design §7.5 |
-| `payload` | the node keys held for the horizon, the queue position held per address, the opened messages' hashes, the nodes agreed to, the attachments, where each party's last message came by | §3, §4.1 |
+| `payload` | the queue position held per address, the opened messages' hashes, what waits for a node key, the parties a message has been attributed from, the identity's encryption secrets where a pairing handed them over, the nodes agreed to, the attachments, where each party's last message came by. **Never the node keys**, which are fetched when a sender connects to write and kept no longer [author, 2026-11-20] | §3, §4.1 |
 | `horizon` | what has been seen (txid and effective time) and the snapshot the horizon materialises from | design §8, and §4.2 above |
 | `delegations` | the delegations held for this device's keys | `wire-format.md` §8.2 |
 | `holder` | whose this state is (the keyhash), the provider credential, the application secret | §4.2, §10 |

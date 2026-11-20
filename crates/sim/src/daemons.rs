@@ -186,10 +186,10 @@ impl Daemons {
             ));
         }
         text.push_str(&format!(
-            "identity = \"{}\"\nlisten = \"127.0.0.1:0\"\nqueue = \"{}\"\nprekeys = \"{}\"\ntopology = \"{}\"\narchive = \"{}\"\nheartbeat = 30\ningestion = \"unverified-gossip\"\n\n[allowance]\nrequests = 120\nseconds = 60\n",
+            "identity = \"{}\"\nlisten = \"127.0.0.1:0\"\nqueue = \"{}\"\nkeys = \"{}\"\ntopology = \"{}\"\narchive = \"{}\"\nheartbeat = 30\ningestion = \"unverified-gossip\"\n\n[allowance]\nrequests = 120\nseconds = 60\n",
             dir.join("identity.key").display(),
             dir.join("queue").display(),
-            dir.join("prekeys").display(),
+            dir.join("keys").display(),
             dir.join("topology").display(),
             dir.join("archive").display()
         ));

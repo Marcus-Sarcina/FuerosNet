@@ -17,8 +17,13 @@
 #  else, so a trust store would be a root it never consults.
 # =============================================================================
 
-ARG RUST=1.98-bookworm
-ARG RUNTIME=debian:bookworm-slim
+#  BOTH BASES PINNED BY DIGEST [author, 2026-11-20]: one commit builds one
+#  image, so what varies is front-loaded into testing and release and never
+#  reaches an operator (`infra-client-requirements.md` §9.1: by digest, never
+#  by tag). The tag beside each digest says what it is; a Debian or Rust fix
+#  arrives when the digest is bumped, which is a commit of its own.
+ARG RUST=1.98-bookworm@sha256:93ce27a88655056a51dbdd8f5f2d7ddc071c7b0070fb288a37b5a285fc83971e
+ARG RUNTIME=debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc
 
 FROM rust:${RUST} AS build
 

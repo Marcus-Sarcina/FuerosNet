@@ -71,6 +71,10 @@ impl Custody for Shell {
     }
 }
 fn client(name: &str) -> Client {
+    client_with(name, Rc::new(rhtn_client::device::NoDirectPath))
+}
+
+fn client_with(name: &str, direct: Rc<dyn rhtn_client::device::DirectPath>) -> Client {
     let s = Arc::new(Shell::default());
     let p = Platform {
         camera: s.clone(),
@@ -87,7 +91,7 @@ fn client(name: &str) -> Client {
         test_identity(name),
         vec![test_identity("alice").public, test_identity("bob").public],
         Config::default(),
-        p.device(Rc::new(rhtn_client::device::NoDirectPath)),
+        p.device(direct),
     )
 }
 
@@ -211,7 +215,7 @@ async fn r08_failover_must_update_the_kernel_serving_identity() {
     let Item::Bytes(ref r) = parse_all(field).unwrap() else {
         panic!("payload")
     };
-    let payload = PayloadState::decode(Default::default(), &field[r.clone()]).unwrap();
+    let payload = PayloadState::decode(&field[r.clone()]).unwrap();
     let observed = payload.attachments.contains(&kh("carol"));
     let q = p.clone();
     tokio::task::spawn_blocking(move || q.detach())
@@ -337,52 +341,6 @@ fn r03_pagination_must_preserve_archive_edge_chronology() {
     );
 }
 
-fn open_message(relabel: bool) -> (Result<Vec<u8>, PayloadError>, bool) {
-    let a = test_identity("alice");
-    let b = test_identity("bob");
-    let ids = vec![a.public.clone(), b.public.clone()];
-    let ad = [1; 32];
-    let bd = [2; 32];
-    let fake = [99; 32];
-    let mut ak = PayloadKeys::generate(&mut fresh, 100);
-    let mut bk = PayloadKeys::generate(&mut fresh, 100);
-    let ab = read_bundle(&ids, &ak.bundle(&a, &ad, 100)).unwrap();
-    let bb = read_bundle(&ids, &bk.bundle(&b, &bd, 100)).unwrap();
-    let mut sender = Sessions::default();
-    let mut receiver = Sessions::default();
-    receiver.prefetch(ab);
-    let mut wire = sender
-        .open(&ak, &ad, b.public.keyhash, &bb, None, &mut fresh, b"hello")
-        .unwrap();
-    if relabel {
-        let ranges = array_item_ranges(&wire, 0).unwrap();
-        let mut edited = vec![];
-        emit_array_head(&mut edited, 3);
-        for (i, r) in ranges.into_iter().enumerate() {
-            if i == 1 {
-                emit_bstr(&mut edited, &fake);
-            } else {
-                edited.extend_from_slice(&wire[r]);
-            }
-        }
-        wire = edited;
-    }
-    let result = receiver.receive(&mut bk, &b.public.keyhash, a.public.keyhash, &wire, &mut fresh);
-    (result, receiver.has_session_with(&a.public.keyhash, &fake))
-}
-#[test]
-fn control_payload_opens_under_the_signed_sending_device() {
-    assert_eq!(open_message(false).0.unwrap(), b"hello");
-}
-#[test]
-fn r04_initial_payload_must_authenticate_the_sending_device() {
-    let (result, installed_fake) = open_message(true);
-    assert!(
-        result.is_err() && !installed_fake,
-        "MAIL-012/PAY-004: unsigned device rewrite accepted: {result:?}; fake device session={installed_fake}"
-    );
-}
-
 #[test]
 fn r05_completed_catalog_refresh_must_remove_withdrawn_entries() {
     use rhtn_archive::catalog::*;
@@ -481,50 +439,25 @@ fn r06_a_valid_presented_presence_must_be_walkable_in_an_archive_reply() {
     );
 }
 
+/// Two clients with a direct path to each other: what an archive fetch
+/// rides between parties who hold one (design §14.1.1). Since 2026-11-20
+/// (slice 2) a protocol object goes direct where the path is held and
+/// sealed through the recipient's node otherwise; the direct path keeps
+/// these fixtures to the two clients.
 fn connected_clients() -> (Client, Client) {
-    let mut a = client("alice");
-    let mut b = client("bob");
-    let ids = vec![test_identity("alice").public, test_identity("bob").public];
-    let ab = read_bundle(
-        &ids,
-        &a.payload
-            .keys
-            .bundle(&test_identity("alice"), &a.payload.device, 100),
-    )
-    .unwrap();
-    let bb = read_bundle(
-        &ids,
-        &b.payload
-            .keys
-            .bundle(&test_identity("bob"), &b.payload.device, 100),
-    )
-    .unwrap();
-    a.payload.sessions.prefetch(bb.clone());
-    b.payload.sessions.prefetch(ab);
-    let wire = a
-        .payload
-        .sessions
-        .open(
-            &a.payload.keys,
-            &a.payload.device,
-            b.keyhash(),
-            &bb,
-            None,
-            &mut fresh,
-            &wrap(rhtn_client::payload::KIND_APPLICATION, b"connected"),
-        )
-        .unwrap();
-    assert!(matches!(
-        b.receive_payload(a.keyhash(), &wire).unwrap(),
-        rhtn_client::ceremony::Dispatched::Application { .. }
-    ));
-    (a, b)
+    (client_with("alice", Rc::new(Everyone)), client_with("bob", Rc::new(Everyone)))
+}
+struct Everyone;
+impl rhtn_client::device::DirectPath for Everyone {
+    fn reachable(&self, _: &rhtn_archive::Keyhash) -> bool {
+        true
+    }
 }
 fn deliver(from: &Client, to: &mut Client, msgs: Vec<rhtn_client::ceremony::Msg>) {
     use rhtn_client::ceremony::Msg;
     for msg in msgs {
         match msg {
-            Msg::Payload { bytes, .. } | Msg::Relay { bytes, .. } => {
+            Msg::Payload { bytes, .. } => {
                 to.receive_payload(from.keyhash(), &bytes).unwrap();
             }
             other => panic!("unexpected: {other:?}"),
@@ -858,17 +791,12 @@ fn n02_archive_reply_rejection_must_not_commit_a_verified_prefix() {
         .fetch_archive(subject.keyhash(), Some(rec.txid), 16)
         .unwrap();
     let wire = match request.as_slice() {
-        [Msg::Payload { bytes, .. }] | [Msg::Relay { bytes, .. }] => bytes.clone(),
+        [Msg::Payload { bytes, .. }] => bytes.clone(),
         other => panic!("one encrypted archive request, got {other:?}"),
     };
-    // Read the request through a copy of the recipient's ratchet, leaving the
-    // real subject able to send the deliberately malformed reply.
-    let mut probe = PayloadState::decode(subject.payload.cfg.clone(), &subject.payload.encode())
-        .expect("payload state clones");
-    let plain = probe
-        .sessions
-        .receive(&mut probe.keys, &subject.keyhash(), asker.keyhash(), &wire, &mut fresh)
-        .unwrap();
+    // the request rides the direct path as `[kind, bytes]`, read here
+    // without the real subject taking it
+    let plain = wire;
     let (kind, inner) = rhtn_client::payload::unwrap(&plain).unwrap();
     assert_eq!(kind, rhtn_client::payload::KIND_ARCHIVE_REQUEST);
     let asked = rhtn_archive::chain::ArchiveRequest::decode(&inner).unwrap();
@@ -888,7 +816,7 @@ fn n02_archive_reply_rejection_must_not_commit_a_verified_prefix() {
         .unwrap();
     for msg in forged {
         let bytes = match msg {
-            Msg::Payload { bytes, .. } | Msg::Relay { bytes, .. } => bytes,
+            Msg::Payload { bytes, .. } => bytes,
             other => panic!("unexpected reply path: {other:?}"),
         };
         assert!(matches!(
@@ -1172,68 +1100,6 @@ fn s02_client_must_relearn_seen_topology_after_discarding_its_only_derived_copy(
             .iter()
             .any(|b| b.node == kh("carol") && b.open()),
         "TOP-036: after discarding the derived copy, propagation is suppressed as {retaken:?} and the relationship never returns"
-    );
-}
-
-#[test]
-fn s03_carried_binding_must_not_replace_an_already_held_binding() {
-    let mut receiver = client("bob");
-    let signer = test_identity("alice");
-    let device = [4; 32];
-    let mut old_keys = PayloadKeys::generate(&mut fresh, 100);
-    let mut current_keys = PayloadKeys::generate(&mut fresh, 200);
-    let old = old_keys.bundle(&signer, &device, 100);
-    let current = current_keys.bundle(&signer, &device, 200);
-    assert!(receiver.take_binding(&current));
-    let before = receiver.payload.sessions.encode();
-    receiver.take_binding(&old);
-    assert_eq!(
-        receiver.payload.sessions.encode(),
-        before,
-        "W 7.10 / MAIL-026: a carried, older signed bundle overwrote an existing binding"
-    );
-}
-
-#[test]
-fn control_carried_binding_authenticates_first_message_and_invalid_binding_is_ignored() {
-    let mut receiver = client("bob");
-    let signer = test_identity("alice");
-    let device = [4; 32];
-    let mut keys = PayloadKeys::generate(&mut fresh, 100);
-    let bundle = keys.bundle(&signer, &device, 100);
-    assert!(receiver.take_binding(&bundle));
-    let before = receiver.payload.sessions.encode();
-    assert!(!receiver.take_binding(b"not a bundle"));
-    assert_eq!(receiver.payload.sessions.encode(), before);
-    let bob = test_identity("bob");
-    let receiver_device = receiver.payload.device;
-    let receiver_bundle = receiver.payload.keys.bundle(&bob, &receiver_device, 100);
-    let p = read_bundle(&vec![bob.public.clone()], &receiver_bundle).unwrap();
-    let mut sender = Sessions::default();
-    let first = sender
-        .open(
-            &keys,
-            &device,
-            bob.public.keyhash,
-            &p,
-            None,
-            &mut fresh,
-            b"first without prefetch",
-        )
-        .unwrap();
-    assert_eq!(
-        receiver
-            .payload
-            .sessions
-            .receive(
-                &mut receiver.payload.keys,
-                &bob.public.keyhash,
-                signer.public.keyhash,
-                &first,
-                &mut fresh
-            )
-            .unwrap(),
-        b"first without prefetch"
     );
 }
 

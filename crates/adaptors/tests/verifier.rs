@@ -38,9 +38,31 @@ fn host(
 ) -> Party {
     let reachable = Reachable::default();
     let handle = spawn_client(name, cfg, reachable.clone());
+    // **every party of the cast holds every other's card**: a grant, an
+    // answer and the subject's copy are each sealed to their recipient,
+    // and a client writes only to a party whose encryption key it holds
+    // [author, 2026-11-20]
+    let cards: Vec<(rhtn_crypto::Identity, Vec<u8>)> = NAMES
+        .iter()
+        .filter(|n| **n != name)
+        .map(|n| {
+            (
+                id(n).public.clone(),
+                rhtn_crypto::encryption_key::own(&id(n)),
+            )
+        })
+        .collect();
+    handle.with_blocking(move |c| {
+        for (identity, ek) in cards {
+            c.contact(&identity, rhtn_client::contacts::How::Introduced, false);
+            if let Some(contact) = c.store.contacts.get_mut(&identity.keyhash) {
+                contact.encryption_key = Some(ek);
+            }
+        }
+    });
     let (courier, app) = Courier::new(handle.clone(), Arc::new(NoDirect(reachable)));
     courier.serve_also(serving.clone());
-    inboxes.host(kh(name), courier.inbound());
+    inboxes.host(kh(name), courier.inbound_via(serving.me()));
     verifiers.host(handle.clone(), courier.clone());
     Party {
         handle,

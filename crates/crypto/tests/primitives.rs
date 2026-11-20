@@ -1,21 +1,21 @@
-//! **The primitives PQXDH is instantiated with, against the vectors their
-//! own specifications publish** (PAY-13; design §14.2.4.2).
+//! **The primitives the split seal is instantiated with, against the
+//! vectors their own specifications publish** (PAY-13; design §14.2.4.2).
 //!
-//! **Why these and not the composition.** PQXDH and the Double Ratchet are
-//! adopted rather than designed here (design §14.2.4), and their
-//! specifications are prose with formal analysis — neither publishes
-//! known-answer vectors. The primitives they are instantiated with do, and
-//! those are the part of *"matching the adopted specifications"* that can
-//! be checked against somebody else's arithmetic rather than against our
-//! own [author, 2026-11-08]. The composition is held by this project's own
-//! canonical vectors and its independent harness, which is the bar as the
-//! author restated it on 2026-10-02.
+//! **Why these and not the composition.** The split seal is composed here
+//! from standard parts (design §14.2.4.6), and the composition has no
+//! published vectors. X-Wing's are checked in `tests/seal.rs`; the
+//! primitives beneath it publish their own, and those are the part that
+//! can be checked against somebody else's arithmetic rather than against
+//! our own [author, 2026-11-08]. The composition is held by this project's
+//! own canonical vectors and its independent harness, which is the bar as
+//! the author restated it on 2026-10-02.
 //!
 //! **The hex below is published, not computed here.** That is the whole
 //! point of it: a vector this project produced would only say that the
 //! implementation agrees with itself.
 
-use rhtn_crypto::pqxdh::{DhPublic, DhSecret, KemSecret, hkdf_sha256};
+use rhtn_crypto::kdf::hkdf_sha256;
+use x25519_dalek::{PublicKey, StaticSecret};
 
 fn hex(s: &str) -> Vec<u8> {
     (0..s.len())
@@ -43,20 +43,28 @@ fn x25519_agrees_with_rfc_7748_section_6_1() {
     let b_pub = h32("de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f");
     let shared = h32("4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742");
 
-    let alice = DhSecret::from_seed(a_priv);
-    let bob = DhSecret::from_seed(b_priv);
-    assert_eq!(alice.public().0, a_pub, "Alice's public key, RFC 7748 §6.1");
-    assert_eq!(bob.public().0, b_pub, "Bob's public key, RFC 7748 §6.1");
+    let alice = StaticSecret::from(a_priv);
+    let bob = StaticSecret::from(b_priv);
+    assert_eq!(
+        PublicKey::from(&alice).to_bytes(),
+        a_pub,
+        "Alice's public key, RFC 7748 §6.1"
+    );
+    assert_eq!(
+        PublicKey::from(&bob).to_bytes(),
+        b_pub,
+        "Bob's public key, RFC 7748 §6.1"
+    );
 
     // **and both sides reach it**, which is the property the agreement is
     // used for rather than one direction of the arithmetic
     assert_eq!(
-        alice.agree(&DhPublic(b_pub)),
+        alice.diffie_hellman(&PublicKey::from(b_pub)).to_bytes(),
         shared,
         "the shared secret, RFC 7748 §6.1"
     );
     assert_eq!(
-        bob.agree(&DhPublic(a_pub)),
+        bob.diffie_hellman(&PublicKey::from(a_pub)).to_bytes(),
         shared,
         "and from the other side"
     );
@@ -79,59 +87,28 @@ fn hkdf_sha256_agrees_with_rfc_5869_case_1() {
 }
 
 // functional: VAL-006
-/// **FIPS 203's parameter set for ML-KEM-768**, which is what §14.2.4.2
-/// names: the sizes are what tell 768 from 512 and 1024, and getting the
-/// parameter set wrong is the failure this catches.
-///
-/// **The published known-answer vectors are not here, and the reason is
-/// said rather than left blank**: NIST's are distributed as ACVP JSON
-/// rather than in the standard's text, and pulling that corpus in is a
-/// decision about what this repository carries — not something to do
-/// quietly inside a test. What is checked is the parameter set and the
-/// round trip, which is every claim PAY-13 makes about the KEM except the
-/// arithmetic itself.
+/// **X-Wing's sizes are ML-KEM-768's and X25519's together**, which is
+/// what §14.2.4.2 names: the sizes are what tell 768 from 512 and 1024,
+/// and getting the parameter set wrong is the failure this catches. The
+/// arithmetic is X-Wing's own published vectors, in `tests/seal.rs`,
+/// which run ML-KEM-768 end to end.
 #[test]
-fn ml_kem_768_has_the_sizes_fips_203_fixes_and_round_trips() {
+fn x_wing_has_the_sizes_fips_203_and_rfc_7748_fix_and_round_trips() {
+    use rhtn_crypto::xwing;
     // FIPS 203 Table 2, ML-KEM-768: encapsulation key 1184 bytes,
-    // ciphertext 1088, shared secret 32
-    let secret = KemSecret::from_seed([7u8; 64]);
-    let public = secret.public();
-    assert_eq!(public.0.len(), 1184, "ML-KEM-768 encapsulation key");
-
-    let (ciphertext, theirs) = secret
-        .public()
-        .encapsulate([3u8; 32])
-        .expect("encapsulates");
-    assert_eq!(ciphertext.len(), 1088, "ML-KEM-768 ciphertext");
-    assert_eq!(theirs.len(), 32, "ML-KEM shared secret");
-
-    let mine = secret.decapsulate(&ciphertext).expect("decapsulates");
-    assert_eq!(mine, theirs, "both sides reach the same secret");
-
-    // a ciphertext of the wrong length is not a 768 ciphertext
-    assert!(
-        secret.decapsulate(&ciphertext[..1087]).is_err(),
-        "a short ciphertext is refused rather than truncated into one"
-    );
-    // **and the seed is what regenerates it**, which is what lets a device
-    // keep 64 bytes instead of a decapsulation key
+    // ciphertext 1088; X25519's 32 each
+    assert_eq!(xwing::PUBLIC_BYTES, 1184 + 32);
+    assert_eq!(xwing::CIPHERTEXT_BYTES, 1088 + 32);
+    let secret = xwing::Secret::from_seed([7u8; 32]);
+    let (theirs, ct) = xwing::encapsulate(secret.public(), &[3u8; 64]).expect("encapsulates");
+    assert_eq!(*secret.decapsulate(&ct), *theirs, "both sides reach it");
+    // **and the seed is what regenerates it**, which is what lets a
+    // device keep 32 bytes instead of a decapsulation key
     assert_eq!(
-        KemSecret::from_seed([7u8; 64]).public().0,
-        public.0,
+        xwing::Secret::from_seed([7u8; 32]).public(),
+        secret.public(),
         "the same seed, the same key"
     );
-}
-
-/// **The profile string PQXDH is instantiated under** (design §14.2.4.2):
-/// the construction is parameterised over a DH and a KEM, so the label has
-/// to name which — and a profile that drifted from the primitives above
-/// would be two implementations calling themselves one.
-#[test]
-fn the_profile_names_the_primitives_it_is_instantiated_with() {
-    let info = String::from_utf8(rhtn_crypto::pqxdh::INFO.to_vec()).expect("ascii");
-    assert!(info.contains("X25519"), "the DH is named: {info}");
-    assert!(info.contains("ML-KEM-768"), "and the KEM: {info}");
-    assert!(info.contains("SHA-256"), "and the hash: {info}");
 }
 
 // functional: SIG-011

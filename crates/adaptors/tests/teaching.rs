@@ -60,7 +60,7 @@ fn party(
     });
     let (courier, _app) = Courier::new(handle.clone(), Arc::new(NoDirect(reachable)));
     courier.serve_also(serving.clone());
-    inboxes.host(kh(name), courier.inbound());
+    inboxes.host(kh(name), courier.inbound_via(serving.me()));
     (handle, courier)
 }
 

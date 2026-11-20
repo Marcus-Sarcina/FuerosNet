@@ -180,6 +180,16 @@ impl Instrument {
                     .own_introduction()
                     .map_err(|e| e.reason().to_string())?)
             )]),
+            // **another party's introduction taken** (`wire-format.md`
+            // §2.3): its material, encryption key and locator, the card a
+            // message to it is sealed by — what a scanned code hands over
+            ["take-introduction", blob] => {
+                let who = self
+                    .client
+                    .take_introduction(bytes(blob)?)
+                    .map_err(|e| e.reason().to_string())?;
+                Ok(vec![format!("introduced {}", hex(&who))])
+            }
 
             ["attached"] => Ok(vec![format!("attached {}", self.client.attached())]),
             // **the agreements and the tabs, as the shell drives them**
@@ -777,6 +787,18 @@ impl Instrument {
                 rhtn_ffi::net::Event::Payload { from, kind, bytes } => {
                     format!(
                         "payload from={} kind={kind} bytes={}",
+                        hex(&from),
+                        hex(&bytes)
+                    )
+                }
+                rhtn_ffi::net::Event::Unverified {
+                    from,
+                    alias,
+                    kind,
+                    bytes,
+                } => {
+                    format!(
+                        "unverified from={} alias={alias:?} kind={kind} bytes={}",
                         hex(&from),
                         hex(&bytes)
                     )

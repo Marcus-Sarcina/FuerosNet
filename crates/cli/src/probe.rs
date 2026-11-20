@@ -80,6 +80,7 @@ pub async fn attached(
             target,
             vec![addr],
         )]))),
+        cursors: Default::default(),
         tls: Arc::new(Mutex::new(Default::default())),
         connect_timeout: Duration::from_secs(5),
         on_reachability: None,

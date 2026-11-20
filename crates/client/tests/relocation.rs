@@ -5,7 +5,7 @@ mod common;
 
 use common::harness::*;
 use common::*;
-use rhtn_client::payload::{PayloadConfig, PayloadState};
+use rhtn_client::payload::PayloadState;
 use rhtn_client::relocation::Found;
 use rhtn_model::Standing;
 
@@ -185,14 +185,11 @@ fn a_newer_invitation_replaces_the_one_held() {
 }
 
 // functional: SES-021
-/// **A relocation survives a restart**, every standing, and the
-/// eleven-field form from before it still reads with none held.
+/// **A relocation survives a restart**, every standing.
 #[test]
-fn relocations_round_trip_and_the_eleven_field_form_still_reads() {
-    let mut fresh = |b: &mut [u8]| b.fill(7);
-    let mut p = PayloadState::new(PayloadConfig::default(), &mut fresh, 1);
+fn relocations_round_trip() {
+    let mut p = PayloadState::default();
     p.agreed.insert(kh("n1"), vec![OLD.to_string()]);
-    let eleven = p.encode();
     for (i, standing) in [
         Standing::Unproved,
         Standing::Proved,
@@ -214,21 +211,8 @@ fn relocations_round_trip_and_the_eleven_field_form_still_reads() {
         );
     }
     let bytes = p.encode();
-    assert_eq!(bytes[0], 0x8c, "twelve fields");
-    let back = PayloadState::decode(PayloadConfig::default(), &bytes).expect("reads");
+    let back = PayloadState::decode(&bytes).expect("reads");
     assert_eq!(back.relocations, p.relocations);
-    // the form before relocations: written without the twelfth field
-    let mut old_form = eleven.clone();
-    assert_eq!(old_form[0], 0x8c);
-    // drop the trailing empty array and say eleven
-    assert_eq!(
-        old_form.pop(),
-        Some(0x80),
-        "the empty relocation list is last"
-    );
-    old_form[0] = 0x8b;
-    let back = PayloadState::decode(PayloadConfig::default(), &old_form).expect("reads");
-    assert!(back.relocations.is_empty());
     assert_eq!(back.agreed, p.agreed);
 }
 

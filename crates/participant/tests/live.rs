@@ -30,13 +30,19 @@ fn two_participant_processes_exchange_payload_through_a_daemon() {
     // a person would have been told one
     assert_eq!(set.get("alice").must("attached"), ["attached false"]);
 
-    // **the order is the protocol's, not the harness's.**  An attach
-    // publishes this client's bundle and sweeps the parties it names, so
-    // carol must publish before alice can sweep it — a payload needs the
-    // recipient's one-time material and there is nowhere else to get it —
-    // and carol must then sweep alice in turn, because a recipient
-    // attributes an initial message only under a binding it already holds
-    // (`wire-format.md` §7.8, design §14.2.4).
+    // **alice holds carol's card**: a message is sealed to the recipient's
+    // encryption key, which travels on its introduction and nowhere else
+    // (`wire-format.md` §2.5, design §14.2.3), so a sender writes to a party
+    // it was introduced to. Carol holds nothing of alice and attributes the
+    // message by the introduction inside the seal (§7.8.1).
+    let card = set.get("carol").must("introduction")[0]
+        .strip_prefix("introduction ")
+        .expect("one line")
+        .to_string();
+    assert_eq!(
+        set.get("alice").must(&format!("take-introduction {card}")),
+        [format!("introduced {}", hex(&kh("carol")))]
+    );
     // **degraded, by the node's own determination** (`wire-format.md`
     // §8.2): the daemon holds no adoption placing either client in its
     // subtree, so it names them in failover; payload flows all the same

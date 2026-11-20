@@ -25,7 +25,6 @@ use crate::utility;
 use crate::verifier::{GrantOutcome, QueryOutcome, VerifierConfig, VerifierState, Verifying};
 use crate::{Keyhash, Txid};
 use rhtn_archive::chain::Archive;
-use rhtn_archive::prekey::{PrekeyReply, decode_batch_reply};
 use rhtn_archive::record::Record;
 use rhtn_archive::tx::{
     Adoption, Evidence, Locator, Seqno, TYPE_ADOPTION, TYPE_DEPARTURE, TYPE_PRESENCE, Witness,
@@ -72,8 +71,6 @@ pub struct Config {
     pub subject: SubjectConfig,
     /// Its numbers as a verifier.
     pub verifier: VerifierConfig,
-    /// Its numbers for the payload path.
-    pub payload: payload::PayloadConfig,
     /// The trust policy this client computes standing with: the reference
     /// metric unless something substitutes one (design §16.1).  **Nothing
     /// the client stores or sends consults it** (design §16.4), so a
@@ -107,7 +104,6 @@ impl Default for Config {
             continuity: crate::device::Continuity::default(),
             subject: SubjectConfig::default(),
             verifier: VerifierConfig::default(),
-            payload: payload::PayloadConfig::default(),
             policy: std::sync::Arc::new(rhtn_policy::ReferenceMetric::default()),
         }
     }
@@ -222,8 +218,6 @@ struct Fetch {
 pub struct Restored {
     /// How many records came back.
     pub records: usize,
-    /// How many payload sessions did.
-    pub sessions: usize,
     /// What the horizon did with the snapshot it found.
     pub horizon: crate::horizon::Woke,
 }
@@ -298,20 +292,11 @@ pub enum Msg {
     AdoptionBody(Vec<u8>),
     /// A sealed line, to whoever holds a locator for it.
     Seal(Vec<u8>),
-    /// A signed prekey bundle, to the serving node.
-    PublishBundle(Vec<u8>),
-    /// One-time keys, to the serving node.
-    StockOneTime(Vec<Vec<u8>>),
-    /// One-time keys for the pool at a node held as a tab — a pool of its
-    /// own per address [author, 2026-11-11].
-    StockOneTimeAt {
-        /// The node whose pool they stock.
-        node: Keyhash,
-        /// The keys.
-        keys: Vec<Vec<u8>>,
-    },
-    /// A `PrekeyRequest` or `PrekeyBatchRequest`, to the serving node.
-    PrekeyRequest(Vec<u8>),
+    /// **Node keys wanted, for these recipients** (`wire-format.md` §7.8):
+    /// the courier asks each one's node under a key minted for the
+    /// connection, a batch where one node serves several, and hands each
+    /// reply to [`Client::take_node_key_reply`].
+    NodeKeyRequest(Vec<Keyhash>),
     /// A `CatalogQuery` (`wire-format.md` §6.4), to the serving node.
     CatalogQuery(Vec<u8>),
     /// A `ResourceRequest` (`wire-format.md` §11.1), to the node hosting
@@ -338,35 +323,28 @@ pub enum Msg {
     /// A `ProfileRequest` (`wire-format.md` §7.11), to where the
     /// subject's locator leads.
     ProfileRequest(Vec<u8>),
-    /// The reply, from the serving node.
-    PrekeyReply(Vec<u8>),
-    /// The serving node's word that the pool ran dry.
-    PoolExhausted,
-    /// Bytes on the end-to-end channel, on the direct path to `to`.
-    /// `device`: the recipient's device, carried so a failed direct path
-    /// can fall back to the relay (`wire-format.md` §7.10 field 4).
+    /// **`[kind, bytes]` on the direct path to `to`** (`wire-format.md`
+    /// §7.10.1): the transport is end to end between the two, so nothing
+    /// is sealed on it. Where the path fails the courier hands it back to
+    /// [`Client::reseal`], which seals it for the recipient's node.
     Payload {
         /// The recipient.
         to: Keyhash,
-        /// The ciphertext.
+        /// `[kind, bytes]`, as [`payload::wrap`] made it.
         bytes: Vec<u8>,
-        /// The recipient's device it is for.
-        device: [u8; 32],
     },
-    /// The same bytes handed to the serving node to relay to `to`.
-    /// `device` is the recipient's device the ciphertext is for
-    /// (`wire-format.md` §7.10 field 4).
-    Relay {
+    /// **A sealed message for the recipient's node** (`wire-format.md`
+    /// §7.10), submitted under a key minted for the connection. `plain` is
+    /// what was sealed, so a refusal for a stale node key is met by
+    /// [`Client::reseal`] after the newest is fetched.
+    Sealed {
         /// The recipient.
         to: Keyhash,
-        /// The ciphertext.
-        bytes: Vec<u8>,
-        /// The recipient's device it is for.
-        device: [u8; 32],
+        /// The `Sealed`, encoded.
+        sealed: Vec<u8>,
+        /// `[kind, bytes]`, as sealed.
+        plain: Vec<u8>,
     },
-    /// Application traffic to the serving node itself: it rides the
-    /// transport session and needs no construction.
-    Transport(Vec<u8>),
     /// **A conversation step for the co-present counterparty**, sealed
     /// under the local session (`wire-format.md` §14.3.2) and carried by
     /// the bearer (design §7.1).
@@ -423,17 +401,12 @@ impl Msg {
             | Msg::RecoveryResponse(b)
             | Msg::AdoptionBody(b)
             | Msg::Seal(b)
-            | Msg::PublishBundle(b)
             | Msg::PublishProfile(b)
-            | Msg::ProfileRequest(b)
-            | Msg::PrekeyRequest(b)
-            | Msg::PrekeyReply(b)
-            | Msg::Transport(b) => b.clone(),
+            | Msg::ProfileRequest(b) => b.clone(),
             Msg::Payload { bytes, .. }
-            | Msg::Relay { bytes, .. }
+            | Msg::Sealed { sealed: bytes, .. }
             | Msg::ResourceRequest { bytes, .. } => bytes.clone(),
-            Msg::StockOneTime(v) => v.concat(),
-            Msg::StockOneTimeAt { keys, .. } => keys.concat(),
+            Msg::NodeKeyRequest(v) => v.concat(),
             Msg::RecoveryProposal { block, .. } => block.clone(),
             Msg::Consent { consent, .. } => consent.clone(),
             Msg::Responses(v) => v.concat(),
@@ -900,6 +873,22 @@ pub enum Dispatched {
     /// came to, in words a screen can show.  What it owes in answer is in
     /// the outbox.
     Peer(String),
+    /// **Application payload from a sender this client cannot attribute**
+    /// [author, 2026-11-19]: no introduction held or carried for the
+    /// keyhash it names, so its tag could not be checked. Shown under the
+    /// alias it carries and marked unverified, never as the person, and
+    /// not answered: the header indexes a thread and reaches nobody
+    /// [author, 2026-11-20].
+    Unverified {
+        /// The keyhash the message names, unverified.
+        sender: Keyhash,
+        /// The alias it carries, display only.
+        alias: String,
+        /// The kind on the wire.
+        kind: u64,
+        /// The plaintext.
+        bytes: Vec<u8>,
+    },
 }
 
 /// What [`Client::reconcile_from_peer`] took.
@@ -978,13 +967,14 @@ impl Client {
     /// A ceremony device holding `id`: it has the seed, so every act the
     /// signing table gives the identity key is open to it.
     pub fn new(id: SigningIdentity, known: Vec<Identity>, cfg: Config, device: Device) -> Self {
-        let now = device.clock.now_ms() / 1000;
-        let random = device.random.clone();
-        let mut fresh = |out: &mut [u8]| random.fill(out);
-        let mut payload = PayloadState::new(cfg.payload.clone(), &mut fresh, now);
-        // this device holds the seed, so it is named by the identity's
-        // classical member (`wire-format.md` §7.8) until told otherwise
-        payload.device = *id.public.ed.as_bytes();
+        // the identity's encryption secrets, from its root (`wire-format.md`
+        // §2.5): every device the phrase restores derives the same two
+        let payload = PayloadState {
+            secret: Some(rhtn_crypto::seal::EncryptionSecret::from_identity_root(
+                id.identity_root(),
+            )),
+            ..PayloadState::default()
+        };
         Self::with_signer(
             id.public.clone(),
             Some(Box::new(id)),
@@ -1008,12 +998,11 @@ impl Client {
         cfg: Config,
         device: Device,
     ) -> Self {
-        let now = device.clock.now_ms() / 1000;
-        let random = device.random.clone();
-        let mut fresh = |out: &mut [u8]| random.fill(out);
-        let mut payload = PayloadState::new(cfg.payload.clone(), &mut fresh, now);
-        payload.device = presented;
-        Self::with_signer(public, None, payload, known, cfg, device)
+        // **no encryption secret until a pairing hands one over**
+        // (`wire-format.md` §14.3.3): a device that holds no seed cannot
+        // derive them ([`Client::take_encryption_secrets`])
+        let _ = presented;
+        Self::with_signer(public, None, PayloadState::default(), known, cfg, device)
     }
 
     fn with_signer(
@@ -2443,12 +2432,9 @@ impl Client {
         }
     }
 
-    /// **A query or grant unanswered at half the patience goes again on
-    /// a fresh session**, once.  Every session with that verifier is set
-    /// aside and the same bytes sent, which asks for a one-time key and
-    /// opens anew when it comes; the verifier's crossing rule takes the
-    /// open (`wire-format.md` §7.10).  What the verifier still sends on
-    /// the old session opens here on the one set aside.
+    /// **A query or grant unanswered at half the patience goes again**,
+    /// once: the same bytes, sealed afresh, in case the first was lost on
+    /// its way or refused at a full queue (`wire-format.md` §7.10).
     ///
     /// Run by `maintain`, on the kernel's own clock: nothing of this is
     /// the shell's to drive.
@@ -2469,13 +2455,11 @@ impl Client {
         };
         let mut out = Vec::new();
         for (query, to, kind, bytes) in due {
-            let displaced = self.payload.sessions.displace(&to);
             tracing::warn!(
                 target: "pay",
                 query = %id8(&query),
                 kind = crate::diag::kind_name(kind),
                 to = %id8(&to),
-                displaced,
                 "pay.resend"
             );
             match self.send_payload(to, kind, &bytes) {
@@ -4366,7 +4350,6 @@ impl Client {
             db,
             &holder,
             ob,
-            &self.cfg.payload,
         )?;
         self.apply_parsed(parsed)
     }
@@ -4378,20 +4361,7 @@ impl Client {
         use crate::durable::*;
         let (_, f) = parse_array(b, 7).ok_or("not a durable state")?;
         let parsed = Parsed::read(
-            &f[0],
-            b,
-            &f[1],
-            b,
-            &f[2],
-            b,
-            &f[3],
-            &f[4],
-            b,
-            &f[5],
-            b,
-            &f[6],
-            b,
-            &self.cfg.payload,
+            &f[0], b, &f[1], b, &f[2], b, &f[3], &f[4], b, &f[5], b, &f[6], b,
         )?;
         self.apply_parsed(parsed)
     }
@@ -4415,9 +4385,6 @@ impl Client {
             && owner != self.public.keyhash
         {
             return Err("this state belongs to another identity".into());
-        }
-        if payload.device != self.payload.device {
-            return Err("this state belongs to another device".into());
         }
         let kh = self.public.keyhash;
         let parsed_records: Vec<Record> = recs
@@ -4445,7 +4412,15 @@ impl Client {
             .ok_or("delegations")?;
         self.archive = archive;
         self.store = store;
+        // the secrets are the identity's: derived again where the seed is
+        // here, and kept as written where they were handed over
+        let card = self.payload.card.take();
+        let derived = self.payload.secret.take();
         self.payload = payload;
+        self.payload.card = card;
+        if self.payload.secret.is_none() {
+            self.payload.secret = derived;
+        }
         self.horizon = horizon;
         self.provider_credential = provider;
         self.application_secret = application_secret;
@@ -4459,7 +4434,6 @@ impl Client {
         self.refresh_acquaintance();
         Ok(Restored {
             records,
-            sessions: self.payload.sessions.ratchets.len(),
             horizon: woke,
         })
     }
@@ -4947,13 +4921,11 @@ impl Client {
         n
     }
 
-    /// How long a one-time prekey request stands unanswered before the
-    /// next send asks again, in seconds.  A client's own number.
-    pub const PREKEY_PATIENCE_S: u64 = 30;
-    /// Rounds a peer may stay silent before the session with it is opened
-    /// anew, the first time; the interval doubles after each reopening up
-    /// to [`PEER_REOPEN_CEILING`], so a peer that is gone costs a prekey
-    /// fetch ever more rarely. A client's own number, no part of the wire.
+    /// Rounds a peer may stay silent before what was deposited with it is
+    /// taken as lost and deposited again, the first time; the interval
+    /// doubles after each, up to [`PEER_REOPEN_CEILING`], so a peer that is
+    /// gone costs a deposit ever more rarely. A client's own number, no
+    /// part of the wire.
     pub const PEER_REOPEN_AFTER: u32 = 2;
     /// The longest a reopening interval grows to, in rounds.
     pub const PEER_REOPEN_CEILING: u32 = 64;
@@ -4967,12 +4939,10 @@ impl Client {
         if !self.peers().contains(&peer) {
             return None;
         }
-        // **a peer silent for too many rounds is opened to anew**: a
-        // process that lost its sessions reads nothing sent on the old
-        // ones and has none to say so on, so the sender opens another,
-        // as it does for a verifier; what it had deposited there is
-        // taken as lost with the rest, and goes again at the next held
-        // contact
+        // **a peer silent for too many rounds may have lost what it
+        // held**: a process restored from its phrase holds no deposit,
+        // so what was deposited there is taken as lost and goes again at
+        // the next held contact
         let (silent, at) = self
             .peer_silence
             .entry(peer)
@@ -4982,23 +4952,22 @@ impl Client {
             *silent = 0;
             *at = (*at * 2).min(Self::PEER_REOPEN_CEILING);
             let next = *at;
-            let displaced = self.payload.sessions.displace(&peer);
             self.deposited.remove(&peer);
-            tracing::info!(target: "peer", peer = %id8(&peer), displaced, next_after = next, "peer.reopen");
+            tracing::info!(target: "peer", peer = %id8(&peer), next_after = next, "peer.reopen");
         }
-        // **a greeting that waited for a session is stale once another
-        // goes**: whatever of the last greetings parked behind a bundle
-        // request is dropped before this one is queued, so a session that
-        // opens carries one greeting and not a round per minute of
-        // waiting [bench 584a275-restore-kind30-1, 2026-10-30: a dozen
-        // flushed at once, each answered with a 130 KB return]
+        // **a greeting that waited for a node key is stale once another
+        // goes**: whatever of the last greetings parked behind a fetch is
+        // dropped before this one is queued, so a key that arrives carries
+        // one greeting and not a round per minute of waiting [bench
+        // 584a275-restore-kind30-1, 2026-10-30: a dozen flushed at once,
+        // each answered with a 130 KB return]
         let stale = [
             payload::KIND_PEER_LOCATOR,
             payload::KIND_PEERING_RECORD,
             payload::KIND_BACKUP_REQUEST,
             payload::KIND_BACKUP_DEPOSIT,
         ];
-        for ((to, _), parked) in self.payload.pending.iter_mut() {
+        for (to, parked) in self.payload.pending.iter_mut() {
             if *to == peer {
                 parked.retain(|p| !payload::unwrap(p).is_ok_and(|(k, _)| stale.contains(&k)));
             }
@@ -5568,28 +5537,15 @@ impl Client {
         n
     }
 
-    /// Attach to `serving` (design §14.1.2): the bundle is published, the
-    /// one-time pool stocked, and the reusable material of the whole
-    /// population prefetched as one sweep (`light-client-requirements.md`
-    /// §3).  Everything returned goes to the serving node.
+    /// Attach to `serving` (design §14.1.2): the profiles published, the
+    /// horizon asserted, and the node keys of the whole population
+    /// prefetched as one sweep (`light-client-requirements.md` §3).
     pub fn attach(&mut self, serving: Keyhash, population: &[Keyhash]) -> Vec<Msg> {
         self.note_attachment(serving);
         if let Some(id) = self.known.iter().find(|k| k.keyhash == serving).cloned() {
             self.contact(&id, crate::contacts::How::Infra, true);
         }
-        let now = self.now_s();
-        let random = self.device.random.clone();
-        let mut fresh = |out: &mut [u8]| random.fill(out);
-        let n = self.payload.cfg.pool_target;
-        let keys = self.payload.keys.one_time_keys(n, &mut fresh);
-        self.payload.pool_reported = n;
-        self.payload.pools.insert(serving, n);
-        let mut out: Vec<Msg> = self.bundle_to_publish(now).into_iter().collect();
-        // stocked at the node named, as a tab is: one pool per address
-        out.push(Msg::StockOneTimeAt {
-            node: serving,
-            keys,
-        });
+        let mut out = Vec::new();
         // the profiles this client holds for the subnet it acts in, as
         // its bundle is: at attach and whenever they change
         // (`light-client-requirements.md` §4.4) — and where it holds none
@@ -5619,7 +5575,7 @@ impl Client {
     /// move, so a stranger it writes to first can attribute the message
     /// and answer.
     pub fn refresh_card(&mut self) {
-        self.payload.sessions.card = self.own_introduction().ok();
+        self.payload.card = self.own_introduction().ok();
     }
 
     /// **A cold call** [author, 2026-10-30: anyone with a locator can
@@ -5646,10 +5602,17 @@ impl Client {
         // knowing a participant's material held no locator for it, dropped
         // the introduction whole, and could ask nobody for the bundle.
         if self.known.iter().any(|k| k.keyhash == *from) {
-            self.hold_encryption_key(from, &intro.encryption_key);
             let held = |c: &Self| c.store.contacts.get(from).and_then(|c| c.locator.clone());
             let before = held(self);
-            return match self.hold_locator(from, &intro.locator.bytes, false) {
+            let placed = self.hold_locator(from, &intro.locator.bytes, false);
+            // **the key after the locator**: holding the locator is what makes
+            // the contact a key is kept on, so a party known by its material
+            // and held as no contact yet keeps the key it introduced itself
+            // with, and can be answered
+            if placed.is_ok() {
+                self.hold_encryption_key(from, &intro.encryption_key);
+            }
+            return match placed {
                 // taken where it placed the party anew; a locator already
                 // held, or an older one, is nothing taken
                 Ok(()) if held(self) != before => {
@@ -5986,36 +5949,31 @@ impl Client {
             .map(|p| p.alias)
     }
 
-    /// Sweep the population's reusable material (`light-client-requirements.md`
-    /// §3), which `attach` does once.  A sweep is a snapshot of what was
-    /// published when it ran, so a client that must attribute an initial
-    /// message from a peer who published later sweeps again.
-    /// The population is the caller's: a client that names its serving
-    /// node wants that binding, since a node can be a participant and send
-    /// payload of its own.  Only this client is dropped.
+    /// **Prefetch the population's node keys** (`light-client-requirements.md`
+    /// §3), which `attach` does once: a sweep fetched uniformly carries no
+    /// information about whom this client means to write to (design
+    /// §14.2.4.5). The courier asks each recipient's node, a batch where a
+    /// node serves several and a single request where it serves one
+    /// (`wire-format.md` §7.8), under a key minted for the connection.
+    /// Only those this client holds an encryption key for are asked about,
+    /// since nobody else can be written to; this client is dropped.
     pub fn sweep(&mut self, population: &[Keyhash]) -> Vec<Msg> {
         let me = self.keyhash();
-        let others: Vec<Keyhash> = population.iter().copied().filter(|k| *k != me).collect();
-        match others.len() {
-            0 => Vec::new(),
-            // a sweep names at least two (`wire-format.md` §7.8); one other
-            // is asked for singly, reusable material only
-            1 => {
-                let nonce = self.nonce();
-                vec![Msg::PrekeyRequest(
-                    rhtn_archive::prekey::PrekeyRequest::One {
-                        subject: others[0],
-                        one_time: false,
-                        nonce,
-                        device: None,
-                    }
-                    .encode(),
-                )]
-            }
-            _ => vec![Msg::PrekeyRequest(payload::batch_request(
-                &others,
-                self.nonce(),
-            ))],
+        let recipients: Vec<Keyhash> = population
+            .iter()
+            .copied()
+            .filter(|k| *k != me)
+            .filter(|k| {
+                self.store
+                    .contacts
+                    .get(k)
+                    .is_some_and(|c| c.encryption_key.is_some())
+            })
+            .collect();
+        if recipients.is_empty() {
+            Vec::new()
+        } else {
+            vec![Msg::NodeKeyRequest(recipients)]
         }
     }
 
@@ -6394,8 +6352,8 @@ impl Client {
         Ok(kept)
     }
 
-    /// Routine maintenance: rotate the signed prekey when its interval has
-    /// elapsed, and replenish the pool when it has fallen low.
+    /// Routine maintenance: a witness's matured signature, what the
+    /// outbox holds, and what went unanswered.
     pub fn maintain(&mut self) -> Vec<Msg> {
         let now = self.now_s();
         // **a witness's window maturing is an event with nothing to
@@ -6407,223 +6365,7 @@ impl Client {
         // traffic, so a record whose own carry was missed is not stranded
         let mut out = self.outbox();
         out.extend(self.resend_unanswered(now));
-        if self.payload.keys.due_for_rotation(now, &self.payload.cfg) {
-            let random = self.device.random.clone();
-            let mut fresh = |out: &mut [u8]| random.fill(out);
-            self.payload.keys.rotate_signed_prekey(now, &mut fresh);
-            out.extend(self.bundle_to_publish(now));
-        }
-        if self.payload.pool_reported < self.payload.cfg.replenish_below {
-            out.extend(self.restock());
-        }
-        let low: Vec<Keyhash> = self
-            .payload
-            .pools
-            .iter()
-            .filter(|(_, n)| **n < self.payload.cfg.replenish_below)
-            .map(|(k, _)| *k)
-            .collect();
-        for node in low {
-            out.extend(self.restock_at(node));
-        }
-        // bindings wanted for peers who wrote before this client held
-        // theirs: reusable material only, one request each
-        for subject in std::mem::take(&mut self.payload.wanted) {
-            let nonce = self.nonce();
-            out.push(Msg::PrekeyRequest(
-                rhtn_archive::prekey::PrekeyRequest::One {
-                    subject,
-                    one_time: false,
-                    nonce,
-                    device: None,
-                }
-                .encode(),
-            ));
-        }
         out
-    }
-
-    fn restock(&mut self) -> Vec<Msg> {
-        let random = self.device.random.clone();
-        let mut fresh = |out: &mut [u8]| random.fill(out);
-        let n = self
-            .payload
-            .cfg
-            .pool_target
-            .saturating_sub(self.payload.pool_reported);
-        if n == 0 {
-            return Vec::new();
-        }
-        let keys = self.payload.keys.one_time_keys(n, &mut fresh);
-        self.payload.pool_reported += n;
-        tracing::info!(target: "pay", minted = n, "pay.bundle.restock");
-        vec![Msg::StockOneTime(keys)]
-    }
-
-    /// The serving node reports how many one-time keys remain, or that
-    /// none do: below the threshold the pool is replenished at once.
-    pub fn on_pool_report(&mut self, remaining: usize) -> Vec<Msg> {
-        if remaining == 0 {
-            tracing::warn!(target: "pay", "pay.bundle.pool_exhausted");
-        } else {
-            tracing::debug!(target: "pay", remaining, "pay.bundle.pool");
-        }
-        self.payload.pool_reported = remaining;
-        if remaining < self.payload.cfg.replenish_below {
-            self.restock()
-        } else {
-            Vec::new()
-        }
-    }
-
-    /// **This device's prekey handover for the co-present counterparty**
-    /// (`wire-format.md` §14.3.4): its signed bundle and one one-time key,
-    /// anchored to this ceremony and sealed under the local session like
-    /// every other carriage.
-    ///
-    /// **Why it crosses the local interface at all.** Opening an
-    /// end-to-end channel needs the peer's published bundle, and fetching
-    /// one needs a node (§7.8). Two devices that have just met have no
-    /// reason to ask anybody: each already holds what the other needs, and
-    /// a pair whose ceremony completed with no node reachable (design §6.4)
-    /// would otherwise end holding a record and unable to say a word to
-    /// each other.
-    ///
-    /// Nothing is spent that a pool misses: the one-time key is one of this
-    /// device's own, generated here and kept with the rest, and a device
-    /// whose material is unsigned — one holding no seed (design §23.3) —
-    /// has nothing to hand over and says so.
-    pub fn prekey_carriage(&mut self) -> Result<Vec<u8>, Abort> {
-        let cid = self.anchored_id()?;
-        let now = self.now_s();
-        let bundle = match self.bundle_to_publish(now) {
-            Some(Msg::PublishBundle(b)) => b,
-            _ => {
-                // a device holding no seed has nothing signed to hand
-                // over (design §23.3)
-                return Err(abort(
-                    "prekey_carriage",
-                    Abort::Malformed("this device has no signed bundle to hand over".into()),
-                ));
-            }
-        };
-        let random = self.device.random.clone();
-        let mut fresh = |out: &mut [u8]| random.fill(out);
-        let one_time = self.payload.keys.one_time_keys(1, &mut fresh).pop();
-        let handover = crate::local::PrekeyHandover {
-            ceremony_id: cid,
-            device: self.payload.device,
-            bundle,
-            one_time,
-        };
-        tracing::info!(
-            target: "cer",
-            ceremony = %id8(&cid),
-            one_time = handover.one_time.is_some(),
-            "cer.prekey.handed"
-        );
-        self.seal(&handover.encode())
-    }
-
-    /// **The counterparty's handover, opened and kept** (`wire-format.md`
-    /// §14.3.4): the bundle verified under the identity pinned at §14.3.1
-    /// and held as prefetched material, and the one-time key kept for the
-    /// first session opened with that device.
-    ///
-    /// **The signature is what makes it trustworthy and not the channel.**
-    /// A bundle that does not verify is refused however it arrived, which
-    /// is the same rule the node path applies; the ceremony-id is checked
-    /// so a handover of another ceremony cannot be replayed into this one.
-    pub fn take_prekey_carriage(&mut self, sealed: &[u8]) -> Result<(), Abort> {
-        let cid = self.anchored_id()?;
-        let peer = self.active.as_ref().ok_or(Abort::NotActive)?.peer()?;
-        let plain = self.open(sealed)?;
-        let h = crate::local::PrekeyHandover::decode(&plain).map_err(Abort::Malformed)?;
-        if h.ceremony_id != cid {
-            return Err(abort("take_prekey_carriage", Abort::CeremonyIdMismatch));
-        }
-        let p = payload::read_bundle(&self.known, &h.bundle).map_err(Abort::Malformed)?;
-        if p.subject != peer || p.device != h.device {
-            return Err(abort(
-                "take_prekey_carriage",
-                Abort::Malformed("a bundle for another party or another device".into()),
-            ));
-        }
-        tracing::info!(
-            target: "cer",
-            ceremony = %id8(&cid),
-            device = %id8(&h.device),
-            one_time = h.one_time.is_some(),
-            "cer.prekey.taken"
-        );
-        if let Some(k) = h.one_time {
-            // **refused here, not downgraded later** [reviewer, 2026-10-08]:
-            // a handed key that does not decode used to be found out at
-            // the first send and the session opened reusable-only — §7.8's
-            // declared forward-secrecy reduction, taken silently on what
-            // was simply bad input. A handover that cannot be used is a
-            // handover refused, while the counterparty is still in front
-            // of this device to notice
-            payload::OneTimeKey::decode(&k).map_err(|e| {
-                abort(
-                    "take_prekey_carriage",
-                    Abort::Malformed(format!("the handed one-time key does not decode: {e}")),
-                )
-            })?;
-            self.payload.handed.insert((peer, h.device), k);
-        }
-        self.payload.sessions.prefetch(p);
-        Ok(())
-    }
-
-    /// Open a session from material already held, asking nobody.
-    ///
-    /// **This is what a handover buys** (`wire-format.md` §14.3.4): the
-    /// peer's bundle and one of its one-time keys are both in hand, so
-    /// there is nothing left for a node to be asked. Called only where a
-    /// handed key is held — prefetched reusable material alone does not
-    /// open a session, because §7.8 has the one-time key requested when a
-    /// session opens and reusable-only is the pool-ran-dry case.
-    fn open_from_held(
-        &mut self,
-        to: Keyhash,
-        device: [u8; 32],
-        plaintext: &[u8],
-    ) -> Option<Vec<Msg>> {
-        let their = self.payload.sessions.prefetched.get(&(to, device))?.clone();
-        let handed = self.payload.handed.remove(&(to, device));
-        // the key was checked when it was handed over, so this cannot
-        // fail; if it ever does, nothing opens — a session on reusable
-        // material alone is a forward-secrecy reduction this side does
-        // not take by accident
-        let one_time = match handed {
-            Some(k) => Some(payload::OneTimeKey::decode(&k).ok()?),
-            None => None,
-        };
-        let random = self.device.random.clone();
-        let mut fresh = |out: &mut [u8]| random.fill(out);
-        let me = self.payload.device;
-        let first = self
-            .payload
-            .sessions
-            .open(
-                &self.payload.keys,
-                &me,
-                to,
-                &their,
-                one_time.as_ref(),
-                &mut fresh,
-                plaintext,
-            )
-            .ok()?;
-        tracing::debug!(
-            target: "pay",
-            to = %id8(&to),
-            device = %id8(&device),
-            one_time = one_time.is_some(),
-            "pay.open.held"
-        );
-        Some(vec![self.route(to, first, device)])
     }
 
     /// Everything addressing `to` needs that this client can answer from
@@ -6940,437 +6682,193 @@ impl Client {
         Reach { upstream, ask }
     }
 
-    /// What was queued for `to` while a prekey reply was awaited, now
-    /// that a session with the device exists: in the order it was queued.
-    ///
-    /// **A send with no session queues its plaintext and asks for a
-    /// one-time key** (`wire-format.md` §7.8), and the queue is drained
-    /// when the reply opens the session.  Where the ask is answered with
-    /// no bundle — a subject that had not published one yet — nothing
-    /// opens and the queue stays; and a session established the other way
-    /// round, by the peer writing first, never looked at it.  **The
-    /// queued steps were then stranded for as long as that session
-    /// lived**, which cost a witness the opening of a conversation and
-    /// cost the sender no error [2026-10-06]. This is what the gate
-    /// caught.
-    ///
-    /// An encryption that fails leaves the rest of that device's queue
-    /// undelivered, as the reply path's does: a ratchet that will not
-    /// encrypt is not a condition a retry mends.
-    fn flush_pending(&mut self, to: Keyhash) -> Vec<Msg> {
-        let devices: Vec<[u8; 32]> = self
-            .payload
-            .pending
-            .keys()
-            .filter(|(p, _)| *p == to)
-            .map(|(_, d)| *d)
-            .filter(|d| self.payload.sessions.has_session_with(&to, d))
-            .collect();
-        let me = self.payload.device;
-        let mut out = Vec::new();
-        for device in devices {
-            let waiting = self
-                .payload
-                .pending
-                .remove(&(to, device))
-                .unwrap_or_default();
-            for plaintext in &waiting {
-                let Some(r) = self.payload.sessions.ratchets.get_mut(&(to, device)) else {
-                    break;
-                };
-                let Ok(m) = r.encrypt(plaintext) else { break };
-                out.push(self.route(to, payload::channel_message(&me, &m), device));
-            }
-        }
-        out
-    }
-
-    /// Send `bytes` of `kind` to `to` (design §14.2.4.1): every identity
-    /// is a leaf, the patron included [author, 2026-11-14] — it goes on
-    /// the session held with each of the recipient's devices, or waits for
-    /// the one-time key requested now, and takes the direct path where one
-    /// exists and the relay otherwise. Nothing addressed to an identity is
-    /// material for the node that speaks as it.
+    /// **Send `bytes` of `kind` to `to`** (design §12.6.3, §14.2.2): a
+    /// direct message — application payload, kind 0 — always passes the
+    /// recipient's node, sealed to the person and to the node's key for
+    /// them; anything else takes the direct path where one is held, and is
+    /// sealed for the node where none is. Refused where no encryption key
+    /// is held for `to`: **a recipient is a contact or is not written to**
+    /// [author, 2026-11-20].
     pub fn send_payload(
         &mut self,
         to: Keyhash,
         kind: u64,
         bytes: &[u8],
     ) -> Result<Vec<Msg>, PayloadError> {
-        let plaintext = payload::wrap(kind, bytes);
-        // a session is with a device (design §14.2.4): every device of the
-        // recipient with a session open gets its own ciphertext, and every
-        // device without one gets a session opened, on a one-time key
-        // asked for that device (`wire-format.md` §7.8 field 4)
-        let me = self.payload.device;
-        // anything queued for this peer earlier goes first, so the order it
-        // was queued in is the order it travels
-        let mut out = self.flush_pending(to);
-        if self.payload.sessions.has_session(&to) {
-            for (device, m) in self.payload.sessions.send(&me, &to, &plaintext)? {
-                out.push(self.route(to, m, device));
-            }
-        }
-        let devices = self.devices_of(&to);
-        if devices.is_empty() {
-            return Err(PayloadError::NoBundle);
-        }
-        for device in devices {
-            if self.payload.sessions.has_session_with(&to, &device) {
-                continue;
-            }
-            // **a one-time key handed over in person opens the session
-            // here**, with no request and no node: what a prekey handover
-            // across the local interface is for (`wire-format.md`
-            // §14.3.4), and what lets a pair whose ceremony needed no node
-            // say something to each other afterwards.
-            //
-            // **Only a handed key, never prefetched material alone.** §7.8
-            // has a one-time key requested *when* a session is opened and
-            // never prefetched, and a session opened on reusable material
-            // alone is a declared reduction in forward secrecy for its
-            // first message — the case where a pool ran dry, not a
-            // shortcut to take whenever a sweep happens to have fetched a
-            // bundle. Four tests said so when this first fired on any
-            // prefetched material [2026-10-06].
-            if self.payload.handed.contains_key(&(to, device))
-                && let Some(msgs) = self.open_from_held(to, device, &plaintext)
-            {
-                out.extend(msgs);
-                continue;
-            }
-            self.payload
-                .pending
-                .entry((to, device))
-                .or_default()
-                .push(plaintext.clone());
-            // **an unanswered request is asked again after a patience**:
-            // the first may have met a node that had nothing for the peer
-            // yet, and nothing of the peer's would ever go otherwise
-            let now = self.now_s();
-            if self
-                .payload
-                .outstanding
-                .values()
-                .any(|t| *t == (to, device))
-            {
-                let asked = self.payload.asked_at.get(&(to, device)).copied();
-                if asked.is_some_and(|at| now < at.saturating_add(Self::PREKEY_PATIENCE_S)) {
-                    continue;
-                }
-                self.payload.outstanding.retain(|_, t| *t != (to, device));
-                tracing::info!(
-                    target: "pay",
-                    to = %id8(&to),
-                    device = %id8(&device),
-                    "pay.prekey.again"
-                );
-            }
-            let nonce = self.nonce();
-            self.payload.outstanding.insert(nonce, (to, device));
-            self.payload.asked_at.insert((to, device), now);
-            out.push(Msg::PrekeyRequest(payload::one_time_request(
-                to, device, nonce,
-            )));
-        }
-        if tracing::event_enabled!(target: "pay", tracing::Level::DEBUG) {
-            let requested = out
-                .iter()
-                .filter(|m| matches!(m, Msg::PrekeyRequest(_)))
-                .count();
-            tracing::debug!(
-                target: "pay",
-                kind = crate::diag::kind_name(kind),
-                to = %id8(&to),
-                bytes = bytes.len(),
-                sent = out.len() - requested,
-                requested,
-                "pay.send"
-            );
-        }
-        Ok(out)
-    }
-
-    /// The recipient's devices a session with `to` is with: the devices
-    /// its prefetched bundles name, else the classical key of the identity
-    /// held for it, which names the seed-holding device.
-    fn devices_of(&self, to: &Keyhash) -> Vec<[u8; 32]> {
-        let known = self.payload.sessions.devices_of(to);
-        if !known.is_empty() {
-            return known;
-        }
-        self.known
-            .iter()
-            .find(|i| i.keyhash == *to)
-            .map(|i| vec![*i.ed.as_bytes()])
-            .unwrap_or_default()
-    }
-
-    fn route(&self, to: Keyhash, bytes: Vec<u8>, device: [u8; 32]) -> Msg {
-        let direct = self.device.direct.reachable(&to);
+        let plain = payload::wrap(kind, bytes);
+        let direct = kind != payload::KIND_APPLICATION && self.device.direct.reachable(&to);
         tracing::debug!(
             target: "pay",
+            kind = crate::diag::kind_name(kind),
             to = %id8(&to),
-            device = %id8(&device),
-            path = if direct { "direct" } else { "relay" },
             bytes = bytes.len(),
-            "pay.route"
+            path = if direct { "direct" } else { "sealed" },
+            "pay.send"
         );
         if direct {
-            Msg::Payload { to, bytes, device }
-        } else {
-            Msg::Relay { to, bytes, device }
+            return Ok(vec![Msg::Payload { to, bytes: plain }]);
         }
+        self.reseal(to, plain)
     }
 
-    /// Which payload construction this build runs, for the client to put
-    /// where its user can reach it (`light-client-requirements.md` §3): no
-    /// peer can tell from the wire, so the only party who can say is the
-    /// client itself. **A value, read off the sessions' own type** — a
-    /// restated answer would quietly go wrong the day the type moved —
-    /// and the wording is each shell's, in its user's own language.
-    pub fn payload_construction(&self) -> crate::ratchet::Construction {
-        payload::construction()
+    /// **Seal `plain` for `to`'s node**, or hold it until a node key is: a
+    /// message the direct path could not carry, or one refused for a stale
+    /// node key, comes back here. What waits for a key goes in the order it
+    /// waited.
+    pub fn reseal(&mut self, to: Keyhash, plain: Vec<u8>) -> Result<Vec<Msg>, PayloadError> {
+        if self.encryption_key_of(&to).is_none() {
+            return Err(PayloadError::NoEncryptionKey);
+        }
+        if self.payload.secret.is_none() {
+            return Err(PayloadError::NoSecret);
+        }
+        let waiting = !self.payload.pending.get(&to).is_none_or(Vec::is_empty);
+        self.payload.pending.entry(to).or_default().push(plain);
+        if waiting || !self.payload.node_keys.contains_key(&to) {
+            // one fetch for whatever waits: asked again at each send, since
+            // a fetch that met nobody leaves nothing else to ask it
+            return Ok(vec![Msg::NodeKeyRequest(vec![to])]);
+        }
+        self.seal_waiting(&to)
     }
 
-    /// A binding that arrived beside a delivery (`wire-format.md` §7.10).
-    ///
-    /// Kept where it verifies against material this client already holds,
-    /// and **discarded where it does not**: the node carrying it is not
-    /// trusted for it, and a delivery is not the place to learn that a
-    /// party's published material is bad. Kept only where no binding for
-    /// that subject's device is held already, which is §7.10's rule and
-    /// not an optimisation. Answering whether it was kept is for the
-    /// caller's own accounting — false is *not held from here*, whether
-    /// because one was held already or because this one did not verify —
-    /// and the message that came with it is processed either way.
-    pub fn take_binding(&mut self, bytes: &[u8]) -> bool {
-        // **A recipient that already holds the binding ignores what
-        // arrived** (`wire-format.md` §7.10).  A delivery is carriage and
-        // not a refresh: honouring a carried bundle over a held one would
-        // let an old-but-valid bundle displace a newer binding and send
-        // session establishment toward retired material, and checking
-        // held-ness first also spares verifying a signature per relayed
-        // message.  Freshness comes from publication and the sweep.
-        let Ok(b) = rhtn_archive::prekey::PrekeyBundle::parse(bytes) else {
-            return false;
-        };
-        if self.payload.sessions.holds_binding(&b.subject, &b.device) {
-            return false;
-        }
-        match payload::read_bundle(&self.known, bytes) {
-            Ok(p) => {
-                self.payload.sessions.prefetch(p);
-                true
-            }
-            Err(_) => false,
-        }
+    /// The node key held for `to` is stale: a submission sealed to it was
+    /// refused (`wire-format.md` §7.8). Dropped, so the next fetch is of
+    /// the newest.
+    pub fn node_key_refused(&mut self, to: &Keyhash) {
+        self.payload.node_keys.remove(to);
     }
 
-    /// A reply from the serving node: a sweep's bundles are kept; a
-    /// one-time reply opens the session it was asked for, with the key
-    /// where one came and on reusable material alone where none did, and
-    /// sends what was waiting.
-    pub fn take_prekey_reply(&mut self, bytes: &[u8]) -> Result<Vec<Msg>, String> {
-        if let Ok(replies) = decode_batch_reply(bytes) {
-            let (mut offered, mut kept) = (0usize, 0usize);
-            for r in replies {
-                // one bundle per device (`wire-format.md` §7.8), each kept
-                // under the device it names
-                for b in &r.bundles {
-                    offered += 1;
-                    if let Ok(p) = payload::read_bundle(&self.known, b) {
-                        self.payload.sessions.prefetch(p);
-                        kept += 1;
-                    }
-                }
-            }
-            tracing::info!(target: "pay", reply = "batch", offered, kept, "pay.bundle");
-            return Ok(Vec::new());
-        }
-        let r = PrekeyReply::decode(bytes)?;
-        let Some((to, device)) = self.payload.outstanding.remove(&r.nonce) else {
-            // a reusable-only reply: the bundles are kept, and nothing opens
-            let mut kept = 0usize;
-            for b in &r.bundles {
-                if let Ok(p) = payload::read_bundle(&self.known, b) {
-                    self.payload.sessions.prefetch(p);
-                    kept += 1;
-                }
-            }
-            tracing::info!(
-                target: "pay",
-                reply = "reusable",
-                offered = r.bundles.len(),
-                kept,
-                "pay.bundle"
-            );
+    /// Everything waiting for `to`, sealed under the node key held for it.
+    fn seal_waiting(&mut self, to: &Keyhash) -> Result<Vec<Msg>, PayloadError> {
+        let Some(node_key) = self.payload.node_keys.get(to).cloned() else {
             return Ok(Vec::new());
         };
-        tracing::info!(
-            target: "pay",
-            reply = "one_time",
-            to = %id8(&to),
-            device = %id8(&device),
-            bundle = !r.bundles.is_empty(),
-            one_time = r.one_time.is_some(),
-            "pay.bundle"
-        );
-        let their = match r.bundles.first() {
-            Some(b) => {
-                let p = payload::read_bundle(&self.known, b)?;
-                if p.subject != to {
-                    return Err("bundle for another subject".into());
-                }
-                if p.device != device {
-                    return Err("bundle for another device".into());
-                }
-                self.payload.sessions.prefetch(p.clone());
-                p
-            }
-            None => self
-                .payload
-                .sessions
-                .prefetched
-                .get(&(to, device))
-                .cloned()
-                .ok_or("no bundle for the peer")?,
-        };
-        // **a session the peer opened first stands** [2026-11-15]: the
-        // reply to a key asked for before any session existed can land
-        // after the peer wrote first, and what waited has travelled on
-        // the peer's session already (PAY-026).  Opening another here
-        // replaced the ratchet the peer is still sending on, which is how
-        // a witness lost a proposed body in a ceremony across subnets.
-        // What still waits goes on the session that stands; the one-time
-        // key the node served is spent there and unused here.
-        if self.payload.sessions.has_session_with(&to, &device) {
-            let waiting = self
-                .payload
-                .pending
-                .remove(&(to, device))
-                .unwrap_or_default();
-            let me = self.payload.device;
-            let mut out = Vec::new();
-            for p in &waiting {
-                let r = self
-                    .payload
-                    .sessions
-                    .ratchets
-                    .get_mut(&(to, device))
-                    .ok_or("no session")?;
-                let m = r.encrypt(p)?;
-                out.push(self.route(to, payload::channel_message(&me, &m), device));
-            }
-            tracing::info!(
-                target: "pay",
-                state = "stands",
-                peer = %id8(&to),
-                device = %id8(&device),
-                sent = waiting.len(),
-                "pay.session"
-            );
-            return Ok(out);
-        }
-        let one_time = match r.one_time {
-            Some(k) => Some(payload::OneTimeKey::decode(&k)?),
-            None => None,
-        };
-        let mut waiting = self
-            .payload
-            .pending
-            .remove(&(to, device))
-            .unwrap_or_default();
-        if waiting.is_empty() {
-            waiting.push(payload::wrap(payload::KIND_APPLICATION, b""));
-        }
+        let their = self
+            .encryption_key_of(to)
+            .ok_or(PayloadError::NoEncryptionKey)?;
+        let waiting = self.payload.pending.remove(to).unwrap_or_default();
+        let me = self.keyhash();
+        let alias = self.seal_alias();
+        let introduction = (!self.payload.heard_from.contains(to))
+            .then(|| self.payload.card.clone())
+            .flatten();
         let random = self.device.random.clone();
         let mut fresh = |out: &mut [u8]| random.fill(out);
-        let me = self.payload.device;
-        let first = self
-            .payload
-            .sessions
-            .open(
-                &self.payload.keys,
-                &me,
-                to,
-                &their,
-                one_time.as_ref(),
-                &mut fresh,
-                &waiting[0],
-            )
-            .map_err(|e| e.to_string())?;
-        let mut out = vec![self.route(to, first, device)];
-        for p in &waiting[1..] {
-            let r = self
-                .payload
-                .sessions
-                .ratchets
-                .get_mut(&(to, device))
-                .ok_or("no session")?;
-            let m = r.encrypt(p)?;
-            out.push(self.route(to, payload::channel_message(&me, &m), device));
+        let secret = self.payload.secret.as_ref().ok_or(PayloadError::NoSecret)?;
+        let from = payload::Sender {
+            keyhash: &me,
+            secret,
+            alias: &alias,
+            introduction: introduction.as_deref(),
+        };
+        let mut out = Vec::with_capacity(waiting.len());
+        for plain in waiting {
+            let (kind, bytes) = payload::unwrap(&plain).map_err(PayloadError::Malformed)?;
+            let sealed = payload::seal_to(&from, to, &their, &node_key, kind, &bytes, &mut fresh)?;
+            out.push(Msg::Sealed {
+                to: *to,
+                sealed,
+                plain,
+            });
         }
         Ok(out)
     }
 
-    /// Run as another of this identity's devices: what a desktop holding a
-    /// delegation is (design §14.2.4).  Its bundle names `key`, the
-    /// transport key it presents, and its messages say they are from it.
-    pub fn as_device(&mut self, key: [u8; 32]) {
-        self.payload.device = key;
+    /// **The node keys a node answered with** (`wire-format.md` §7.8), for
+    /// the `recipients` it was asked about in that order: each verified
+    /// under `node` and naming the recipient asked about and that node,
+    /// held to seal with, and what was waiting for it sealed now.
+    pub fn take_node_key_reply(
+        &mut self,
+        node: &Keyhash,
+        recipients: &[Keyhash],
+        reply: &[u8],
+    ) -> Vec<Msg> {
+        use rhtn_archive::node_key::{NodeKey, NodeKeyReply, decode_batch_reply};
+        let replies = match recipients.len() {
+            1 => NodeKeyReply::decode(reply).map(|r| vec![r]),
+            _ => decode_batch_reply(reply),
+        };
+        let Ok(replies) = replies else {
+            tracing::warn!(target: "pay", node = %id8(node), "pay.node_key.unreadable");
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        for (to, r) in recipients.iter().zip(replies) {
+            let Ok(bytes) = r.outcome else { continue };
+            let Ok(key) = NodeKey::parse(&bytes) else {
+                continue;
+            };
+            if key.fields.recipient != *to
+                || key.fields.node != *node
+                || key.verify(&self.known).is_err()
+            {
+                tracing::warn!(target: "pay", to = %id8(to), node = %id8(node), "pay.node_key.refused");
+                continue;
+            }
+            self.payload.node_keys.insert(
+                *to,
+                payload::NodeKeyHeld {
+                    node: *node,
+                    n: key.fields.n,
+                    public: Box::new(key.fields.public),
+                },
+            );
+            match self.seal_waiting(to) {
+                Ok(m) => out.extend(m),
+                Err(why) => tracing::warn!(target: "pay", to = %id8(to), %why, "pay.seal.refused"),
+            }
+        }
+        out
+    }
+
+    /// The encryption key held for `who`, verified under its material.
+    fn encryption_key_of(&self, who: &Keyhash) -> Option<rhtn_crypto::verify::EncryptionKey> {
+        let raw = self.store.contacts.get(who)?.encryption_key.as_deref()?;
+        rhtn_crypto::verify::encryption_key(&self.known[..], raw).ok()
+    }
+
+    /// The alias a sealed message carries (`wire-format.md` §7.8.1),
+    /// display only: the one this client published for a subnet it is in,
+    /// or the start of its keyhash where it has published none.
+    fn seal_alias(&self) -> String {
+        self.store
+            .profiles
+            .values()
+            .find_map(|b| rhtn_archive::profile::Profile::parse(b).ok())
+            .map(|p| p.alias)
+            .unwrap_or_else(|| hex8(&self.keyhash()))
+    }
+
+    /// **The identity's encryption secrets, handed over in a pairing**
+    /// (`wire-format.md` §14.3.3): a device holding no seed opens what is
+    /// sealed to the person, and authenticates what it sends, with these.
+    pub fn take_encryption_secrets(&mut self, kem_seed: &[u8; 32], auth: &[u8; 32]) {
+        self.payload.secret = Some(rhtn_crypto::seal::EncryptionSecret::from_secrets(
+            kem_seed, auth,
+        ));
+        self.payload.secret_handed = true;
+    }
+
+    /// **The two secrets to hand a paired device** (`wire-format.md`
+    /// §14.3.3): the X-Wing seed and the authentication key, on the device
+    /// that holds them.
+    pub fn encryption_secrets(&self) -> Option<([u8; 32], zeroize::Zeroizing<[u8; 32]>)> {
+        let s = self.payload.secret.as_ref()?;
+        Some((*s.kem_seed(), s.auth_secret()))
     }
 
     /// **A further node attached to** — a tab beside the one `attach` took
     /// as the session the single-session shell holds [author, 2026-11-11].
-    /// What it publishes there: the bundle and the profiles, so a peer in
-    /// that subnet fetching from its node finds this client, and **a pool
-    /// of one-time keys of its own** — *"One pool per address, each node
-    /// stocked separately"* [author, 2026-11-11], since a key in two pools
-    /// could be spent twice.
+    /// What it publishes there: the profiles, so a peer in that subnet
+    /// fetching from its node finds this client.
     pub fn attach_tab(&mut self, node: Keyhash) -> Vec<Msg> {
         self.note_attachment(node);
         if let Some(id) = self.known.iter().find(|k| k.keyhash == node).cloned() {
             self.contact(&id, crate::contacts::How::Infra, true);
         }
-        let now = self.now_s();
-        let random = self.device.random.clone();
-        let mut fresh = |out: &mut [u8]| random.fill(out);
-        let n = self.payload.cfg.pool_target;
-        let keys = self.payload.keys.one_time_keys(n, &mut fresh);
-        self.payload.pools.insert(node, n);
-        let mut out: Vec<Msg> = self.bundle_to_publish(now).into_iter().collect();
-        out.push(Msg::StockOneTimeAt { node, keys });
-        out.extend(self.refreshed_profiles());
-        out
-    }
-
-    /// The pool at a tab's node, as the node reports it: restocked where
-    /// it has run low.
-    pub fn on_pool_report_at(&mut self, node: Keyhash, remaining: usize) -> Vec<Msg> {
-        if !self.payload.attachments.contains(&node) {
-            return Vec::new();
-        }
-        self.payload.pools.insert(node, remaining);
-        if remaining < self.payload.cfg.replenish_below {
-            self.restock_at(node)
-        } else {
-            Vec::new()
-        }
-    }
-
-    fn restock_at(&mut self, node: Keyhash) -> Vec<Msg> {
-        let have = self.payload.pools.get(&node).copied().unwrap_or(0);
-        let n = self.payload.cfg.pool_target.saturating_sub(have);
-        if n == 0 {
-            return Vec::new();
-        }
-        let random = self.device.random.clone();
-        let mut fresh = |out: &mut [u8]| random.fill(out);
-        let keys = self.payload.keys.one_time_keys(n, &mut fresh);
-        self.payload.pools.insert(node, have + n);
-        tracing::info!(target: "pay", minted = n, "pay.bundle.restock.tab");
-        vec![Msg::StockOneTimeAt { node, keys }]
+        self.refreshed_profiles()
     }
 
     /// A tab's session failed over to a sibling: every address served by
@@ -7378,9 +6876,6 @@ impl Client {
     pub fn moved_tab(&mut self, from: Keyhash, to: Keyhash) {
         self.payload.attachments.remove(&from);
         self.payload.attachments.insert(to);
-        if let Some(n) = self.payload.pools.remove(&from) {
-            self.payload.pools.insert(to, n);
-        }
         for n in self.payload.serving_at.values_mut() {
             if *n == from {
                 *n = to;
@@ -7391,7 +6886,6 @@ impl Client {
     /// A tab closed: the node leaves the set and serves no address here.
     pub fn detached_from(&mut self, node: &Keyhash) {
         self.payload.attachments.remove(node);
-        self.payload.pools.remove(node);
         self.payload.serving_at.retain(|_, n| n != node);
     }
 
@@ -7405,124 +6899,6 @@ impl Client {
         if let [anchor] = mine.as_slice() {
             self.payload.serving_at.insert(*anchor, serving);
         }
-    }
-
-    /// The bundle to publish now, if this device can: signed here where
-    /// the seed is here, or the one the ceremony device signed over the
-    /// material currently held.  A delegated device whose material has no
-    /// signature yet publishes nothing and offers [`Client::bundle_to_sign`].
-    fn bundle_to_publish(&mut self, now: u64) -> Option<Msg> {
-        if let Some(me) = self.signer.as_deref() {
-            return Some(Msg::PublishBundle(self.payload.keys.bundle(
-                me,
-                &self.payload.device,
-                now,
-            )));
-        }
-        let blob = self.payload.keys.blob().encode();
-        match &self.payload.signed_bundle {
-            Some((over, signed)) if *over == blob => Some(Msg::PublishBundle(signed.clone())),
-            _ => None,
-        }
-    }
-
-    /// **A peer's prekey request, answered from this device over a held
-    /// direct path** (`wire-format.md` §7.8, §9.1): this device's signed
-    /// bundle and one one-time key, as the bearer hands them in a ceremony
-    /// (§14.3.4), so the peer opens a session with no node asked — which
-    /// is what a client restored from its phrase has to offer the peer
-    /// that reaches it.  None where the request is for another subject or
-    /// device, or this device has no signed bundle.
-    pub fn answer_prekey_request(&mut self, from: &Keyhash, bytes: &[u8]) -> Option<Vec<u8>> {
-        let (subject, device, nonce) = match rhtn_archive::prekey::PrekeyRequest::decode(bytes) {
-            Ok(rhtn_archive::prekey::PrekeyRequest::One {
-                subject,
-                device,
-                nonce,
-                ..
-            }) => (subject, device, nonce),
-            _ => return None,
-        };
-        if subject != self.public.keyhash || device.is_some_and(|d| d != self.payload.device) {
-            tracing::info!(target: "pay", from = %id8(from), "pay.prekey.not_mine");
-            return None;
-        }
-        let now = self.now_s();
-        let Some(Msg::PublishBundle(bundle)) = self.bundle_to_publish(now) else {
-            return None;
-        };
-        let random = self.device.random.clone();
-        let mut fresh = |out: &mut [u8]| random.fill(out);
-        let one_time = self.payload.keys.one_time_keys(1, &mut fresh).pop();
-        tracing::info!(target: "pay", from = %id8(from), one_time = one_time.is_some(), "pay.prekey.answered");
-        Some(
-            rhtn_archive::prekey::PrekeyReply {
-                nonce,
-                bundles: vec![bundle],
-                one_time,
-                code: None,
-            }
-            .encode(),
-        )
-    }
-
-    /// On a device holding no seed: the unsigned bundle over this device's
-    /// current material, for the ceremony device to sign
-    /// (`wire-format.md` §7.8, design §23.3).  Nothing where this device
-    /// holds the seed, or where the material held is already signed over.
-    pub fn bundle_to_sign(&self) -> Option<Vec<u8>> {
-        if self.signer.is_some() {
-            return None;
-        }
-        let blob = self.payload.keys.blob().encode();
-        if matches!(&self.payload.signed_bundle, Some((over, _)) if *over == blob) {
-            return None;
-        }
-        let now = self.now_s();
-        Some(
-            self.payload
-                .keys
-                .bundle_payload(&self.public.keyhash, &self.payload.device, now),
-        )
-    }
-
-    /// On the ceremony device: sign a bundle payload another device of
-    /// mine made over its own material.  Refused where the payload names
-    /// another subject; the device it names is that device's to say.
-    pub fn sign_device_bundle(&self, payload: &[u8]) -> Result<Vec<u8>, Abort> {
-        let me = self.signer()?;
-        let (subject, _device) = rhtn_archive::prekey::PrekeyBundle::payload_names(payload)
-            .map_err(|_| Abort::NotMine("not a payload"))?;
-        if subject != self.public.keyhash {
-            return Err(Abort::NotMine("another subject"));
-        }
-        Ok(rhtn_archive::prekey::PrekeyBundle::sign(me, payload))
-    }
-
-    /// On a device holding no seed: take the bundle the ceremony device
-    /// signed.  It must verify under my identity, name this device, and be
-    /// over the material this device holds now; what comes back is the
-    /// publication for the serving node, where one is attached.
-    pub fn take_signed_bundle(&mut self, signed: &[u8]) -> Result<Option<Msg>, Abort> {
-        let b = rhtn_archive::prekey::PrekeyBundle::parse(signed)
-            .map_err(|_| Abort::NotMine("does not parse"))?;
-        b.verify(std::slice::from_ref(&self.public))
-            .map_err(|_| Abort::NotMine("does not verify under me"))?;
-        if b.subject != self.public.keyhash {
-            return Err(Abort::NotMine("another subject"));
-        }
-        if b.device != self.payload.device {
-            return Err(Abort::NotMine("another device"));
-        }
-        let blob = self.payload.keys.blob().encode();
-        if b.blob != blob {
-            return Err(Abort::NotMine("not this device's current material"));
-        }
-        self.payload.signed_bundle = Some((blob, signed.to_vec()));
-        self.payload.keys.published_at = Some(b.published_at);
-        // published where a session is held; the courier carries a bundle
-        // to every node this client is attached to
-        Ok((!self.payload.attachments.is_empty()).then(|| Msg::PublishBundle(signed.to_vec())))
     }
 
     /// On the ceremony device: delegate to a transport key another device
@@ -7638,32 +7014,52 @@ impl Client {
         ))
     }
 
-    /// What arrived on the end-to-end channel from `from`: decrypted on the
-    /// session, or a session opened on my prekeys, and delivered by kind —
-    /// a key grant to the grant handler, a late response beside its record,
-    /// application payload to the application.
+    /// **What arrived on the direct path from `from`** (`wire-format.md`
+    /// §7.10.1): `[kind, bytes]` on a connection authenticated end to end
+    /// by both parties' keys, so the transport's peer is the sender and
+    /// nothing is opened.
     pub fn receive_payload(&mut self, from: Keyhash, bytes: &[u8]) -> Result<Dispatched, String> {
-        let out = self.receive_payload_in(from, bytes);
-        // **a session opened by the peer writing first drains what was
-        // waiting for one** ([`Client::flush_pending`]): into the outbox,
-        // which the courier carries after every delivery, because a
-        // delivery hands back a `Dispatched` and has nowhere else to put a
-        // message of its own.
-        if out.is_ok() {
-            let waiting = self.flush_pending(from);
-            self.outbox.extend(waiting);
-        }
+        let (kind, inner) = payload::unwrap(bytes)?;
+        let out = self.dispatch(from, kind, inner);
+        tracing::info!(
+            target: "pay",
+            from = %id8(&from),
+            bytes = bytes.len(),
+            dispatched = %crate::diag::dispatched(&out),
+            "pay.receive.direct"
+        );
+        Ok(out)
+    }
+
+    /// **What `node` delivered** (`wire-format.md` §7.10): opened under this
+    /// identity's encryption key and the node's half, refused where it was
+    /// opened before, then attributed — **open, then attribute, then
+    /// believe** (`light-client-requirements.md` §3). A body whose tag
+    /// fails is discarded and shown as nothing; one from a sender this
+    /// client holds no introduction for, and which carries none, is
+    /// application payload shown unverified and nothing else. The queue
+    /// position is collected either way, so the node is not asked for it
+    /// again.
+    ///
+    /// The sender as the message names it, attributed or not, with what it
+    /// came to.
+    pub fn receive_relayed(
+        &mut self,
+        node: Keyhash,
+        bytes: &[u8],
+    ) -> Result<(Keyhash, Dispatched), String> {
+        let out = self.receive_relayed_in(node, bytes);
         match &out {
-            Ok(d) => tracing::info!(
+            Ok((_, d)) => tracing::info!(
                 target: "pay",
-                from = %id8(&from),
+                node = %id8(&node),
                 bytes = bytes.len(),
                 dispatched = %crate::diag::dispatched(d),
                 "pay.receive"
             ),
             Err(why) => tracing::warn!(
                 target: "pay",
-                from = %id8(&from),
+                node = %id8(&node),
                 bytes = bytes.len(),
                 %why,
                 "pay.error"
@@ -7672,39 +7068,73 @@ impl Client {
         out
     }
 
-    fn receive_payload_in(&mut self, from: Keyhash, bytes: &[u8]) -> Result<Dispatched, String> {
-        let random = self.device.random.clone();
-        let mut fresh = |out: &mut [u8]| random.fill(out);
+    fn receive_relayed_in(
+        &mut self,
+        node: Keyhash,
+        bytes: &[u8],
+    ) -> Result<(Keyhash, Dispatched), String> {
+        let relayed = rhtn_archive::submission::unrelayed(bytes).ok_or("not a relayed payload")?;
+        // collected, whatever it turns out to be: the cursor says what this
+        // device holds of the queue and is never moved backwards
+        let cursor = self.payload.cursors.entry(node).or_insert(0);
+        *cursor = (*cursor).max(relayed.position);
         let me = self.keyhash();
-        let plaintext = match self.payload.sessions.receive(
-            &mut self.payload.keys,
-            &me,
-            from,
-            bytes,
-            &mut fresh,
-        ) {
-            Ok(p) => p,
-            Err(e) => {
-                // Nothing is opened and nothing dispatched under a name
-                // this client cannot give the message.  Where the binding
-                // is merely absent, it is asked for: the peer's next
-                // attempt is attributable, and this one is not recovered.
-                if matches!(e, payload::PayloadError::NoBundle) {
-                    self.payload.wanted.insert(from);
-                }
-                if matches!(
-                    e,
-                    payload::PayloadError::NotTheSender | payload::PayloadError::NoBundle
-                ) {
-                    self.device
-                        .notifier
-                        .notify(Notice::PayloadUnattributable { from });
-                }
-                return Err(e.to_string());
-            }
+        let secret = self
+            .payload
+            .secret
+            .as_ref()
+            .ok_or_else(|| PayloadError::NoSecret.to_string())?;
+        let (sealed, body) =
+            payload::open_relayed(secret, &me, &node, &relayed).map_err(|e| e.to_string())?;
+        if !self.payload.first_opening(&node, sealed.n, sealed.hash()) {
+            return Err(PayloadError::Replayed.to_string());
+        }
+        let from = body.sender;
+        // the sender's encryption key: the one held for it, or the one its
+        // own introduction carries, which must name it and verify
+        let carried = match &body.introduction {
+            Some(intro) => match rhtn_archive::locator::Introduction::parse(intro) {
+                Ok(i) if i.identity.keyhash == from => Some(i),
+                _ => return Err("the introduction carried is not the sender's".into()),
+            },
+            None => None,
         };
-        let (kind, inner) = payload::unwrap(&plaintext)?;
-        Ok(match kind {
+        let their = self
+            .encryption_key_of(&from)
+            .or_else(|| carried.as_ref().map(|i| i.encryption.clone()));
+        let Some(their) = their else {
+            // **unverified** [author, 2026-11-19]: shown under the alias,
+            // never as the person, and only as application payload — a
+            // protocol object from nobody attributable is nothing
+            if body.kind != payload::KIND_APPLICATION {
+                return Err("a protocol object from an unattributed sender".into());
+            }
+            return Ok((
+                from,
+                Dispatched::Unverified {
+                    sender: from,
+                    alias: body.alias,
+                    kind: body.kind,
+                    bytes: body.bytes,
+                },
+            ));
+        };
+        let secret = self.payload.secret.as_ref().expect("checked above");
+        if !payload::tag_verifies(secret, &me, &their, &sealed, &body) {
+            return Err(PayloadError::TagFailed.to_string());
+        }
+        // attributed: the introduction it carried is taken as any is, and
+        // this client's own stops riding to a party that has written back
+        if let Some(intro) = &body.introduction {
+            self.take_cold_introduction(&from, intro);
+        }
+        self.payload.heard_from.insert(from);
+        Ok((from, self.dispatch(from, body.kind, body.bytes)))
+    }
+
+    /// One attributed message, by its kind (`wire-format.md` §7.10.1).
+    fn dispatch(&mut self, from: Keyhash, kind: u64, inner: Vec<u8>) -> Dispatched {
+        match kind {
             payload::KIND_KEY_GRANT => Dispatched::Grant(self.take_grant(from, &inner)),
             payload::KIND_LATE_RESPONSE => {
                 let consented = self.subject.consented_by_ceremony().clone();
@@ -7818,7 +7248,7 @@ impl Client {
                 kind: k,
                 bytes: inner,
             },
-        })
+        }
     }
 }
 
@@ -8365,7 +7795,6 @@ impl Parsed {
         db: &[u8],
         holder: &rhtn_codec::cbor::Item,
         ob: &[u8],
-        cfg: &crate::payload::PayloadConfig,
     ) -> Result<Parsed, String> {
         use crate::durable::*;
         let recs: Vec<Vec<u8>> = array(archive)
@@ -8375,8 +7804,8 @@ impl Parsed {
             .collect::<Option<_>>()
             .ok_or("records")?;
         let store = ClientStore::decode(&bytes(sb, store).ok_or("store")?).ok_or("store")?;
-        let payload = PayloadState::decode(cfg.clone(), &bytes(pb, payload).ok_or("payload")?)
-            .ok_or("payload")?;
+        let payload =
+            PayloadState::decode(&bytes(pb, payload).ok_or("payload")?).ok_or("payload")?;
         let held: Vec<HeldSeen> = array(seen)
             .ok_or("horizon")?
             .iter()

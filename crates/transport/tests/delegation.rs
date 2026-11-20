@@ -17,6 +17,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::time::Duration;
 
+mod common;
+use common::{SealKeys, delivered, opaque};
+
 const WINDOW: u64 = rhtn_codec::schema::DELEGATION_WINDOW_SECONDS;
 
 fn loopback() -> SocketAddr {
@@ -69,6 +72,7 @@ fn client_cfg(name: &str) -> ClientConfig {
         filter: None,
         sibling_cache: Arc::new(Mutex::new(Vec::new())),
         addresses: Arc::new(Mutex::new(Default::default())),
+        cursors: Default::default(),
         tls: Arc::new(Mutex::new(Default::default())),
         connect_timeout: Duration::from_millis(1500),
         on_reachability: None,
@@ -713,41 +717,136 @@ async fn ses_26_a_subjects_devices_are_several_sessions_each_named_by_its_key() 
 
 // acceptance: QUE-21
 #[tokio::test]
-async fn que_21_a_ciphertext_waits_for_the_device_it_names_and_reaches_that_session_alone() {
+async fn que_21_a_message_for_the_recipient_reaches_every_device_that_proves_the_identity() {
     let t = now();
-    let (node, addr) = spawn_node(node_cfg("bob", 5));
-    let phone_key = test_identity("alice").public.ed.to_bytes();
+    let keys = SealKeys::new(kh("alice"), kh("bob"));
+    let mut cfg = node_cfg("bob", 5);
+    cfg.open_half = Some(keys.open_half());
+    let (node, addr) = spawn_node(cfg);
     let d2 = desktop(32, t);
-    // both devices offline: a submission for alice naming the phone (d1)
-    node.enqueue_for(kh("alice"), phone_key, b"for the phone".to_vec())
-        .unwrap();
+    // both devices offline: a submission for alice, naming no device
+    let sealed = keys.seal(1, b"for alice", 0);
+    node.enqueue(kh("alice"), sealed.clone(), 1).unwrap();
     assert_eq!(node.queued(&kh("alice")), 1);
-    // d2 attaches, drains and detaches: told nothing waits, given nothing
+    // d2 attaches with no field 5, drains and detaches
     let ep = client_ep();
     let laptop = client_cfg("alice").with_credential(d2.clone());
     let AttachOutcome::Attached(mut s2) = attach(&laptop, &ep, kh("bob"), addr, false).await else {
         panic!("the desktop attaches")
     };
-    assert_eq!(s2.ack.queued, 0, "field 4 is 0 for d2");
-    assert!(
-        tokio::time::timeout(Duration::from_millis(500), s2.deliveries.recv())
-            .await
-            .is_err(),
-        "d2 receives nothing"
+    assert_eq!(s2.ack.queued, 1, "field 4 is 1 for d2");
+    let got2 = tokio::time::timeout(Duration::from_secs(3), s2.deliveries.recv())
+        .await
+        .expect("delivered to d2")
+        .expect("open");
+    assert_eq!(delivered(&got2).1, sealed);
+    assert_eq!(
+        keys.open(&got2).as_deref(),
+        Some(&b"for alice"[..]),
+        "d2 opens it"
     );
     s2.conn.close(0u32.into(), b"");
-    assert_eq!(node.queued(&kh("alice")), 1, "still waiting for d1");
-    // then d1 attaches
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(node.queued(&kh("alice")), 1, "still held for d1");
+    // then d1, the phone holding the seed, attaches with no field 5
     let phone = client_cfg("alice");
     let AttachOutcome::Attached(mut s1) = attach(&phone, &ep, kh("bob"), addr, false).await else {
         panic!("the phone attaches")
     };
     assert_eq!(s1.ack.queued, 1, "field 4 is 1 for d1");
-    let got = tokio::time::timeout(Duration::from_secs(3), s1.deliveries.recv())
+    let got1 = tokio::time::timeout(Duration::from_secs(3), s1.deliveries.recv())
         .await
-        .expect("delivered")
+        .expect("delivered to d1")
         .expect("open");
-    assert_eq!(got, b"for the phone");
+    assert_eq!(delivered(&got1).1, sealed);
+    assert_eq!(
+        keys.open(&got1).as_deref(),
+        Some(&b"for alice"[..]),
+        "d1 opens it"
+    );
+}
+
+/// A node's clock a test moves, apart from the clock its binding reads, so
+/// a month can pass for the mailbox while every delegation stays in its
+/// window.
+fn mailbox_clock(cfg: &mut NodeConfig, t: u64) -> Arc<AtomicU64> {
+    let cell = Arc::new(AtomicU64::new(t));
+    let c = cell.clone();
+    cfg.clock = Arc::new(move || c.load(Ordering::SeqCst));
+    cell
+}
+
+// acceptance: QUE-23
+#[tokio::test]
+async fn que_23_a_delivered_message_is_kept_thirty_days_from_its_first_delivery() {
+    let t = now();
+    let mut cfg = node_cfg("bob", 5);
+    // the retention is the shipped thirty days, unchanged by the test
+    assert_eq!(RETENTION_SECS, 30 * 86_400);
+    assert_eq!(cfg.retention_secs, RETENTION_SECS);
+    let clock = mailbox_clock(&mut cfg, t);
+    let (node, addr) = spawn_node(cfg);
+    let sealed = opaque(b"kept for a month");
+    node.enqueue(kh("alice"), sealed.clone(), 1).unwrap();
+    let ep = client_ep();
+    // d1 collects it at t
+    {
+        let AttachOutcome::Attached(mut s1) =
+            attach(&client_cfg("alice"), &ep, kh("bob"), addr, false).await
+        else {
+            panic!("d1 attaches")
+        };
+        let got = tokio::time::timeout(Duration::from_secs(3), s1.deliveries.recv())
+            .await
+            .expect("delivered to d1")
+            .unwrap();
+        assert_eq!(delivered(&got).1, sealed);
+        s1.conn.close(0u32.into(), b"");
+    }
     tokio::time::sleep(Duration::from_millis(200)).await;
-    assert_eq!(node.queued(&kh("alice")), 0);
+    let first = node.queue_records(&kh("alice"))[0].delivered_at;
+    assert_eq!(first, Some(t), "the first delivery starts the clock");
+    // d2 attaches with no field 5 just before t + retention
+    clock.store(t + RETENTION_SECS - 1, Ordering::SeqCst);
+    assert_eq!(node.expire(), 0, "not yet");
+    {
+        let laptop = client_cfg("alice").with_credential(desktop(33, t));
+        let AttachOutcome::Attached(mut s2) = attach(&laptop, &ep, kh("bob"), addr, false).await
+        else {
+            panic!("d2 attaches")
+        };
+        assert_eq!(s2.ack.queued, 1);
+        let got = tokio::time::timeout(Duration::from_secs(3), s2.deliveries.recv())
+            .await
+            .expect("delivered to d2")
+            .unwrap();
+        assert_eq!(delivered(&got).1, sealed, "d2 is handed the message");
+        s2.conn.close(0u32.into(), b"");
+    }
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(
+        node.queue_records(&kh("alice"))[0].delivered_at,
+        Some(t),
+        "d2's collection does not restart the clock"
+    );
+    // after it: the node's maintenance removes the message
+    clock.store(t + RETENTION_SECS, Ordering::SeqCst);
+    assert_eq!(node.expire(), 1);
+    assert!(
+        node.queue_records(&kh("alice")).is_empty(),
+        "no longer held"
+    );
+    // and a device restored from alice's phrase is handed nothing
+    let AttachOutcome::Attached(mut restored) =
+        attach(&client_cfg("alice"), &ep, kh("bob"), addr, false).await
+    else {
+        panic!("the restored device attaches")
+    };
+    assert_eq!(restored.ack.queued, 0);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(500), restored.deliveries.recv())
+            .await
+            .is_err(),
+        "nothing is handed over"
+    );
 }

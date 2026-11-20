@@ -102,7 +102,7 @@ fn layout_on(tag: &str, token: &[u8; 32], surface: &str) -> Layout {
              delegations = \"{}\"\n\
              listen = \"127.0.0.1:{}\"\n\
              endpoint-record = \"{}\"\nanchor-entry = \"{}\"\n\
-             queue = \"{}\"\nprekeys = \"{}\"\ntopology = \"{}\"\narchive = \"{}\"\n\
+             queue = \"{}\"\nkeys = \"{}\"\ntopology = \"{}\"\narchive = \"{}\"\n\
              resources = \"{}\"\ngrants = \"{}\"\nstate = \"{}\"\n\
              heartbeat = 30\ningestion = \"unverified-gossip\"\n\
              [allowance]\nrequests = 120\nseconds = 60\n\
@@ -115,7 +115,7 @@ fn layout_on(tag: &str, token: &[u8; 32], surface: &str) -> Layout {
             dir.join("endpoint.record").display(),
             dir.join("anchor.entry").display(),
             dir.join("queue").display(),
-            dir.join("prekeys").display(),
+            dir.join("keys").display(),
             dir.join("topology").display(),
             dir.join("archive").display(),
             dir.join("hosting").display(),

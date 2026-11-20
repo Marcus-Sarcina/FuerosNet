@@ -1,20 +1,16 @@
-//! The four things a client hands the node serving it (`wire-format.md`
-//! §7.10): its prekey bundle, one-time keys for its pool, payload to carry,
-//! and where to ring it.  Each is its own request type, each is answered
-//! with the nonce it carried and a code, and the shape of what the node
-//! then delivers for a relayed message is here too, since the node
-//! composes it.
+//! What a client hands a node (`wire-format.md` §7.10): a sealed message
+//! for one of the node's recipients, where to ring it, and its profile.
+//! Each is its own request type, each is answered with the nonce it
+//! carried and a code, and the shape of what the node then delivers for a
+//! sealed message is here too, since the node composes it.
 
 use crate::Keyhash;
 use rhtn_codec::cbor::*;
 use rhtn_codec::encode::*;
 use rhtn_codec::schema::{self, Family};
 
-/// Request types 9 to 12 (`wire-format.md` §7.10, §9.2's table).
-pub const REQUEST_PREKEY_PUBLICATION: u64 = 9;
-/// Request frame 10: one-time keys deposited.
-pub const REQUEST_ONE_TIME_DEPOSIT: u64 = 10;
-/// Request frame 11: a message handed over to relay.
+/// Request frame 11: a sealed message handed over (`wire-format.md`
+/// §7.10, §9.2's table; 9 and 10 are retired).
 pub const REQUEST_RELAY: u64 = 11;
 /// Request frame 12: where to ring this client.
 pub const REQUEST_WAKE: u64 = 12;
@@ -23,16 +19,6 @@ pub const REQUEST_PROFILE_PUBLICATION: u64 = 13;
 /// Request type 15 (`wire-format.md` §7.12): one row of the horizon a
 /// client asserts to the node serving it.
 pub const REQUEST_HORIZON_ASSERTION: u64 = 15;
-
-/// A client publishing its own bundle to the node that serves it
-/// (`wire-format.md` §7.10).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PrekeyPublication {
-    /// The signed bundle being published.
-    pub bundle: Vec<u8>,
-    /// The nonce the reply must echo.
-    pub nonce: [u8; 16],
-}
 
 /// A client publishing its own profile to the node that serves it
 /// (`wire-format.md` §7.10, §7.11).
@@ -71,29 +57,17 @@ impl ProfilePublication {
     }
 }
 
-/// A client stocking its node's pool.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OneTimeDeposit {
-    /// The one-time keys, each opaque to the node holding them.
-    pub keys: Vec<Vec<u8>>,
-    /// The nonce the reply must echo.
-    pub nonce: [u8; 16],
-}
-
-/// A client handing its node payload to carry.
+/// A sealed message handed to the recipient's node.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RelaySubmission {
     /// Who the message is for. **The node learns this and no more**: the
-    /// ciphertext is opaque to it.
+    /// submission is made under a key minted for it (`wire-format.md`
+    /// §9.1), and the sender is inside the seal.
     pub recipient: Keyhash,
-    /// The message, encrypted to the recipient.
-    pub ciphertext: Vec<u8>,
+    /// The `Sealed` (§7.8.1), encoded.
+    pub sealed: Vec<u8>,
     /// The nonce the reply must echo.
     pub nonce: [u8; 16],
-    /// The recipient's device this ciphertext is for (`wire-format.md`
-    /// §7.10 field 4): a session is with a device, and the node cannot
-    /// tell from the ciphertext.
-    pub device: [u8; 32],
 }
 
 /// A client registering, refreshing or withdrawing a wake endpoint
@@ -137,89 +111,19 @@ pub const SUBMISSION_REFUSED: u64 = 1;
 /// The recipient's queue is at its cap.
 pub const SUBMISSION_OVER_BOUND: u64 = 2;
 
-impl PrekeyPublication {
-    /// The publication's bytes.
-    pub fn encode(&self) -> Vec<u8> {
-        let mut out = Vec::new();
-        emit_map_head(&mut out, 2);
-        emit_uint(&mut out, 1);
-        // the bundle is the object `wire-format.md` §7.10 names, spliced in as
-        // §7.8 encoded it — not a byte string wrapping it, which is what a
-        // conformant peer would refuse
-        out.extend_from_slice(&self.bundle);
-        emit_uint(&mut out, 2);
-        emit_bstr(&mut out, &self.nonce);
-        out
-    }
-
-    /// A publication from its bytes.
-    pub fn decode(b: &[u8]) -> Result<Self, String> {
-        let item = parse_all(b).map_err(|e| e.0)?;
-        schema::check_unsigned(Family::PrekeyPublication, b, 0).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else {
-            return Err("not a map".into());
-        };
-        let bundle = value_slice(b, 1).ok_or("field 1")?;
-        Ok(PrekeyPublication {
-            bundle: b[bundle].to_vec(),
-            nonce: nonce_at(b, m, 2)?,
-        })
-    }
-}
-
-impl OneTimeDeposit {
-    /// The deposit's bytes.
-    pub fn encode(&self) -> Vec<u8> {
-        let mut out = Vec::new();
-        emit_map_head(&mut out, 2);
-        emit_uint(&mut out, 1);
-        emit_array_head(&mut out, self.keys.len());
-        for k in &self.keys {
-            emit_bstr(&mut out, k);
-        }
-        emit_uint(&mut out, 2);
-        emit_bstr(&mut out, &self.nonce);
-        out
-    }
-
-    /// A deposit from its bytes.
-    pub fn decode(b: &[u8]) -> Result<Self, String> {
-        let item = parse_all(b).map_err(|e| e.0)?;
-        schema::check_unsigned(Family::OneTimeDeposit, b, 0).map_err(|e| e.0)?;
-        let Item::Map(m) = &item else {
-            return Err("not a map".into());
-        };
-        let Some(Item::Array(a)) = map_get(m, 1) else {
-            return Err("field 1".into());
-        };
-        // each key's content, not the item that carries it
-        let mut keys = Vec::with_capacity(a.len());
-        for k in a {
-            let Item::Bytes(r) = k else {
-                return Err("a one-time key is a byte string".into());
-            };
-            keys.push(b[r.clone()].to_vec());
-        }
-        Ok(OneTimeDeposit {
-            keys,
-            nonce: nonce_at(b, m, 2)?,
-        })
-    }
-}
-
 impl RelaySubmission {
     /// The submission's bytes.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
-        emit_map_head(&mut out, 4);
+        emit_map_head(&mut out, 3);
         emit_uint(&mut out, 1);
         emit_bstr(&mut out, &self.recipient);
         emit_uint(&mut out, 2);
-        emit_bstr(&mut out, &self.ciphertext);
+        // the seal is the object §7.10 names, spliced in as §7.8.1 encodes
+        // it, not a byte string wrapping it
+        out.extend_from_slice(&self.sealed);
         emit_uint(&mut out, 3);
         emit_bstr(&mut out, &self.nonce);
-        emit_uint(&mut out, 4);
-        emit_bstr(&mut out, &self.device);
         out
     }
 
@@ -231,12 +135,11 @@ impl RelaySubmission {
             return Err("not a map".into());
         };
         let recipient: Keyhash = bytes_at(b, m, 1)?.try_into().map_err(|_| "recipient")?;
-        let device: [u8; 32] = bytes_at(b, m, 4)?.try_into().map_err(|_| "device")?;
+        let sealed = value_slice(b, 2).ok_or("field 2")?;
         Ok(RelaySubmission {
             recipient,
-            ciphertext: bytes_at(b, m, 2)?,
+            sealed: b[sealed].to_vec(),
             nonce: nonce_at(b, m, 3)?,
-            device,
         })
     }
 }
@@ -445,48 +348,53 @@ fn nonce_at(b: &[u8], m: &[(Item, Item)], key: u64) -> Result<[u8; 16], String> 
         .map_err(|_| format!("field {key} is not a 16-byte nonce"))
 }
 
-/// What a node delivers for a submission (`wire-format.md` §7.10): the
-/// submitter in front of the ciphertext, so a recipient holding material
-/// for many peers can choose which to try.  **A routing hint, not an
-/// attribution**: the name is the node's assertion, and what a message is
-/// attributed to is decided by the material it opens under.
-///
-/// `binding` is the submitter's bundle for the device that submitted,
-/// where the node holds one: what the recipient attributes the message
-/// under, carried because a recipient cannot have asked for the bundle of
-/// somebody who had not yet written to it.  Signed by the submitter, so
-/// carrying it costs the node no authority it did not have.
-pub fn relayed(from: Keyhash, ciphertext: &[u8], binding: Option<&[u8]>) -> Vec<u8> {
-    let mut out = Vec::new();
-    emit_array_head(&mut out, if binding.is_some() { 3 } else { 2 });
-    emit_bstr(&mut out, &from);
-    emit_bstr(&mut out, ciphertext);
-    if let Some(b) = binding {
-        emit_bstr(&mut out, b);
-    }
+/// What a node delivers for a sealed message (`wire-format.md` §7.10): its
+/// position in the recipient's queue, the seal unchanged, and `ss_n`, the
+/// node's own half decapsulated under the key the message was sealed to.
+/// **It names no sender**, since the node knows none.
+pub fn relayed(position: u64, sealed: &[u8], ss_n: &[u8; 32]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(sealed.len() + 48);
+    emit_array_head(&mut out, 3);
+    emit_uint(&mut out, position);
+    out.extend_from_slice(sealed);
+    emit_bstr(&mut out, ss_n);
     out
 }
 
-/// Split what `relayed` composed; nothing where the bytes are not that.
-///
-/// **Both shapes are read**: the binding is optional on the wire, so a
-/// node holding no bundle for that device, and any node that predates
-/// carrying one, deliver the two-element form.
-pub fn unrelayed(b: &[u8]) -> Option<(Keyhash, Vec<u8>, Option<Vec<u8>>)> {
+/// What one delivery carries.
+#[derive(Clone, PartialEq, Eq)]
+pub struct Relayed {
+    /// The message's position in the recipient's queue.
+    pub position: u64,
+    /// The `Sealed`, encoded.
+    pub sealed: Vec<u8>,
+    /// The node's half of the seal.
+    pub ss_n: zeroize::Zeroizing<[u8; 32]>,
+}
+
+impl std::fmt::Debug for Relayed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Relayed(position {}, {} bytes)",
+            self.position,
+            self.sealed.len()
+        )
+    }
+}
+
+/// Split what [`relayed`] composed; nothing where the bytes are not that.
+pub fn unrelayed(b: &[u8]) -> Option<Relayed> {
     let item = parse_all(b).ok()?;
-    let Item::Array(parts) = &item else {
-        return None;
-    };
-    let (f, p, binding) = match parts.as_slice() {
-        [Item::Bytes(f), Item::Bytes(p)] => (f, p, None),
-        [Item::Bytes(f), Item::Bytes(p), Item::Bytes(k)] => (f, p, Some(b[k.clone()].to_vec())),
-        _ => return None,
-    };
-    Some((
-        b[f.clone()].try_into().ok()?,
-        b[p.clone()].to_vec(),
-        binding,
-    ))
+    schema::check_kind(b, "RelayedPayload", &item).ok()?;
+    let Item::Array(a) = &item else { return None };
+    let parts = array_item_ranges(b, 0)?;
+    let Item::Bytes(k) = &a[2] else { return None };
+    Some(Relayed {
+        position: as_uint(&a[0])?,
+        sealed: b[parts[1].clone()].to_vec(),
+        ss_n: zeroize::Zeroizing::new(b[k.clone()].try_into().ok()?),
+    })
 }
 
 /// **One row of the horizon a client asserts to the node serving it**

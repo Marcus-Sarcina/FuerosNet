@@ -120,10 +120,10 @@ pub struct Config {
     /// How many requests one peer may make in a window, and how long the
     /// window is in seconds.  The values are the operator's.
     pub request_allowance: (u32, u64),
-    /// Where the prekey service's pools and bundles are kept, so a restart
-    /// does not reissue a one-time key it already served
-    /// (`wire-format.md` §7.8).
-    pub prekeys: PathBuf,
+    /// Where the node keys and the profiles are kept: a node key's private
+    /// half is held while a message sealed to it is queued, so a restart
+    /// must not lose it (`wire-format.md` §7.8).
+    pub keys: PathBuf,
     /// Where the topology store is kept: it is this node's seen-set, and a
     /// node that forgets it replays a forwarding wave
     /// (`infra-client-requirements.md` §4.3).
@@ -364,7 +364,7 @@ struct File {
     acknowledge: Option<bool>,
     listen: Spanned<String>,
     queue: PathBuf,
-    prekeys: PathBuf,
+    keys: PathBuf,
     topology: PathBuf,
     archive: PathBuf,
     heartbeat: Spanned<u64>,
@@ -659,7 +659,7 @@ impl Config {
             reconcile_secs,
             ingestion,
             request_allowance,
-            prekeys: f.prekeys,
+            keys: f.keys,
             topology: f.topology,
             archive: f.archive,
             resources: f.resources,

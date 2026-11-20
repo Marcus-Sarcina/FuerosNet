@@ -24,8 +24,11 @@ pub mod encryption_key;
 pub mod enrolment;
 /// The hybrid identity, its keyhash, and the signing half.
 pub mod identity;
-/// PQXDH (design §5.3): the key agreement a payload session opens with.
-pub mod pqxdh;
+/// HKDF-SHA-256, the derivation every keyed label here expands through.
+pub mod kdf;
+/// A serving node's key for one recipient (`wire-format.md` §7.8): what
+/// the node signs and publishes, and the private half it opens with.
+pub mod node_key;
 /// The split seal (design §14.2.4): the identity's encryption key, the
 /// message key, the AEAD and the sender's tag.
 pub mod seal;

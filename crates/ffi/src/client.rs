@@ -156,6 +156,24 @@ fn nonce_drawn(random: &dyn crate::device::Random) -> [u8; 16] {
     })
 }
 
+/// **The platform's randomness, drawn in full once before anything is
+/// built on it**: short measure is refused here, as a value, rather than
+/// at the first seal — which draws on the client's own thread, where a
+/// refusal has nowhere to go but the end of the thread. Nothing at start
+/// draws otherwise: an identity's encryption keys are derived from its
+/// root, not drawn.
+fn random_in_full(platform: &Platform) -> Result<(), Refused> {
+    use zeroize::Zeroize;
+    let mut probe = platform.random.fill(32);
+    let full = probe.len() == 32;
+    probe.zeroize();
+    if full {
+        Ok(())
+    } else {
+        Err(Refused::new("the platform's random source came up short"))
+    }
+}
+
 /// The storage seam with the kernel's sealing on it
 /// (`light-client-requirements.md` §9): what goes down is sealed under the
 /// key the platform's custody returned, what comes up is opened, and a blob
@@ -1001,29 +1019,16 @@ impl Participant {
         }
         let restored = self
             .handle
-            .with_blocking(move |c| -> Result<(usize, Vec<String>), String> {
+            .with_blocking(move |c| -> Result<(usize, usize), String> {
                 let r = if from_parts {
                     c.restore_parts(&parts)?
                 } else {
                     c.restore_durable(blob.as_deref().expect("one of the two"))?
                 };
-                let held: Vec<String> = c
-                    .payload
-                    .sessions
-                    .held()
-                    .iter()
-                    .map(|(k, d)| {
-                        format!(
-                            "{}/{}",
-                            rhtn_client::diag::id8(k),
-                            rhtn_client::diag::id8(d)
-                        )
-                    })
-                    .collect();
-                Ok((r.sessions, held))
+                Ok((r.records, c.payload.cursors.len()))
             })
             .map_err(|e| Refused::new(format!("the stored state does not open: {e}")))?;
-        tracing::info!(target: "pay", sessions = restored.0, held = ?restored.1, from_parts, "pay.restored");
+        tracing::info!(target: "pay", records = restored.0, cursors = restored.1, from_parts, "pay.restored");
         if !from_parts {
             // the migration: the relations written now, the blob kept
             self.save()?;
@@ -1061,8 +1066,8 @@ impl Participant {
 impl Participant {
     /// One step of the conversation (`wire-format.md` §7.10.1): taken on
     /// the client, carried by the courier, and the state written, since
-    /// the ratchets advanced and a restart that lost them could not read
-    /// the replies.
+    /// what it sent and took is the client's to remember across a
+    /// restart.
     fn converse<F>(&self, step: F) -> Result<(), Refused>
     where
         F: FnOnce(
@@ -1154,11 +1159,7 @@ fn save_relations(
     storage: &Arc<dyn crate::device::Storage>,
     written: &std::sync::Mutex<std::collections::HashMap<&'static str, [u8; 32]>>,
 ) -> Result<usize, String> {
-    let parts = handle.with_blocking(|c| {
-        let held = c.payload.sessions.held().len();
-        tracing::debug!(target: "pay", sessions = held, "pay.saving");
-        c.durable_parts()
-    });
+    let parts = handle.with_blocking(|c| c.durable_parts());
     let mut written = written.lock().unwrap_or_else(|e| e.into_inner());
     let mut wrote = 0usize;
     for (name, bytes) in parts {
@@ -1261,6 +1262,7 @@ impl Participant {
             if !ids.iter().any(|i| i.keyhash == me.public.keyhash) {
                 ids.push(me.public.clone());
             }
+            random_in_full(&platform)?;
             // the nonces this client's submissions carry come from the
             // platform's random source, which is the only one there is
             let random = platform.random.clone();
@@ -1628,6 +1630,7 @@ impl Participant {
             }
             let credential = Arc::new(credential);
             let presented = credential.public();
+            random_in_full(&platform)?;
             let random = platform.random.clone();
             let nonce: Arc<dyn Fn() -> [u8; 16] + Send + Sync> =
                 Arc::new(move || nonce_drawn(random.as_ref()));
@@ -1743,8 +1746,18 @@ impl Participant {
             if run.is_empty() {
                 return Err(Refused::new("no run started on this link"));
             }
-            let bundle = self.sign_device_bundle(intro.bundle)?;
-            let credential = rhtn_client::local::DeviceCredential { run, bundle };
+            // **the identity's two encryption secrets go with the run**
+            // (`wire-format.md` §14.3.3) [author, 2026-11-19]: what lets the
+            // device read what is sealed to the person
+            let (kem_seed, auth) = self
+                .handle
+                .with_blocking(|c| c.encryption_secrets())
+                .ok_or_else(|| Refused::new("this device holds no encryption secret to hand on"))?;
+            let credential = rhtn_client::local::DeviceCredential {
+                run,
+                kem_seed: zeroize::Zeroizing::new(kem_seed),
+                auth,
+            };
             Ok(link.session.seal(&credential.encode()))
         })
     }
@@ -1771,38 +1784,21 @@ impl Participant {
         self.call_plain("presented_key", || self.net.presented_key().to_vec())
     }
 
-    /// On a device holding no seed: the unsigned bundle over its own
-    /// payload material, for the ceremony device to sign.  Nothing where
-    /// the material it holds is already signed over, or where this device
-    /// holds the seed.
-    #[must_use]
-    pub fn bundle_to_sign(&self) -> Option<Vec<u8>> {
-        self.call_plain("bundle_to_sign", || {
-            self.handle.with_blocking(|c| c.bundle_to_sign())
-        })
-    }
-
-    /// On the ceremony device: sign a bundle payload another device of
-    /// this identity made.
-    pub fn sign_device_bundle(&self, payload: Vec<u8>) -> Result<Vec<u8>, Refused> {
-        self.call("sign_device_bundle", || {
+    /// **On a device holding no seed: take the identity's two encryption
+    /// secrets** a pairing handed over (`wire-format.md` §14.3.3), so it
+    /// opens what is sealed to the person and authenticates what it sends.
+    pub fn take_encryption_secrets(&self, kem_seed: Vec<u8>, auth: Vec<u8>) -> Result<(), Refused> {
+        self.call("take_encryption_secrets", || {
+            let kem: [u8; 32] = kem_seed
+                .as_slice()
+                .try_into()
+                .map_err(|_| Refused::new("an X-Wing seed is 32 bytes"))?;
+            let auth: [u8; 32] = auth
+                .as_slice()
+                .try_into()
+                .map_err(|_| Refused::new("an authentication key is 32 bytes"))?;
             self.handle
-                .with_blocking(move |c| c.sign_device_bundle(&payload))
-                .map_err(|e| Refused::new(format!("{e:?}")))
-        })
-    }
-
-    /// On a device holding no seed: take the bundle the ceremony device
-    /// signed, and publish it where a serving node is attached.
-    pub fn take_signed_bundle(&self, signed: Vec<u8>) -> Result<(), Refused> {
-        self.call("take_signed_bundle", || {
-            let msg = self
-                .handle
-                .with_blocking(move |c| c.take_signed_bundle(&signed))
-                .map_err(|e| Refused::new(format!("{e:?}")))?;
-            if let Some(m) = msg {
-                self.net.carry(vec![m])?;
-            }
+                .with_blocking(move |c| c.take_encryption_secrets(&kem, &auth));
             self.save()
         })
     }
@@ -1823,18 +1819,6 @@ impl Participant {
     pub fn material(&self) -> Vec<u8> {
         self.call_plain("material", || {
             self.handle.with_blocking(|c| c.public.key_material())
-        })
-    }
-
-    /// Which payload construction this build runs, for the shell to show
-    /// its user (`light-client-requirements.md` §3): a value, and the
-    /// wording is the shell's, in its user's own language.
-    #[must_use]
-    pub fn payload_construction(&self) -> crate::types::Construction {
-        self.call_plain("payload_construction", || {
-            self.handle
-                .with_blocking(|c| c.payload_construction())
-                .into()
         })
     }
 
@@ -2140,45 +2124,6 @@ impl Participant {
         })
     }
 
-    /// **This device's prekey handover for the co-present counterparty**
-    /// (`wire-format.md` §14.3.4): its signed bundle and one one-time key,
-    /// anchored to the ceremony and sealed under the local session, for
-    /// the shell's bearer to carry like the capture key.
-    ///
-    /// **What it is for**: opening an end-to-end channel needs the peer's
-    /// published bundle and fetching one needs a node, so a pair whose
-    /// ceremony completed with no node reachable (design §6.4) would
-    /// otherwise hold a record and be unable to say a word to each other.
-    /// Handed over here, neither asks anybody.
-    pub fn prekey_carriage(&self) -> Result<Vec<u8>, Refused> {
-        self.call("prekey_carriage", || {
-            let out = self
-                .handle
-                .with_blocking(|c| c.prekey_carriage())
-                .map_err(|a| Refused::new(format!("{a:?}")))?;
-            let _ = self.save();
-            Ok(out)
-        })
-    }
-
-    /// The counterparty's handover, opened and kept: the bundle verified
-    /// under the identity pinned at `wire-format.md` §14.3.1 and held as
-    /// prefetched material, the one-time key kept for the first session
-    /// opened with that device.
-    ///
-    /// A handover of another ceremony, or one whose bundle does not
-    /// verify, is refused: the signature is what makes the material
-    /// trustworthy and never the channel it arrived on.
-    pub fn take_prekey_carriage(&self, bytes: Vec<u8>) -> Result<(), Refused> {
-        self.call("take_prekey_carriage", || {
-            self.handle
-                .with_blocking(move |c| c.take_prekey_carriage(&bytes))
-                .map_err(|a| Refused::new(format!("{a:?}")))?;
-            let _ = self.save();
-            Ok(())
-        })
-    }
-
     /// The verifiers this client selected of the counterparty's pool, and
     /// the basis each was eligible on (`wire-format.md` §5.5).
     pub fn select_verifiers(&self) -> Result<Vec<Selected>, Refused> {
@@ -2326,8 +2271,8 @@ impl Participant {
         self.call("send", || {
             let peer = keyhash(&to).ok_or_else(|| Refused::new("a recipient is 32 bytes"))?;
             self.net.send(peer, kind, bytes)?;
-            // the ratchet advanced: a restart that lost this could not read
-            // the reply
+            // what it sealed, or still holds waiting for a node key, is
+            // the client's state
             self.save()
         })
     }
@@ -2349,7 +2294,7 @@ impl Participant {
         self.call_plain("next_event", || {
             let e = self.net.next_event(timeout_ms);
             if e.is_some() {
-                // what arrived advanced a ratchet; the event is the shell's
+                // what arrived moved the client's state; the event is the shell's
                 // either way, and a storage that did not take the state is
                 // reported at the next call that can carry a refusal
                 let _ = self.save();

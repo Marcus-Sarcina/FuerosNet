@@ -127,7 +127,7 @@ fn is_signed_kind(kind: &str) -> bool {
             | "AbuseReport"
             | "AnchorEntry"
             | "SubtreeAck"
-            | "PrekeyBundle"
+            | "NodeKey"
             | "EndpointRecord"
             | "SignedLocator"
     )

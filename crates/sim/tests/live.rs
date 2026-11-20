@@ -398,7 +398,7 @@ async fn a_running_node_replicates_its_store_and_never_its_mailbox() {
     }
     assert!(!t.n.node.has_session(&kh("carol")));
     let queued = b"ciphertext for C".to_vec();
-    t.n.node.enqueue(kh("carol"), queued.clone()).unwrap();
+    enqueue(&t.n.node, "carol", &queued).unwrap();
     assert_eq!(
         t.n.node.queued(&kh("carol")),
         1,

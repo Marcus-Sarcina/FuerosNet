@@ -75,10 +75,16 @@ class Front {
         val messages: List<Message>,
         /** Earlier messages exist on disk that this snapshot does not hold ([earlier] reads them). */
         val more: Boolean = false,
+        /** **Its sender is unattributed** [author, 2026-11-19]: named by the
+         *  alias it carried, and not answered — a reply goes only to a
+         *  contact [author, 2026-11-20]. */
+        val unverified: Boolean = false,
     )
 
     private class Convo(val by: String, val peer: String, var name: String) {
         var direct: Boolean = false
+        /** The last arrival could not be attributed; one that could clears it. */
+        var unverified: Boolean = false
         /** The messages read or written in this process: the newest page and what came after it. */
         val messages = mutableListOf<Message>()
         /** Whether a page has been read; a thread is read when its conversation is opened, not at start. */
@@ -225,7 +231,8 @@ class Front {
     /** The one key a conversation has: the identity that holds it and the peer. */
     private fun key(by: String, peerKey: String) = "$by/$peerKey"
 
-    private fun Convo.snapshot() = Thread(by, peer, name, direct, messages.toList(), more = before != null)
+    private fun Convo.snapshot() =
+        Thread(by, peer, name, direct, messages.toList(), more = before != null, unverified = unverified)
 
     // ---- mutators: the kernel's side -----------------------------------
 
@@ -286,14 +293,16 @@ class Front {
     }
 
     /** An arrival, attributed to its sender: the name it came with is the
-     *  attribution and the thread's name from here. */
-    fun incoming(by: String, peerKey: String, name: String, text: String) {
+     *  attribution and the thread's name from here. [unverified] where the
+     *  kernel could not attribute it: the thread is then not answered. */
+    fun incoming(by: String, peerKey: String, name: String, text: String, unverified: Boolean = false) {
         synchronized(lock) {
             val k = key(by, peerKey)
             val had = convos[k]
             val c = convos.getOrPut(k) { Convo(by, peerKey, name) }
             val listed = had == null || c.name != name
             c.name = name
+            c.unverified = unverified
             val id = written(c, Threads.Record.Said(false, name, text, Delivery.SENT, null))
             c.messages.add(Message(id, false, name, text, Delivery.SENT, null))
             if (listed) indexer?.invoke(by)

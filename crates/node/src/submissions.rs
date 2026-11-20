@@ -1,49 +1,21 @@
-//! The four things a client hands the node serving it (`wire-format.md`
-//! §7.10): its bundle, one-time keys for its pool, payload to carry, and
-//! where to ring it.  Each is a request stream and each is answered with
-//! the nonce it carried and a code, and nothing further
-//! (`infra-client-requirements.md` §6.1).
+//! What a client hands a node (`wire-format.md` §7.10): a sealed message
+//! for one of the node's recipients, where to ring it, and its profile.
+//! Each is a request stream and each is answered with the nonce it carried
+//! and a code, and nothing further (`infra-client-requirements.md` §6.1).
 //!
-//! Every one of the four is about the client that sent it.  The subject
-//! of a publication, the owner of a deposited pool, the sender of a
-//! relayed message and the holder of an endpoint are all the
-//! authenticated peer, so a client cannot reach past its own
-//! relationship by asking.
+//! A wake registration and a profile are about the authenticated peer that
+//! sent them, so a client cannot reach past its own relationship by asking.
+//! **A sealed message is about nobody the node can name**: it arrives under
+//! a key minted for it (`wire-format.md` §9.1), and the node holds a
+//! recipient, a size and a time.
 
 use crate::Keyhash;
 use crate::view::NodeView;
 use crate::wake::Registered;
-use rhtn_archive::prekey::PrekeyBundle;
 use rhtn_archive::submission::*;
 use rhtn_transport::queue::Refusal;
 use rhtn_transport::session::Node;
 use std::sync::Arc;
-
-/// Take a publication from the client that sent it.  A bundle naming
-/// another party is refused: publishing it would be choosing the material
-/// that party's peers open sessions against
-/// (`infra-client-requirements.md` §6.1).
-pub fn publication(
-    view: &mut NodeView,
-    ids: &[rhtn_crypto::identity::Identity],
-    peer: &Keyhash,
-    device: &[u8; 32],
-    body: &[u8],
-) -> Option<Vec<u8>> {
-    let p = PrekeyPublication::decode(body).ok()?;
-    let parsed = PrekeyBundle::parse(&p.bundle).ok();
-    // the bundle is the sending device's: one naming another device is
-    // refused, since the session it arrived on is what names the device
-    // (`wire-format.md` §7.10, §8.2)
-    let code = if parsed.as_ref().map(|b| (b.subject, b.device)) != Some((*peer, *device)) {
-        SUBMISSION_REFUSED
-    } else if view.prekeys.publish(ids, &p.bundle).is_ok() {
-        SUBMISSION_ACCEPTED
-    } else {
-        SUBMISSION_REFUSED
-    };
-    Some(SubmissionReply::code(p.nonce, code).encode())
-}
 
 /// Take a profile from the client that sent it: one naming another
 /// party is refused, and so is one not later than what is held
@@ -70,10 +42,9 @@ pub fn profile(
 /// **Take one row of the horizon an attached client asserts**
 /// (`wire-format.md` §7.12).
 ///
-/// **The one thing a client hands its node that names another party.** The
-/// four of §7.10 are each about the sender — its bundle, its pool, its
-/// message, its endpoint — so the authenticated requester is the subject
-/// and nothing has to be bounded. This is not: a row is about a member,
+/// **The one thing a client hands its node that names another party.** A
+/// wake endpoint and a profile are each about the sender, and a sealed
+/// message about nobody the node can name, so nothing has to be bounded. This is not: a row is about a member,
 /// and what keeps it honest is where the sender sits.
 ///
 /// **So authority follows the topology** [author, 2026-11-04]: a row whose
@@ -190,71 +161,43 @@ pub fn horizon(
     Some(SubmissionReply::code(a.nonce, code).encode())
 }
 
-/// Take one-time keys into the sender's own pool, bounded.  Over the
-/// bound the deposit is refused with the code rather than silently
-/// trimmed, so a client knows what its pool holds.
-pub fn deposit(
-    view: &mut NodeView,
-    peer: &Keyhash,
-    device: &[u8; 32],
-    body: &[u8],
-) -> Option<Vec<u8>> {
-    let d = OneTimeDeposit::decode(body).ok()?;
-    let cfg = view.prekeys.cfg.clone();
-    let code = if d.keys.len() > cfg.per_deposit
-        || view.prekeys.pool_size_for(peer, device) + d.keys.len() > cfg.pool
-    {
-        SUBMISSION_OVER_BOUND
-    } else if view.prekeys.stock_for(*peer, *device, d.keys) {
-        SUBMISSION_ACCEPTED
-    } else {
-        // **accepted means the node took them.**  A deposit it could not
-        // store is refused, not acknowledged: a client told its pool was
-        // replenished stops replenishing it
-        SUBMISSION_REFUSED
-    };
-    Some(SubmissionReply::code(d.nonce, code).encode())
-}
-
-/// Take payload to carry.  Answered on taking, not on delivering: taking
-/// it is the promise the queue already makes (design §14.1.6), and a
-/// sender made to wait for delivery would be waiting on a party who may
-/// be away for days.  The sender is named in front of the ciphertext for
-/// the recipient, the way everything else this node queues is.
+/// **Take a sealed message.** Answered on taking, not on delivering:
+/// taking it is the promise the queue already makes (design §14.1.6), and
+/// a sender made to wait for delivery would be waiting on a party who may
+/// be away for days. Refused where it is sealed to a node key this node no
+/// longer accepts for the recipient (`wire-format.md` §7.8), which the
+/// sender meets by fetching the newest.
 ///
-/// **The submitter's binding goes with it** (`wire-format.md` §7.10,
-/// design §14.2.2): the bundle of the device on this session, which this
-/// node serves anyway, because the recipient cannot have asked for the
-/// bundle of somebody who had not written to it yet.  Where this node
-/// holds none the two-element form goes, as it always did.
+/// **The view is not held across the enqueue**: a message removed to make
+/// room tells the node-key service, which takes the view itself.
 pub fn relay(
-    view: &NodeView,
+    view: &std::sync::Mutex<NodeView>,
     node: Option<&Arc<Node>>,
-    peer: &Keyhash,
-    device: &[u8; 32],
     body: &[u8],
 ) -> Option<Vec<u8>> {
     let r = RelaySubmission::decode(body).ok()?;
-    let binding = view.prekeys.bundle_for(peer, device).cloned();
+    let sealed = rhtn_archive::sealed::Sealed::decode(&r.sealed).ok()?;
+    let accepted = {
+        let v = view.lock().unwrap();
+        v.node_keys.accepts(&r.recipient, sealed.n, v.now())
+    };
     let code = match node {
         None => SUBMISSION_REFUSED,
-        Some(n) => match n.enqueue_for(
-            r.recipient,
-            r.device,
-            relayed(*peer, &r.ciphertext, binding.as_deref()),
-        ) {
+        Some(_) if !accepted => SUBMISSION_REFUSED,
+        Some(n) => match n.enqueue(r.recipient, r.sealed, sealed.n) {
             // **a doorbell where the recipient is away** (design §14.1.5):
-            // one per arrival, to the endpoint the recipient registered,
-            // for the poster to ring; a recipient with a session here is
-            // handed the message on it instead
-            Ok(()) => {
-                let away = !n.has_session_for(&r.recipient, &r.device);
-                view.ring_for(&r.recipient, &r.device, away);
+            // one per arrival, to the endpoint the recipient registered;
+            // a recipient with a session here is handed the message on it
+            Ok(_) => {
+                let away = !n.sessions().contains(&r.recipient);
+                view.lock()
+                    .unwrap()
+                    .ring_for(&r.recipient, &[0u8; 32], away);
                 SUBMISSION_ACCEPTED
             }
-            // at a cap is a bound; a recipient this node holds no record
-            // of, and a credential it has verified superseded, are both
-            // refusals about somebody else
+            // at a cap with nothing delivered to make room is a bound; a
+            // recipient this node holds no record of, and a credential it
+            // has verified superseded, are both refusals about somebody else
             Err(Refusal::AtCap) => SUBMISSION_OVER_BOUND,
             // a store that would not take it is this node's own trouble,
             // and the bare refusal is the honest answer: over-bound would

@@ -96,7 +96,7 @@ async fn payload_does_not_reset_the_detector() {
     let node = p.n.node.clone();
     let pump = tokio::spawn(async move {
         for i in 0..40u32 {
-            let _ = node.enqueue(kh("carol"), format!("payload {i}").into_bytes());
+            let _ = enqueue(&node, "carol", format!("payload {i}").as_bytes());
             tokio::time::sleep(Duration::from_millis(250)).await;
         }
     });
@@ -258,7 +258,7 @@ async fn a_degraded_session_produces_no_countersignature() {
         "whereas N's would be"
     );
     // and payload flows on the same session
-    p.s.node.enqueue(kh("carol"), b"payload".to_vec()).unwrap();
+    enqueue(&p.s.node, "carol", b"payload").unwrap();
     let got = drain(&mut deg, 700).await;
     assert_eq!(got, vec![b"payload".to_vec()], "the payload is carried");
 }
@@ -406,9 +406,7 @@ async fn material_queues_for_a_client_marked_unreachable() {
     );
     drop(c);
     // X submits one message while C is away
-    p.n.node
-        .enqueue(kh("carol"), b"while away".to_vec())
-        .unwrap();
+    enqueue(&p.n.node, "carol", b"while away").unwrap();
     p.path.partition(false);
     // C performs a fresh attach
     let mut back = match fresh_attach(&p.cfg, &client_ep(), kh("alice"), false).await {
@@ -429,9 +427,9 @@ async fn an_offline_subordinate_differs_from_a_keyhash_with_no_record() {
     let n = Running::start(cfg);
     let ccfg = client_cfg("carol");
     know(&ccfg, "alice", n.addr);
-    let for_c = n.node.enqueue(kh("carol"), b"for C".to_vec());
-    let for_z = n.node.enqueue(kh("w2"), b"for Z".to_vec());
-    assert_eq!(for_c, Ok(()));
+    let for_c = enqueue(&n.node, "carol", b"for C");
+    let for_z = enqueue(&n.node, "w2", b"for Z");
+    assert!(for_c.is_ok());
     assert_eq!(
         for_z,
         Err(Refusal::NoRecord),
@@ -456,7 +454,7 @@ async fn a_failover_sibling_holds_no_queue_state() {
     let p = pair(None);
     let msgs = messages(3, "at N");
     for m in &msgs {
-        p.n.node.enqueue(kh("carol"), m.clone()).unwrap();
+        enqueue(&p.n.node, "carol", m).unwrap();
     }
     p.n.go_dark();
     let fresh = client_cfg("carol");
@@ -515,7 +513,7 @@ async fn a_client_collects_from_its_own_serving_node_when_it_returns() {
     // k messages are queued at N, and N then goes dark
     let msgs = messages(4, "waiting");
     for m in &msgs {
-        n.node.enqueue(kh("carol"), m.clone()).unwrap();
+        enqueue(&n.node, "carol", m).unwrap();
     }
     path.partition(true);
     let deg = match fresh_attach(&cfg, &client_ep(), kh("alice"), false).await {

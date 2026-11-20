@@ -257,7 +257,7 @@ pub fn node_config(token_hex: &str, quic: u16, admin: u16) -> String {
          anchor-entry = \"/var/lib/rhtn/anchor.entry\"\n\
          listen = \"0.0.0.0:{quic}\"\n\
          queue = \"/var/lib/rhtn/queue\"\n\
-         prekeys = \"/var/lib/rhtn/prekeys\"\n\
+         keys = \"/var/lib/rhtn/keys\"\n\
          topology = \"/var/lib/rhtn/topology\"\n\
          archive = \"/var/lib/rhtn/archive\"\n\
          grants = \"/var/lib/rhtn/grants\"\n\

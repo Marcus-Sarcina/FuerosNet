@@ -33,7 +33,7 @@ except ImportError:
     raise SystemExit('kyber-py is required for the ML-KEM-768 half of X-Wing: '
                      'pip install kyber-py (any environment this '
                      'interpreter can import from)')
-from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
 
 H = lambda b: hashlib.sha256(b).digest()
 
@@ -279,6 +279,25 @@ def xwing_public(seed):
     ek, _ = ML_KEM_768.key_derive(e[:64])
     return ek + _x25519_pub(e[64:])
 
+XWING_LABEL = bytes.fromhex('5c2e2f2f5e5c')
+
+def xwing_encaps(pk, eseed):
+    """X-Wing's EncapsulateDerand: ML-KEM-768's message from the first 32
+    bytes, the X25519 ephemeral from the last 32; the combiner over the
+    ML-KEM secret, the X25519 secret, its ciphertext, its public key and the
+    label. (shared secret, ciphertext)."""
+    k, ct_m = ML_KEM_768._encaps_internal(pk[:1184], eseed[:32])
+    eph = X25519PrivateKey.from_private_bytes(eseed[32:])
+    ct_x = eph.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+    ss_x = eph.exchange(X25519PublicKey.from_public_bytes(pk[1184:]))
+    ss = hashlib.sha3_256(k + ss_x + ct_x + pk[1184:] + XWING_LABEL).digest()
+    return ss, ct_m + ct_x
+
+def encryption_secrets(who):
+    """wire §2.5: the identity's X-Wing seed and sealing-authentication key,
+    from its root."""
+    return _hkdf32(who.root, AAD_ENCRYPTION_KEY), _hkdf32(who.root, b'rhtn/1:seal-auth')
+
 def encryption_key(who, signer=None, algs=(-8, -49), kem=None):
     """wire §2.5: `who`'s X-Wing key and sealing-authentication key, both
     from its identity root, signed hybrid.  `signer` other than `who` is the
@@ -437,7 +456,7 @@ RFC 8032.
 |---|---|---|
 | bob-instance | bob's infra instance, delegated by bob | `{hx(TK['bob-instance'].pub)}` |
 | carol-instance | carol's infra instance, delegated by carol | `{hx(TK['carol-instance'].pub)}` |
-| alice-desktop | alice's desktop, a delegated device with prekeys of its own | `{hx(TK['alice-desktop'].pub)}` |
+| alice-desktop | alice's desktop, a delegated device holding no seed | `{hx(TK['alice-desktop'].pub)}` |
 
 The seed-holding device presents its identity's classical key and needs no
 delegation; as a device (`wire-format.md` §7.8) it is named by that key.
@@ -2281,14 +2300,14 @@ goal — but only for objects that have one:
 
 - **Signed — complete 2026-09-02.** Every domain-separation context now has a
   known-answer signature: locator and endpoints (below), currency, catalog,
-  abuse, anchor, subtree-ack and prekey (the bar-8 section at the end of this
+  abuse, anchor, subtree-ack and node-key (the bar-8 section at the end of this
   file, each with its wrong-signer analogue), and successor, verifier and
   consent (the recovery adoption and normal record in `transactions.md`).
   The envelope tag is every transaction's.
 - **Unsigned message encodings — landed 2026-09-02 in `messages.md`**
   (canonical bar 9): every family in this inventory has a positive
   known-answer encoding there — session frames, topology push and memo,
-  resolution, archive, prekey, query-plus-consent, catalog, resource
+  resolution, archive, node-key, query-plus-consent, catalog, resource
   request/response, registration and reply, currency, the capture key grant
   and the late-response wrapper — plus the session-trace table. *The
   inventory remains hand-maintained until the corpus format enumerates it
@@ -2309,10 +2328,10 @@ def _introduction(who, loc_bytes):
     return e_arr([e_uint(1), who.key_material, encryption_key(who), _signed_locator_by(who, loc_bytes)])
 vs_c1 = _introduction(IDS['c1'], locator(bob.keyhash, p_odd, seqno(2, 7)))
 vs_c1_later = _introduction(IDS['c1'], locator(bob.keyhash, p_odd, seqno(2, 9)))
-vs_carol = _introduction(carol, locator(carol.keyhash, b'\x40', seqno(1, 0)))
-vs_bob = _introduction(bob, locator(bob.keyhash, b'\x40', seqno(1, 0)))
+vs_carol = _introduction(carol, locator(carol.keyhash, path([]), seqno(1, 0)))
+vs_bob = _introduction(bob, locator(bob.keyhash, path([]), seqno(1, 0)))
 vs_mismatch = e_arr([e_uint(1), alice.key_material, encryption_key(alice), _signed_locator_by(IDS['c1'], locator(bob.keyhash, p_odd, seqno(2, 7)))])
-vs_self = _introduction(alice, locator(alice.keyhash, b'\x40', seqno(1, 0), subnet=None))  # a lone identity names no subnet
+vs_self = _introduction(alice, locator(alice.keyhash, path([]), seqno(1, 0), subnet=None))  # a lone identity names no subnet
 vs_bundle = [vs_c1, vs_carol, vs_c1_later, vs_bob, vs_mismatch, vs_self]
 
 # §2.4's card: c1's introduction, whose locator is anchored
@@ -2404,7 +2423,7 @@ AAD_CATALOG = b'rhtn/1:catalog'
 AAD_ABUSE = b'rhtn/1:abuse'
 AAD_ANCHOR = b'rhtn/1:anchor'
 AAD_SUBTREE = b'rhtn/1:subtree-ack'
-AAD_PREKEY = b'rhtn/1:prekey'
+AAD_NODE_KEY = b'rhtn/1:node-key'
 AAD_DELEGATION = b'rhtn/1:delegation'
 DELEGATION_WINDOW = 172_800   # exactly 48 hours (wire §8.2)
 
@@ -2506,19 +2525,48 @@ ack_pairs = [(e_uint(1), e_bstr(adopt_txid)),
 ack = sign1_slot(ack_pairs, 5, AAD_SUBTREE, TK['carol-instance'])
 ack_wrong = sign1_slot(ack_pairs, 5, AAD_SUBTREE, bob)
 
-pk_material = H(b'rhtn-test-vectors:prekey-material-1') + H(b'rhtn-test-vectors:prekey-material-2')
-pk_pairs = [(e_uint(1), e_bstr(alice.keyhash)),
-            (e_uint(2), e_uint(1)),
-            (e_uint(3), e_bstr(pk_material)),
-            (e_uint(4), e_uint(TS_REC)),
-            (e_uint(5), e_bstr(alice.ed_pub))]   # the device: alice's phone, the seed-holding device
-prekey = sign1_slot(pk_pairs, 6, AAD_PREKEY, alice)
-prekey_wrong = sign1_slot(pk_pairs, 6, AAD_PREKEY, carol)
-# alice's desktop: its own material, named by its transport key, signed by
-# alice's identity on the phone (wire §7.8, design §23.3)
-pk_desk_material = H(b'rhtn-test-vectors:prekey-material-desktop-1') + H(b'rhtn-test-vectors:prekey-material-desktop-2')
-pk_desk_pairs = pk_pairs[:2] + [(e_uint(3), e_bstr(pk_desk_material)), pk_pairs[3], (e_uint(5), e_bstr(TK['alice-desktop'].pub))]
-prekey_desktop = sign1_slot(pk_desk_pairs, 6, AAD_PREKEY, alice)
+# wire §7.8: bob's node holds a key for carol, number 3; signed by bob's
+# node, classically, under rhtn/1:node-key, field 2 the signer. The seed is a
+# test vector's: a node draws one at random per key
+NODE_KEY_SEED = H(b'rhtn-test-vectors:node-key-seed:bob:carol:3')
+NODE_KEY_N = 3
+node_key_pub = xwing_public(NODE_KEY_SEED)
+nk_pairs = [(e_uint(1), e_bstr(carol.keyhash)),
+            (e_uint(2), e_bstr(bob.keyhash)),
+            (e_uint(3), e_uint(NODE_KEY_N)),
+            (e_uint(4), e_bstr(node_key_pub)),
+            (e_uint(5), e_uint(TS_REC))]
+node_key = sign1_slot(nk_pairs, 6, AAD_NODE_KEY, bob)
+node_key_wrong = sign1_slot(nk_pairs, 6, AAD_NODE_KEY, carol)
+
+# wire §7.8.1: alice seals a first message to carol through bob's node key
+# 3. Every random input is the test vector's own (an implementation draws
+# them fresh): the two encapsulations' 64 bytes each and the AES-GCM nonce
+SEAL_ESEED_R = H(b'rhtn-test-vectors:seal-eseed-r-1') + H(b'rhtn-test-vectors:seal-eseed-r-2')
+SEAL_ESEED_N = H(b'rhtn-test-vectors:seal-eseed-n-1') + H(b'rhtn-test-vectors:seal-eseed-n-2')
+SEAL_NONCE = H(b'rhtn-test-vectors:seal-nonce')[:12]
+SEAL_ALIAS = 'alice'
+SEAL_BYTES = b'hello carol'
+carol_xwing_seed, carol_auth = encryption_secrets(carol)
+alice_xwing_seed, alice_auth = encryption_secrets(alice)
+carol_kem_pub = xwing_public(carol_xwing_seed)
+ss_r, ct_r = xwing_encaps(carol_kem_pub, SEAL_ESEED_R)
+ss_n, ct_n = xwing_encaps(node_key_pub, SEAL_ESEED_N)
+seal_info = b'rhtn/1:seal' + carol.keyhash + bob.keyhash + e_uint(NODE_KEY_N) + ct_r + ct_n
+message_key = _hkdf32(ss_r + ss_n, seal_info)
+seal_intro_loc = locator(alice.keyhash, path([]), seqno(1, 0), subnet=None)
+seal_fields = (e_bstr(alice.keyhash) + e_tstr(SEAL_ALIAS)
+               + e_arr([e_uint(1), alice.key_material, encryption_key(alice),
+                        _signed_locator_by(alice, seal_intro_loc)])
+               + e_uint(0) + e_bstr(SEAL_BYTES))
+_auth_dh = X25519PrivateKey.from_private_bytes(alice_auth).exchange(
+    X25519PublicKey.from_public_bytes(_x25519_pub(carol_auth)))
+tag_key = _hkdf32(_auth_dh, b'rhtn/1:seal-auth' + alice.keyhash + carol.keyhash)
+seal_tag = hmac.new(tag_key, ct_r + ct_n + seal_fields, hashlib.sha256).digest()
+sealed_body = b'\x86' + seal_fields + e_bstr(seal_tag)
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM as _AESGCM
+sealed = e_arr([e_uint(NODE_KEY_N), e_bstr(ct_r), e_bstr(ct_n),
+                e_bstr(SEAL_NONCE + _AESGCM(message_key).encrypt(SEAL_NONCE, sealed_body, None))])
 
 emit('records.md', f"""
 ## The remaining signed contexts (canonical bar 8)
@@ -2613,24 +2661,46 @@ that must not substitute for the grandpatron):
 {hexblock(ack_wrong)}
 ```
 
-**Prekey bundle** — subject alice, construction 1 (PQXDH), 64 bytes of opaque
-reusable material, field 5 naming the device (alice's phone, the seed-holding
-device's classical key), the signature at field 6 over fields 1 to 5
-({len(prekey)} bytes; wrong-signer: carol):
+**Node key** (§7.8) — the key bob's node holds for carol, number 3: an X-Wing
+encapsulation key from the seed `H("rhtn-test-vectors:node-key-seed:bob:carol:3")`
+(a test vector's; a node draws one at random), published at the record's time
+and signed by bob's node at field 6 over fields 1 to 5, classical only
+({len(node_key)} bytes; wrong-signer: carol, over the same fields naming bob):
 
 ```
-{hexblock(prekey)}
+{hexblock(node_key)}
 ```
 
 ```
-{hexblock(prekey_wrong)}
+{hexblock(node_key_wrong)}
 ```
 
-The bundle of alice's **desktop**, a delegated device: its own material, field
-5 its transport key, signed by alice's identity ({len(prekey_desktop)} bytes):
+**The seal** (§7.8.1) — alice's first message to carol, sealed to carol's
+encryption key and to the node key above. Every random input is the vector's
+own: the encapsulation randomness to carol `H("rhtn-test-vectors:seal-eseed-r-1")
+‖ H("…-r-2")`, to the node `H("…-n-1") ‖ H("…-n-2")`, and the nonce the first 12
+bytes of `H("rhtn-test-vectors:seal-nonce")`. The body carries alice's keyhash,
+the alias `alice`, her introduction (a first message), kind 0 and the bytes
+`hello carol`, and its tag:
 
 ```
-{hexblock(prekey_desktop)}
+ssR          {ss_r.hex()}
+ssN          {ss_n.hex()}
+message key  {message_key.hex()}
+tag key      {tag_key.hex()}
+tag          {seal_tag.hex()}
+```
+
+**Sealed** ({len(sealed)} bytes):
+
+```
+{hexblock(sealed)}
+```
+
+**SealedBody**, what it opens to ({len(sealed_body)} bytes):
+
+```
+{hexblock(sealed_body)}
 ```
 
 **Transport delegation** (§8.2) — bob delegates to his instance's transport key
@@ -2725,26 +2795,22 @@ f_archive_frontier2 = frame(2, e_map([(e_uint(1), e_bstr(alice.keyhash)),
                                       (e_uint(3), e_uint(16)),
                                       (e_uint(5), e_bstr(NONCE(b'archive-2')))]))
 
-f_pk1 = frame(3, e_map([(e_uint(1), e_bstr(alice.keyhash)),
-                        (e_uint(2), e_uint(1)),
-                        (e_uint(3), e_bstr(NONCE(b'prekey'))),
-                        (e_uint(4), e_bstr(alice.ed_pub))]))   # a one-time key is one device's
-f_pk1_nodevice = frame(3, e_map([(e_uint(1), e_bstr(alice.keyhash)),
-                                 (e_uint(2), e_uint(1)),
-                                 (e_uint(3), e_bstr(NONCE(b'prekey')))]))
-batch_khs = sorted([alice.keyhash, bob.keyhash])
-f_pkb = frame(3, e_map([(e_uint(1), e_arr([e_bstr(k) for k in batch_khs])),
-                        (e_uint(2), e_bstr(NONCE(b'prekey-batch')))]))
-r_pk = e_map([(e_uint(1), e_bstr(NONCE(b'prekey'))),
-              (e_uint(2), e_arr([prekey])),
-              (e_uint(3), e_bstr(H(b'rhtn-test-vectors:one-time-prekey')))])
-# every device's bundle, for a request naming none
-r_pk_all = e_map([(e_uint(1), e_bstr(NONCE(b'prekey-all'))),
-                  (e_uint(2), e_arr([prekey, prekey_desktop]))])
-r_pk_8 = e_map([(e_uint(1), e_bstr(NONCE(b'prekey-8'))), (e_uint(2), e_arr([prekey] * 8))])
-r_pk_9 = e_map([(e_uint(1), e_bstr(NONCE(b'prekey-9'))), (e_uint(2), e_arr([prekey] * 9))])
-r_pk_fail = e_map([(e_uint(1), e_bstr(NONCE(b'prekey'))),
-                   (e_uint(4), e_uint(0))])
+# wire §7.8: one recipient, visibly targeted; a population, visibly a sweep
+f_nk1 = frame(3, e_map([(e_uint(1), e_bstr(carol.keyhash)),
+                        (e_uint(2), e_bstr(NONCE(b'node-key')))]))
+batch_khs = sorted([alice.keyhash, carol.keyhash])
+f_nkb = frame(3, e_map([(e_uint(1), e_arr([e_bstr(k) for k in batch_khs])),
+                        (e_uint(2), e_bstr(NONCE(b'node-key-batch')))]))
+r_nk = e_map([(e_uint(1), e_bstr(NONCE(b'node-key'))), (e_uint(2), node_key)])
+r_nk_fail = e_map([(e_uint(1), e_bstr(NONCE(b'node-key'))), (e_uint(3), e_uint(0))])
+r_nk_refused = e_map([(e_uint(1), e_bstr(NONCE(b'node-key-batch'))), (e_uint(3), e_uint(1))])
+# the batch's replies in its own ascending order: alice is no recipient of
+# bob's node, carol is
+r_nk_batch = e_arr([e_map([(e_uint(1), e_bstr(NONCE(b'node-key-batch'))), (e_uint(3), e_uint(0))])
+                    if k == alice.keyhash else
+                    e_map([(e_uint(1), e_bstr(NONCE(b'node-key-batch'))), (e_uint(2), node_key)])
+                    for k in batch_khs])
+_nk_fail_small = e_map([(e_uint(1), e_bstr(NONCE(b'node-key-batch'))), (e_uint(3), e_uint(0))])
 
 f_query = frame(4, e_arr([npr_query0, consent_over(npr_q0, alice), e_uint(0)]))
 f_catq = frame(5, e_map([(e_uint(1), e_tstr('rhtn-forum')),
@@ -2771,21 +2837,21 @@ r_cur = e_map([(e_uint(1), e_bstr(NONCE(b'currency'))),
 r_cur_no = e_map([(e_uint(1), e_bstr(NONCE(b'currency'))),
                   (e_uint(2), e_uint(1))])
 
-# §7.10: the four a client hands the node serving it.  Every one is about
-# the client that sends it, so none of them names a subject, an owner or a
-# sender: the node takes that from the session.
-f_pub = frame(9, e_map([(e_uint(1), prekey),
-                        (e_uint(2), e_bstr(NONCE(b'publication')))]))
-otks = [H(b'rhtn-test-vectors:one-time-deposit:' + bytes([i])) for i in range(3)]
-f_dep = frame(10, e_map([(e_uint(1), e_arr([e_bstr(k) for k in otks])),
-                         (e_uint(2), e_bstr(NONCE(b'deposit')))]))
+# §7.10: a sealed message names its recipient and nothing of its sender,
+# who submits under a key minted for the connection (§9.1)
 f_relay = frame(11, e_map([(e_uint(1), e_bstr(carol.keyhash)),
-                           (e_uint(2), e_bstr(H(b'rhtn-test-vectors:relayed-ciphertext'))),
-                           (e_uint(3), e_bstr(NONCE(b'relay'))),
-                           (e_uint(4), e_bstr(carol.ed_pub))]))   # carol's phone: the device the session is with
-f_relay_nodevice = frame(11, e_map([(e_uint(1), e_bstr(carol.keyhash)),
-                                    (e_uint(2), e_bstr(H(b'rhtn-test-vectors:relayed-ciphertext'))),
-                                    (e_uint(3), e_bstr(NONCE(b'relay')))]))
+                           (e_uint(2), sealed),
+                           (e_uint(3), e_bstr(NONCE(b'relay')))]))
+# the shape §7.10 retired: a byte string where the seal goes, and a device
+f_relay_old = frame(11, e_map([(e_uint(1), e_bstr(carol.keyhash)),
+                               (e_uint(2), e_bstr(H(b'rhtn-test-vectors:relayed-ciphertext'))),
+                               (e_uint(3), e_bstr(NONCE(b'relay'))),
+                               (e_uint(4), e_bstr(carol.ed_pub))]))
+# §8.2 field 5: the newest queue position the attaching device holds, and the
+# AttachAck that counts only what is newer
+f_attach_cursor = frame(1, e_map([(e_uint(1), e_bstr(carol.keyhash)),
+                                  (e_uint(3), caps_client),
+                                  (e_uint(5), e_uint(6))]))
 # field 5 is the key the post is SIGNED with: the client's own, since the
 # push service refuses a post signed by any other (design s14.1.5)
 WAKE_SIGNER = H(b'rhtn-test-vectors:wake-signing-key')
@@ -2796,19 +2862,14 @@ f_wake = frame(12, e_map([(e_uint(1), e_bstr(NONCE(b'wake'))),
                           (e_uint(5), e_bstr(WAKE_SIGNER))]))
 # a withdrawal: field 2 absent, and 3, 4 and 5 absent with it
 f_wake_off = frame(12, e_map([(e_uint(1), e_bstr(NONCE(b'wake-withdraw')))]))
-r_sub = e_map([(e_uint(1), e_bstr(NONCE(b'publication'))), (e_uint(2), e_uint(0))])
-r_sub_bound = e_map([(e_uint(1), e_bstr(NONCE(b'deposit'))), (e_uint(2), e_uint(2))])
+r_sub = e_map([(e_uint(1), e_bstr(NONCE(b'relay-accepted'))), (e_uint(2), e_uint(0))])
+r_sub_bound = e_map([(e_uint(1), e_bstr(NONCE(b'relay-bound'))), (e_uint(2), e_uint(2))])
 # 1 refused: a relay for a recipient this node holds no record of (s7.10);
 # the reply names no reason, since every reason is about somebody else
 r_sub_refused = e_map([(e_uint(1), e_bstr(NONCE(b'relay'))), (e_uint(2), e_uint(1))])
-# what the node then delivers for a relay submission: the submitter in
-# front of the ciphertext, an array and not a map
-relayed = e_arr([e_bstr(alice.keyhash), e_bstr(H(b'rhtn-test-vectors:relayed-ciphertext'))])
-# the same delivery with the submitter's binding in it, which a node
-# carries where it holds one (`wire-format.md` §7.10's third element)
-relayed_bound = e_arr([e_bstr(alice.keyhash),
-                       e_bstr(H(b'rhtn-test-vectors:relayed-ciphertext')),
-                       e_bstr(prekey)])
+# what the node delivers (§7.10): the message's position in carol's queue,
+# the seal unchanged, and the node's own half, decapsulated under key 3
+relayed = e_arr([e_uint(7), sealed, e_bstr(ss_n)])
 
 f_attach_deleg = frame(1, e_map([(e_uint(1), e_bstr(alice.keyhash)),
                                  (e_uint(2), currency),
@@ -2841,16 +2902,17 @@ _msg_pairs = [
     ('TopologyMemo — the same slot EMPTIED (field 5 absent: departure or disavowal)', f_memo_empty),
     ('ResolveRequest (request 1)', f_resolve),
     ('ArchiveRequest (request 2) — head ABSENT: the recovery case, a must-accept', f_archive),
-    ('PrekeyRequest (request 3) — reusable plus a one-time key', f_pk1),
-    ('PrekeyBatchRequest (request 3) — two subjects, ascending', f_pkb),
+    ('NodeKeyRequest (request 3) — carol\'s node key, one recipient, visibly targeted', f_nk1),
+    ('NodeKeyBatchRequest (request 3) — two recipients, ascending, visibly a sweep', f_nkb),
     ('Query, consent, and the selector\'s selection_basis claim (request 4) — the normal record\'s worked query', f_query),
     ('CatalogQuery (request 5) — filtered to `rhtn-forum`', f_catq),
     ('ResourceRequest (request 6) — an HTTP/1.1 GET inside the frame', f_rr),
     ('ResourceRegistration (request 7) — the signed catalog entry, requested scope absent', f_reg),
     ('CurrencyRequest (request 8)', f_cur),
-    ('PrekeyPublication (request 9) — the subject\'s own bundle, published by the subject', f_pub),
-    ('OneTimeDeposit (request 10) — three keys, opaque to the node', f_dep),
-    ('RelaySubmission (request 11) — ciphertext for carol, which this node cannot read', f_relay),
+    # 9 and 10 are retired (§9.2): these two took their places in this list
+    ('Attach — field 5, the newest queue position this device holds of the node (§7.10, §8.2)', f_attach_cursor),
+    ('Attach — the same with no field 5: a device attaching for the first time, or restored, is handed everything still held', frame(1, e_map([(e_uint(1), e_bstr(carol.keyhash)), (e_uint(3), caps_client)]))),
+    ('RelaySubmission (request 11) — alice\'s sealed message for carol, naming the recipient and nothing of the sender', f_relay),
     ('WakeRegistration (request 12) — endpoint, the key its body is encrypted to, the key its post is signed with, and when the client expects it to lapse', f_wake),
     ('WakeRegistration — the WITHDRAWAL: field 2 absent, and fields 3, 4 and 5 absent with it', f_wake_off),
     # appended 2026-09-22, after the request families, so every earlier fixture keeps its id
@@ -2924,18 +2986,18 @@ _reply_pairs = [
     ('ResolveReply — referral (code 2, advances 2)', r_referral),
     ('ResolveReply — failure (code 1, reason 0: no such child)', r_fail),
     ('ArchiveReply — one envelope, no more remaining', r_archive),
-    ('PrekeyReply — bundle plus one-time key', r_pk),
-    ('PrekeyReply — failure 0, unknown subject', r_pk_fail),
+    ('NodeKeyReply — carol\'s newest node key', r_nk),
+    ('NodeKeyReply — failure 0, not a recipient this node serves', r_nk_fail),
     ('CatalogReply — one entry, no truncation', r_cat),
     ('ResourceResponse — 0 delivered, HTTP/1.1 200 inside', r_rr),
     ('ResourceResponse — 1 refused, field 2 absent', r_rr_refused),
     ('CurrencyReply — attestation follows', r_cur),
     ('CurrencyReply — 1 cannot issue', r_cur_no),
     ('ResourceRegistrationReply — 0 recorded', r_reg),
-    ('SubmissionReply — 0 accepted, echoing the publication\'s nonce', r_sub),
-    ('SubmissionReply — 2 over a bound this node applies, echoing the deposit\'s nonce', r_sub_bound),
+    ('SubmissionReply — 0 accepted, echoing the submission\'s nonce', r_sub),
+    ('SubmissionReply — 2 over a bound this node applies: nothing delivered to make room', r_sub_bound),
     # appended 2026-09-22
-    ('PrekeyReply — every device\'s bundle, alice\'s phone and desktop, for a request naming no device (§7.8)', r_pk_all),
+    ('NodeKeyReply — failure 1, refused', r_nk_refused),
     ('ArchiveReply — one PRESENTED presence record, the holder\'s disclosure choice carried (§7.9)', r_archive_presented),
     # appended 2026-10-02
     ('SubmissionReply (1 refused): echoing the relay submission\'s nonce, a recipient this node holds no record of, and no reason given (§7.10)', r_sub_refused),
@@ -2970,7 +3032,7 @@ def introduction(who, loc_bytes):
     return e_arr([e_uint(1), who.key_material, encryption_key(who), signed_locator_by(who, loc_bytes)])
 sl_c1 = signed_locator_by(IDS['c1'], locator(bob.keyhash, p_odd, seqno(2, 7)))
 intro_c1 = e_arr([e_uint(1), IDS['c1'].key_material, encryption_key(IDS['c1']), sl_c1])
-sl_bob = signed_locator_by(bob, locator(bob.keyhash, b'\x40', seqno(1, 0)))
+sl_bob = signed_locator_by(bob, locator(bob.keyhash, path([]), seqno(1, 0)))
 # one candidate per proposal, in turns (§5.1): the proposal is the introduction
 fishing_proposal = intro_c1
 # the opening's kinds (s7.10.1, 20-24) [author, 2026-10-19]: what a
@@ -3002,7 +3064,7 @@ trace_confirmed = e_map([(e_uint(1), e_bstr(conv_handle)), (e_uint(2), e_uint(3)
                          (e_uint(5), e_bstr(npr_precommit))])
 trace_confirmed_bad = e_map([(e_uint(1), e_bstr(conv_handle)), (e_uint(2), e_uint(3)),
                              (e_uint(3), e_uint(3)), (e_uint(5), e_bstr(npr_precommit))])
-intro_w1 = introduction(IDS['w1'], locator(bob.keyhash, b'\x30', seqno(1, 2)))
+intro_w1 = introduction(IDS['w1'], locator(bob.keyhash, path([3]), seqno(1, 2)))
 witness_set = e_arr([intro_c1, intro_w1])
 witness_keep = e_arr([e_bstr(i) for i in sorted([IDS['c1'].keyhash, IDS['w1'].keyhash])])
 witness_standdown = e_map([(e_uint(1), e_bstr(conv_handle))])
@@ -3093,7 +3155,7 @@ one positive known-answer encoding per framed message family. Framing is
 at 64 KiB (65,536 B), bidirectional request streams at 256 KiB (262,144 B).
 Unknown **control frames are skipped** and the session survives; unknown
 **request types are rejected**. Signed objects embedded below (the currency
-attestation, catalog entry, prekey bundle, adoption envelope, query consent)
+attestation, catalog entry, node key, adoption envelope, query consent)
 are byte-identical to their fixtures in `records.md` and `transactions.md`.
 
 ## Control frames (stream 0)
@@ -3104,30 +3166,26 @@ are byte-identical to their fixtures in `records.md` and `transactions.md`.
 
 {chr(10).join(_req_md)}
 
-## What the node delivers for a relay submission
+## What the node delivers for a sealed message
 
-`wire-format.md` §7.10's `RelayedPayload`: the submitter's keyhash in front of
-the ciphertext, composed by the node that took the submission and not by
-either end. The name is a routing hint — it tells a recipient which peer's
-material to try — and never an attribution, which the material the message
-opens under decides.
+`wire-format.md` §7.10's `RelayedPayload`: the message's position in the
+recipient's queue, the `Sealed` unchanged, and `ssN`, the node's own half
+decapsulated under the node key the message was sealed to. **It names no
+sender**: the node knows none, and the sender is inside the seal.
 
-**RelayedPayload — alice's submission as carol collects it** ({len(relayed)} bytes):
+**RelayedPayload — alice's sealed message as carol collects it, at position
+7** ({len(relayed)} bytes):
 
 ```
 {hexblock(relayed)}
 ```
 
-The submitter's bundle rides as an optional third element where the node holds
-one, because a recipient cannot have asked for the bundle of a party who had
-not written to it yet. It is signed by the submitter, so the node carrying it
-gains no say in attribution; **a decoder MUST read both shapes.**
-
-**RelayedPayload — the same delivery with the submitter's binding**
-({len(relayed_bound)} bytes):
+**NodeKeyBatchReply — the replies to the batch request above, one per
+recipient asked, in its ascending keyhash order: carol's key, and failure 0 for
+alice, whom bob's node does not serve** ({len(r_nk_batch)} bytes):
 
 ```
-{hexblock(relayed_bound)}
+{hexblock(r_nk_batch)}
 ```
 
 ## Replies
@@ -3222,8 +3280,9 @@ for fid, by, kind in [
     ('P-signedlocator-root', sl_root, 'SignedLocator'), ('P-endpointrecord', endpoint_record, 'EndpointRecord'),
     ('P-currency', currency, 'CurrencyAttestation'), ('P-catalog', catalog, 'CatalogEntry'),
     ('P-abuse', abuse, 'AbuseReport'), ('P-anchor', anchor, 'AnchorEntry'),
-    ('P-subtree-ack', ack, 'SubtreeAck'), ('P-prekey', prekey, 'PrekeyBundle'),
-    ('P-prekey-desktop', prekey_desktop, 'PrekeyBundle'),
+    ('P-subtree-ack', ack, 'SubtreeAck'), ('P-node-key', node_key, 'NodeKey'),
+    ('P-sealed', sealed, 'Sealed'), ('P-sealed-body', sealed_body, 'SealedBody'),
+    ('P-node-key-batch-reply', r_nk_batch, 'NodeKeyBatchReply'),
     ('P-currency-identity', currency_identity, 'CurrencyAttestation'),
     ('P-currency-successor', currency_successor, 'CurrencyAttestation'),
     ('P-delegation', deleg_bob, 'Delegation'), ('P-delegation-carol', deleg_carol, 'Delegation'),
@@ -3231,7 +3290,6 @@ for fid, by, kind in [
     ('P-delegation-alice-desktop', deleg_alice_desktop, 'Delegation'),
     ('P-verification-query', rec_query, 'VerificationQuery'),
     ('P-relayed', relayed, 'RelayedPayload'),
-    ('P-relayed-bound', relayed_bound, 'RelayedPayload'),
 ]:
     reg(fid, 'bytes', ACC(kind), by)
 for i, (cap, by) in enumerate(_msg_pairs):
@@ -3245,7 +3303,7 @@ for fid, by, why in [
     ('N-wrong-signer-catalog', catalog_wrong, 'CatalogEntry'),
     ('N-wrong-signer-abuse', abuse_wrong, 'AbuseReport'),
     ('N-wrong-signer-ack', ack_wrong, 'SubtreeAck'),
-    ('N-wrong-signer-prekey', prekey_wrong, 'PrekeyBundle'),
+    ('N-wrong-signer-node-key', node_key_wrong, 'NodeKey'),
 ]:
     reg(fid, 'bytes', REJ(why, 'semantic', 'signature valid under a key the object does not name'), by)
 reg('N-wrong-signer-currency', 'bytes',
@@ -3583,14 +3641,8 @@ reg('B-zone-unsigned-sibling', 'bytes',
                     (e_uint(2), e_arr([e_map([(e_uint(1), e_bstr(W16[0].keyhash)),
                                               (e_uint(2), e_arr([network_point([10, 0, 1, 1], asn=64511, zone='nyc1')]))])])),
                     (e_uint(3), e_uint(300)), (e_uint(4), e_uint(0)), (e_uint(5), caps_server)])))
-reg('B-prekey-4096', 'bytes', ACC('PrekeyBundle', 'blob at the 4 KB ceiling'),
-    sign1_slot([(e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), e_uint(1)),
-                (e_uint(3), e_bstr(b'k' * 4096)), (e_uint(4), e_uint(TS_REC)),
-                (e_uint(5), e_bstr(alice.ed_pub))], 6, AAD_PREKEY, alice))
-reg('B-prekey-4097', 'bytes', REJ('PrekeyBundle', 'schema', 'blob exceeds the 4 KB ceiling'),
-    sign1_slot([(e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), e_uint(1)),
-                (e_uint(3), e_bstr(b'k' * 4097)), (e_uint(4), e_uint(TS_REC)),
-                (e_uint(5), e_bstr(alice.ed_pub))], 6, AAD_PREKEY, alice))
+reg('B-node-key-1215', 'bytes', REJ('NodeKey', 'schema', 'an X-Wing encapsulation key is 1216 bytes'),
+    sign1_slot(nk_pairs[:3] + [(e_uint(4), e_bstr(node_key_pub[:1215])), nk_pairs[4]], 6, AAD_NODE_KEY, bob))
 reg('B-archive-max-0', 'bytes', REJ('ArchiveRequest', 'schema', 'max_records below 1'),
     e_map([(e_uint(1), e_bstr(alice.keyhash)), (e_uint(3), e_uint(0)), (e_uint(5), e_bstr(NONCE(b'a0')))]))
 reg('B-archive-max-256', 'bytes', ACC('ArchiveRequest', 'max_records at the ceiling'),
@@ -3700,8 +3752,12 @@ def _catalog_padded(target):
     raise AssertionError('could not pad catalog entry to %d' % target)
 reg('B-catalog-2048', 'bytes', ACC('CatalogEntry', 'total encoded size at the 2048 ceiling'), _catalog_padded(2048))
 reg('B-catalog-2049', 'bytes', REJ('CatalogEntry', 'schema', '2049 encoded bytes exceed the ceiling'), _catalog_padded(2049))
-reg('B-batch-1-subject', 'bytes', REJ('PrekeyBatchRequest', 'schema', 'a batch names at least two subjects'),
+reg('B-batch-1-recipient', 'bytes', REJ('NodeKeyBatchRequest', 'schema', 'a batch names at least two recipients: one is the targeted form'),
     e_map([(e_uint(1), e_arr([e_bstr(alice.keyhash)])), (e_uint(2), e_bstr(NONCE(b'b1')))]))
+reg('B-node-key-batch-reply-256', 'bytes', ACC('NodeKeyBatchReply', 'two hundred and fifty-six replies, one per recipient a batch may name'),
+    e_arr([_nk_fail_small] * 256))
+reg('B-node-key-batch-reply-257', 'bytes', REJ('NodeKeyBatchReply', 'schema', 'more replies than a batch may name recipients'),
+    e_arr([_nk_fail_small] * 257))
 reg('U-responses-33', 'unit',
     REJ('body', 'schema', 'thirty-three verifier responses exceed the 32 ceiling'),
     note='recipe: any normal record with 33 distinct-verifier responses; the suite holds fewer distinct identities than the bound')
@@ -3758,11 +3814,31 @@ reg('N-delegation-classical-only', 'bytes',
 reg('N-currency-delegation-mismatch', 'bytes',
     REJ('CurrencyAttestation', 'semantic', 'field 8 names a key other than the one that signed field 7'),
     currency_deleg_mismatch)
-reg('P-frame-prekey-request-device', 'bytes', ACC('frame', 'PrekeyRequest naming the device, a one-time key asked for'), f_pk1)
-reg('N-shape-prekey-request-onetime-without-device', 'bytes',
-    REJ('frame', 'schema', 'field 4 required when field 2 = 1: a one-time key is one device\'s'), f_pk1_nodevice)
-reg('N-shape-relay-missing-device', 'bytes',
-    REJ('frame', 'schema', 'RelaySubmission field 4 required: a session is with a device'), f_relay_nodevice)
+reg('N-shape-relay-unsealed', 'bytes',
+    REJ('frame', 'schema', 'a RelaySubmission carries a Sealed at field 2, not a byte string, and names no device (§7.10)'), f_relay_old)
+for _t in (9, 10):
+    reg(f'N-frame-request-{_t}-retired', 'bytes',
+        REJ('frame', 'schema', f'request type {_t} is retired and not reassigned (§9.2): a decoder rejects it'),
+        frame(_t, e_map([(e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), e_bstr(NONCE(b'retired')))])))
+# the seal's shapes (§7.8.1)
+_sealed_parts = lambda n=NODE_KEY_N, cr=ct_r, cn=ct_n, body=None: e_arr(
+    [e_uint(n), e_bstr(cr), e_bstr(cn),
+     e_bstr(body if body is not None else SEAL_NONCE + b'\x00' * 16)])
+reg('N-sealed-ct-r-1119', 'bytes', REJ('Sealed', 'schema', 'an X-Wing ciphertext is 1120 bytes'), _sealed_parts(cr=ct_r[:1119]))
+reg('N-sealed-ct-n-1121', 'bytes', REJ('Sealed', 'schema', 'an X-Wing ciphertext is 1120 bytes'), _sealed_parts(cn=ct_n + b'\x00'))
+reg('N-sealed-short-body', 'bytes', REJ('Sealed', 'schema', 'a seal carries at least its nonce and its GCM tag'), _sealed_parts(body=SEAL_NONCE + b'\x00' * 15))
+reg('N-sealed-body-tag-31', 'bytes', REJ('SealedBody', 'schema', 'a tag is 32 bytes'),
+    b'\x86' + seal_fields + e_bstr(seal_tag[:31]))
+reg('N-sealed-body-alias-empty', 'bytes', REJ('SealedBody', 'schema', 'an alias is 1 to 64 bytes of text'),
+    b'\x86' + e_bstr(alice.keyhash) + e_tstr('') + NULL + e_uint(0) + e_bstr(SEAL_BYTES) + e_bstr(seal_tag))
+reg('P-sealed-body-no-introduction', 'bytes', ACC('SealedBody', 'a later message: the introduction slot is nil'),
+    b'\x86' + e_bstr(alice.keyhash) + e_tstr(SEAL_ALIAS) + NULL + e_uint(0) + e_bstr(SEAL_BYTES) + e_bstr(seal_tag))
+reg('N-relayed-half-31', 'bytes', REJ('RelayedPayload', 'schema', "the node's half is 32 bytes"),
+    e_arr([e_uint(7), sealed, e_bstr(ss_n[:31])]))
+reg('N-relayed-sender-named', 'bytes', REJ('RelayedPayload', 'schema', 'the retired shape: a sender keyhash in front of a byte string'),
+    e_arr([e_bstr(alice.keyhash), e_bstr(H(b'rhtn-test-vectors:relayed-ciphertext'))]))
+reg('N-node-key-reply-both', 'bytes', REJ('NodeKeyReply', 'schema', 'a node key and a failure code are alternatives'),
+    e_map([(e_uint(1), e_bstr(NONCE(b'node-key'))), (e_uint(2), node_key), (e_uint(3), e_uint(0))]))
 # type 12's paired shapes (s7.10): the endpoint, its body key and its
 # signing key stand or fall together [author, 2026-11-06]
 reg('N-shape-wake-missing-signer', 'bytes',
@@ -3780,8 +3856,6 @@ reg('B-wake-signer-31', 'bytes',
                      (e_uint(2), e_tstr('https://push.example/rhtn/a3f9')),
                      (e_uint(3), e_bstr(H(b'rhtn-test-vectors:wake-endpoint-key'))),
                      (e_uint(5), e_bstr(WAKE_SIGNER[:31]))])))
-reg('B-prekey-reply-8', 'bytes', ACC('PrekeyReply', 'eight bundles, the ceiling'), r_pk_8)
-reg('B-prekey-reply-9', 'bytes', REJ('PrekeyReply', 'schema', 'nine bundles exceed the ceiling of eight'), r_pk_9)
 reg('N-peering-endpoint-neither', 'bytes', REJ('body', 'schema', 'a peering endpoint is a network point or a locator, told apart by key 1'), peer_neither_body)
 reg('P-archive-request-frontier-2', 'bytes', ACC('frame', 'a two-txid frontier, past a merge'), f_archive_frontier2)
 reg('B-archive-frontier-0', 'bytes', REJ('frame', 'schema', 'an empty frontier: field 2 is [ + txid ]'),
@@ -3986,8 +4060,8 @@ txid: `{hx(peer_light_txid)}`
 # The five local device-to-device encodings, one coherent exchange: alice
 # initiates with bob, the contributions and ceremony-id are records.md's
 # pre-commitment known answer byte-for-byte, and the device handover reuses
-# keys.md's desktop transport key, records.md's delegation and the desktop's
-# prekey bundle byte-for-byte.  The bytes are the objects alone: what a code
+# keys.md's desktop transport key and records.md's delegation byte-for-byte,
+# with alice's two encryption secrets.  The bytes are the objects alone: what a code
 # encodes them as, and how a bearer frames them, is no part of these
 # vectors -- but the SEALING is, since 2026-10-05, and it is covered at the
 # end of the file: s14.3.2 specifies the session key, the cipher, the
@@ -4041,22 +4115,13 @@ cand_handover = e_arr([e_uint(1), e_bstr(pc_demo), cands_bare])
 ck_alice_to_bob = hkdf_sha256(demo_seed, b'rhtn/1:capture' + alice.keyhash + bob.keyhash + pc_demo)
 ck_handover = e_arr([e_uint(1), e_bstr(pc_demo), e_bstr(ck_alice_to_bob)])
 
-# the handover between alice's two devices: the desktop's transport key and
-# its bundle payload (the PrekeyBundle map with field 6 absent — exactly
-# what alice's identity signs), answered by the delegation and the signed
-# bundle records.md already carries
-intro_payload = e_map(pk_desk_pairs)
-dev_intro = e_arr([e_uint(1), e_bstr(TK['alice-desktop'].pub), e_bstr(intro_payload)])
-dev_cred = e_arr([e_uint(1), e_arr([e_bstr(deleg_alice_desktop)]), e_bstr(prekey_desktop)])
-# wire s14.3.4: alice hands bob her prekey material across the local
-# session, so the pair can open an end-to-end channel after they separate
-# with no node's help.  The bundle is NOT reinvented: it is `prekey`, the
-# same bytes records.md publishes, signed by alice and naming her phone as
-# the device.  The one-time key is one of the deposit's, opaque here.
-prekey_handover = e_arr([e_uint(1), e_bstr(pc_demo), e_bstr(alice.ed_pub),
-                         e_bstr(prekey), e_bstr(otks[0])])
-prekey_handover_dry = e_arr([e_uint(1), e_bstr(pc_demo), e_bstr(alice.ed_pub),
-                             e_bstr(prekey)])
+# the handover between alice's two devices (s14.3.3): the desktop offers the
+# transport key it minted, and is answered by the delegation records.md
+# carries and alice's two encryption secrets (s2.5), so it reads what is
+# sealed to her
+dev_intro = e_arr([e_uint(1), e_bstr(TK['alice-desktop'].pub)])
+dev_cred = e_arr([e_uint(1), e_arr([e_bstr(deleg_alice_desktop)]),
+                  e_bstr(alice_xwing_seed), e_bstr(alice_auth)])
 
 emit('local-interfaces.md', f"""# Local device-to-device interfaces (`wire-format.md` §14.3)
 
@@ -4066,8 +4131,8 @@ emit('local-interfaces.md', f"""# Local device-to-device interfaces (`wire-forma
 of `wire-format.md` §14.3, as one coherent exchange: **alice initiates with
 bob**, the contributions and the ceremony-id are the pre-commitment known
 answer in `records.md` **byte-for-byte**, and the device handover reuses the
-desktop transport key (`keys.md`), alice's delegation to it (`records.md`)
-and the desktop's signed prekey bundle (`records.md`) byte-for-byte. The
+desktop transport key (`keys.md`) and alice's delegation to it (`records.md`)
+byte-for-byte, with her two encryption secrets (`wire-format.md` §2.5). The
 bytes are the objects alone — what an optical code encodes them as, and how a bearer
 frames them, is the shell's and no part of these vectors. **The sealing is
 not the shell's** [reviewer, 2026-10-06]: `wire-format.md` §14.3.2 fixes the
@@ -4160,16 +4225,16 @@ ceremony's pre-commitment; one such message crosses each way at capture time:
 
 ## The handover between one identity's devices (§14.3.3)
 
-**DeviceIntroduction — alice's desktop offers its transport key and its
-unsigned bundle payload (the `PrekeyBundle` map, field 6 absent)**
+**DeviceIntroduction — alice's desktop offers the transport key it minted**
 ({len(dev_intro)} bytes):
 
 ```
 {hexblock(dev_intro)}
 ```
 
-**DeviceCredential — the answer: one delegation and the signed bundle, each
-byte-identical to its `records.md` fixture** ({len(dev_cred)} bytes):
+**DeviceCredential — the answer: one delegation, byte-identical to its
+`records.md` fixture, then alice's X-Wing seed and her sealing-authentication
+key, each derived from her identity root (§2.5)** ({len(dev_cred)} bytes):
 
 ```
 {hexblock(dev_cred)}
@@ -4189,14 +4254,14 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 # participant-keyhash order, which is the order the ceremony-id uses
 session_key = H(b'rhtn/1:ceremony-session' + pc_first + pc_second)
 
-# one sealed carriage: the PrekeyHandover above, sealed under that key with
+# one sealed carriage: the CaptureKeyHandover above, sealed under that key with
 # the ceremony-id as associated data.  **The nonce is a test vector's, not a
 # generator's**: an implementation draws it at random per carriage (s14.3.2),
 # and a known answer needs one fixed, so this is derived from the fixture
 # names and is no part of the protocol
 seal_nonce = H(b'rhtn-test-vectors:ceremony-session-nonce')[:12]
 sealed_handover = seal_nonce + AESGCM(session_key).encrypt(
-    seal_nonce, prekey_handover, pc_demo)
+    seal_nonce, ck_handover, pc_demo)
 
 emit("local-interfaces.md", f"""
 ### The local session's cryptography (§14.3.2)
@@ -4218,7 +4283,7 @@ second       {pc_second.hex()}
 key          {session_key.hex()}
 ```
 
-**One sealed carriage** — the `PrekeyHandover` above, sealed under that key:
+**One sealed carriage** — the `CaptureKeyHandover` above, sealed under that key:
 AES-256-GCM, the 96-bit nonce **in front of** the ciphertext, and the
 ceremony-id as associated data. The nonce here is the fixture's own, since an
 implementation draws one at random per carriage and a known answer needs one
@@ -4227,7 +4292,7 @@ fixed:
 ```
 nonce        {seal_nonce.hex()}
 aad          {pc_demo.hex()}
-plaintext    the P-prekey-handover fixture, {len(prekey_handover)} bytes
+plaintext    the P-capture-key-handover fixture, {len(ck_handover)} bytes
 sealed       {len(sealed_handover)} bytes
 ```
 
@@ -4264,10 +4329,8 @@ for fid, by, kind, note in [
     ('P-candidates-bare', cands_bare, 'Candidates', 'the payload path form; both address families'),
     ('P-candidate-handover', cand_handover, 'CandidateHandover', 'the same candidates, anchored'),
     ('P-capture-key-handover', ck_handover, 'CaptureKeyHandover', "alice's key for bob's captures of her, anchored"),
-    ('P-prekey-handover', prekey_handover, 'PrekeyHandover', "alice's bundle and one one-time key, anchored; the bundle is records.md's bytes unchanged"),
-    ('P-prekey-handover-dry', prekey_handover_dry, 'PrekeyHandover', 'the same without a one-time key, which s7.8 permits when a pool runs dry'),
-    ('P-device-introduction', dev_intro, 'DeviceIntroduction', 'field 3 is the PrekeyBundle map, field 6 absent'),
-    ('P-device-credential', dev_cred, 'DeviceCredential', 'delegation and signed bundle, byte-identical to records.md'),
+    ('P-device-introduction', dev_intro, 'DeviceIntroduction', 'the transport key the delegations will name'),
+    ('P-device-credential', dev_cred, 'DeviceCredential', "one delegation, byte-identical to records.md, and alice's two encryption secrets"),
 ]:
     reg(fid, 'bytes', ACC(kind, note), by)
 
@@ -4306,18 +4369,15 @@ reg('N-capture-key-handover-version-2', 'bytes',
     REJ('CaptureKeyHandover', 'schema', 'a version the decoder does not know is refused'),
     e_arr([e_uint(2), e_bstr(pc_demo), e_bstr(ck_alice_to_bob)]))
 
-reg('N-prekey-handover-device-31', 'bytes',
-    REJ('PrekeyHandover', 'schema', 'a device is 32 bytes'),
-    e_arr([e_uint(1), e_bstr(pc_demo), e_bstr(alice.ed_pub[:31]), e_bstr(prekey)]))
-reg('N-prekey-handover-anchor-31', 'bytes',
-    REJ('PrekeyHandover', 'schema', 'a ceremony-id is 32 bytes'),
-    e_arr([e_uint(1), e_bstr(pc_demo[:31]), e_bstr(alice.ed_pub), e_bstr(prekey)]))
-reg('N-prekey-handover-empty-bundle', 'bytes',
-    REJ('PrekeyHandover', 'schema', 'a bundle is a non-empty byte string'),
-    e_arr([e_uint(1), e_bstr(pc_demo), e_bstr(alice.ed_pub), e_bstr(b'')]))
-reg('N-prekey-handover-version-2', 'bytes',
-    REJ('PrekeyHandover', 'schema', 'a version the decoder does not know is refused'),
-    e_arr([e_uint(2), e_bstr(pc_demo), e_bstr(alice.ed_pub), e_bstr(prekey)]))
+reg('N-device-introduction-31', 'bytes',
+    REJ('DeviceIntroduction', 'schema', 'a device key is 32 bytes'),
+    e_arr([e_uint(1), e_bstr(TK['alice-desktop'].pub[:31])]))
+reg('N-device-introduction-bundle', 'bytes',
+    REJ('DeviceIntroduction', 'schema', 'the retired shape: a bundle after the key'),
+    e_arr([e_uint(1), e_bstr(TK['alice-desktop'].pub), e_bstr(b'\xa0')]))
+reg('N-device-credential-seed-31', 'bytes',
+    REJ('DeviceCredential', 'schema', 'an X-Wing seed is 32 bytes'),
+    e_arr([e_uint(1), e_arr([e_bstr(deleg_alice_desktop)]), e_bstr(alice_xwing_seed[:31]), e_bstr(alice_auth)]))
 
 # the ceremony conversation's structures (s7.10.2), kinds 9-18 in messages.md
 for fid, by, kind, note in [
@@ -4463,10 +4523,10 @@ reg('N-continuation-empty', 'bytes',
     e_arr([e_uint(1), e_bstr(pc_demo), e_uint(1), e_arr([])]))
 reg('B-credential-delegations-45', 'bytes',
     ACC('DeviceCredential', 'forty-five delegations, the 90-day run, the ceiling'),
-    e_arr([e_uint(1), e_arr([e_bstr(deleg_alice_desktop)] * 45), e_bstr(prekey_desktop)]))
+    e_arr([e_uint(1), e_arr([e_bstr(deleg_alice_desktop)] * 45), e_bstr(alice_xwing_seed), e_bstr(alice_auth)]))
 reg('N-credential-delegations-46', 'bytes',
     REJ('DeviceCredential', 'schema', 'forty-six delegations exceed the run of forty-five'),
-    e_arr([e_uint(1), e_arr([e_bstr(deleg_alice_desktop)] * 46), e_bstr(prekey_desktop)]))
+    e_arr([e_uint(1), e_arr([e_bstr(deleg_alice_desktop)] * 46), e_bstr(alice_xwing_seed), e_bstr(alice_auth)]))
 for fid, by, why in [
     ('N-cbor-uint-not-shortest', b'\x81\x18\x05', 'a uint encoded above its shortest form (RFC 8949 §4.2.1)'),
     ('N-cbor-map-keys-unsorted', b'\xa2\x02\x00\x01\x00', 'map keys not in ascending bytewise order'),

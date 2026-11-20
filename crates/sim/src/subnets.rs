@@ -860,7 +860,7 @@ impl Fabric {
                 let upstream = tmp.patron_of(n).map(|patron| (kh(patron), addrs[patron]));
                 let r = root(n);
                 let mut conf = format!(
-                    "identity = \"{r}/identity.key\"\nlisten = \"{}\"\nqueue = \"{r}/queue\"\nprekeys = \"{r}/prekeys\"\ntopology = \"{r}/topology\"\narchive = \"{r}/archive\"\nheartbeat = 30\ningestion = \"unverified-gossip\"\nendpoint-record = \"{r}/endpoint-record\"\nanchors = \"{r}/anchors\"\n",
+                    "identity = \"{r}/identity.key\"\nlisten = \"{}\"\nqueue = \"{r}/queue\"\nkeys = \"{r}/keys\"\ntopology = \"{r}/topology\"\narchive = \"{r}/archive\"\nheartbeat = 30\ningestion = \"unverified-gossip\"\nendpoint-record = \"{r}/endpoint-record\"\nanchors = \"{r}/anchors\"\n",
                     listen(n)
                 );
                 if is_anchor {
@@ -1139,6 +1139,7 @@ impl Fabric {
             filter: None,
             sibling_cache: Arc::new(Mutex::new(Vec::new())),
             addresses: Arc::new(Mutex::new(Default::default())),
+            cursors: Default::default(),
             tls: Arc::new(Mutex::new(Default::default())),
             connect_timeout: std::time::Duration::from_millis(1500),
             on_reachability: None,

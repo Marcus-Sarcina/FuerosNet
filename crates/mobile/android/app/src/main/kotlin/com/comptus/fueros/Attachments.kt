@@ -3,7 +3,6 @@ package com.comptus.fueros
 import android.content.Context
 import org.json.JSONObject
 import uniffi.rhtn_ffi.Answer
-import uniffi.rhtn_ffi.Construction
 import uniffi.rhtn_ffi.Conversation
 import uniffi.rhtn_ffi.Event
 import uniffi.rhtn_ffi.Participant
@@ -328,12 +327,7 @@ object Attachments {
             is Connection.Reconnecting -> "reconnecting…"
             is Connection.Lost -> "lost: no serving node reachable"
         }
-        // the kernel says which; the words are this shell's
-        val construction = when (p.payloadConstruction()) {
-            Construction.DOUBLE_RATCHET -> "the Double Ratchet (the floor)"
-            Construction.TRIPLE_RATCHET -> "the Triple Ratchet"
-        }
-        Gateway.front.setStatus("$line · presents $key…\npayload: $construction")
+        Gateway.front.setStatus("$line · presents $key…")
         // **every thread's chip, not the latest party's** [2026-10-27]:
         // the chip is per peer on the thread list (C1), and reading it off
         // one slot left every other thread's showing whatever it showed
@@ -398,6 +392,7 @@ object Attachments {
                     "kind" to e::class.simpleName,
                     "from" to when (e) {
                         is Event.Payload -> Diag.id8(e.from)
+                        is Event.Unverified -> Diag.id8(e.from)
                         is Event.Answered -> Diag.id8(e.from)
                         is Event.ResponseCopy -> Diag.id8(e.from)
                         is Event.Late -> Diag.id8(e.from)
@@ -405,7 +400,7 @@ object Attachments {
                         is Event.Peer -> Diag.id8(e.from)
                         else -> null
                     },
-                    "bytes" to (e as? Event.Payload)?.bytes?.size,
+                    "bytes" to ((e as? Event.Payload)?.bytes ?: (e as? Event.Unverified)?.bytes)?.size,
                     "refused" to when (e) {
                         is Event.Answered -> e.refused
                         is Event.ResponseCopy -> e.refused
@@ -425,6 +420,15 @@ object Attachments {
                         Gateway.front.incoming(id, from, who, String(e.bytes))
                         // **told in the shade where no screen shows it**
                         // [author, 2026-11-17]: it came over the session kept
+                        Gateway.appContext?.let { if (!Arrived.onScreen()) Arrived.post(it, who, from) }
+                    }
+                    // **a sender this identity cannot attribute** [author,
+                    // 2026-11-19]: shown under the alias it carries, marked
+                    // unverified, and never answered from here
+                    is Event.Unverified -> {
+                        val from = Gateway.hex(e.from)
+                        val who = "${e.alias} (unverified)"
+                        Gateway.front.incoming(id, from, who, String(e.bytes), unverified = true)
                         Gateway.appContext?.let { if (!Arrived.onScreen()) Arrived.post(it, who, from) }
                     }
                     is Event.Connection -> {

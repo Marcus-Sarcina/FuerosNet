@@ -6492,7 +6492,7 @@
   "id": "PAY-25",
   "area": "payload",
   "gap": "payload",
-  "title": "A node already serving this client is reached on the session that is up, not dialled again",
+  "title": "A node already serving this client is asked on the session that is up, save for a node-key fetch and a sealed message",
   "milestone": 3,
   "kind": "negative",
   "spec": [
@@ -6502,12 +6502,12 @@
   "rule": [
    {
     "where": "light-client-requirements.md §5",
-    "text": "A node that already serves you is reached on the session that is up rather than dialled a second time."
+    "text": "A\n  node that already serves you is reached on the session that is up rather than\n  dialled a second time, **except for a node-key fetch and a sealed message**"
    }
   ],
-  "given": "A running node N serving both this client and the recipient, and a client that names N as the node it is served by.",
-  "when": "The client is asked to hand payload for that recipient to the node serving the recipient, which resolves to N.",
-  "then": "Nothing is dialled and no submission is made on a new connection: N queues nothing from this path, and the answer is no, so the caller falls through to the session it already holds with N.",
+  "given": "A running node N serving both this client and a recipient R, and a client holding a session with N.",
+  "when": "The client fetches R's profile, and then sends R a direct message.",
+  "then": "The profile request rides the session already up and no connection is dialled for it; the node-key fetch and the sealed submission for R each go to N on a connection of their own, under a key minted for it, and none rides the session.",
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
@@ -12518,7 +12518,7 @@
   ],
   "given": "Node N serves clients S and R. R holds no session with N and is not reachable.",
   "when": "S submits ciphertext for R in a type-11 request.",
-  "then": "The reply echoes S's nonce with code 0 before R has connected; N's queue for R holds one message; and when R attaches it receives that message with S's keyhash in front of the ciphertext unchanged.",
+  "then": "The reply echoes S's nonce with code 0 before R has connected; N's queue for R holds one message; and when R attaches it receives that message as a RelayedPayload carrying the seal unchanged and N's half, and it opens to S's message.",
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
@@ -18048,7 +18048,7 @@
    },
    {
     "where": "light-client-requirements.md §3",
-    "text": "Your introduction rides inside the seal on your first message to a recipient."
+    "text": "Your introduction rides inside the seal on your messages to a recipient until you have had a reply from it"
    },
    {
     "where": "wire-format.md §7.10",
@@ -18057,7 +18057,7 @@
   ],
   "given": "Client S, attached to the node that also serves R, holding R's card and never having had a message from R.",
   "when": "S fetches R's node key and sends R two messages; R replies; S sends a third.",
-  "then": "Every connection S opens to R's node for the fetch and the submissions presents a key that is neither S's classical component nor one a delegation from S names, and no two of those connections present the same key; none rides S's attached session. The first sealed body carries S's introduction and the second and third carry nil in its place. R's node takes each submission.",
+  "then": "Every connection S opens to R's node for the fetch and the submissions presents a key that is neither S's classical component nor one a delegation from S names, and no two of those connections present the same key; none rides S's attached session. The first and second sealed bodies carry S's introduction, and the third, sent after R's reply, carries nil in its place. R's node takes each submission.",
   "oracle": "behaviour",
   "interpretation": null
  },
@@ -18083,7 +18083,7 @@
     "text": "a recipient replies to a sender it holds as a contact, and to no other"
    }
   ],
-  "given": "A, restored from its phrase with nothing of B held, collects a message B sealed after its first, so field 3 is nil; and a second sender C who chose B's alias.",
+  "given": "A, restored from its phrase with nothing of B held, collects a message B sealed after B had a reply from A, so field 3 is nil; and a second sender C who chose B's alias.",
   "when": "A lists its threads and tries to reply to B's message.",
   "then": "A shows B's message under the alias in field 2, marked unverified, in a thread kept apart from C's by the keyhash in field 1; nothing in it is dispatched as B's; and no reply is sealed or submitted, since A holds no contact for B.",
   "oracle": "behaviour",

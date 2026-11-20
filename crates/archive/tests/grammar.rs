@@ -8,7 +8,7 @@
 //! that no round trip could see, because a decoder that is wrong the same
 //! way on the way out and the way in agrees with itself.
 
-use rhtn_archive::prekey::PrekeyBundle;
+use rhtn_archive::sealed::Sealed;
 use rhtn_archive::submission::*;
 use rhtn_archive::tx::{Locator, Seqno};
 use rhtn_codec::cbor::*;
@@ -18,23 +18,28 @@ use rhtn_crypto::identity::testkit::test_identity;
 /// The subnet the fixtures' positions are in (`wire-format.md` §2.3 field 4).
 const SUBNET: [u8; 32] = [0xdb; 32];
 
-fn bundle(name: &str) -> Vec<u8> {
-    PrekeyBundle::build(
-        &test_identity(name),
-        1,
-        b"reusable material",
-        1_800_000_000,
-        &[0u8; 32],
-    )
+/// A seal as §7.8.1 encodes it. The arithmetic is not the subject here,
+/// only the shape, so the ciphertexts are filler of the declared length.
+fn sealed() -> Vec<u8> {
+    use rhtn_crypto::xwing::CIPHERTEXT_BYTES;
+    Sealed {
+        n: 1,
+        ct_r: Box::new([0x11; CIPHERTEXT_BYTES]),
+        ct_n: Box::new([0x22; CIPHERTEXT_BYTES]),
+        body: vec![0x33; 64],
+    }
+    .encode()
 }
 
 // acceptance: DEC-28
 #[test]
 fn a_structured_field_is_the_object_the_grammar_names() {
-    let b = bundle("alice");
-    // as `wire-format.md` §7.10 declares it: field 1 is the bundle map
-    let good = PrekeyPublication {
-        bundle: b.clone(),
+    let s = sealed();
+    let recipient = test_identity("bob").public.keyhash;
+    // as `wire-format.md` §7.10 declares it: field 2 is the Sealed array
+    let good = RelaySubmission {
+        recipient,
+        sealed: s.clone(),
         nonce: [1; 16],
     }
     .encode();
@@ -43,22 +48,24 @@ fn a_structured_field_is_the_object_the_grammar_names() {
         panic!("a map")
     };
     assert!(
-        matches!(map_get(m, 1), Some(Item::Map(_))),
-        "field 1 is the bundle, spliced in"
+        matches!(map_get(m, 2), Some(Item::Array(_))),
+        "field 2 is the seal, spliced in"
     );
-    assert_eq!(PrekeyPublication::decode(&good).unwrap().bundle, b);
+    assert_eq!(RelaySubmission::decode(&good).unwrap().sealed, s);
 
-    // the same bundle wrapped in a byte string: the shape a decoder that
+    // the same seal wrapped in a byte string: the shape a decoder that
     // wraps on the way out and unwraps on the way in would produce, and
     // would then accept from itself
     let mut wrapped = Vec::new();
-    emit_map_head(&mut wrapped, 2);
+    emit_map_head(&mut wrapped, 3);
     emit_uint(&mut wrapped, 1);
-    emit_bstr(&mut wrapped, &b);
+    emit_bstr(&mut wrapped, &recipient);
     emit_uint(&mut wrapped, 2);
+    emit_bstr(&mut wrapped, &s);
+    emit_uint(&mut wrapped, 3);
     emit_bstr(&mut wrapped, &[1u8; 16]);
     assert!(
-        PrekeyPublication::decode(&wrapped).is_err(),
+        RelaySubmission::decode(&wrapped).is_err(),
         "the wrapping is refused"
     );
 
@@ -67,12 +74,12 @@ fn a_structured_field_is_the_object_the_grammar_names() {
     // grammar accepts
     assert_ne!(good, wrapped, "the two encodings are not the same bytes");
     assert!(
-        rhtn_codec::schema::check_unsigned(rhtn_codec::schema::Family::PrekeyPublication, &good, 0)
+        rhtn_codec::schema::check_unsigned(rhtn_codec::schema::Family::RelaySubmission, &good, 0)
             .is_ok()
     );
     assert!(
         rhtn_codec::schema::check_unsigned(
-            rhtn_codec::schema::Family::PrekeyPublication,
+            rhtn_codec::schema::Family::RelaySubmission,
             &wrapped,
             0
         )

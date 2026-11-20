@@ -44,15 +44,11 @@ fn three_meetings() -> (Setup, [u8; 32], [u8; 32], [u8; 32]) {
     (s, cb, ab, ac)
 }
 
-// functional: PAY-016
-/// **A query or a grant unanswered at half the patience goes again, on
-/// a fresh session, once.** A verifier that lost its sessions refuses
-/// everything sent on the old ones and has nothing to say so on; the
-/// selector's query and the subject's grant are the two messages an
-/// answer is owed to, and each side re-sends its own. Here nothing
-/// answers at all, so both go again at 30 s and neither a third time;
-/// with no node beside them a one-time key is asked for the verifier and
-/// the bytes wait on it, as any first send does.
+/// **A query or a grant unanswered at half the patience goes again,
+/// once.** The selector's query and the subject's grant are the two
+/// messages an answer is owed to, and each side re-sends its own. Here
+/// nothing answers at all, so both go again at 30 s and neither a third
+/// time; the direct path is held, so each goes on it.
 #[test]
 fn a_query_and_a_grant_unanswered_at_half_the_patience_go_again_once() {
     let (mut s, _, _, _) = three_meetings();
@@ -87,15 +83,14 @@ fn a_query_and_a_grant_unanswered_at_half_the_patience_go_again_once() {
 
     let asks = |msgs: Vec<Msg>| {
         msgs.iter()
-            .filter(|m| matches!(m, Msg::PrekeyRequest(_)))
+            .filter(|m| matches!(m, Msg::Payload { to, .. } if *to == kh("bob")))
             .count()
     };
     // before half the patience, maintenance sends nothing to bob
     s.clock.set(s.clock.get() + 29_000);
     assert_eq!(asks(s.client("carol").maintain()), 0);
     assert_eq!(asks(s.client("alice").maintain()), 0);
-    // at half, each re-sends its own: a one-time key asked for bob, the
-    // bytes waiting on it
+    // at half, each re-sends its own to bob
     s.clock.set(s.clock.get() + 1_000);
     assert_eq!(asks(s.client("carol").maintain()), 1, "the query, again");
     assert_eq!(asks(s.client("alice").maintain()), 1, "the grant, again");

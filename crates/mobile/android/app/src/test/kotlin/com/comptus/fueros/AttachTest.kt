@@ -69,11 +69,11 @@ class AttachTest {
     // functional: UX-012
     @Test
     fun the_status_bar_keeps_the_kernels_words_and_says_the_line_is_a_door() {
-        val bar = Attach.statusLine("detached · presents 5046da37…\npayload: the Double Ratchet")
+        val bar = Attach.statusLine("detached · presents 5046da37…\nsecond line")
         assertTrue(bar.startsWith("detached · presents 5046da37…"))
         assertTrue(bar.contains("tap to attach"))
-        // the second line of the kernel's status is not the bar's
-        assertTrue(!bar.contains("payload:"))
+        // a second line of the status, where there is one, is not the bar's
+        assertTrue(!bar.contains("second line"))
         assertEquals("tap to attach", Attach.hint("lost: no serving node reachable"))
         assertEquals("tap to change", Attach.hint("attached, primary · presents x…"))
         assertNotNull(Attach.hint("starting the kernel…"))

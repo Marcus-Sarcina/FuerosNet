@@ -443,3 +443,309 @@ pub async fn until(ms: u64, mut done: impl FnMut() -> bool) -> bool {
     }
     done()
 }
+
+// ------------------------------------------------ the split seal, for a sender
+
+/// A recipient's own side of the seal: its keyhash and the encryption
+/// secret its identity root derives (`wire-format.md` §7.8.1).
+pub struct Recipient {
+    pub keyhash: Keyhash,
+    pub secret: rhtn_crypto::seal::EncryptionSecret,
+}
+
+impl Recipient {
+    pub fn of(name: &str) -> Self {
+        let root = rhtn_codec::cose::sha256(format!("test root:{name}").as_bytes());
+        Recipient {
+            keyhash: kh(name),
+            secret: rhtn_crypto::seal::EncryptionSecret::from_identity_root(&root),
+        }
+    }
+
+    /// **Seal `body` to this recipient and the node key `record`** (a
+    /// `NodeKey` as the node served it), as a sender does; `salt` keeps
+    /// two seals of one body apart.
+    pub fn seal(&self, record: &[u8], body: &[u8], salt: u8) -> Vec<u8> {
+        use rhtn_crypto::{seal, xwing};
+        let k = rhtn_archive::node_key::NodeKey::parse(record).expect("a node key");
+        let f = &k.fields;
+        let eseed = |tag: u8| {
+            let mut e = [0u8; xwing::ESEED_BYTES];
+            e[0] = tag;
+            e[1] = salt;
+            e[2..10].copy_from_slice(&f.n.to_be_bytes());
+            e[10..42].copy_from_slice(&rhtn_codec::cose::sha256(body));
+            e
+        };
+        let (ss_r, ct_r) = xwing::encapsulate(self.secret.kem_public(), &eseed(1)).unwrap();
+        let (ss_n, ct_n) = xwing::encapsulate(&f.public, &eseed(2)).unwrap();
+        let key = seal::message_key(&ss_r, &ss_n, &self.keyhash, &f.node, f.n, &ct_r, &ct_n);
+        let mut nonce = [0u8; seal::NONCE_BYTES];
+        nonce[0] = salt;
+        nonce[1..9].copy_from_slice(&f.n.to_be_bytes());
+        rhtn_archive::sealed::Sealed {
+            n: f.n,
+            ct_r: Box::new(ct_r),
+            ct_n: Box::new(ct_n),
+            body: seal::seal(&key, nonce, body),
+        }
+        .encode()
+    }
+
+    /// Open `sealed` from `node` with `ss_n` as the node's half: the body,
+    /// or nothing.
+    pub fn open_with(&self, node: &Keyhash, sealed: &[u8], ss_n: &[u8; 32]) -> Option<Vec<u8>> {
+        use rhtn_crypto::seal;
+        let s = rhtn_archive::sealed::Sealed::decode(sealed).ok()?;
+        let ss_r = self.secret.decapsulate(&s.ct_r);
+        let key = seal::message_key(&ss_r, ss_n, &self.keyhash, node, s.n, &s.ct_r, &s.ct_n);
+        seal::open(&key, &s.body).map(|b| b.to_vec())
+    }
+
+    /// Open one delivery from `node` with the half it carries.
+    pub fn open(&self, node: &Keyhash, delivery: &[u8]) -> Option<Vec<u8>> {
+        let r = rhtn_archive::submission::unrelayed(delivery)?;
+        self.open_with(node, &r.sealed, &r.ss_n)
+    }
+}
+
+// ------------------------------------- a minted connection, its key known
+
+/// **A connection to `node` at `addr` under a transport key minted for it**
+/// (`wire-format.md` §9.1), the key drawn from `seed` so a test can look
+/// for it afterwards: the connection and the raw key it presents.
+pub async fn minted(
+    pins: &rhtn_transport::tls::Pins,
+    node: &Keyhash,
+    addr: std::net::SocketAddr,
+    seed: [u8; 32],
+) -> (quinn::Connection, [u8; 32]) {
+    use rhtn_transport::tls;
+    let ed = ed25519_dalek::SigningKey::from_bytes(&seed);
+    let key = ed.verifying_key().to_bytes();
+    let me = tls::Presenter::Own {
+        keyhash: rhtn_transport::session::MINTED,
+        ed: Box::new(ed),
+    };
+    let cfg = tls::client_config(me, pins, node).expect("the node is pinned");
+    let ep = tls::client_endpoint("127.0.0.1:0".parse().unwrap()).unwrap();
+    let conn = tls::dial_with(&ep, cfg, addr)
+        .expect("dials")
+        .await
+        .expect("connects");
+    (conn, key)
+}
+
+/// Ask `conn` for `recipients`' node keys: one reply per recipient.
+pub async fn fetch(
+    conn: &quinn::Connection,
+    recipients: &[Keyhash],
+    nonce: [u8; 16],
+) -> Vec<rhtn_archive::node_key::NodeKeyReply> {
+    use rhtn_archive::node_key::*;
+    let req = NodeKeyRequest::for_recipients(recipients.to_vec(), nonce).unwrap();
+    let batch = matches!(req, NodeKeyRequest::Batch { .. });
+    let reply = rhtn_transport::session::request_on(conn, REQUEST_NODE_KEY, &req.encode())
+        .await
+        .expect("answered");
+    if batch {
+        decode_batch_reply(&reply).unwrap()
+    } else {
+        vec![NodeKeyReply::decode(&reply).unwrap()]
+    }
+}
+
+/// Submit `sealed` for `recipient` on `conn`: the reply's code.
+pub async fn submit(
+    conn: &quinn::Connection,
+    recipient: &Keyhash,
+    sealed: &[u8],
+    nonce: [u8; 16],
+) -> u64 {
+    use rhtn_archive::submission::*;
+    let body = RelaySubmission {
+        recipient: *recipient,
+        sealed: sealed.to_vec(),
+        nonce,
+    }
+    .encode();
+    let reply = rhtn_transport::session::request_on(conn, REQUEST_RELAY, &body)
+        .await
+        .expect("answered");
+    let r = SubmissionReply::decode(&reply).unwrap();
+    assert_eq!(r.nonce, nonce, "the reply echoes the nonce");
+    r.code
+}
+
+/// Every file under `dir`, with its path, depth first.
+pub fn files_under(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut out = Vec::new();
+    if let Ok(rd) = std::fs::read_dir(dir) {
+        for e in rd.flatten() {
+            if e.path().is_dir() {
+                out.extend(files_under(&e.path()));
+            } else {
+                out.push(e.path());
+            }
+        }
+    }
+    out
+}
+
+/// Every byte under `dir`: each path's text and each file's content, so a
+/// search finds a value in a name as well as in a file.
+pub fn bytes_under(dir: &std::path::Path) -> Vec<u8> {
+    let mut all = Vec::new();
+    for f in files_under(dir) {
+        all.extend(f.to_string_lossy().as_bytes());
+        all.push(0);
+        all.extend(std::fs::read(&f).unwrap_or_default());
+        all.push(0);
+    }
+    all
+}
+
+/// Whether `needle` appears in `hay`, raw or as lowercase hex.
+pub fn mentions(hay: &[u8], needle: &[u8]) -> bool {
+    let hex: String = needle.iter().map(|b| format!("{b:02x}")).collect();
+    hay.windows(needle.len()).any(|w| w == needle)
+        || hay.windows(hex.len()).any(|w| w == hex.as_bytes())
+}
+
+// ------------------------------------------------- a running node to talk to
+
+/// A running node, `bob`, serving whoever asks, on loopback: its mailbox
+/// and its node keys in `dir` where one is given, and its clock the
+/// test's.
+pub struct Bench {
+    pub live: Arc<rhtn_node::runtime::LiveNode>,
+    pub clock: Arc<std::sync::atomic::AtomicU64>,
+    pub pins: rhtn_transport::tls::Pins,
+}
+
+impl Bench {
+    /// Start `bob` at `t`, `keys` its node-key numbers and `tweak` any
+    /// further configuration.
+    pub fn start(
+        t: u64,
+        dir: Option<&std::path::Path>,
+        keys: rhtn_node::node_keys::NodeKeyConfig,
+        tweak: impl FnOnce(&mut rhtn_transport::session::NodeConfig),
+    ) -> Bench {
+        Self::start_on(
+            Arc::new(std::sync::atomic::AtomicU64::new(t)),
+            dir,
+            keys,
+            tweak,
+        )
+    }
+
+    /// [`Bench::start`] on a clock already running: what a restart is.
+    pub fn start_on(
+        clock: Arc<std::sync::atomic::AtomicU64>,
+        dir: Option<&std::path::Path>,
+        keys: rhtn_node::node_keys::NodeKeyConfig,
+        tweak: impl FnOnce(&mut rhtn_transport::session::NodeConfig),
+    ) -> Bench {
+        use rhtn_node::node_keys::NodeKeyService;
+        use rhtn_node::resolution::{AnchorTable, Ingestion};
+        let pins = rhtn_transport::tls::Pins::new();
+        for n in NAMES {
+            pins.pin_identity(&id(n).public);
+        }
+        let mut cfg =
+            rhtn_transport::session::NodeConfig::defaults(Arc::new(id("bob")), pins.clone(), 30);
+        let c = clock.clone();
+        cfg.clock = Arc::new(move || c.load(std::sync::atomic::Ordering::SeqCst));
+        let mut v = view("bob", Table::with_me(kh("bob")), "bob", &[]);
+        match dir {
+            Some(d) => {
+                v.node_keys = NodeKeyService::at(d, keys).unwrap();
+                cfg.queue = Arc::new(rhtn_node::queue::DirStore::new(d.join("queue")));
+            }
+            None => v.node_keys = NodeKeyService::new(keys),
+        }
+        tweak(&mut cfg);
+        let live = rhtn_node::runtime::LiveNode::start(
+            cfg,
+            v,
+            ids(),
+            AnchorTable::new(0, Ingestion::UnverifiedGossip),
+        );
+        Bench { live, clock, pins }
+    }
+
+    pub fn set(&self, t: u64) {
+        self.clock.store(t, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub fn now(&self) -> u64 {
+        self.clock.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// A minted connection to the node, its key from `seed`.
+    pub async fn minted(&self, seed: u8) -> (quinn::Connection, [u8; 32]) {
+        minted(&self.pins, &kh("bob"), self.live.addr, [seed; 32]).await
+    }
+
+    /// `recipient`'s newest node key, fetched as anybody would.
+    pub async fn node_key(&self, recipient: &Keyhash) -> Vec<u8> {
+        let (c, _) = self.minted(0xee).await;
+        let r = fetch(&c, &[*recipient], [0xee; 16]).await;
+        c.close(0u32.into(), b"");
+        r[0].outcome.clone().expect("a key for a recipient served")
+    }
+
+    /// Submit `sealed` for `recipient` as anybody would: the reply's code.
+    pub async fn submit(&self, recipient: &Keyhash, sealed: &[u8], nonce: u8) -> u64 {
+        let (c, _) = self.minted(nonce).await;
+        let code = submit(&c, recipient, sealed, [nonce; 16]).await;
+        c.close(0u32.into(), b"");
+        code
+    }
+
+    /// Attach as a device of `name`, naming `cursor` where it holds one,
+    /// and take what is delivered within `ms`.
+    pub async fn collect(&self, name: &str, cursor: Option<u64>, ms: u64) -> (u64, Vec<Vec<u8>>) {
+        use rhtn_transport::session::*;
+        let cfg = ClientConfig {
+            me: rhtn_transport::tls::Party::of(Arc::new(id(name))),
+            pins: self.pins.clone(),
+            bind: Default::default(),
+            capabilities: BTreeMap::new(),
+            attestation: None,
+            filter: None,
+            sibling_cache: Arc::new(Mutex::new(Vec::new())),
+            addresses: Arc::new(Mutex::new(Default::default())),
+            cursors: Default::default(),
+            tls: Arc::new(Mutex::new(Default::default())),
+            connect_timeout: std::time::Duration::from_secs(3),
+            on_reachability: None,
+            log: Log::default(),
+        };
+        if let Some(c) = cursor {
+            cfg.cursors.lock().unwrap().insert(kh("bob"), c);
+        }
+        let ep = rhtn_transport::tls::client_endpoint("127.0.0.1:0".parse().unwrap()).unwrap();
+        let AttachOutcome::Attached(mut s) =
+            attach(&cfg, &ep, kh("bob"), self.live.addr, false).await
+        else {
+            panic!("{name} attaches")
+        };
+        let mut got = Vec::new();
+        while let Ok(Some(b)) =
+            tokio::time::timeout(std::time::Duration::from_millis(ms), s.deliveries.recv()).await
+        {
+            got.push(b);
+        }
+        s.conn.close(0u32.into(), b"");
+        (s.ack.queued, got)
+    }
+
+    /// The process dies: the endpoint goes, and nothing is written back.
+    pub fn kill(self) -> Arc<std::sync::atomic::AtomicU64> {
+        self.live.endpoint.close(0u32.into(), b"killed");
+        self.live.client_ep.close(0u32.into(), b"killed");
+        self.clock
+    }
+}

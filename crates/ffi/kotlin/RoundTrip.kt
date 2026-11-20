@@ -44,6 +44,8 @@ fun main() {
     val a = Participant.start(alice.seeds, known, platformOf())
     val c = Participant.start(carol.seeds, known, platformOf())
     check(a.status() == Connection.Detached) { "detached before attaching" }
+    // a message is sealed to its recipient: alice holds carol's card
+    a.takeIntroduction(c.ownIntroduction())
     c.attach(bob.id, listOf(addr), listOf())
     val attached = a.attach(bob.id, listOf(addr), listOf(carol.id))
     check(attached.primary) { "alice is in bob's subtree" }

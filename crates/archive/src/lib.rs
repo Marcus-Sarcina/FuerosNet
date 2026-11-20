@@ -30,12 +30,14 @@ pub mod currency;
 pub mod endpoint;
 /// A standalone signed locator (`wire-format.md` §2.3).
 pub mod locator;
-/// Prekey bundles, their request and its reply (`wire-format.md` §7.8).
-pub mod prekey;
+/// Node keys, their request forms and replies (`wire-format.md` §7.8).
+pub mod node_key;
 /// A profile and its fetch (`wire-format.md` §7.11).
 pub mod profile;
 /// One envelope parsed into the facts a chain walker needs.
 pub mod record;
+/// The split seal's encodings: `Sealed` and `SealedBody` (§7.8.1).
+pub mod sealed;
 /// A relationship's series: the adoption that opened it and the reissues
 /// that moved it.
 pub mod series;

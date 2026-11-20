@@ -12,7 +12,7 @@ their purpose: **a disagreement between a vector and the specification is a
 finding against one of them**, and either answer is progress. Review rounds
 have produced specification fixes.
 
-**Pinned**: wire-format.md `6b8ecbaa3df46c10e0b65bcb4cfd854201ea72093d923622175f42c59c5636bf` · network-design.md `f5143c59dc85cf3b345b233f40c90ac3a39f5125714d9c2f218464473ddf7d84`
+**Pinned**: wire-format.md `2463498d5d2925f273ef3cf567a14c8a93afe731516239dab9c8ea049e0b0230` · network-design.md `325815ea309dcd3760b837ef561a41312cdcfd4b37e8749eac49370c1a7c71b6`
 
 **Scope**: wire-format/protocol **interoperability** vectors.
 `light-client-requirements.md` is pinned alongside the two protocol documents
@@ -52,7 +52,7 @@ vector. This file and `negative-vectors.md` are authored by hand.
 | `corpus.json` | The machine-readable corpus (bar 6): every fixture under a stable id with class, exact bytes and a structured expect — no harness parses Markdown headings as an interface |
 | *(the Rust corpus runner)* | Retired 2026-09-22 [author]. Its parser grew into `rhtn-codec`, and `crates/crypto/tests/corpus.rs` now carries every corpus entry through the workspace's own decoder and RustCrypto `ml-dsa`, against the generator's dilithium-py signatures: the cross-implementation check the runner made, without a second decoder to keep in step with the wire |
 | `verifier-selection.md` | The reasonableness criterion — `required()` table rows generated from the formula — and the window boundaries. *The nonce, seed and rank vectors retired 2026-09-01 with deterministic selection* |
-| `local-interfaces.md` | The six local device-to-device encodings of `wire-format.md` §14.3, as one coherent exchange [2026-09-29]: the optical contributions and the ceremony-id they derive (`records.md`'s pre-commitment known answer byte-for-byte), the bearer-carried intent echoing one, the two anchored exchanges, and the handover between one identity's devices reusing `records.md`'s delegation and desktop bundle. **No signatures of their own** — every one is unsigned, which is the point §14.3.3 and `models/tamarin/local/` both turn on, and which the 2026-10-05 session encryption does not change: that ruling encrypts the carriage and signs nothing. §14.3.4's `PrekeyHandover` carries the bundle `records.md` publishes, reused in those bytes rather than reinvented, with and without a one-time key since §7.8 lets a pool run dry |
+| `local-interfaces.md` | The six local device-to-device encodings of `wire-format.md` §14.3, as one coherent exchange [2026-09-29]: the optical contributions and the ceremony-id they derive (`records.md`'s pre-commitment known answer byte-for-byte), the bearer-carried intent echoing one, the two anchored exchanges, and the handover between one identity's devices reusing `records.md`'s delegation, with the identity's two encryption secrets. **No signatures of their own** — every one is unsigned, which is the point §14.3.3 and `models/tamarin/local/` both turn on, and which the 2026-10-05 session encryption does not change: that ruling encrypts the carriage and signs nothing. §14.3.4's `PrekeyHandover` carries the bundle `records.md` publishes, reused in those bytes rather than reinvented, with and without a one-time key since §7.8 lets a pool run dry |
 | `negative-vectors.md` | Conformance fixtures against a **structured result model** (structural / signatures / chain / per-subject selection / effectiveness / evidentiary), in byte-level, context-dependent, method, and must-accept sections |
 
 ## What every vector assumes
@@ -254,14 +254,14 @@ negatives (T9–T12). Still open:
 7. ~~The boundary sweep~~ **DONE 2026-09-02** (`B-*` in the corpus): every
    bound in the declared scope with byte fixtures at the bound and past it —
    back-pointers, witnesses, path nibbles, unknown keys and values, audits,
-   NetworkPoint lists and ports, prekey blobs, catalog total size, scope
+   NetworkPoint lists and ports, node keys and seals, catalog total size, scope
    lists, capabilities, siblings, asserted locations,
    corroborations, geohash lengths and case, archive bounds, the
    finalization gap at 86,400/86,401 — with the two over-identity-set counts
    and the two 100 KB frame bounds as unit recipes.
 8. ~~The remaining signed contexts~~ **DONE 2026-09-02**: every
    domain-separation tag has a known-answer signature — currency, catalog,
-   abuse, anchor, subtree-ack and prekey in `records.md`; successor, verifier
+   abuse, anchor, subtree-ack and node-key in `records.md`; successor, verifier
    and consent in `transactions.md`; locator, endpoints and envelope already
    present; the fourteenth, `rhtn/1:delegation`, added 2026-09-22 with the
    delegation itself — and the **cross-context substitution family is live** (S25): the

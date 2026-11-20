@@ -1353,6 +1353,7 @@ async fn a_running_node_learns_who_is_attached_to_it_and_forwards_to_them() {
         filter: None,
         sibling_cache: Arc::new(Mutex::new(Vec::new())),
         addresses: Arc::new(Mutex::new(Default::default())),
+        cursors: Default::default(),
         tls: Arc::new(Mutex::new(Default::default())),
         connect_timeout: Duration::from_secs(5),
         on_reachability: None,

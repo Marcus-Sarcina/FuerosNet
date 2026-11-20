@@ -111,6 +111,21 @@ pub enum Event {
         /// The plaintext.
         bytes: Vec<u8>,
     },
+    /// **Application payload from a sender this client cannot attribute**
+    /// [author, 2026-11-19]: shown under the alias it carries and marked
+    /// unverified, never as the person it names, and not answered — a
+    /// reply goes only to a contact [author, 2026-11-20].
+    Unverified {
+        /// The keyhash it names, unverified: with the alias, what indexes
+        /// its thread, and reaching nobody.
+        from: Id,
+        /// The alias it carries, display only.
+        alias: String,
+        /// The kind it came under.
+        kind: u64,
+        /// The plaintext.
+        bytes: Vec<u8>,
+    },
     /// A verifier's copy of the response it gave about this subject: the
     /// query it answered, or why the copy was refused.
     ResponseCopy {
@@ -435,14 +450,6 @@ impl Direct for SwappableDirect {
             }
         })
     }
-    fn request(&self, peer: Keyhash, bytes: Vec<u8>) -> DirectFut<'_, Option<Vec<u8>>> {
-        Box::pin(async move {
-            match self.get() {
-                Some(d) => d.request(peer, bytes).await,
-                None => None,
-            }
-        })
-    }
 }
 
 pub(crate) struct Net {
@@ -475,8 +482,8 @@ pub(crate) struct Net {
     events_tx: UnboundedSender<Event>,
     events: Mutex<UnboundedReceiver<Event>>,
     /// Run after every inbound dispatch, whether or not the shell hears
-    /// of it: the client's state written.  **A delivery moves a ratchet
-    /// whether or not it becomes an event**, and a verifier's whole
+    /// of it: the client's state written.  **A delivery moves the client's
+    /// state whether or not it becomes an event**, and a verifier's whole
     /// service — the session its grant opened, the query it answered —
     /// produced none; on the bench a phone restarted and had lost every
     /// session it had served on since its last event [2026-10-12].
@@ -550,6 +557,7 @@ impl Net {
             filter: None,
             sibling_cache: Arc::new(Mutex::new(Vec::new())),
             addresses: Arc::new(Mutex::new(HashMap::new())),
+            cursors: Default::default(),
             tls: Arc::new(Mutex::new(Default::default())),
             connect_timeout: CONNECT_TIMEOUT,
             on_reachability: None,
@@ -798,13 +806,11 @@ impl Net {
                     h.with_blocking(move |c| c.store.contacts.contains_key(&peer))
                 })
             };
-            // the control streams (`wire-format.md` §9.1): this side's
-            // introduction on a dial, a dialler's taken as a cold call,
-            // and a peer's prekey request answered from the kernel
+            // the control stream (`wire-format.md` §9.1): this side's
+            // introduction on a dial, and a dialler's taken as a cold call
             let control = {
                 let h1 = handle_for_task.clone();
                 let h2 = handle_for_task.clone();
-                let h3 = handle_for_task.clone();
                 rhtn_adaptors::direct::Control {
                     introduce: Arc::new(move || {
                         let h = h1.clone();
@@ -818,13 +824,6 @@ impl Net {
                                     || c.take_cold_introduction(&from, &bytes)
                             })
                             .await
-                        })
-                    }),
-                    answer: Arc::new(move |from, bytes| {
-                        let h = h3.clone();
-                        Box::pin(async move {
-                            h.with(move |c| c.answer_prekey_request(&from, &bytes))
-                                .await
                         })
                     }),
                 }
@@ -996,6 +995,18 @@ impl Net {
             .lock()
             .unwrap()
             .insert(node, addrs.to_vec());
+        // **how far this device has collected from the node** goes with the
+        // attach as field 5 (`wire-format.md` §8.2): the client keeps it
+        // with its own state, so a restarted process is handed what is
+        // newer and not the whole queue again
+        let held = handle.with_blocking(move |c| c.payload.cursors.get(&node).copied());
+        {
+            let mut cursors = self.cfg.cursors.lock().unwrap();
+            match held {
+                Some(c) => cursors.insert(node, c),
+                None => cursors.remove(&node),
+            };
+        }
         // the one direct socket and the one courier, stood if not yet
         self.stand_detached(handle)?;
         let courier = self.courier()?;
@@ -1055,7 +1066,11 @@ impl Net {
             let carried = courier_for_task.attach_at(serving_node, population).await;
             let tasks = vec![
                 attached::follow(handle_for_task.clone(), frames),
-                attached::collect(courier_for_task.inbound_via(serving_node), deliveries),
+                attached::collect(
+                    serving_node,
+                    courier_for_task.inbound_via(serving_node),
+                    deliveries,
+                ),
                 tokio::spawn(watch(
                     session,
                     serving_node,
@@ -1166,9 +1181,8 @@ impl Net {
         Ok(())
     }
 
-    /// Carry messages the client made outside its outbox: a bundle the
-    /// ceremony device signed for this one, and the conversation's legs to
-    /// witnesses and verifiers.
+    /// Carry messages the client made outside its outbox: the
+    /// conversation's legs to witnesses and verifiers.
     ///
     /// **Detached is not an error when nothing needed a node.** The
     /// counterparty's leg of kinds 9 to 18 crosses the local interface and
@@ -1234,37 +1248,13 @@ impl Net {
             .refused
             .iter()
             .filter_map(|m| match m {
-                Msg::Payload { to, .. } | Msg::Relay { to, .. } => Some(*to),
+                Msg::Payload { to, .. } | Msg::Sealed { to, .. } => Some(*to),
                 _ => None,
             })
             .collect();
         unreached.sort_unstable();
         unreached.dedup();
         Ok(unreached)
-    }
-
-    pub(crate) fn carry(&self, msgs: Vec<rhtn_client::ceremony::Msg>) -> Result<(), Refused> {
-        let courier = match self.courier() {
-            Ok(c) => c,
-            Err(_) if msgs.is_empty() => return Ok(()),
-            Err(_) => {
-                return Err(Refused::new(format!(
-                    "no serving node is attached and {} message(s) need one",
-                    msgs.len()
-                )));
-            }
-        };
-        let carried = self.rt().block_on(async move { courier.carry(msgs).await });
-        if !carried.refused.is_empty() {
-            return Err(Refused::new("the serving node refused the publication"));
-        }
-        if !carried.left.is_empty() {
-            return Err(Refused::new(format!(
-                "no path carried {} of the messages: unsent",
-                carried.left.len()
-            )));
-        }
-        Ok(())
     }
 
     pub(crate) fn maintain(&self, handle: &Handle) -> Result<(), Refused> {
@@ -1700,7 +1690,7 @@ async fn watch(
             }
         }
         tokio::spawn(attached::follow(handle.clone(), frames));
-        tokio::spawn(attached::collect(courier.inbound_via(to), deliveries));
+        tokio::spawn(attached::collect(to, courier.inbound_via(to), deliveries));
         tell(Status::Attached {
             serving: to,
             primary: mode == 0,
@@ -1718,6 +1708,17 @@ fn event_of(from: Keyhash, d: Dispatched) -> Option<Event> {
     let from = id_of(&from);
     match d {
         Dispatched::Application { kind, bytes } => Some(Event::Payload { from, kind, bytes }),
+        Dispatched::Unverified {
+            sender,
+            alias,
+            kind,
+            bytes,
+        } => Some(Event::Unverified {
+            from: id_of(&sender),
+            alias,
+            kind,
+            bytes,
+        }),
         Dispatched::Peer(what) => Some(Event::Peer { from, what }),
         Dispatched::ResponseCopy(Ok(q)) => Some(Event::ResponseCopy {
             from,

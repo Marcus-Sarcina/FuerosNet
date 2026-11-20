@@ -226,6 +226,9 @@ pub fn dispatched(d: &crate::ceremony::Dispatched) -> String {
         Fetched(Err(why)) => format!("Fetched(refused: {why})"),
         Conversation(c) => format!("Conversation({c})"),
         Peer(what) => format!("Peer({what})"),
+        Unverified { kind, bytes, .. } => {
+            format!("Unverified(kind {kind}, {} bytes)", bytes.len())
+        }
     }
 }
 
@@ -260,20 +263,14 @@ pub fn msg(m: &crate::ceremony::Msg) -> &'static str {
         RecoveryProposal { .. } => "RecoveryProposal",
         AdoptionBody(_) => "AdoptionBody",
         Seal(_) => "Seal",
-        PublishBundle(_) => "PublishBundle",
-        StockOneTime(_) => "StockOneTime",
-        StockOneTimeAt { .. } => "StockOneTimeAt",
-        PrekeyRequest(_) => "PrekeyRequest",
+        NodeKeyRequest(_) => "NodeKeyRequest",
         CatalogQuery(_) => "CatalogQuery",
         ResourceRequest { .. } => "ResourceRequest",
         PublishProfile(_) => "PublishProfile",
         AssertHorizon { .. } => "AssertHorizon",
         ProfileRequest(_) => "ProfileRequest",
-        PrekeyReply(_) => "PrekeyReply",
-        PoolExhausted => "PoolExhausted",
         Payload { .. } => "Payload",
-        Relay { .. } => "Relay",
-        Transport(_) => "Transport",
+        Sealed { .. } => "Sealed",
         Carriage(_) => "Carriage",
     }
 }

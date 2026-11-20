@@ -316,7 +316,10 @@ fn a_message_crosses_as_its_kind_and_comes_back_the_same() {
     );
 
     // what is not the conversation's is None, not a kind
-    assert_eq!(conversation_payload(&Msg::PoolExhausted), None);
+    assert_eq!(
+        conversation_payload(&Msg::NodeKeyRequest(vec![[1; 32]])),
+        None
+    );
     assert_eq!(
         conversation_payload(&Msg::Grant(vec![1, 2, 3])),
         None,

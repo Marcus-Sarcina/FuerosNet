@@ -3,7 +3,6 @@ package com.comptus.fueros
 import android.content.Context
 import org.json.JSONObject
 import uniffi.rhtn_ffi.Answer
-import uniffi.rhtn_ffi.Construction
 import uniffi.rhtn_ffi.Conversation
 import uniffi.rhtn_ffi.Event
 import uniffi.rhtn_ffi.Participant

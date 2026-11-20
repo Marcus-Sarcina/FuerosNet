@@ -248,8 +248,8 @@ fn dump(f: &Fabric, phones: &[&Phone]) -> String {
                 || l.contains("pay.direct")
                 || l.contains("pay.descent")
                 || l.contains("pay.theirs")
-                || l.contains("pay.prekey")
-                || l.contains("pay.bundle")
+                || l.contains("pay.node_key")
+                || l.contains("pay.sealed")
             {
                 out.push_str("   ~ ");
                 out.push_str(&l.chars().take(300).collect::<String>());
@@ -358,14 +358,10 @@ async fn a_ceremony_opens_across_two_subnets_and_both_witnesses_attest() {
 /// kernels' own diagnostics once each had a sink of its own
 /// [2026-11-15]: a far witness started knowing a participant's material
 /// dropped the participant's opener whole, locator included, so it could
-/// place nobody and ask nobody for the bundle, and the participant's
-/// messages failed under a session the witness then opened itself; a
-/// one-time-key reply landing after the peer had written first opened a
-/// second session over the one that stood; and an open replaced the
-/// ratchet the peer was still sending on and kept nothing of it.  The
-/// construction's crossing rule (design §22.2) was never the defect.
+/// place nobody. Each participant's messages carry its introduction
+/// inside the seal until it has had a reply, so a far witness takes the
+/// participant from its first message (`wire-format.md` §7.8.1).
 // functional: PAY-021
-// functional: PAY-022
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_ceremony_runs_between_two_subnets_that_share_no_node() {
     let f = Arc::new(two_subnets());

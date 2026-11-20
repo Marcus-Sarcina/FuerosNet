@@ -800,7 +800,7 @@ async fn a_witness_whose_back_pointers_trail_its_answer_is_waited_for() {
     )
     .await;
     for to in ["alice", "bob"] {
-        m.stagger(to, &["w1", "w2"], Duration::from_secs(1));
+        m.stagger(to, &["w1", "w2"], Duration::from_secs(1)).await;
     }
     let t = m
         .meet("alice", "bob", &["w1"], &["w2"])
