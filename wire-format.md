@@ -606,8 +606,8 @@ EncryptionKey = {
 }
 ```
 
-**Derived from the identity's seed**, as the capture keys are (design
-§7.5.2.6): HKDF-SHA-256 with an empty salt over the seed, expanded under
+**Derived from the identity's root**, as the capture keys are (design
+§7.5.2.6): HKDF-SHA-256 with an empty salt over the identity root, expanded under
 `rhtn/1:encryption-key` to X-Wing's 32-byte decapsulation seed and under
 `rhtn/1:seal-auth` to the X25519 private key of field 3. Every device restored
 from the phrase computes the same two keys, so none is carried between devices
@@ -3380,7 +3380,8 @@ replaces an unverifiable behavioural claim with a visible one.
 
 #### 7.8.1 The seal
 
-**Each half is an X-Wing encapsulation** (`draft-connolly-cfrg-xwing-kem`):
+**Each half is an X-Wing encapsulation** (`draft-connolly-cfrg-xwing-kem`,
+revision -11) [author, 2026-11-20]:
 ML-KEM-768 and X25519 under X-Wing's combiner, which is the transport's pair
 of primitives in a KEM's shape. A sender holding the recipient's encryption
 key `R` and the node's key `N`, numbered `n`:

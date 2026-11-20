@@ -6526,7 +6526,7 @@ next collects, after which what was delivered is the first to go.
 **§5.1's identity keys sign; they do not encrypt.** Encryption needs a KEM key,
 distinct from them and bound to the identity. **The identity's encryption key is
 hybrid**, X25519 with ML-KEM-768 as the transport is (§14.1.3), **derived from the
-identity's seed**, so every device restored from the phrase holds it and nothing
+identity root** (§7.5.2.6), so every device restored from the phrase holds it and nothing
 has to carry it between devices.
 
 **It travels on the card, signed by the identity, and outside the key material**
@@ -6556,7 +6556,7 @@ half together.
 ##### 14.2.4.2 The seal
 
 **Each half is a hybrid encapsulation**, X25519 with ML-KEM-768 under the
-X-Wing combiner (`wire-format.md` §7.8.1): one to the recipient's encryption
+X-Wing combiner (`wire-format.md` §7.8.1) [author, 2026-11-20]: one to the recipient's encryption
 key, one to the node's key for that recipient. **The two shared secrets are
 combined with the ciphertexts and both keys' identifiers**, so that the message
 key needs both shared secrets and breaking either half leaves nothing. The plaintext

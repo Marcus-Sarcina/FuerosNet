@@ -9,6 +9,7 @@ use rhtn_client::payload::{OneTimePair, PayloadKeys};
 use rhtn_client::ratchet::{NoPostQuantum, Ratchet};
 use rhtn_crypto::SigningIdentity;
 use rhtn_crypto::pqxdh::{DhSecret, KemSecret};
+use rhtn_crypto::{seal::EncryptionSecret, xwing};
 use std::mem::ManuallyDrop;
 use zeroize::ZeroizeOnDrop;
 
@@ -23,6 +24,8 @@ fn wipes_on_drop<T: ZeroizeOnDrop>() {}
 fn every_holder_of_key_material_claims_to_wipe_on_drop() {
     wipes_on_drop::<DhSecret>();
     wipes_on_drop::<KemSecret>();
+    wipes_on_drop::<xwing::Secret>();
+    wipes_on_drop::<EncryptionSecret>();
     wipes_on_drop::<SigningIdentity>();
     wipes_on_drop::<Ratchet<NoPostQuantum>>();
     wipes_on_drop::<PayloadKeys>();
@@ -81,6 +84,11 @@ fn the_drops_leave_zeros_behind() {
     assert!(!k.seed_wiped());
     let k = dropped_in_place(k);
     assert!(k.seed_wiped(), "the KEM seed is zero");
+
+    let x = xwing::Secret::from_seed([3; 32]);
+    assert!(!x.seed_wiped());
+    let x = dropped_in_place(x);
+    assert!(x.seed_wiped(), "the X-Wing seed is zero");
 
     // the dependency's own wipe, which the marker on `DhSecret` rests on
     let d = DhSecret::from_seed([5; 32]);

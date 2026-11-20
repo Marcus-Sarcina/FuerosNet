@@ -24,6 +24,9 @@ pub mod enrolment;
 pub mod identity;
 /// PQXDH (design §5.3): the key agreement a payload session opens with.
 pub mod pqxdh;
+/// The split seal (design §14.2.4): the identity's encryption key, the
+/// message key, the AEAD and the sender's tag.
+pub mod seal;
 pub mod signer;
 /// What a caller must provide to sign: the trait the profile's signing
 /// contexts are written against.
@@ -35,5 +38,8 @@ pub mod ssh;
 /// Verification of the structures `rhtn-codec` parses, up to a complete
 /// transaction envelope with its embedded evidence.
 pub mod verify;
+/// X-Wing (`draft-connolly-cfrg-xwing-kem`): ML-KEM-768 and X25519 as one
+/// KEM, each half of the split seal.
+pub mod xwing;
 
 pub use identity::{Identity, SigningIdentity};

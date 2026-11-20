@@ -3748,6 +3748,7 @@ dependencies = [
 name = "rhtn-crypto"
 version = "0.1.0"
 dependencies = [
+ "aws-lc-rs",
  "ed25519-dalek",
  "hex",
  "hkdf 0.13.0",
@@ -3756,6 +3757,7 @@ dependencies = [
  "rhtn-codec",
  "serde_json",
  "sha2 0.11.0",
+ "sha3",
  "x25519-dalek",
  "zeroize",
 ]

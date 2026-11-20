@@ -15,6 +15,8 @@ ml-dsa = { workspace = true }
 x25519-dalek = { version = "3.0.0", features = ["static_secrets"] }
 ml-kem = { version = "0.3.2", features = ["hazmat", "zeroize"] }
 hkdf = "0.13.0"
+sha3 = "0.11.0"
+aws-lc-rs = "1.18"
 
 [dev-dependencies]
 hex = { workspace = true }
