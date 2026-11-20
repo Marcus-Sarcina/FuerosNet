@@ -714,7 +714,6 @@ async fn a_derived_view_that_cannot_account_for_the_store_is_discarded_whole() {
     let _ = std::fs::remove_dir_all(&l.dir);
 }
 
-// acceptance: DMN-14
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn serving_a_one_time_key_does_not_stop_the_node_writing_its_state_back() {
     use rhtn_daemon::config::Config;

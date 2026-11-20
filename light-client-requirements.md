@@ -78,7 +78,7 @@ shell exists.
   after selecting. A node that solicits nomination is self-selecting, and the
   counterparty's prune is what it now has to get past (design §7.1.1).
   **Engaging is where you discover it, and it is retried, not decided once**
-  [author, 2026-10-19]: a nominee you hold no session material for is asked
+  [author, 2026-10-19]: a nominee you hold no introduction for is asked
   for on the first attempt and reached on a later one, so a transient
   absence is not an unavailable witness. **The set you offer the prune is
   the nominees the engagement reached** — one still unreached when the
@@ -448,7 +448,11 @@ job.
   identity derives, the capture keys that unlock your likeness on other
   people's devices among them (design §7.5.2.6); what it does not restore is
   the archive, which comes from the backup or not at all (design §10.2; §6).
-  Say both.
+  Say both. **Ask each node you attach to for where you sit under it**
+  [author, 2026-11-19]: it answers in records you check yourself — your
+  adoption under it, its line up to the subnet's root, the subnet's profile —
+  and your positions there are compiled from them, which is standing and not
+  history (design §23.3).
 
 - **A seed phrase, if you offer one, is a feature of its own and nothing
   depends on it** [author, 2026-10-17]. It encodes the identity's key material
@@ -555,14 +559,13 @@ job.
     merges your addresses into one path, which would tell them which
     other subnets you are in.
   - **A session per address.** Attach to the node serving each of your
-    addresses, publish your bundle to each so sessions open there, and
-    receive at each; never route one address's mail through another's
+    addresses and receive at each; never route one address's mail through another's
     node. The serving node of §4, and of the wire format throughout, is
     one such session described alone: the wire level speaks of one client
     and one node, and this is the dimension it does not carry (design
     §12.9).
   - **The key is a name, and identities are the unit of unlinkability**
-    [author, 2026-11-11]. The same bundle reaches every address's node, so
+    [author, 2026-11-11]. The same key is on every address's card, so
     two nodes comparing notes can link an identity's addresses by its
     key: intended, and often the point of using one name. Where audiences
     must not be linked, that is a second identity, never a second key.
@@ -692,73 +695,64 @@ job.
 
 ## 3. Payload encryption
 
-design §14.2.4 adopts **PQXDH** for key agreement and the **Triple Ratchet** for
-session secrecy. The client implements them; it does not reinvent them.
+design §14.2.4's **split seal**: a message is sealed to the recipient's
+encryption key and to a key the recipient's serving node holds for them, and
+opens only with both (`wire-format.md` §7.8.1). The client implements it; it
+does not reinvent its parts.
 
 - **Wipe key material rather than leaving it in freed memory** [author,
-  2026-09-26]. Root keys, chain keys, message keys and prekey seeds are
-  wiped when they go, including the copies a ratchet makes of its own state
-  while deciding whether a message opens. This is not observable to a peer
-  and §1.1 cannot reach it; it is stated because **no expert review is
-  coming** and an obligation nobody wrote down is one nobody implements.
-
-**The Double Ratchet is the floor** (design §14.2.4.3) [author, 2026-09-26]:
-run at least it over a PQXDH session, and run the Triple Ratchet where an
-implementation of the post-quantum half is available. A client running the
-floor alone has the post-quantum session establishment PQXDH gives and lacks
-post-compromise security against a quantum adversary. **Say which one is
-running** where the user can reach it: no peer can tell from the wire, so the
-only party who can tell them is their own client.
-
-- **Publish a prekey bundle and keep it stocked.** A subject with no one-time
-  prekeys left falls back to the last-resort key, which is a **declared reduction
-  in forward secrecy.** Not a state to remain in. Replenish
-  well before exhaustion (`wire-format.md` §7.8).
-- **Rotate the signed prekey on a policy interval**, and never reuse a one-time
-  prekey.
+  2026-09-26]. Message keys, shared secrets, the node's halves as they arrive
+  and the encryption key's private parts are wiped when they go. This is not
+  observable to a peer and §1.1 cannot reach it; it is stated because **no
+  expert review is coming** and an obligation nobody wrote down is one nobody
+  implements.
+- **Seal to the person, never to a device** [author, 2026-11-19]. A direct
+  message goes to the recipient's serving node in every case, sealed to the
+  encryption key on their introduction and the node's newest key for them;
+  you know nothing of their devices and the wire gives you nothing to know it
+  by (design §14.2.2).
+- **Do not name yourself to the recipient's node** [author, 2026-11-19].
+  Fetch its key and submit under a transport key you mint for that
+  connection, never your identity's (`wire-format.md` §7.8, §7.10), **and do
+  so where you are attached to that node yourself** [author, 2026-11-19]: the
+  session you hold there names you. Your introduction rides inside the seal on
+  your first message to a recipient.
 - **Every identity is a leaf.** A patron is a person on devices that may be
   offline, and a patron who runs no node is a light client like any other
   [author, 2026-11-14]: a message to one takes this construction, through
-  the node that holds the device's bundle, and never rides a session to a
-  node as material for the node. Only a resource is reached without it: a
-  session to a resource terminates at an endpoint that is online by
-  definition and already runs over an authenticated transport — the
-  `rhtn/1` session, or the service's own TLS on a brokered connection
-  (design §14.2.4, `resource-requirements.md` §3).
-- **Prefetch reusable prekey material for the whole trust horizon as a batch request**
-  (`wire-format.md` §7.8), which is structurally distinct from a targeted fetch —
-  so the serving node sees a sweep rather than having to take your word for it. A fetch driven by peers' rotation schedules reveals *past* activity —
-  someone rotated, rather than intent to message. Fetching on demand instead
-  announces each intended conversation to whoever serves the bundle (design
+  the node that serves them, and never rides a session to a node as material
+  for the node. Only a resource is reached without it: a session to a
+  resource terminates at an endpoint that is online by definition and already
+  runs over an authenticated transport — the `rhtn/1` session, or the
+  service's own TLS on a brokered connection (design §14.2.4,
+  `resource-requirements.md` §3).
+- **Prefetch node keys for the whole trust horizon as a batch request**
+  (`wire-format.md` §7.8), which is structurally distinct from a targeted
+  fetch — so the serving node sees a sweep rather than having to take your
+  word for it. A fetch driven by the nodes' rotation schedules reveals that a
+  key changed, not that you meant to write. Fetching on demand instead
+  announces each intended conversation to whoever serves the key (design
   §19.8, C11).
-- **Put a targeted fetch to the node that serves the subject** [author,
-  2026-10-05]. A node answers a prekey request from what was published to it
-  (`wire-format.md` §7.8), so the party holding a subject's bundle is the node
-  that subject attached to, and your own serving node holds it only where it
-  serves them too. The intent a targeted fetch discloses then reaches the party
-  that is about to be handed the message rather than your patron (design §19.4,
-  P26). Your own node is where it goes when that one cannot be reached.
-- **Never prefetch one-time keys.** Serving one consumes it, so blanket prefetch
-  would drain every pool in the org and make exhaustion the normal state —
-  destroying its value as a signal that someone is draining a pool deliberately.
-  Request a one-time key only when actually opening a session.
-- **Accept the cost knowingly:** a session opened from prefetched material alone
-  lacks one-time-key forward secrecy for its **first message**. Protection improves
-  as ratchet contributions are incorporated, not immediately.
-- **Write your sessions after every message you receive or send, not only
-  after what you show the person.** A ratchet moves on every message, and a
-  verifier's whole service — the session a grant opened, the query it
-  answered — may show nothing. A process that ends holding sessions it never
-  wrote cannot read what its peers go on sending, and has no session to say
-  so on.
-- **When a query or a grant has gone unanswered for half the patience you
-  give a verifier, send it again on a fresh session, once.** A verifier that
-  lost its sessions refuses everything sent on the old ones and cannot say
-  so; only the sender can open another. Set the sessions you hold with it
-  aside for what it may still send on them, open anew as for a first message,
-  and send the same bytes. The verifier's crossing rule takes the open
-  (`wire-format.md` §7.10). Once: after that the person decides whether to go
-  on without the answer (§1.4).
+- **Put a fetch to the node that serves the subject** [author, 2026-10-05].
+  Only that node holds its keys for them, so the intent a targeted fetch
+  discloses reaches the party that is about to be handed the message and not
+  your patron (design §19.4, P26).
+- **Open, then attribute, then believe.** A message opens under your
+  encryption key and the half your node hands you; its sender is whoever its
+  tag verifies for (`wire-format.md` §7.8.1), and a message that does not open
+  or whose tag fails is discarded and shown as nothing. A message you have
+  already opened is not opened twice.
+- **Show what you cannot attribute as unverified** [author, 2026-11-19]. A message whose sender you hold no introduction for,
+  and which carries none — mail still queued when you were restored — is
+  shown under the alias it carries and marked unverified, never as the person.
+  **Reply only to a sender you hold as a contact** [author, 2026-11-20]: the
+  header's alias and keyhash index the thread and reach nobody, so a
+  stranger's message cannot be answered, which is the resistance to spam and
+  impostors it is meant to give (`wire-format.md` §7.8.1). A refusal for a
+  stale node key is met by fetching the newest and sealing again.
+- **On the direct path, the transport is the seal.** Payload other than a
+  direct message travels to a contact over a connection authenticated end to
+  end by both parties' keys (design §12.6.3), with nothing further around it.
 
 ## 4. Session
 
@@ -867,7 +861,7 @@ nothing below reaches across them.
   to keep (design §12.6.1).
 - **A resolution request discloses intent to reach someone**, before any contact
   exists, to whoever serves it (design §19.4, P26). Do not resolve
-  speculatively, the same reasoning that forbids prefetching one-time prekeys.
+  speculatively, the same reasoning that makes a node-key fetch a batch.
 - **Ask it of any infra node whose address you hold**, not only of your serving
   node (`wire-format.md` §7.7.1) [author, 2026-10-05]. The addresses above are
   what that choice is made from, and a client whose serving node will not answer
@@ -878,16 +872,11 @@ nothing below reaches across them.
 
 ### 4.1 What you hand your serving node
 
-- **Publish your bundle and stock your pool as part of attaching**
-  (`wire-format.md` §7.10 and `wire-format.md` §7.8). A node that holds neither cannot answer for
-  you, and a peer that cannot fetch your material cannot open a session with
-  you at all. Each of your devices does this for itself, on its own session:
-  the bundle it publishes carries material it generated and a signature your
-  ceremony device made over it, and the pool it stocks is its own
-  (design §23.3) [author, 2026-09-22]. **And a pool per address** [author,
-  2026-11-11]: each node you hold a session with (§2) is stocked
-  separately, with keys of its own, since a key in two pools could be
-  spent twice.
+- **Say what you already hold when you attach** (`wire-format.md` §8.2,
+  `Attach` field 5): the newest queue position this device has, so the node
+  hands over what is newer and keeps no record of which device took what
+  (design §14.1.6). A device restored or new says nothing and is handed
+  everything still held.
 - **Attach again after a loss, without the person's hand** [author,
   2026-11-04: *"all horizon members should re-attach every time they become
   detached"*]. A session lost to the node serving one of your addresses,
@@ -906,13 +895,10 @@ nothing below reaches across them.
   refused runs the same, its sessions re-attached the moment it is visible
   again, and nothing is lost but the time it was away. Both states are
   tested, not the first alone.
-- **Open a session with each of a recipient's devices, and send to each.** A
-  fetch returns a bundle per device (`wire-format.md` §7.8), a session is with
-  a device, and a message sent to one of them reaches one of them; the
-  submission names the device (`wire-format.md` §7.10).
-- **Hand payload to your node rather than waiting for the recipient.** The
-  answer says your node took it, not that it arrived; a recipient may be away
-  for days, and that is what the mailbox is for (design §14.1.6).
+- **Hand a direct message to the recipient's node rather than waiting for
+  the recipient.** The answer says the node took it, not that it arrived; a
+  recipient may be away for days, and that is what the mailbox is for (design
+  §14.1.6).
 - **Verify the delegation your node presents, and check that it names the key the
   handshake gave you** (`wire-format.md` §8.2). An instance carries a delegated
   credential rather than its operator's seed (design §23.3), so the key it
@@ -1062,7 +1048,7 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   Order two records of one node by seqno as you order locators.
 - **Take an introduction, and take it with its anchor.** A person must be
   able to bring in a party they have never met, from a code or a referral:
-  that is an `AnchoredIntroduction` (`wire-format.md` §2.4) — the
+  that is a `Card` (`wire-format.md` §2.4) — the
   introduction with the anchor its locator names, that anchor's key
   material, and where it answers — and a bare introduction or a bare
   endpoint record is taken too, the kind decided by parsing rather than by
@@ -1148,7 +1134,7 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
 
 - **Publish an alias and, if you choose, an image, for each subnet you hold a
   position in** (`wire-format.md` §7.11; design §12.8) — to your serving node
-  in that subnet, as you publish your prekeys (§4.1), at attach and whenever
+  in that subnet, at attach and whenever
   it changes, each one at a higher counter than the last. Both are the
   person's to pick, and neither is expected to be anything in particular: a
   picture of the face is not asked for, and how much to show is the person's
@@ -1597,8 +1583,8 @@ on the wire.
   in; the kernel holds no relationship with that service and obtains nothing
   itself.
 - **The kernel seals what it persists; the application keeps the key**
-  [author, 2026-09-26]. What is persisted is the archive, the payload
-  sessions and the ratchet state — **key material among it** — so it is
+  [author, 2026-09-26]. What is persisted is the archive, the
+  threads and the identity's keys — **key material among it** — so it is
   encrypted before it reaches the platform's storage, in the kernel, under a
   storage key the kernel mints. The kernel stays platform-agnostic
   (design §14.1.0) through the key's **provenance**: it never chooses where
@@ -1658,7 +1644,7 @@ has a retention window (design §7.5.1). The names are the storage names.
 |---|---|---|
 | `archive` | the records this identity signed or holds, each as its bytes; loaded in chain order whatever order they were kept in | design §10 for the chain, design §7.5.1 for the captures kept apart |
 | `store` | contacts, hints, the pruning checkpoint, the captures held and their windows (§2) | §2, design §7.5 |
-| `payload` | the PQXDH material, the sessions, the one-time pools per address, the nodes agreed to, the attachments, where each party's last message came by | §3, §4.1 |
+| `payload` | the node keys held for the horizon, the queue position held per address, the opened messages' hashes, the nodes agreed to, the attachments, where each party's last message came by | §3, §4.1 |
 | `horizon` | what has been seen (txid and effective time) and the snapshot the horizon materialises from | design §8, and §4.2 above |
 | `delegations` | the delegations held for this device's keys | `wire-format.md` §8.2 |
 | `holder` | whose this state is (the keyhash), the provider credential, the application secret | §4.2, §10 |

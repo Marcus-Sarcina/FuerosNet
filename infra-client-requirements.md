@@ -64,13 +64,13 @@ documents. Where a requirement leaves a visible artifact, that is noted in place
   after its serving node is already dark (design §14.1.2).
 - **Keep the state that serving needs and no history of the requests that
   produced it, whatever the request class** [author, 2026-09-18]. A resolution says whom a client
-  wants to reach, a one-time key request that a session is opening, a filtered
+  wants to reach, a single-subject key request that a message is coming, a filtered
   catalog query what kind of service it seeks, a currency fallback whom it is
-  evaluating, a publication or deposit that it is making itself reachable. Each
+  evaluating, a publication that it is making itself reachable. Each
   is priced alone in design §19, and one node answers all of them, so histories
   of them would join into an interest graph no single class yields (design
   §19.8, C23). §2, §4.5, §6 and §6.1 say what this means for the queue,
-  resolution, prekeys and doorbells; the rule is the same for a class this
+  resolution, node keys and doorbells; the rule is the same for a class this
   document does not name.
 - **Process liveness updates and discard them.** Store the resulting reachability
   state, not the update history (design §15). **The protocol cannot prevent an
@@ -79,8 +79,11 @@ documents. Where a requirement leaves a visible artifact, that is noted in place
 ## 2. Queue
 
 - **Hold ciphertext for offline clients** (design §14.1.4, design §14.1.6).
-- **Queue indefinitely, bounded by a per-subordinate storage cap** (design
-  §14.1.6). No time limit: a message survives an absence of any length.
+- **Queue an undelivered message indefinitely, bounded by a per-subordinate
+  storage cap** (design §14.1.6). No time limit: a message survives an absence
+  of any length. **Keep a delivered one thirty days from its first delivery**
+  [author, 2026-11-19], your own to change, so that every device of the
+  identity collects it and not only the first to connect.
   **The cap is the disk you lend, not the bytes you hold** [author,
   2026-11-06]: count each queued message as the blocks it occupies, because
   that is what it costs you and what an operator sizing a machine from your
@@ -90,18 +93,24 @@ documents. Where a requirement leaves a visible artifact, that is noted in place
 - **Do not replicate queue state to siblings.** Failover covers sessions, not
   mailboxes, a client attached to a sibling collects from its own serving node when
   that node returns.
-- **At the cap, refuse the newest message and tell the sender** (design §14.1.6).
-  Never drop the oldest: it destroys a message the sender believes was accepted, and
-  it lets anyone who can reach the queue flush what is already in it.
-- **Delete on delivery, immediately, leaving nothing recoverable.** No journal, no
+- **At the cap, remove the oldest message already delivered; when everything
+  held is undelivered, refuse the newest and tell the sender** (design §14.1.6)
+  [author, 2026-11-19]. Never drop an undelivered message: it destroys one the
+  sender believes was accepted, and it lets anyone who can reach the queue
+  flush what is already in it. **Count the incoming message in blocks too**,
+  as the held ones are counted.
+- **Remove a message when its time or the cap says so, immediately, leaving
+  nothing recoverable**, and your half of its seal with it. No journal, no
   tombstone, no crash-recovery copy that outlives the delete. Durable storage for your
   own crash recovery is your backup problem and must not extend a message's life.
   **This bounds what your node retains, not what your hosting provider can**
   (design §14.1.6, design §18.1) [2026-09-03]: a provider snapshotting below your guest
   keeps what you deleted, and your deletion is hygiene against that party — the
   real bound against everyone above the hypervisor.
-- **Hold the minimum while a message waits**: ciphertext, recipient keyhash and
-  device, arrival time. Nothing further.
+- **Hold the minimum while a message waits**: ciphertext, recipient keyhash, the
+  node key it was sealed to, its position, arrival time and first delivery.
+  Nothing further, and nothing per device: a device says what it holds when it
+  attaches (`wire-format.md` §8.2), and you hand it what is newer.
 - **Stop serving a binding you have verified superseded** (design §12.6.5)
   [2026-09-03]: authenticated supersession evidence — a verified reissue chain,
   a validated rotation — ends the old credential's service. Terminate its
@@ -421,62 +430,41 @@ specific claims are supported by people you can ask.
 
 ---
 
-## 6. Prekey service
+## 6. Node keys
 
-design §14.2.4 adopts PQXDH, whose asynchronous property depends on someone
-holding a subject's prekeys while that subject is offline. That someone is the
-serving node.
+design §14.2.4's split seal needs a key that only the recipient's serving node
+holds, so that a ciphertext recorded anywhere outlives every key that opens
+it. That node is you.
 
-- **Hold and serve prekey bundles for attached clients** (`wire-format.md` §7.8).
-- **A bundle, a pool and a queue per device, and a reply carrying every device's
-  bundle** [author, 2026-09-22]. A subject's devices attach as separate
-  sessions, each named by the key it presented (`wire-format.md` §8.2); a
-  publication, a deposit and a wake registration belong to the device on the
-  session they arrive on, and a publication naming another device is refused
-  (`wire-format.md` §7.10); a relay submission names the device its ciphertext
-  is for and is queued for that device (design §14.1.6).
-- **A bundle over new material empties the device's pool** [author, 2026-11-15]
-  (`wire-format.md` §7.8): drop it, held and stored, before serving the new
-  bundle; the same material re-signed keeps it.
-- **Serve reusable material freely.** It is returned any number of times to anyone
-  and consumes nothing — clients prefetch it org-wide by default so that fetching
-  carries no intent signal (design §14.2.4).
-- **Serve a one-time key only for a subject you serve** [author, 2026-10-16].
-  Serving one is a metadata event (below; design §14.2.2, C11), so the party
-  that learns it is the one already serving that subject: a sibling holding a
-  copy would widen who sees it for nothing. **Reusable material is different
-  and may be served by a sibling** — it is published to be fetched and carries
-  no intent — so a cache of it costs the subject no disclosure. Asked for a
-  one-time key for a subject you do not serve, answer that you hold none,
-  which is what you would answer anyway.
-- **Consume one-time keys on serving them**, and only when one is requested.
-- **Rate-limit one-time key issuance per requester per subject.** You cannot tell
-  whether a requester is really opening a session, and binding consumption to
-  session evidence is circular, the key is needed before the session exists. Rate
-  limiting bounds the harm instead: an attacker draining a victim's pool to force
-  them onto the last-resort key is slowed without anyone having to prove motive.
-- **Tell the subject when their one-time pool is exhausted.** An attacker can drain
-  it deliberately, and a subject who is not told cannot replenish. **This signal
-  only works because one-time keys are excluded from blanket prefetch.** If they
-  were prefetched, exhaustion would be the normal state and draining would be
-  invisible.
-- **The bundle is opaque.** Do not attempt to validate its contents — only the
-  endpoints hold the state to interpret them, and treating the blob as inspectable
-  couples this node to a PQXDH revision.
-- **A one-time key request is a metadata event this node observes.** It learns
-  that one party intends to message another before any message exists (design
-  §19.8, C11). **A reusable-material fetch is not**, which is the point of
-  prefetching it org-wide: only the on-demand request carries intent. It falls under §1's process-and-discard obligation: serve the request,
-  keep no record of who asked for whose bundle.
+- **Keep a key for each identity you serve, and rotate it** (`wire-format.md`
+  §7.8) [author, 2026-11-19]: one a day as shipped, your own to change
+  (design §14.2.4.3). One per recipient and never one shared between them, so
+  that no subordinate's mail keeps a key alive for another's.
+- **Hold a private half while any message sealed to it is queued, and delete
+  it with the last one** (design §14.1.6). **Accept a submission sealed to your
+  newest key, and to the one before only within a grace of generous network
+  latency after the rotation** [author, 2026-11-19], thirty seconds as
+  shipped, so that nothing is replayed into the queue past its key's day.
+- **Hand the shared secret and never the key** [author, 2026-11-19]. On
+  delivery, open your own half of each message and hand its 32-byte secret
+  with the ciphertext (`wire-format.md` §7.10), so a delivery opens that one
+  message and no other.
+- **Serve keys for the recipients you serve, to whoever asks**, singly or as
+  a batch, and nothing for anyone else. A key is not consumed by being
+  served, so there is nothing to ration.
+- **Do not know who asks** [author, 2026-11-19]. A fetch and a submission
+  arrive under a transport key minted for them (`wire-format.md` §7.8,
+  §7.10), and nothing in either names the sender; do not try to learn it.
+  **You cannot filter by sender, and that is accepted**: the per-subordinate
+  cap is what bounds a flood (§2).
+- **A single-subject fetch is a metadata event this node observes.** It
+  learns that someone intends to write to one of its subordinates before the
+  message arrives (design §19.8, C11). **A batch fetch is not**, which is the
+  point of prefetching across the horizon. It falls under §1's
+  process-and-discard obligation: serve the request and keep no record of it.
 
 ### 6.1 What your clients hand you
 
-- **Take a prekey publication only from the subject it names**
-  (`wire-format.md` §7.10). A client publishing another party's bundle would be
-  choosing the material that party's peers open sessions against.
-- **Bound a deposit and say so.** The pool is space you lend, and a client that
-  asks for more than you lend is refused with the code rather than silently
-  trimmed.
 - **Answer a relay submission when you have taken it, not when you have
   delivered it.** Taking it is the promise the queue already makes (design
   §14.1.6); a sender made to wait for delivery would be waiting on a party who
@@ -516,16 +504,16 @@ serving node.
 
 - **Hold the latest profile per (subject, subnet, kind) and serve it to anyone
   who asks** (`wire-format.md` §7.11). It is published to be read: a fetch is
-  the weight of a reusable-material fetch and is not logged (§1's
+  the weight of a batch node-key fetch and is not logged (§1's
   process-and-discard).
-- **Take a profile only from the subject it names**, as a prekey publication
+- **Take a profile only from the subject it names**
   (`wire-format.md` §7.10), and replace the one you hold only by one
   published later (`wire-format.md` §7.11). A subnet's profile is
   taken from whoever signed it: that the signer is the root is a convention
   (design §12.8), and this node checks the signature and not the convention.
 - **Bound what you hold.** An image is at most 64 KiB and an alias 64
   characters (`wire-format.md` §1.3); refuse over the bound with the code
-  rather than trimming, as a deposit is refused (§6.1).
+  rather than trimming.
 - **The profile is opaque to what you do with it.** You serve bytes a subject
   signed; you do not render, match, or index by the alias, and you do not read
   the image. Anything a profile says is between the subject and whoever
@@ -760,7 +748,7 @@ is not a matter of granting narrow scopes carefully: **the hooks do not exist.**
 design §11 already states the rule — *the resource never reads network state*, and
 a hosted package is a resource. It receives its credential (`resource-requirements.md`
 §2) and its own request traffic, and nothing else: no topology, no liveness state,
-no queue contents, no prekey requests, no role-evaluation inputs.
+no queue contents, no node-key requests, no role-evaluation inputs.
 
 **Why this matters more than ordinary containment.** Those datasets are minimised
 individually and separated deliberately, and a single process holding all of them

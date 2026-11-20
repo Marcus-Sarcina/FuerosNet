@@ -125,7 +125,6 @@ impl PostQuantumRatchet for Stub {
 /// advance takes the post-quantum contribution with the Diffie-Hellman
 /// output (design §14.2.4.3).  The floor is the same ratchet with nothing
 /// on the other side of the seam.
-// acceptance: PAY-22
 #[test]
 fn the_post_quantum_seam_carries_its_chunk_and_changes_what_the_root_derives() {
     let sk = [42u8; 32];

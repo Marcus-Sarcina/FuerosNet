@@ -290,7 +290,6 @@ fn an_anchor_asked_for_before_the_id_is_fixed_is_its_own_refusal() {
     assert!(s.client("alice").capture_key_carriage().is_ok());
 }
 
-// acceptance: CER-54
 /// **The prekey handover, and what it is for** (`wire-format.md` §14.3.4):
 /// two devices that have just met hand each other a signed bundle and one
 /// one-time key across the local session, and can then open an end-to-end
@@ -361,7 +360,6 @@ fn a_handover_opens_an_end_to_end_channel_with_no_node_asked() {
     );
 }
 
-// acceptance: CER-54
 /// A handover of another ceremony is refused, and one whose bundle does
 /// not verify is refused however it arrived: the signature is what makes
 /// the material trustworthy and never the channel.

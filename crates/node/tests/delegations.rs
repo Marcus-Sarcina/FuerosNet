@@ -489,7 +489,6 @@ fn dec_35_an_envelope_signed_under_a_delegated_key_fails_verification() {
     assert_eq!(fab.count(FRAME_TOPOLOGY_PUSH), 0);
 }
 
-// acceptance: SUB-12
 #[test]
 fn sub_12_a_publication_naming_another_device_than_the_sessions_is_refused() {
     use rhtn_archive::prekey::{CONSTRUCTION_PQXDH, PrekeyBundle};

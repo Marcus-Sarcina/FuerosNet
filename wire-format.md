@@ -121,7 +121,8 @@ either be structurally disjoint from every language above, or carry its own
 | Standalone locator (§2.3) | `rhtn/1:locator` |
 | Anchor entry (§7.2) | `rhtn/1:anchor` |
 | Node endpoint record (§7.6) | `rhtn/1:endpoints` |
-| Prekey bundle (§7.8) | `rhtn/1:prekey` |
+| Node key (§7.8) | `rhtn/1:node-key` |
+| Encryption key (§2.5) | `rhtn/1:encryption-key` |
 | Profile (§7.11) | `rhtn/1:profile` |
 | Subtree acknowledgement (§7.5) | `rhtn/1:subtree-ack` |
 | Old-key successor statement (§4.1) | `rhtn/1:successor` |
@@ -131,7 +132,7 @@ either be structurally disjoint from every language above, or carry its own
 **Why it matters more than it did.** Exploiting cross-context confusion requires a
 byte string valid in two roles, which the differing CBOR structures argue against without ruling out
 — and unproven non-confusability is precisely what domain separation exists to
-replace. **Fifteen roles carry a tag**, and the risk domain separation
+replace. **Sixteen roles carry a tag**, and the risk domain separation
 answers grows with every one of them: each new signed context is another
 chance for a byte string to be valid in two places at once. A verifier that derives the tag from
 context rather than content also makes the check free.
@@ -204,7 +205,6 @@ malformed, not merely unusual.
 | Verifier responses per rotation | 32 |
 | Witnesses per presence record | 16 |
 | Path length | 24 nibbles (depth 24 at f=10 exceeds any plausible network) |
-| Prekey bundle blob | 4 KB. A PQXDH bundle is an ML-KEM-768 encapsulation key (1,184 B) plus signed prekeys and their signatures — roughly 1.5–2 KB, so this is a DoS ceiling with headroom rather than a capacity figure |
 | Profile image | 64 KiB, and an alias 64 characters (§7.11): a small picture and a name, fetched per contact, which the horizon multiplies |
 | Merge back-pointers per signer | 8 |
 | Verifier responses per presence record | 32 — **two subjects × a per-subject threshold capped at 10**, with headroom. Sixteen does not fit: two well-connected participants require ten each |
@@ -221,7 +221,6 @@ malformed, not merely unusual.
 | `VerifierResponse` entries per `GatheredResponses` (§7.10.2) | 32 — the per-record bound above |
 | `COSE_Signature` entries per `SigningReply` (§7.10.2) | 2 — one logical signer (§3.5) |
 | Delegations per `DeviceCredential` (§14.3.3) | 45 — the run an instance is provisioned with, 90 days end to end (design §12.6.5) |
-| `PrekeyBundle` entries per prekey reply (§7.8) | 8 — one per device the node holds for the subject; design §23.3 holds the count near three |
 | `CatalogEntry`, total encoded bytes | 2048 |
 | `CatalogReply` entries | 111 — an answering node answers for **itself plus the ≤110 users it serves** (§6.4, design §11.5). Not the trust horizon population, which is larger (design §15.1) and irrelevant here: the bound is per *answering node*, not per horizon. The frame bound caps this at 127 |
 | Unknown extension keys per map | 16 |
@@ -527,21 +526,27 @@ Introduction = [
   uint,              ; version, 1
   KeyMaterial,       ; the subject's key material (§2.2); its hash is the
                      ;   locator's subject, and the signature verifies under it
+  EncryptionKey,     ; the subject's encryption key (§2.5), which a message
+                     ;   to it is sealed to (design §14.2.3)
   SignedLocator      ; the most recent the holder has for that subject
 ]
 ```
 
-- **The material's hash MUST equal the locator's subject**, and the
-  locator's signature MUST verify under it; an introduction failing either
-  is not an introduction and contributes nothing wherever it is handed.
+- **The material's hash MUST equal the locator's subject and the encryption
+  key's**, and both signatures MUST verify under it; an introduction failing
+  any of these is not an introduction and contributes nothing wherever it is
+  handed.
 - **It is the holder's statement of what it holds**, not the subject's of
   where it is now: the locator inside is as fresh as the holder's last
   word from the subject, which is why a bundle names the most recent held
   (§5.4) and why resolution still runs by seqno (§2.3).
 
-### 2.4 Anchored introduction
+### 2.4 Card
 
-**One code carries the introduction and its anchor records** [author,
+**A card is everything that reaches an address** (design §12.9) [author,
+2026-11-19]: what goes in a signature block or on a printed code, so that
+anyone holding it and nothing else can send to the subject through that
+subnet. **One code carries the introduction and its anchor records** [author,
 2026-10-13]. An introduction gives a holder a key and a position, and a
 position is not an address: the locator names its anchor by hash, and
 neither that anchor's key material nor where it answers is anywhere in
@@ -549,10 +554,10 @@ the object. Design §12.3 Case 1 has the holder "look up `anchor` in his
 local table for an address to start from", which a party with no node of
 its own has no way to fill — so an introduction handed over at a meeting,
 which is Case 0 and the dominant case, could not be acted on at all. What
-travels at a meeting therefore carries both:
+travels at a meeting, and what a card is, therefore carries both:
 
 ```
-AnchoredIntroduction = [
+Card = [
   uint,              ; version, 1
   Introduction,      ; §2.3
   KeyMaterial,       ; the anchor's key material (§2.2); its hash is the
@@ -578,6 +583,41 @@ AnchoredIntroduction = [
   wherever they travel.
 
 ---
+
+### 2.5 Encryption key
+
+**The key a message to an identity is sealed to** (design §14.2.3), signed by
+the identity and carried on its introduction, outside the key material so that
+the keyhash is unchanged by it.
+
+```
+EncryptionKey = {
+  1: keyhash,          ; the identity
+  2: bstr .size 1216,  ; the X-Wing encapsulation key (§7.8.1): ML-KEM-768's
+                       ;   1,184 bytes and X25519's 32, in X-Wing's order
+  3: bstr .size 32,    ; the X25519 public key that authenticates what this
+                       ;   identity seals (§7.8.1), a key of its own so that
+                       ;   no key serves both as a KEM's and in a static
+                       ;   exchange
+  4: COSE_Sign         ; BY THE IDENTITY over canonical CBOR of fields 1-3;
+                       ;   external_aad = "rhtn/1:encryption-key". BOTH
+                       ;   components (§3.5): it lasts as long as the
+                       ;   identity, so design §5.1's horizon applies
+}
+```
+
+**Derived from the identity's seed**, as the capture keys are (design
+§7.5.2.6): HKDF-SHA-256 with an empty salt over the seed, expanded under
+`rhtn/1:encryption-key` to X-Wing's 32-byte decapsulation seed and under
+`rhtn/1:seal-auth` to the X25519 private key of field 3. Every device restored
+from the phrase computes the same two keys, so none is carried between devices
+except to one paired without the seed (design §23.3).
+
+- **Field 1 MUST be the keyhash the signature verifies under**, and an
+  encryption key failing either is discarded wherever it arrives.
+- **It changes only when the identity does.** A rotation (design §9.0) mints a
+  new seed and so a new encryption key, which is what cuts off a holder of the
+  old one (design §14.2.4.4).
 
 ## 3. Common envelope and structural verification
 
@@ -2296,8 +2336,8 @@ querier (§4.1) and no type-4 request travels.
 **The querier a verifier limits and attributes is the party the transport
 authenticated, never one the request names** [2026-09-02]: field 2 MUST equal
 the transport-authenticated peer on the stream carrying the query — or, on
-the end-to-end path, the peer the session attributed the message to (§7.8,
-design §14.2.4) — and a mismatch is rejected. Otherwise a request chooses its
+the end-to-end path, the sender the seal's tag attributed the message to
+(§7.8.1, design §14.2.4) — and a mismatch is rejected. Otherwise a request chooses its
 own rate-limit bucket.
 
 **The successful reply body is a single `VerifierResponse`** [2026-09-02],
@@ -2581,7 +2621,7 @@ retained state is a denial-of-service surface however well-intentioned.
 **Unsigned session messages reject unknown map keys** (§1's global rule) —
 `CatalogQuery`, `CatalogReply`, `ResourceRequest`, `ResourceResponse` and the
 control frames of §8.0 alike, and equally every unsigned family this chapter does
-not name: resolution, prekey and archive requests, grants and wrappers.
+not name: resolution, node-key and archive requests, grants and wrappers.
 
 **An asker outside the answering node's horizon is refused before the application
 reply.** Close the stream; do not return an empty `CatalogReply`. **An empty
@@ -2688,7 +2728,7 @@ evaluator can see.
 
 ---
 
-## 7. Attestations and records: currency, anchors, key grants, acknowledgements, endpoints, resolution, prekeys, archive fetch
+## 7. Attestations and records: currency, anchors, key grants, acknowledgements, endpoints, resolution, node keys, archive fetch
 
 ### 7.1 Currency attestation
 
@@ -3264,135 +3304,142 @@ reissue does not disturb routing**: the path is unchanged, so a cached locator s
 reaches the subject, and the comparison only matters once the position moves as
 well — at which point the cached path is stale on its own account.
 
-### 7.8 Prekey distribution
+### 7.8 Node keys and the seal
 
-**The network distributes prekeys; it does not define them.** design §14.2.4 adopts
-PQXDH, whose bundle contents are specified by that protocol. This section carries
-them.
-
-**The bundle is opaque to this protocol**. A node that serves
-prekeys cannot validate their contents and does not need to: only the endpoints
-share the state required to interpret them. Carrying the bundle as a blob also
-means a PQXDH revision does not force a wire change here.
-
-**The bundle is split, because its two halves have opposite properties.**
+**A message to an identity is sealed to two keys** (design §14.2.4): the
+identity's encryption key, on its introduction (§2.5), and a key the
+recipient's serving node holds for that recipient alone. This section carries
+the node's key and states the seal.
 
 ```
-device = bstr .size 32 ; the raw public key a device presents in a handshake
-                       ;   (§9.1): its delegated transport key (§8.2), or the
-                       ;   identity's classical component for the device that
-                       ;   holds the seed. A device is named by nothing else
-                       ;   [author, 2026-09-22]
-
-PrekeyBundle = {
-  1: keyhash,          ; subject
-  2: uint,             ; construction identifier — 1 = PQXDH
-  3: bstr,             ; opaque REUSABLE material: signed prekey and PQ signed
-                       ; prekey, per the named construction. Reusable by design
-  4: timestamp,        ; published_at
-  5: device,           ; the device whose material this is. Under the
-                       ;   signature, so a bundle cannot be re-attributed to
-                       ;   another device of the same subject
-  6: COSE_Sign1        ; BY THE SUBJECT over fields 1-5;
-                       ; external_aad = "rhtn/1:prekey".
-                       ; Classical only — relevance expires on replacement, so
-                       ; §7.1's horizon does not apply. The subject's identity
-                       ; key signs, on the ceremony device, over material the
-                       ; device generated (design §23.3)
+NodeKey = {
+  1: keyhash,          ; the recipient it is for
+  2: keyhash,          ; the node holding its private half
+  3: uint,             ; its number: the node's counter for this recipient,
+                       ;   increasing with every rotation
+  4: bstr .size 1216,  ; the X-Wing encapsulation key (§7.8.1)
+  5: timestamp,        ; published_at
+  6: COSE_Sign1        ; BY THE NODE over canonical CBOR of fields 1-5;
+                       ;   external_aad = "rhtn/1:node-key". Classical only:
+                       ;   relevance ends on rotation, so design §5.1's
+                       ;   horizon does not apply
 }
 
-PrekeyRequest = {
-  1: keyhash,          ; subject whose material is wanted
-  2: uint,             ; 0 = reusable only | 1 = reusable plus a one-time key
-  3: bstr .size 16,    ; nonce
-  4: ? device          ; the device wanted. ABSENT with field 2 = 0 means every
-                       ;   device's reusable material; REQUIRED with field 2 =
-                       ;   1, a one-time key being consumed from one device's
-                       ;   pool
+NodeKeyRequest = {
+  1: keyhash,          ; the recipient whose node key is wanted
+  2: bstr .size 16     ; nonce
 }
 
-PrekeyBatchRequest = {
+NodeKeyBatchRequest = {
   1: [ 2*256 keyhash ],   ; the population swept, in ascending keyhash order
   2: bstr .size 16        ; nonce
 }
 
-PrekeyBatchReply = [ 1*256 PrekeyReply ]
-                       ; the answer to a PrekeyBatchRequest [author,
-                       ;   2026-10-16]: one reply per subject asked, **in the
-                       ;   request's own ascending keyhash order**, which is
-                       ;   what associates a reply with its subject — every
-                       ;   reply echoes the one request nonce, so position is
-                       ;   the association. A subject the node could not
-                       ;   answer for carries its own failure code in field 4
+NodeKeyBatchReply = [ 1*256 NodeKeyReply ]
+                       ; one reply per recipient asked, **in the request's own
+                       ;   ascending keyhash order**, which is what associates
+                       ;   a reply with its recipient — every reply echoes the
+                       ;   one request nonce, so position is the association
+                       ;   [author, 2026-10-16]. A recipient the node could not
+                       ;   answer for carries its own failure code in field 3
                        ;   rather than being omitted, so the orders cannot
                        ;   drift apart
 
-PrekeyReply = {
+NodeKeyReply = {
   1: bstr .size 16,    ; echoes the request nonce
-  2: ? [ 1*8 PrekeyBundle ],
-                       ; one per device the node holds for the subject, or the
-                       ;   one device the request named. Eight is a chosen
-                       ;   ceiling (§1.3): design §23.3 holds the count near
-                       ;   three by construction
-  3: ? bstr,           ; a one-time prekey of the device named, iff requested
-                       ;   and available
-  4: ? uint            ; failure code when field 2 absent:
-                       ;   0 unknown subject | 1 refused
+  2: ? NodeKey,        ; the newest this node holds for the recipient
+  3: ? uint            ; failure code when field 2 absent:
+                       ;   0 not a recipient this node serves | 1 refused
 }
 ```
 
-**A subject with several devices has a bundle per device, and a session is with
-a device** [author, 2026-09-22]. Each device generates its own material and the
-identity signs it on the ceremony device (design §23.3 and design §14.2.4); the ratchet
-advances on the device that receives, so material shared between devices would
-part them at the first message. A reply therefore carries every device's bundle,
-an initiator opens one session against each and sends to each, and a one-time
-pool is a device's. **A device is named by the key it presents** — the delegated
-transport key, or the seed-holding device's classical component — because that key
-is what a delegation already binds and what a serving node already keys a session
-by, and because a root's several devices have nothing else to be named by
-[author, 2026-09-22]. A consequence stated rather than hidden: **a prekey fetch
-reveals how many devices a subject has**, which a reply carrying one bundle did
-not.
+**One key per recipient, rotated by the node** [author, 2026-11-19]. A node
+generates a key for each identity it serves, publishes its successor on its
+own schedule — one day as shipped (design §14.2.4.3) — and **holds each
+private half while any message sealed to it is queued**, deleting it when the
+last such message is removed (design §14.1.6). **It accepts a submission sealed
+to its newest key, and to the one before for a grace after the rotation**
+[author, 2026-11-19]: generous network latency, thirty seconds as shipped,
+its own to change. A sender refused for a stale key fetches the newest and
+seals again.
 
-**Only the one-time key is consumed on serving.** The reusable material may be
-returned any number of times to anyone. A one-time key is returned once and
-discarded; when none remain, field 3 is simply absent and the session proceeds on
-reusable material alone, a **declared reduction in forward secrecy for the first
-message**, not a failure. Everything after it is covered by the ratchet.
+**A requester is not named, and the node answers whoever asks** [author,
+2026-11-19]. A fetch is made under a transport key minted for it (§9.1) and
+not the requester's identity's, so a node learns that somebody wants to write
+to one of its subordinates and not who: design §14.2.2 states why. A node
+answers only for recipients it serves, and a key is not consumed by being
+served, so there is nothing a requester can deplete.
 
-**A pool belongs to the bundle it was stocked beside** [author, 2026-11-15]. A
-publication for the same device over different material discards that device's
-pool, held and stored alike, before the new bundle is served, and the device
-restocks as on a first publication; the same material again, re-signed, keeps
-the pool. A device that starts over (restored from its phrase, design §6.3)
-numbers its keys from the start again and holds none of the old pool, so a key
-served from it would open nothing.
+**The two request forms are structurally distinct, so a serving node need not
+infer intent.** A `NodeKeyBatchRequest` naming a population is visibly a
+sweep; a `NodeKeyRequest` naming one recipient is visibly targeted (design
+§14.2.4.5). **Asking implementations to make fetches "independent of intent"
+would state a property no observer could check**: the fact of a fetch is
+shared, the motive behind it is not (design §1.1). Making the shapes differ
+replaces an unverifiable behavioural claim with a visible one.
 
-**The split exists so that blanket prefetch is affordable.** A client prefetching
-reusable material for its whole trust horizon (design §14.2.4) consumes nothing
-scarce, and **leaves one-time-key depletion meaningful as a signal.** Under
-blanket prefetch of one-time keys, exhaustion would be the normal state and an
-attacker draining a pool would be indistinguishable from ordinary traffic.
+#### 7.8.1 The seal
 
-**The two request forms are structurally distinct, so a serving node need not infer
-intent.** A `PrekeyBatchRequest` naming a population is visibly a sweep; a
-`PrekeyRequest` naming one subject is visibly targeted. **Asking implementations to make fetches "independent of
-intent" would state a property no observer could check**: the fact of a fetch is
-shared, the motive behind it is not (design §1.1).
-Making the shapes differ replaces an unverifiable behavioural claim with a visible
-one.
+**Each half is an X-Wing encapsulation** (`draft-connolly-cfrg-xwing-kem`):
+ML-KEM-768 and X25519 under X-Wing's combiner, which is the transport's pair
+of primitives in a KEM's shape. A sender holding the recipient's encryption
+key `R` and the node's key `N`, numbered `n`:
 
-**Requesting a one-time key discloses intent to message that subject.** Requesting
-reusable material does not, when done as a batch.
+| Step | |
+|---|---|
+| Encapsulate | `(ssR, ctR) = Encaps(R.field 2)`, `(ssN, ctN) = Encaps(N.field 4)` |
+| Message key | HKDF-SHA-256, empty salt, input `ssR ‖ ssN`, info `rhtn/1:seal` ‖ recipient keyhash ‖ node keyhash ‖ `n` as a deterministic CBOR uint ‖ `ctR` ‖ `ctN`; 32 bytes, an AES-256-GCM key |
+| Body | `SealedBody` below, its tag computed over fields 1-5 as encoded |
+| Seal | AES-256-GCM under the message key, a random 96-bit nonce in front of the ciphertext, no associated data: the key already binds both encapsulations, both keys and the recipient |
 
-**Speculative depletion is bounded rather than forbidden.** A serving node
-cannot know whether a requester is truly opening a session, and binding consumption
-to session-opening evidence is circular — under PQXDH the key is needed *before*
-the session exists. So the node **rate-limits one-time key issuance per requester
-per subject** rather than policing motive. That bounds the harm the rule was
-protecting against — draining a victim's pool to force them onto the last-resort
-key — without requiring anyone to prove why they asked.
+```
+Sealed = [
+  uint,                ; n, the node key it is sealed to
+  bstr .size 1120,     ; ctR
+  bstr .size 1120,     ; ctN
+  bstr                 ; nonce ‖ AES-256-GCM ciphertext of SealedBody
+]
+
+SealedBody = [
+  keyhash,             ; the sender
+  tstr .size (1..64),  ; the sender's alias: DISPLAY ONLY, as §7.11's, and
+                       ;   shown as unverified wherever the tag is not
+                       ;   checked [author, 2026-11-19]. With field 1 it
+                       ;   is the header that indexes a thread, two
+                       ;   senders of one alias kept apart by the keyhash
+                       ;   [author, 2026-11-20]; neither is an address
+  Introduction / nil,  ; the sender's own (§2.3), on its first message to this
+                       ;   recipient; nil otherwise
+  uint,                ; the kind (§7.10.1)
+  bstr,                ; the bytes
+  bstr .size 32        ; the tag
+]
+```
+
+**The tag authenticates the sender, and only to the recipient** (design
+§14.2.4.2). It is HMAC-SHA-256 over `ctR ‖ ctN ‖` the canonical encoding of
+fields 1-5, keyed by HKDF-SHA-256 of the X25519 exchange between the sender's
+field-3 key (§2.5) and the recipient's, info `rhtn/1:seal-auth` ‖ sender
+keyhash ‖ recipient keyhash. **Either party computes the same key**, so the
+tag convinces the recipient and proves nothing to anyone else.
+
+**Opening.** The recipient decapsulates `ctR` under its own key and takes
+`ssN` from its node (§7.10), derives the message key and opens the body. **It
+then attributes it**: the sender's field-3 key comes from the introduction it
+already holds for field 1, or from the one in field 3, which MUST hash to field
+1 and verify as §2.3 requires; the tag MUST verify under it. **A body that does
+not open, or whose tag fails, is discarded** and contributes nothing. **A body
+with no introduction held or carried is kept as unverified** (design
+§14.2.4.3): shown under its alias and marked so, and not answered, since its
+sender is no contact. A recipient discards a sealed
+message it has already opened, by the hash of its ciphertext, remembering those
+opened under the node's two newest keys it has seen; an older one cannot be
+submitted again (§7.8), so a replay opens once.
+
+**No signature, deliberately.** A signature would make every message a
+portable proof of what its sender said, which design §14.2.4.2 declines;
+authentication is classical where confidentiality is post-quantum, accepted
+there [author, 2026-11-19].
 
 ### 7.9 Archive fetch
 
@@ -3467,19 +3514,18 @@ batch, matching the archive-reference bound it replaces.
 
 ### 7.10 What a client hands its serving node
 
-**Five things a light client cannot do for itself.** It cannot publish its own
-prekey bundle, stock its own one-time pool, hold its own mail, be woken by a
-service it is not connected to, or hold its own profile where a stranger can
-fetch it. Each is an act the node it is already attached to performs on its
+**Three things a light client cannot do for itself.** It cannot hold its own
+mail, be woken by a service it is not connected to, or hold its own profile
+where a stranger can fetch it. Each is an act the node it is already attached to performs on its
 behalf, and each needs a message. **Said of one session**: a client holds
 one with the node serving each subnet it has a position in, and hands that
 node these things for that subnet alone (`light-client-requirements.md` §2;
-design §12.9). §6.2 gives a sixth member of this family, a
+design §12.9). §6.2 gives a fourth member of this family, a
 catalog registration, its own request type and says why: without a message,
 the one act that matters would be the one thing an attached client cannot say,
 and every implementation would invent its own.
 
-**Five request types, not one submission carrying a kind** [2026-09-13]. The
+**Three request types, not one submission carrying a kind** [2026-09-13]. The
 request table is explicit for every other message and a kind tag inside a body
 is the sender-supplied discriminator §10.1 refuses for pushes, for the same
 reason: it is state every receiver must trust before it knows what it is
@@ -3490,26 +3536,11 @@ something, so none may be processed in early data. (A profile *fetch*, §7.11,
 is read-only and is not in this family.)
 
 ```
-PrekeyPublication = {          ; type 9
-  1: PrekeyBundle,             ; §7.8's bundle, signed by its subject, naming
-                               ;   the device publishing it
-  2: bstr .size 16,            ; nonce, echoed in the reply
-}
-
-OneTimeDeposit = {             ; type 10
-  1: [ 1*256 bstr ],           ; one-time keys, opaque (§7.8), into the pool of
-                               ;   the device on this session
-  2: bstr .size 16,            ; nonce
-}
-
 RelaySubmission = {            ; type 11
   1: keyhash,                  ; the recipient
-  2: bstr,                     ; the ciphertext, which this node cannot read
+  2: Sealed,                   ; §7.8.1, which this node opens only its own
+                               ;   half of
   3: bstr .size 16,            ; nonce
-  4: device                    ; the recipient's device this ciphertext is for
-                               ;   (§7.8): a session is with a device, and the
-                               ;   node cannot tell from the ciphertext
-                               ;   [author, 2026-09-22]
 }
 
 WakeRegistration = {           ; type 12
@@ -3534,7 +3565,7 @@ ProfilePublication = {         ; type 13
   2: bstr .size 16,            ; nonce
 }
 
-SubmissionReply = {            ; the answer to any of the five
+SubmissionReply = {            ; the answer to any of the three
   1: bstr .size 16,            ; echoes the request nonce
   2: uint                      ; 0 accepted | 1 refused | 2 over a bound
                                ;   this node applies
@@ -3559,27 +3590,23 @@ which node rang, and a client re-deriving it can ring its own doorbell when its
 node is gone (design §14.1.5).
 
 **The subject of a publication is the sender, and the node checks it.** A
-bundle names its subject and is signed by it (§7.8); a client publishing
-another party's bundle would be choosing the material its peers open sessions
-against. The node refuses a publication whose subject is not the authenticated
-requester, **and one whose device is not the key this session presented**
-[author, 2026-09-22]: a device publishes its own bundle, stocks its own pool and
-registers its own wake endpoint, each on the session it holds, so none of the
-three carries a device field and the node attributes each to the device on the
-session. A profile names its subject the same way, and a node takes one only
-from the subject it names — **for a subnet's profile too**, whose subject is
-the party signing it: that the signer is the subnet's root is a convention the
-node does not check (§7.11).
-
-**A deposit is bounded by the array limits like everything else** (§1.3), and a
-node applies its own storage bound on top: the pool is space it lends.
+profile names its subject and is signed by it, and a node takes one only from
+the authenticated requester it names — **for a subnet's profile too**, whose
+subject is the party signing it: that the signer is the subnet's root is a
+convention the node does not check (§7.11). A wake registration is the
+session's own, and carries no subject at all.
 
 **A relay submission is answered before the message is delivered, not after.**
 The answer says the node took it, which is the same promise design §14.1.6's queue
 makes; delivery is the node's problem from that moment, and a sender that
 waited for delivery would be waiting on a party that may be offline for days.
 **The node refuses one for a recipient it holds no record of**, which is the
-distinction design §7.4.3 draws between offline and unknown.
+distinction design §7.4.3 draws between offline and unknown, **and one sealed
+to a node key it no longer accepts** for that recipient, which the sender meets
+by fetching the newest (§7.8). **It is taken from nobody the node can name**
+[author, 2026-11-19]: a sender submits under a transport key minted for the
+submission (§9.1), so the node holds a recipient, a size and a time, and the
+sender's card is inside the seal (design §14.2.2).
 
 **A wake registration with no endpoint withdraws.** Opting out must be as
 sayable as opting in, and a client that has stopped wanting a doorbell should
@@ -3592,75 +3619,49 @@ that its node took what it said; the node discloses nothing about the other
 clients it serves, and a refusal names no reason, since every reason it could
 give is about capacity or about somebody else.
 
-**What the node hands the recipient carries the submitter in front of the
-ciphertext.**
+**What the node hands a device carries its own half, opened.**
 
 ```
 RelayedPayload = [             ; what a node delivers for a submission
-  keyhash,                     ; the submitter, as this node authenticated it
-  bstr,                        ; the ciphertext, unchanged
-  ? bstr,                      ; the submitter's bundle (§7.8) for the device
-                               ; that submitted, where this node holds one
+  uint,                        ; the message's position in this recipient's
+                               ;   queue, increasing with every arrival
+  Sealed,                      ; §7.8.1, unchanged
+  bstr .size 32                ; ssN: this node's half, decapsulated under the
+                               ;   private key the message was sealed to
 ]
 ```
 
-A recipient holds material for many peers and must choose which to try before
-it can read anything, and only the node that took the submission knows who
-handed it over. **The name is a routing hint and not an attribution.** It is
-the node's assertion, not the sender's, and a recipient that treated it as
-authorship would be letting its own node say who wrote to it; what a message
-is attributed to is decided by the material it opens under (§7.8, design
-§14.2.4).
+**The node hands over the shared secret and not its key** [author,
+2026-11-19], so each delivery opens one message and no other, on a session the
+transport already encrypts (§9.1). It hands every message it holds to any
+device that proves the identity, or presents a delegation under it (§8.2), and
+names no sender, since it knows none.
 
-**Two initial messages can cross**, each side opening a session to the other
-at once, as both participants of a ceremony do when they ask their witnesses.
-The session the lower keyhash opened stands; the other is held only for what
-was already sent on it, bounded (the reference client holds two), and then let
-go [2026-10-02].
-
-**The third element is what the recipient opens it under, and the node is not
-trusted for it.** Attribution needs the submitter's bundle, and a recipient
-cannot have asked for the bundle of a party who has not written to it yet:
-store-and-forward means the first message arrives before there was anything to
-ask about (design §14.2.2). The node that took the submission holds that
-bundle already — serving it is §7.8's business — so it carries it. **The
-bundle is signed by the submitter** (§7.8), so a node that substitutes or
-alters one produces a bundle that does not verify, or one whose key is not the
-key the message carries; either way the recipient is left exactly where it
-would have been without it. A serving node can withhold this and cannot forge
-it, which is the same authority it already has over delivery itself.
-
-**The element is optional and a recipient MUST accept its absence**, since a
-node holds no bundle for a device that has published none, and a node that
-does not carry one is delivering what §7.10 has always defined. A recipient
-that already holds the binding ignores what arrived; **a bundle that fails
-verification is discarded and the message is processed as though none came**,
-because a delivery is not the place to learn that a party's published material
-is bad.
+**A device says what it already holds, and the node keeps no record of who
+took what** (design §14.1.6). `Attach` field 5 carries the newest position the
+attaching device has of this queue, and the node delivers what is newer; a
+device attaching for the first time, or restored, carries none and is handed
+everything still held. The node records the time of a message's first delivery,
+which starts its thirty days, and nothing per device.
 
 #### 7.10.1 What the end-to-end plaintext carries
 
-**The frame around the ciphertext** is the payload construction's own:
-`[tag, device, bytes]` — the message's kind on the channel (an initial
-message or a ratchet message), the sending device's key (§7.8; a session is
-with a device, design §14.2.4), and the bytes. **An initial message carries a
-fourth element, the sender's introduction** (§2.3: its key material and a
-signed locator) [author, 2026-10-30], so that a first message to a party
-that holds nothing of the sender can be attributed on arrival: the
-recipient checks the material hashes to the keyhash the channel names,
-takes the introduction as it would a scanned one, and the binding the node
-carried then verifies. A recipient that already holds the sender ignores
-it. A ratchet message carries no fourth element, and a frame of any other
-shape is not this construction's.
+**Two carriages, one plaintext.** A message through the recipient's node is a
+`SealedBody` (§7.8.1), which carries the sender, its introduction until it has
+had a reply [author, 2026-10-30], the kind and the bytes, so that a first
+message to a party that holds nothing of the sender is attributed on arrival.
+A message on the direct path (design §12.6.3) is `uint kind || bytes` on a
+connection whose transport is end to end between the two parties, each
+authenticated by its identity key or a delegation under it (§9.1), and needs
+no seal of its own.
 
 **A kind tag in front of the plaintext, and nothing else** [2026-09-30]. Once
-a message on the end-to-end channel (§7.8, design §14.2.4) is opened, its
-plaintext is `uint kind || bytes`, the tag a deterministic CBOR uint. Protocol
-objects ride the channel beside application payload, and the tag is how a
-recipient tells them apart. It is inside the ciphertext, so it is the
-sender's word alone, under the sender's session — the discriminator §7.10
-refuses at the node is refused there because a node reads it before it can
-attribute it; here nothing is read before attribution.
+a message is opened, its kind is a deterministic CBOR uint. Protocol objects
+ride beside application payload, and the tag is how a recipient tells them
+apart. It is inside the seal or the end-to-end transport, so it is the
+sender's word alone — the discriminator §7.10 refuses at the node is refused
+there because a node reads it before it can attribute it; here nothing is read
+before attribution.
 
 | Kind | Carries | Between |
 |---|---|---|
@@ -3759,17 +3760,17 @@ off:
 | Recipient of the leg | Interface | Envelope |
 |---|---|---|
 | The co-present **counterparty**, for every one of kinds 9 to 19, 22 and 23 it is sent | The local interface of §14.1, on the bearer the shell chose (§14.3.1) | The plaintext below, sealed under the local session (§14.3.2) and listed in §14.2 as a carriage |
-| A **witness**, a **nominee** or a **verifier**, for every kind any of them is sent | The end-to-end payload path (§7.8, design §14.2.4), reached through that party's own locator and its upstream node | This section's plaintext inside the payload session, as it always was |
+| A **witness**, a **nominee** or a **verifier**, for every kind any of them is sent | The end-to-end payload path (§7.8, design §14.2.4), reached through that party's own locator and its upstream node | This section's plaintext in a `SealedBody` through that node, or on the end-to-end transport of a direct path (design §12.6.3) |
 
 **The plaintext is the same object either way**: `uint kind || bytes`, built
-once and then either sealed under the local session or sent through the
-payload session, so the two interfaces carry one encoding and a shell has one
+once and then either sealed under the local session or sent on the
+payload path, so the two interfaces carry one encoding and a shell has one
 set of structures to implement. **Nothing here is a different message for
 being carried differently**, and the kinds' meanings, the "who hears what"
 rules above and §7.10.2's structures are untouched by the split.
 
-**Why the counterparty's leg leaves the payload path.** Opening a payload
-session needs the peer's published bundle and fetching one needs a node, so
+**Why the counterparty's leg leaves the payload path.** Sealing to a peer
+needs the key its node holds for it, and fetching one needs a node, so
 while every leg travelled this path a ceremony between two co-present devices
 could not finish without the participants' own infrastructure — which is the
 suppression design §6.4 holds that no party can perform on another's client.
@@ -4005,7 +4006,7 @@ Profile = {
                                ;   WebP; others malformed) and its bytes, at
                                ;   most 64 KiB (§1.3)
   6: uint,                     ; when it was published, seconds: a later
-                               ;   one replaces an earlier, as §7.8's bundle,
+                               ;   one replaces an earlier, as §7.8's node key,
                                ;   and one no later than the one held does
                                ;   not replace it
   7: COSE_Sign1                ; BY THE SUBJECT over canonical CBOR of fields
@@ -4030,9 +4031,9 @@ ProfileReply = {
 ```
 
 **One per (subject, subnet, kind), the latest by publication time.** A node keeps the
-newest it has taken and serves it to anyone who asks, as it serves reusable
-prekey material (§7.8): a profile is published to be read, and the fetch is a
-metadata event of the same weight as a reusable-material fetch, which is to say
+newest it has taken and serves it to anyone who asks, as it serves its node
+keys (§7.8): a profile is published to be read, and the fetch is a
+metadata event of the same weight as a node-key fetch, which is to say
 none worth logging (`infra-client-requirements.md` §6).
 
 **It travels nowhere else.** Not in a bundle (§5.4), not in an intent
@@ -4046,7 +4047,7 @@ replaces it.
 
 **Bounds** (§1.3): the alias at 64 characters, which is a name and not a
 biography; the image at 64 KiB, which holds a small picture and keeps a fetch
-near a prekey fetch in cost, and which design §3.3's horizon of 221 multiplies.
+near a node-key fetch in cost, and which design §3.3's horizon of 221 multiplies.
 
 ### 7.12 The horizon a client asserts to its node
 
@@ -4222,7 +4223,7 @@ extension point; an enumerated field is a closed vocabulary.
 
 **Values, not flags.** A parameter carries an opaque value rather than mere
 presence, because several natural capabilities are quantities: the largest archive
-batch a peer will serve (§7.9), which prekey construction it implements (§7.8),
+batch a peer will serve (§7.9),
 what it will accept as a resolution referral depth (§7.7). A bitfield could express
 none of these, and would cap the space at 64.
 
@@ -4300,11 +4301,14 @@ Attach = {
                        ; already, and refusing the session would strand a
                        ; client whose patron is the party that can refresh it
   3: Capabilities,     ; §8.1
-  4: ? Delegation      ; PRESENT iff the handshake presented a delegated
+  4: ? Delegation,     ; PRESENT iff the handshake presented a delegated
                        ;   transport key rather than this identity's own key.
                        ;   ABSENT means field 1's keyhash is over the key the
                        ;   handshake presented, which the receiver checks
                        ;   directly
+  5: ? uint            ; the newest queue position below which this device
+                       ;   holds every message it was handed (§7.10); ABSENT:
+                       ;   none, and everything still held is delivered
 }
 
 AttachAck = {
@@ -4330,7 +4334,9 @@ AttachAck = {
                        ;   every session instantly overdue, failover permanent.
                        ;   Fixed for the session's lifetime — there is no update
                        ;   message, and changing it requires a fresh attach
-  4: uint,             ; messages queued for this client AT THE RESPONDING NODE;
+  4: uint,             ; messages queued for this client AT THE RESPONDING NODE,
+                       ;   counting those newer than Attach field 5: what
+                       ;   this device will be handed (§7.10);
                        ;   U64 RANGE [2026-09-02] — stated so no implementation
                        ;   narrows it by inference. Advisory. In a degraded session this cannot include
                        ;   the dark patron's mailbox — siblings hold no queue
@@ -4344,6 +4350,12 @@ AttachAck = {
                        ;   §23.3), so the key it presents is not the one a
                        ;   client pinned, and this is what binds the two
 }
+
+device = bstr .size 32 ; the raw public key a device presents in a handshake
+                       ;   (§9.1): its delegated transport key, or the
+                       ;   identity's classical component for a device that
+                       ;   holds the seed. A device is named by nothing else
+                       ;   [author, 2026-09-22]
 
 Delegation = {
   1: bstr,             ; the transport key this delegation names: the 32-byte
@@ -4376,10 +4388,10 @@ Delegation = {
 
 **An attach speaks for a device, and a subject's several devices attach as
 several sessions** [author, 2026-09-22]. The key the handshake presented names
-the device (§7.8's `device`), whether the delegated key or the seed-holding
-device's own; a node serving a subject holds one session, one queue, one pool and
-one bundle per device, and its mailbox delivers to the device a ciphertext names
-(§7.10, design §14.1.6).
+the device (§8.2's `device`), whether the delegated key or the seed-holding
+device's own; a node serving a subject holds one session per device, and one
+queue and one series of node keys for the subject, whose mail any of those
+sessions collects (§7.10, design §14.1.6).
 
 **A receiver checks field 1 against the key the handshake actually presented and
 refuses the session if they differ.** That check is the whole of what makes a
@@ -4660,24 +4672,25 @@ presents its introduction (§2.3) first on the connection and the recipient's
 policy admits a cold call** (§7.10.1) [author, 2026-10-30] — the material's
 classical member is the key presented, the recipient takes the party as it
 takes any cold call, and the key binds by the pin from then. A connection on
-which none holds is refused, whether or not it would have opened a session.
+which none holds is refused, whether or not it would have opened a session,
+**with one exception: a connection to a node under a transport key minted for
+it**, which binds to no keyhash, carries a node-key fetch or a relay
+submission and nothing else (§7.8, §7.10) [author, 2026-11-19]; any other
+request on it is refused.
 
 **Control streams on the direct path** [author, 2026-10-30]. Payload travels
 on unidirectional streams as before, one message each. A bidirectional stream
 is a control stream, and its first byte says which: **2**, the dialler's
 `Introduction` (§2.3), presented first on a dial, which the recipient answers
 with one byte, 1 where it took the party or needed nothing and 0 where it did
-not; **3**, a `PrekeyRequest` (§7.8) for the recipient's own material, which
-the recipient answers on the same stream with a `PrekeyReply` exactly as its
-node would, from its own signed bundle and one-time pool, or with nothing.
-The recipient of a first message on the direct path that holds no bundle of
-the sender's — the node carries the sender's binding on the relay (§7.10),
-nothing does here — asks the sender for it the same way before it takes the
-message. This is what lets a session open between two parties with no node
-asked, and a client restored from its phrase be reached and restored by a
+not. **The introduction is all a direct path needs** [author, 2026-11-19]: the
+transport is end to end between the two parties (§7.10.1), so nothing is sealed
+on it and no key material beyond the introduction is asked for. This is what
+lets two parties speak with no node asked, and a client restored from its phrase be reached and restored by a
 peer that dials it at its last address with nothing between them (design
 §6.3).
-post-quantum component authenticates nothing at the transport layer, and does
+
+**The post-quantum component authenticates nothing at the transport layer, and does
 not need to.** design §5.1's rule is that an object may use the classical
 component alone where its relevance expires before the post-quantum horizon, and
 a session's authenticity expires with the session. Confidentiality is separately
@@ -4714,7 +4727,7 @@ nothing weaker to fall back to.
 - Stream 0: the control frames of §8.0 — session control (attach, heartbeat,
   sibling updates) and topology propagation (push, memo)
 **Every bidirectional stream opens with a request-type tag.**
-Resolution, archive fetch, prekey fetch, resource requests, catalog queries and
+Resolution, archive fetch, node-key fetch, resource requests, catalog queries and
 verifier queries all share the same ALPN and the same stream class, and **nothing
 told a receiver which it had.** Structural guessing across six schemas is not a
 protocol.
@@ -4736,14 +4749,14 @@ no continuation to preserve.
 |---|---|
 | 1 | `ResolveRequest` (§7.7) |
 | 2 | `ArchiveRequest` (§7.9) |
-| 3 | `PrekeyRequest` / `PrekeyBatchRequest` (§7.8) |
+| 3 | `NodeKeyRequest` / `NodeKeyBatchRequest` (§7.8) |
 | 4 | `[ VerificationQuery, COSE_Sign1, uint ]` — the query, the subject's consent, and the selector's `selection_basis` claim (§5) — to a verifier that is this node; a verifier that is a client is reached on the end-to-end path (§5.6, §7.10.1) |
 | 5 | `CatalogQuery` (§6.4) |
 | 6 | `ResourceRequest` (§11) |
 | 7 | `ResourceRegistration` (§6.2) |
 | 8 | `CurrencyRequest` (§7.1) |
-| 9 | `PrekeyPublication` (§7.10) |
-| 10 | `OneTimeDeposit` (§7.10) |
+| 9 | *Retired, not reassigned* |
+| 10 | *Retired, not reassigned* |
 | 11 | `RelaySubmission` (§7.10) |
 | 12 | `WakeRegistration` (§7.10) |
 | 13 | `ProfilePublication` (§7.10) |
@@ -4773,10 +4786,9 @@ waiting to be told why would be waiting for something no responder owes it.
 **A request that changes state or spends a budget MUST NOT be processed in TLS 1.3
 0-RTT early data** — reject it or defer it until the handshake
 completes. Early data is replayable, so a replay repeats whatever the request did:
-an application effect the requester never asked for twice (§11), a consumed
-one-time prekey (§7.8), a spent anti-oracle count (§5), a replayed registration
+an application effect the requester never asked for twice (§11), a spent anti-oracle count (§5), a replayed registration
 that reverts an owner's current entry (§6.5). **Read-only lookups are unaffected** — resolution,
-archive fetch and catalog queries answer the same way however often they are
+archive fetch, node-key fetch and catalog queries answer the same way however often they are
 replayed, which is what makes 0-RTT still worth having. A resource request is
 never in the read-only class, whatever the HTTP method inside (§11), and
 neither is anything a client hands its serving node (§7.10): each changes state
@@ -5502,10 +5514,9 @@ design already depends on.
 | The optical transcript — each device's key material and contribution, then the derived ceremony-id, screen to camera | Two participants' devices | design §7.1 item 3, design §7.5.2, design §12.3 | `OpticalContribution` then `TranscriptConfirm` (§14.3.2): the key material is pinned at this first contact, the contribution is the key-exchange input, the ceremony-id is the transcript hash both display and check |
 | Traversal candidates | Two participants' devices | design §12.6.3 [author, 2026-09-25] | `CandidateHandover` (§14.3.2), carrying the `Candidate` structure this document now defines; the same candidates travel the end-to-end payload path when a direct connection is set up remotely (design §12.6.3, §14.1.1) |
 | The capture-key handover — the key each participant derived for the captures the other holds of them, handed across at capture time | Two participants' devices | design §7.5.2, design §7.5.2.6 | `CaptureKeyHandover` (§14.3.2): the 32-byte key design §7.5.2.6 derives, anchored to the ceremony-id like the proximity outcomes and the candidates [author, 2026-10-02] |
-| A delegated device's payload material, and the ceremony device's signature over it | Two devices of one identity | design §23.3, §7.8 | `DeviceIntroduction` then `DeviceCredential` (§14.3.3): §7.8's bundle unsigned and then signed, beside §8.2's delegations; for a device with no camera, `DeviceOffer` read off its screen first and `DeviceStart` before the two |
+| A delegated device's transport key, and what the ceremony device hands back for it | Two devices of one identity | design §23.3, §8.2 | `DeviceIntroduction` then `DeviceCredential` (§14.3.3): the key the delegations will name, then §8.2's delegations and the identity's encryption secrets (§2.5) [author, 2026-11-19]; for a device with no camera, `DeviceOffer` read off its screen first and `DeviceStart` before the two |
 | **The dataset one device of an identity hands another** — the records the other lacks, the view and the sealed captures, on both holders' acknowledgement | Two devices of one identity | design §23.3, design §10.2 [author, 2026-11-15] | `DatasetContribution` then `DatasetHandover` (§14.3.3): the contributions as §14.3.2's optical step, the dataset sealed under the key they derive |
 | **The participants' own legs of the conversation** — kinds 9 to 19 of §7.10.1, each one addressed to the co-present counterparty, the arranging of an adoption among them, and the prune's two legs, kinds 22 and 23, which no witness sees [author, 2026-10-19] | Two participants' devices | §7.10.1, design §7.1 [author, 2026-10-05] | The kind-tagged plaintext §7.10.1 defines, **unchanged**, sealed under the local session (§14.3.2) and carried by the same bearer. A witness's or verifier's leg of the same kind travels the end-to-end payload path instead; the leg is chosen by who the recipient is |
-| **The post-quantum prekey handover** — the sender's signed bundle and one one-time key, so a co-present pair can open an end-to-end channel afterwards without a node | Two participants' devices | §7.8, design §14.2.4.3 [author, 2026-10-05] | `PrekeyHandover` (§14.3.4), anchored to the ceremony-id and sealed under the local session like every other carriage |
 
 **The last row is the one that is not between two people.** A phone
 provisioning a desktop it owns is the same class of interface and the same
@@ -5654,8 +5665,8 @@ anchor checks are what say *why* a carriage is refused, and they run on the
 plaintext.
 
 **What this is and is not.** It makes the bearer confidential and
-exclusive to the two participants, which is what lets a prekey cross it
-(§14.3.4). It is not man-in-the-middle resistance: a co-present adversary
+exclusive to the two participants, which is what lets a capture key cross it
+(§14.3.2). It is not man-in-the-middle resistance: a co-present adversary
 that reads both screens holds the key, and §14.3.1's physical premise is
 still the whole of the resistance past that point.
 `models/tamarin/local/exchange.spthy` carries both halves as proved
@@ -5697,7 +5708,7 @@ IntentExchange = [             ; carried by the bearer (§14.3.1), not optical
                                ;   [author, 2026-10-19]: each side's set
                                ;   travels by locator once the id has
                                ;   fixed (§7.10.2, kind 22), and this
-                               ;   exchange is eight fields, or nine where
+                               ;   exchange is nine fields, or ten where
                                ;   the sender's own number rides with it
   [ * Introduction ],          ; the bundle's first carriage: the prior
                                ;   counterparties the sender names for
@@ -5728,13 +5739,18 @@ IntentExchange = [             ; carried by the bearer (§14.3.1), not optical
                                ;   sender's own, or does not verify under
                                ;   that key, is refused where it is read,
                                ;   with nothing of it kept
+  EncryptionKey,               ; the sender's (§2.5), so the receiver can
+                               ;   write to it afterwards through its node
+                               ;   with no fetch [author, 2026-11-19]; one
+                               ;   that does not verify under the pinned key
+                               ;   is refused as the locator is
   ? tstr .size (1..32),        ; the number the sender's device reports for
                                ;   itself [author, 2026-11-10], where the
                                ;   platform gave one. ABSENT IS THE ORDINARY
                                ;   CASE: the number is carrier-provisioned
                                ;   rather than device-known, so a handset
-                               ;   without a subscription sends eight fields
-                               ;   and nine is not required of anybody. The
+                               ;   without a subscription sends nine fields
+                               ;   and ten is not required of anybody. The
                                ;   receiver keeps it with the rest of what it
                                ;   holds of that party (§2.3's contact), where
                                ;   the peer backup carries it (design §6.3);
@@ -5855,15 +5871,9 @@ every signature that comes back is the identity's:
 ```
 DeviceIntroduction = [         ; the new device offers what it minted
   uint,                        ; version, 1
-  device,                      ; §7.8: the raw transport key the delegation
+  device,                      ; §8.2: the raw transport key the delegation
                                ;   will name — a device is named by nothing
                                ;   else [author, 2026-09-22]
-  bstr .size (1..5120),        ; a PrekeyBundle (§7.8) with field 6 ABSENT:
-                               ;   the payload the identity signs, over
-                               ;   payload material the device generated
-                               ;   (design §23.3). The ceiling is §1.3's
-                               ;   4 KB blob bound plus the bundle's own
-                               ;   fields
 ]
 
 DeviceCredential = [           ; the ceremony device answers
@@ -5877,9 +5887,13 @@ DeviceCredential = [           ; the ceremony device answers
                                ;   provisioned with, 90 days end to end
                                ;   (design §12.6.5); 4096 bounds a hybrid
                                ;   signature and its fields with room
-  bstr .size (1..5120),        ; the same PrekeyBundle, field 6 PRESENT:
-                               ;   signed by the identity on the ceremony
-                               ;   device (§7.8, design §23.3)
+  bstr .size 32,               ; the identity's X-Wing decapsulation seed
+                               ;   (§2.5), so the device opens what is
+                               ;   sealed to the person (design §14.2.2)
+                               ;   [author, 2026-11-19]
+  bstr .size 32,               ; the identity's sealing-authentication
+                               ;   private key (§2.5), so what it sends is
+                               ;   authenticated as the person's
 ]
 ```
 
@@ -5891,10 +5905,12 @@ softened: an intermediated introduction, which §14.1 forbids and nothing can
 detect, would carry the identity's own signatures to a key the intermediary
 chose, for as long as the delegations run. What comes back is at least
 checkable everywhere it is later used — a delegation verifies under the
-identity and names the key it delegates to (§8.2), the bundle verifies under
-the identity and names the device whose material it covers under the
-signature (§7.8, field 5) — so the artifacts say exactly what the identity
-signed, and the exposure is bounded by the windows it signed for.
+identity and names the key it delegates to (§8.2) — so the artifacts say
+exactly what the identity signed, and the exposure is bounded by the windows it
+signed for. **The encryption secrets are not bounded so**: they are the
+identity's and do not lapse, so an intermediated introduction would carry the
+power to read the person's mail until the identity rotates (design §9.0),
+which is the price of a paired device reading at all.
 
 **A device with no camera is introduced the other way round** [author,
 2026-11-18]. It cannot read the ceremony device's screen, so it shows one
@@ -5904,7 +5920,7 @@ code, and everything after it crosses a session that code keys:
 DeviceOffer = [                ; the device with no camera shows it, screen
                                ;   to camera; the ceremony device reads it
   uint,                        ; version, 1
-  device,                      ; §7.8: the raw transport key the delegations
+  device,                      ; §8.2: the raw transport key the delegations
                                ;   will name
   bstr .size 32,               ; the offer's secret, drawn fresh per offer:
                                ;   it keys the session below and crosses no
@@ -5919,7 +5935,7 @@ DeviceStart = [                ; the ceremony device, first, on the session
   KeyMaterial,                 ; §2.2: the identity this is a device of
   bstr .size (1..4096),        ; the run's first Delegation (§8.2), over the
                                ;   offer's key: what the device stands up on
-                               ;   to mint the material its introduction
+                               ;   to present the key its introduction
                                ;   offers
 ]
 ```
@@ -5939,9 +5955,9 @@ two that overlap.
 **What binds it is the screen, as above.** The secret crossed by the camera
 alone, so a party on the same network that did not read the screen can
 neither read the session nor speak on it: a `DeviceStart` it sends does not
-open at the device, and an introduction it sends over material it minted
-does not open at the ceremony device, which therefore never signs a bundle
-for a stranger. An intermediated reading of the screen, which §14.1 forbids
+open at the device, and an introduction it sends over a key it minted
+does not open at the ceremony device, which therefore never delegates to a
+stranger or hands one the identity's encryption secrets. An intermediated reading of the screen, which §14.1 forbids
 and nothing can detect, holds the secret and is the whole of the exposure,
 bounded as above.
 
@@ -5967,7 +5983,7 @@ DatasetContribution = [        ; each device shows one, screen to camera
                                ;   nothing they do
 ]
 
-DatasetHandover = bstr         ; the dataset, sealed as §14.3.4's carriages
+DatasetHandover = bstr         ; the dataset, sealed as §14.3.2's carriages
                                ;   are, under the key the two contributions
                                ;   derive — `rhtn/1:dataset-session` in the
                                ;   construction of §14.3.2's session key —
@@ -5996,48 +6012,3 @@ after them: the offer's secret is what the screen carried, and a third
 device on the same network lacks it as it would lack a contribution read
 off a screen. A later hand-over to the same device opens the same way, from
 a fresh offer, and carries the dataset's messages alone.
-
-#### 14.3.4 The prekey handover
-
-**What it is for.** The ceremony's conversation runs between the two
-participants over the bearer, so neither needs a node to reach the other
-while they are together. What they do need a node for, today, is each
-other's prekey material: a session is opened from a published bundle, and a
-bundle is fetched (§7.8). **This object carries it across the local session
-instead**, so a co-present pair can open an end-to-end channel afterwards
-without either party's own node having cooperated in anything [author,
-2026-10-05]. The same material is asked of a peer over a held direct path,
-as §9.1's control stream 3, so two parties that can reach each other need no
-node for a session either [author, 2026-10-30].
-
-```
-PrekeyHandover = [             ; the sender's prekey material, locally
-  uint,                        ; version, 1
-  bstr .size 32,               ; the ceremony-id (§14.3.1), checked as above
-  bstr .size 32,               ; the sending DEVICE, by the key it presents
-                               ;   (§8.2); a session is with a device and
-                               ;   never with an identity (design §14.2.4)
-  bstr,                        ; the sender's signed prekey bundle, exactly
-                               ;   the bytes §7.8 publishes
-  ? bstr,                      ; one one-time key as §7.8 encodes it, absent
-                               ;   where the sender's pool is empty
-]
-```
-
-**The bundle is reused, not reinvented**, as §14.3.2's intent reuses
-`ArchiveEntry`. It arrives in the form §7.8 publishes, signed by the
-sending identity, and **a bundle that does not verify under the identity
-pinned at §14.3.1 is refused**. So the material's authenticity rests on the
-signature it already carries rather than on the channel, and the channel's
-job here is confidentiality: a bundle is not secret, but which pair
-exchanged one, when, and alongside which ceremony are all things §14.3.2's
-session keeps between them.
-
-**No one-time key is not an error.** §7.8 lets a pool run dry, and a
-session opened without one is the case design §14.2.4.3 already covers.
-The receiver treats an absent fifth element as the pool being empty, not as
-a malformed object.
-
-**This does not make a session.** It supplies what opening one needs. When
-the two parties open it, and over which path, is design §12.6.3's business
-and unchanged by this section.

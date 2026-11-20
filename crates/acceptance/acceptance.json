@@ -2054,7 +2054,7 @@
    },
    {
     "where": "wire-format.md §5.6",
-    "text": "field 2 MUST equal the transport-authenticated peer on the stream carrying the query — or, on the end-to-end path, the peer the session attributed the message to (§7.8, design §14.2.4) — and a mismatch is rejected"
+    "text": "field 2 MUST equal the transport-authenticated peer on the stream carrying the query — or, on the end-to-end path, the sender the seal's tag attributed the message to (§7.8.1, design §14.2.4) — and a mismatch is rejected"
    }
   ],
   "given": "A verifier hosted in a node's process with a query pending its grant, and a second peer presenting the same signed query body under its own authenticated identity.",
@@ -2851,30 +2851,16 @@
   "id": "CER-54",
   "area": "ceremony",
   "gap": "ceremony",
-  "title": "A prekey handover opens an end-to-end channel with no node asked",
+  "title": "Withdrawn: a prekey handover opens an end-to-end channel with no node asked",
   "milestone": 4,
-  "kind": "positive",
-  "spec": [
-   "wire-format.md §14.3.4",
-   "wire-format.md §7.8",
-   "design §6.4"
-  ],
-  "rule": [
-   {
-    "where": "wire-format.md §14.3.4",
-    "text": "so a co-present pair can open an end-to-end channel afterwards\nwithout either party's own node having cooperated in anything"
-   }
-  ],
-  "given": "Two participants through the optical exchange of a ceremony, each holding the local session key, neither attached to any node.",
-  "when": "Each builds a prekey handover and takes the other's, and one then sends application payload to the other.",
-  "then": "The send produces an initial message and no prekey request: nothing is addressed to a node. The recipient opens it and the payload reaches its application. A handover naming another party's bundle is refused, as is one carrying another ceremony's id, and bytes that are not of this ceremony's session do not open at all.",
+  "kind": "withdrawn",
+  "spec": [],
+  "rule": [],
+  "given": "Withdrawn.",
+  "when": "Withdrawn.",
+  "then": "Withdrawn.",
   "oracle": "behaviour",
-  "interpretation": null,
-  "families": [
-   "NET-016",
-   "NET-025",
-   "SCH-024"
-  ]
+  "interpretation": "Withdrawn 2026-11-19. The payload construction is the split seal [author, 2026-11-19] (design §14.2.4, wire-format.md §7.8), and the prekeys, ratchet and per-device sessions are gone with the scheme they belonged to: the prekey handover went with the prekeys, and a direct path needs the dialler's introduction and nothing more (wire-format.md §9.1), which TRN-29 holds."
  },
  {
   "id": "CER-55",
@@ -3809,10 +3795,10 @@
    },
    {
     "where": "wire-format.md §6.4",
-    "text": "Unsigned session messages reject unknown map keys (§1's global rule) — CatalogQuery, CatalogReply, ResourceRequest, ResourceResponse and the control frames of §8.0 alike, and equally every unsigned family this chapter does not name: resolution, prekey and archive requests, grants and wrappers."
+    "text": "Unsigned session messages reject unknown map keys (§1's global rule) — CatalogQuery, CatalogReply, ResourceRequest, ResourceResponse and the control frames of §8.0 alike, and equally every unsigned family this chapter does not name: resolution, node-key and archive requests, grants and wrappers."
    }
   ],
-  "given": "For every unsigned family that has an accepted vector in test-vectors/messages.md — control frames on stream 0, requests, and replies, including CatalogQuery, CatalogReply, ResourceRequest, ResourceResponse, the resolution, prekey and archive messages, grants and wrappers — the vector's top-level map with one added entry `99: h'c0ffee'`, inserted in ascending key position so the map stays canonical; where the message is a frame, the u32 length prefix adjusted.",
+  "given": "For every unsigned family that has an accepted vector in test-vectors/messages.md — control frames on stream 0, requests, and replies, including CatalogQuery, CatalogReply, ResourceRequest, ResourceResponse, the resolution, node-key and archive messages, grants and wrappers — the vector's top-level map with one added entry `99: h'c0ffee'`, inserted in ascending key position so the map stays canonical; where the message is a frame, the u32 length prefix adjusted.",
   "when": "Each modified message is presented to the decoder at its layer.",
   "then": "Each is rejected as malformed; none is accepted with the key preserved, and none is accepted with the key ignored. The unmodified vectors remain accepted.",
   "oracle": "behaviour",
@@ -4513,17 +4499,16 @@
   "milestone": "after-5",
   "kind": "negative",
   "spec": [
-   "wire-format.md §7.10",
-   "wire-format.md §7.8"
+   "wire-format.md §7.10"
   ],
   "rule": [
    {
     "where": "wire-format.md §7.10",
-    "text": "1: PrekeyBundle,             ; §7.8's bundle, signed by its subject"
+    "text": "1: Profile, ; §7.11, signed by its subject"
    },
    {
-    "where": "wire-format.md §7.8",
-    "text": "The bundle is opaque to this protocol"
+    "where": "wire-format.md §7.10",
+    "text": "2: Sealed, ; §7.8.1, which this node opens only its own"
    }
   ],
   "given": "A decoder holding the grammar for a request type whose field is declared as a structured object.",
@@ -4887,28 +4872,33 @@
   "id": "DMN-02",
   "area": "daemon",
   "gap": "daemon",
-  "title": "Load consumable state before the first session and write it back on the way out",
+  "title": "Load the state serving needs before the first session, and write it back on the way out",
   "milestone": "after-5",
   "kind": "positive",
   "spec": [
    "infra-client-requirements.md §2",
-   "infra-client-requirements.md §4.3"
+   "infra-client-requirements.md §4.3",
+   "wire-format.md §7.10"
   ],
   "rule": [
    {
     "where": "infra-client-requirements.md §2",
-    "text": "**Delete on delivery, immediately, leaving nothing recoverable.**"
+    "text": "Keep a delivered one thirty days from its first delivery"
    },
    {
     "where": "infra-client-requirements.md §4.3",
     "text": "**Keep the topology store across a restart; it is your seen-set.**"
+   },
+   {
+    "where": "wire-format.md §7.10",
+    "text": "`Attach` field 5 carries the newest position the attaching device has of this queue, and the node delivers what is newer"
    }
   ],
-  "given": "A daemon stopped with a signal, with material accepted for a client waiting in its queue.",
-  "when": "It is restarted and that client attaches, and then it is stopped, restarted and the client attaches again.",
-  "then": "The material is delivered once, on the first attach. The store then holds nothing for that client and the second attach delivers nothing.",
+  "given": "A daemon stopped with a signal, with a message accepted for a client waiting in its queue.",
+  "when": "It is restarted and a device of that client attaches, and then it is stopped, restarted and the device attaches again naming the position it was handed.",
+  "then": "The message is delivered on the first attach. The second attach is handed nothing, and the message is still held, its thirty days counted from that first delivery and not restarted by the stop.",
   "oracle": "behaviour",
-  "interpretation": "A node serving before it has loaded its one-time pools reissues a key it already served, and one serving before it has loaded its topology store replays a forwarding wave, so both are read before the transport accepts a session.",
+  "interpretation": "A node serving before it has loaded its queue answers a returning device as though nothing were held, and one serving before it has loaded its topology store replays a forwarding wave, so both are read before the transport accepts a session.",
   "families": [
    "OPS-009",
    "INT-013"
@@ -4948,28 +4938,28 @@
   "id": "DMN-04",
   "area": "daemon",
   "gap": "daemon",
-  "title": "Spend a one-time key on disk before its reply goes out, so no stop can bring it back",
+  "title": "Delete a node key from disk with the last message sealed to it, so no stop can bring it back",
   "milestone": "after-5",
   "kind": "negative",
   "spec": [
-   "wire-format.md §7.8",
-   "infra-client-requirements.md §6"
+   "infra-client-requirements.md §6",
+   "design §14.1.6"
   ],
   "rule": [
    {
     "where": "infra-client-requirements.md §6",
-    "text": "**Consume one-time keys on serving them**"
+    "text": "Hold a private half while any message sealed to it is queued, and delete it with the last one"
    },
    {
-    "where": "wire-format.md §7.8",
-    "text": "**Only the one-time key is consumed on serving.** The reusable material may be returned any number of times to anyone."
+    "where": "design §14.1.6",
+    "text": "removal is immediate and leaves nothing recoverable — no journal, no tombstone — the node's half of the seal going with it"
    }
   ],
-  "given": "A node whose pool holds one one-time key, kept in a directory, with no snapshot taken after the key is served.",
-  "when": "The key is served and the node's memory is then lost, and a node is started again from the bytes on disk.",
-  "then": "The pool is empty and the key is not served a second time. A key whose file cannot be removed is not served at all, and the reusable material alone is answered.",
+  "given": "A node keeping its node keys in a directory, holding one message for a recipient sealed to a key it has since rotated past, with no snapshot taken after the message is removed.",
+  "when": "The message is removed, the node's memory is then lost, and a node is started again from the bytes on disk.",
+  "then": "Neither the message nor the private half of the key it was sealed to is anywhere under the node's directories, and a submission sealed to that key is refused; the newer key is still held and served.",
   "oracle": "behaviour",
-  "interpretation": "A snapshot taken after the reply cannot carry once-only issuance: a stop between snapshots would return a key whose private half the recipient has already consumed. The allowance counters are spent with the key for the same reason, a counter kept only in memory giving a requester a fresh window every time the process stops.",
+  "interpretation": "A removal written only at the next snapshot cannot carry the bound: a stop between snapshots would bring back a key whose last message is gone, and with it the power to open any recording of that message.",
   "families": [
    "MAIL-003",
    "MAIL-011"
@@ -5018,14 +5008,14 @@
   "rule": [
    {
     "where": "wire-format.md §9.2",
-    "text": "**Read-only lookups are unaffected** — resolution, archive fetch and catalog queries answer the same way however often they are replayed"
+    "text": "**Read-only lookups are unaffected** — resolution, archive fetch, node-key fetch and catalog queries answer the same way however often they are replayed"
    }
   ],
   "given": "A running node with a subordinate, its own archive and an empty catalog, and a tool attached to it as a member of its horizon.",
   "when": "The tool resolves the subordinate, fetches the node's archive and queries its catalog, and then is asked to send something else.",
   "then": "Each of the three is answered and printed, the archive naming the records it holds. Anything outside the read-only class is refused by the tool before it dials.",
   "oracle": "behaviour",
-  "interpretation": "A prekey fetch consumes a one-time key and a resource request has an application effect whatever the method inside, so neither is reachable from a command whose purpose is to look.",
+  "interpretation": "A node-key fetch is not among the read-only lookups wire-format.md §9.2 names, and a resource request has an application effect whatever the method inside, so neither is reachable from a command whose purpose is to look.",
   "families": [
    "OPS-011",
    "TOOL-001",
@@ -5036,31 +5026,16 @@
   "id": "DMN-07",
   "area": "daemon",
   "gap": "daemon",
-  "title": "A snapshot holds what is held: a served one-time key does not survive the save that follows it",
+  "title": "Withdrawn: a snapshot holds what is held: a served one-time key does not survive the save that follows it",
   "milestone": "after-5",
-  "kind": "negative",
-  "spec": [
-   "wire-format.md §7.8",
-   "infra-client-requirements.md §6"
-  ],
-  "rule": [
-   {
-    "where": "infra-client-requirements.md §6",
-    "text": "**Consume one-time keys on serving them**"
-   },
-   {
-    "where": "wire-format.md §7.8",
-    "text": "**Only the one-time key is consumed on serving.** The reusable material may be returned any number of times to anyone."
-   }
-  ],
-  "given": "A prekey service loaded from a directory it is not bound to, holding one one-time key.",
-  "when": "The key is served, the service is saved, and a service is loaded from that directory again.",
-  "then": "The pool is empty and no key is served a second time. The reusable material is still there, and a subject whose bundle the service no longer holds is gone from the directory too. The allowance a requester has spent is still spent after a restart.",
+  "kind": "withdrawn",
+  "spec": [],
+  "rule": [],
+  "given": "Withdrawn.",
+  "when": "Withdrawn.",
+  "then": "Withdrawn.",
   "oracle": "behaviour",
-  "interpretation": "One rule whichever way the service is kept: the save makes the directory match what is held. A bound service already has disk and memory in step and loses nothing to it; a detached one is snapshotted, and adding without removing would leave a served key for the next load to hand out.",
-  "families": [
-   "MAIL-003"
-  ]
+  "interpretation": "Withdrawn 2026-11-19. The payload construction is the split seal [author, 2026-11-19] (design §14.2.4, wire-format.md §7.8), and the prekeys, ratchet and per-device sessions are gone with the scheme they belonged to: there is no one-time key to serve and no pool to snapshot. A node key is not consumed by being served; its deletion with its last message, surviving a stop, is DMN-04's."
  },
  {
   "id": "DMN-08",
@@ -5224,12 +5199,12 @@
    },
    {
     "where": "light-client-requirements.md §4.1",
-    "text": "Publish your bundle and stock your pool as part of attaching"
+    "text": "Hand a direct message to the recipient's node rather than waiting for the recipient."
    }
   ],
   "given": "A shell holding only the facade, and a serving node on the network.",
   "when": "The shell attaches, registers and withdraws a wake endpoint, sends payload to another client of that node, and asks for what arrived.",
-  "then": "The node holds the bundle and pool the attach published, the endpoint the registration gave and then nothing after the withdrawal, and the recipient's shell is handed the payload already decrypted. No method returns an encoding, and maintenance without a session is refused with its reason.",
+  "then": "The node holds the endpoint the registration gave and then nothing after the withdrawal, and the recipient's shell is handed the payload already opened and attributed. No method returns an encoding, and maintenance without a session is refused with its reason.",
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
@@ -5243,31 +5218,16 @@
   "id": "DMN-14",
   "area": "daemon",
   "gap": "daemon",
-  "title": "Serving a one-time key does not stop the node writing its state back",
+  "title": "Withdrawn: serving a one-time key does not stop the node writing its state back",
   "milestone": "after-5",
-  "kind": "positive",
-  "spec": [
-   "infra-client-requirements.md §4.3",
-   "infra-client-requirements.md §6"
-  ],
-  "rule": [
-   {
-    "where": "infra-client-requirements.md §4.3",
-    "text": "Keep the topology store across a restart; it is your seen-set."
-   },
-   {
-    "where": "infra-client-requirements.md §6",
-    "text": "Consume one-time keys on serving them"
-   }
-  ],
-  "given": "A daemon started from a configuration, holding a published bundle and a stocked pool.",
-  "when": "It serves a one-time key to a requester and then writes its state back, twice.",
-  "then": "Both saves succeed, and the archive, the topology store and the derived view are all on disk afterwards. Ordinary issuance is not a condition that can stop a node persisting.",
+  "kind": "withdrawn",
+  "spec": [],
+  "rule": [],
+  "given": "Withdrawn.",
+  "when": "Withdrawn.",
+  "then": "Withdrawn.",
   "oracle": "behaviour",
-  "interpretation": null,
-  "families": [
-   "OPS-010"
-  ]
+  "interpretation": "Withdrawn 2026-11-19. The payload construction is the split seal [author, 2026-11-19] (design §14.2.4, wire-format.md §7.8), and the prekeys, ratchet and per-device sessions are gone with the scheme they belonged to: serving a node key consumes nothing, so issuance leaves no state for a write-back to trip on. Persistence across a restart is DMN-02's and DMN-04's."
  },
  {
   "id": "DMN-15",
@@ -5290,9 +5250,9 @@
     "text": "The reply carries the nonce and a code and nothing further."
    }
   ],
-  "given": "A shell attached to a serving node that will not queue for the recipient, whose prekey material the client holds.",
+  "given": "A shell attached to a serving node that will not queue for the recipient, whose card and node key the client holds.",
   "when": "The shell sends application payload to that recipient.",
-  "then": "The call reports a refusal rather than success, nothing is queued at the node, and the same discipline applies to publishing a bundle and stocking a pool. An application told a message was sent stops retrying it.",
+  "then": "The call reports a refusal rather than success, and nothing is queued at the node. An application told a message was sent stops retrying it.",
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
@@ -5609,13 +5569,13 @@
   "id": "DMN-27",
   "area": "daemon",
   "gap": "daemon",
-  "title": "Start a device holding a delegation and no seed through the boundary, attach it under the delegation, and refuse the identity key's acts on it",
+  "title": "Start a device holding a delegation and the encryption secrets and no seed through the boundary, attach it under the delegation, open what is sealed to the identity, and refuse the identity key's acts on it",
   "milestone": "after-5",
   "kind": "positive",
   "spec": [
    "design §23.3",
    "wire-format.md §8.2",
-   "light-client-requirements.md §4.1"
+   "wire-format.md §14.3.3"
   ],
   "rule": [
    {
@@ -5623,13 +5583,13 @@
     "text": "The identity seed sits on the devices its holder put it on, and nowhere else"
    },
    {
-    "where": "light-client-requirements.md §4.1",
-    "text": "the bundle it publishes carries material it generated and a signature your ceremony device made over it"
+    "where": "design §23.3",
+    "text": "a paired desktop receives the identity's encryption key with its transport credential, across the same local interface"
    }
   ],
-  "given": "Alice's phone started from her seeds; a transport seed for a desktop; a serving node that pins alice.",
-  "when": "The phone delegates a run over the desktop's public key; the desktop starts from alice's key material, the transport seed and the run, attaches, and its bundle payload is signed on the phone.",
-  "then": "A start with no delegation, or with a delegation by another identity, is refused; the desktop presents the delegated key where the phone presents the classical member; signing a body on the desktop is refused; the attach binds under the delegation with the pool stocked and no bundle until the phone's signature is taken, after which the node holds the bundle under the desktop's device.",
+  "given": "Alice's phone started from her seeds; a transport seed for a desktop; a serving node that pins alice, holding a message sealed to alice.",
+  "when": "The phone delegates a run over the desktop's public key and hands over alice's two encryption secrets with it; the desktop starts from alice's key material, the transport seed, the run and the secrets, and attaches.",
+  "then": "A start with no delegation, or with a delegation by another identity, is refused; the desktop presents the delegated key where the phone presents the classical member; signing a body on the desktop is refused; the attach binds under the delegation, and the queued message is handed to the desktop and opens there, attributed to its sender.",
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
@@ -6015,99 +5975,52 @@
   "id": "PAY-01",
   "area": "payload",
   "gap": "payload",
-  "title": "Publish a signed prekey bundle and keep the one-time pool stocked",
+  "title": "Withdrawn: publish a signed prekey bundle and keep the one-time pool stocked",
   "milestone": "after-5",
-  "kind": "positive",
-  "spec": [
-   "light-client-requirements.md §3",
-   "wire-format.md §7.8"
-  ],
-  "rule": [
-   {
-    "where": "light-client-requirements.md §3",
-    "text": "Publish a prekey bundle and keep it stocked."
-   },
-   {
-    "where": "wire-format.md §7.8",
-    "text": "The bundle is opaque to this protocol"
-   }
-  ],
-  "given": "Client S attaches to serving node N. The identity binding, prekey cadence and last-resort policy are open integration decisions (design §22.2) and are supplied to the test as parameters.",
-  "when": "S completes its attach.",
-  "then": "N holds a PrekeyBundle for S with field 2 equal to 1, field 5 equal to the key S's session presented, and a signature by S under the prekey tag over fields 1 to 5, and a non-empty one-time pool for that device of S.",
+  "kind": "withdrawn",
+  "spec": [],
+  "rule": [],
+  "given": "Withdrawn.",
+  "when": "Withdrawn.",
+  "then": "Withdrawn.",
   "oracle": "behaviour",
-  "interpretation": "Re-derived 2026-09-22 to a bundle per device (wire-format.md §7.8)."
+  "interpretation": "Withdrawn 2026-11-19. The payload construction is the split seal [author, 2026-11-19] (design §14.2.4, wire-format.md §7.8), and the prekeys, ratchet and per-device sessions are gone with the scheme they belonged to: a client publishes nothing. The identity's encryption key travels on its card (wire-format.md §2.5) and the serving node generates its own key for the recipient. Replaced by PAY-28 and PAY-29."
  },
  {
   "id": "PAY-02",
   "area": "payload",
   "gap": "payload",
-  "title": "Never serve or use a one-time prekey twice",
+  "title": "Withdrawn: never serve or use a one-time prekey twice",
   "milestone": "after-5",
-  "kind": "negative",
-  "spec": [
-   "light-client-requirements.md §3",
-   "infra-client-requirements.md §6",
-   "wire-format.md §7.8"
-  ],
-  "rule": [
-   {
-    "where": "light-client-requirements.md §3",
-    "text": "never reuse a one-time prekey"
-   },
-   {
-    "where": "infra-client-requirements.md §6",
-    "text": "Consume one-time keys on serving them, and only when one is requested."
-   },
-   {
-    "where": "wire-format.md §7.8",
-    "text": "Only the one-time key is consumed on serving."
-   }
-  ],
-  "given": "N holds a pool of one-time keys for S.",
-  "when": "Two requesters each send a PrekeyRequest for S with field 2 equal to 1.",
-  "then": "The two replies carry different one-time keys, the pool shrinks by two, and neither key is ever served again.",
+  "kind": "withdrawn",
+  "spec": [],
+  "rule": [],
+  "given": "Withdrawn.",
+  "when": "Withdrawn.",
+  "then": "Withdrawn.",
   "oracle": "behaviour",
-  "interpretation": null,
-  "families": [
-   "MAIL-003",
-   "INT-013"
-  ]
+  "interpretation": "Withdrawn 2026-11-19. The payload construction is the split seal [author, 2026-11-19] (design §14.2.4, wire-format.md §7.8), and the prekeys, ratchet and per-device sessions are gone with the scheme they belonged to: there are no one-time prekeys. Nothing replaces this entry."
  },
  {
   "id": "PAY-03",
   "area": "payload",
   "gap": "payload",
-  "title": "Replenish the one-time pool before it is exhausted",
+  "title": "Withdrawn: replenish the one-time pool before it is exhausted",
   "milestone": "after-5",
-  "kind": "liveness",
-  "spec": [
-   "light-client-requirements.md §3"
-  ],
-  "rule": [
-   {
-    "where": "light-client-requirements.md §3",
-    "text": "Replenish well before exhaustion"
-   },
-   {
-    "where": "light-client-requirements.md §3",
-    "text": "Rotate the signed prekey on a policy interval"
-   }
-  ],
-  "given": "Client S with a replenishment threshold and a signed-prekey interval chosen by the test, since both are policy.",
-  "when": "Requesters draw one-time keys until the pool falls below the threshold, and the interval elapses.",
-  "then": "S uploads further one-time keys before the pool reaches zero, and publishes a new bundle with a later field 4 after the interval.",
+  "kind": "withdrawn",
+  "spec": [],
+  "rule": [],
+  "given": "Withdrawn.",
+  "when": "Withdrawn.",
+  "then": "Withdrawn.",
   "oracle": "behaviour",
-  "interpretation": null,
-  "families": [
-   "MAIL-007"
-  ]
+  "interpretation": "Withdrawn 2026-11-19. The payload construction is the split seal [author, 2026-11-19] (design §14.2.4, wire-format.md §7.8), and the prekeys, ratchet and per-device sessions are gone with the scheme they belonged to: there is no pool to replenish and no signed prekey to rotate; the node rotates its own key for each recipient, which PAY-28 holds."
  },
  {
   "id": "PAY-04",
   "area": "payload",
   "gap": "payload",
-  "title": "Serve reusable material freely and consume nothing unless a one-time key is requested",
+  "title": "Serve a recipient's node key to whoever asks, and consume nothing in serving it",
   "milestone": "after-5",
   "kind": "positive",
   "spec": [
@@ -6117,18 +6030,18 @@
   "rule": [
    {
     "where": "infra-client-requirements.md §6",
-    "text": "Serve reusable material freely."
+    "text": "Serve keys for the recipients you serve, to whoever asks, singly or as a batch, and nothing for anyone else."
    },
    {
     "where": "wire-format.md §7.8",
-    "text": "The reusable material may be returned any number of times to anyone."
+    "text": "a key is not consumed by being served, so there is nothing a requester can deplete"
    }
   ],
-  "given": "N holds S's bundle and pool.",
-  "when": "Two PrekeyRequests for S with field 2 equal to 0 arrive from different peers.",
-  "then": "Both replies carry S's bundles in field 2, one per device N holds for S, neither carries field 3, and every pool is unchanged.",
+  "given": "N serves S and holds a node key for it.",
+  "when": "Two NodeKeyRequests for S arrive from different peers, and one for a keyhash N does not serve.",
+  "then": "Both replies for S carry the same NodeKey in field 2, the newest N holds for S, naming S in field 1 and N in field 2, and what N holds for S is unchanged by the serving. The third reply carries no field 2 and failure code 0.",
   "oracle": "behaviour",
-  "interpretation": "Re-derived 2026-09-22 to a bundle per device (wire-format.md §7.8).",
+  "interpretation": null,
   "families": [
    "MAIL-003",
    "MAIL-004"
@@ -6138,64 +6051,37 @@
   "id": "PAY-05",
   "area": "payload",
   "gap": "payload",
-  "title": "Rate-limit one-time key issuance per requester per subject",
+  "title": "Withdrawn: rate-limit one-time key issuance per requester per subject",
   "milestone": "after-5",
-  "kind": "negative",
-  "spec": [
-   "infra-client-requirements.md §6",
-   "wire-format.md §7.8"
-  ],
-  "rule": [
-   {
-    "where": "infra-client-requirements.md §6",
-    "text": "Rate-limit one-time key issuance per requester per subject."
-   },
-   {
-    "where": "wire-format.md §7.8",
-    "text": "rate-limits one-time key issuance per requester per subject"
-   }
-  ],
-  "given": "N with a limit L per requester per subject per window, chosen by the test.",
-  "when": "One requester sends L plus one PrekeyRequests for S with field 2 equal to 1 within the window, and one for another subject T.",
-  "then": "The first L replies carry one-time keys; the excess request for S is served no one-time key; the request for T is served one.",
+  "kind": "withdrawn",
+  "spec": [],
+  "rule": [],
+  "given": "Withdrawn.",
+  "when": "Withdrawn.",
+  "then": "Withdrawn.",
   "oracle": "behaviour",
-  "interpretation": "Whether the refused request is answered with the bundle and no field 3, or with failure code 1, is not stated; the test asserts only that no one-time key is served.",
-  "families": [
-   "MAIL-006",
-   "MAIL-024"
-  ]
+  "interpretation": "Withdrawn 2026-11-19. The payload construction is the split seal [author, 2026-11-19] (design §14.2.4, wire-format.md §7.8), and the prekeys, ratchet and per-device sessions are gone with the scheme they belonged to: a node key is not consumed by being served, so there is nothing to ration (infra-client-requirements.md §6). Nothing replaces this entry."
  },
  {
   "id": "PAY-06",
   "area": "payload",
   "gap": "payload",
-  "title": "Tell the subject when its one-time pool is exhausted",
+  "title": "Withdrawn: tell the subject when its one-time pool is exhausted",
   "milestone": "after-5",
-  "kind": "positive",
-  "spec": [
-   "infra-client-requirements.md §6"
-  ],
-  "rule": [
-   {
-    "where": "infra-client-requirements.md §6",
-    "text": "Tell the subject when their one-time pool is exhausted."
-   }
-  ],
-  "given": "S's pool at N is drained by requesters.",
-  "when": "The last one-time key is served.",
-  "then": "S's client on the device whose pool was drained learns of the exhaustion and replenishes that device's pool; the test observes the notice through that client and the subsequent upload.",
+  "kind": "withdrawn",
+  "spec": [],
+  "rule": [],
+  "given": "Withdrawn.",
+  "when": "Withdrawn.",
+  "then": "Withdrawn.",
   "oracle": "behaviour",
-  "interpretation": "No wire object carries the exhaustion notice; the test observes it through the client and treats the carrier as a parameter. Re-derived 2026-09-22: a pool is a device's.",
-  "families": [
-   "MAIL-007",
-   "MAIL-024"
-  ]
+  "interpretation": "Withdrawn 2026-11-19. The payload construction is the split seal [author, 2026-11-19] (design §14.2.4, wire-format.md §7.8), and the prekeys, ratchet and per-device sessions are gone with the scheme they belonged to: there is no one-time pool to exhaust. Nothing replaces this entry."
  },
  {
   "id": "PAY-07",
   "area": "payload",
   "gap": "payload",
-  "title": "Prefetch reusable material for the whole Dunbar Org as one sweep",
+  "title": "Prefetch node keys for the whole trust horizon as one sweep",
   "milestone": "after-5",
   "kind": "positive",
   "spec": [
@@ -6205,7 +6091,7 @@
   "rule": [
    {
     "where": "light-client-requirements.md §3",
-    "text": "Prefetch reusable prekey material for the whole trust horizon as a batch request"
+    "text": "Prefetch node keys for the whole trust horizon as a batch request"
    },
    {
     "where": "wire-format.md §7.8",
@@ -6213,12 +6099,12 @@
    },
    {
     "where": "wire-format.md §7.8",
-    "text": "A `PrekeyBatchRequest` naming a population is visibly a sweep"
+    "text": "A `NodeKeyBatchRequest` naming a population is visibly a sweep"
    }
   ],
-  "given": "Client S attaches with a horizon of known population.",
-  "when": "S refreshes its prekey material.",
-  "then": "A PrekeyBatchRequest naming the population in ascending keyhash order is observed, and no single-subject PrekeyRequest with field 2 equal to 0 for any of them.",
+  "given": "Client S attaches with a horizon of known population, several of whose members one node N serves.",
+  "when": "S refreshes its node keys.",
+  "then": "A NodeKeyBatchRequest to N naming the members N serves, in ascending keyhash order, is observed, and no single-subject NodeKeyRequest for any of them.",
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
@@ -6231,37 +6117,22 @@
   "id": "PAY-08",
   "area": "payload",
   "gap": "payload",
-  "title": "Request a one-time key only when opening a session, and never in a prefetch",
+  "title": "Withdrawn: request a one-time key only when opening a session, and never in a prefetch",
   "milestone": "after-5",
-  "kind": "negative",
-  "spec": [
-   "light-client-requirements.md §3"
-  ],
-  "rule": [
-   {
-    "where": "light-client-requirements.md §3",
-    "text": "Never prefetch one-time keys."
-   },
-   {
-    "where": "light-client-requirements.md §3",
-    "text": "Request a one-time key only when actually opening a session."
-   }
-  ],
-  "given": "Client S has prefetched reusable material for its org and has no session with T.",
-  "when": "S idles, then sends its first message to T.",
-  "then": "No PrekeyRequest with field 2 equal to 1 is observed while idle; exactly one, naming T, is observed immediately before the first message.",
+  "kind": "withdrawn",
+  "spec": [],
+  "rule": [],
+  "given": "Withdrawn.",
+  "when": "Withdrawn.",
+  "then": "Withdrawn.",
   "oracle": "behaviour",
-  "interpretation": null,
-  "families": [
-   "PAY-002",
-   "MAIL-024"
-  ]
+  "interpretation": "Withdrawn 2026-11-19. The payload construction is the split seal [author, 2026-11-19] (design §14.2.4, wire-format.md §7.8), and the prekeys, ratchet and per-device sessions are gone with the scheme they belonged to: there are no one-time keys; a sender seals to the newest node key it holds, which a sweep supplies (PAY-07). Nothing replaces this entry."
  },
  {
   "id": "PAY-09",
   "area": "payload",
   "gap": "payload",
-  "title": "Keep no record of who asked for whose bundle",
+  "title": "Keep no record of who asked for whose node key",
   "milestone": "after-5",
   "kind": "negative",
   "spec": [
@@ -6270,12 +6141,16 @@
   "rule": [
    {
     "where": "infra-client-requirements.md §6",
-    "text": "keep no record of who asked for whose bundle"
+    "text": "serve the request and keep no record of it"
+   },
+   {
+    "where": "infra-client-requirements.md §6",
+    "text": "Do not know who asks"
    }
   ],
-  "given": "N serves several PrekeyRequests and a PrekeyBatchRequest.",
-  "when": "The test inspects N's persistent storage afterwards.",
-  "then": "No record of the requesters or of which subjects they asked for is present.",
+  "given": "N serves several NodeKeyRequests and a NodeKeyBatchRequest, each on a connection under a transport key minted for it.",
+  "when": "The test inspects N's persistent storage afterwards, and after N has written its state back.",
+  "then": "No record of the requesters, of the keys they presented, or of which subjects they asked for is present.",
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
@@ -6286,37 +6161,22 @@
   "id": "PAY-10",
   "area": "payload",
   "gap": "payload",
-  "title": "Store and serve a bundle without interpreting its contents",
+  "title": "Withdrawn: store and serve a bundle without interpreting its contents",
   "milestone": "after-5",
-  "kind": "must-accept",
-  "spec": [
-   "infra-client-requirements.md §6",
-   "wire-format.md §7.8"
-  ],
-  "rule": [
-   {
-    "where": "infra-client-requirements.md §6",
-    "text": "The bundle is opaque."
-   },
-   {
-    "where": "wire-format.md §7.8",
-    "text": "The bundle is opaque to this protocol"
-   }
-  ],
-  "given": "A PrekeyBundle for S whose field 3 is an arbitrary byte string, correctly signed by S.",
-  "when": "S uploads it and a requester fetches it.",
-  "then": "N stores and serves it unchanged. An implementation that parses field 3 and rejects it fails.",
+  "kind": "withdrawn",
+  "spec": [],
+  "rule": [],
+  "given": "Withdrawn.",
+  "when": "Withdrawn.",
+  "then": "Withdrawn.",
   "oracle": "behaviour",
-  "interpretation": null,
-  "families": [
-   "MAIL-001"
-  ]
+  "interpretation": "Withdrawn 2026-11-19. The payload construction is the split seal [author, 2026-11-19] (design §14.2.4, wire-format.md §7.8), and the prekeys, ratchet and per-device sessions are gone with the scheme they belonged to: the node holds no material of the client's to be opaque to: it generates and signs its own key for each recipient, which PAY-28 holds."
  },
  {
   "id": "PAY-11",
   "area": "payload",
   "gap": "payload",
-  "title": "Use the asynchronous construction for every identity, the patron included",
+  "title": "Seal to every identity, the patron included",
   "milestone": "after-5",
   "kind": "positive",
   "spec": [
@@ -6330,12 +6190,12 @@
    },
    {
     "where": "design §14.2.4.1",
-    "text": "Leaf → patron | The full construction, the same as any leaf."
+    "text": "Leaf → patron | The split seal, the same as any leaf."
    }
   ],
   "given": "Client S attached at the node its patron P operates, which speaks as P, with a first message for P and one for leaf T.",
   "when": "S sends to P and then to T.",
-  "then": "A one-time key request names P and one names T; both messages are encrypted under the payload construction; nothing rides the transport session as material for the node.",
+  "then": "Each message is a relay submission to the node serving its recipient, sealed to that recipient's encryption key and that node's key for it; nothing rides the transport session as material for the node, and each recipient opens its own.",
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
@@ -6346,60 +6206,43 @@
   "id": "PAY-12",
   "area": "payload",
   "gap": "payload",
-  "title": "Open a session on reusable material alone when no one-time key remains",
+  "title": "Withdrawn: open a session on reusable material alone when no one-time key remains",
   "milestone": "after-5",
-  "kind": "must-accept",
-  "spec": [
-   "wire-format.md §7.8"
-  ],
-  "rule": [
-   {
-    "where": "wire-format.md §7.8",
-    "text": "when none remain, field 3 is simply absent and the session proceeds on reusable material alone"
-   }
-  ],
-  "given": "T's one-time pool at N is empty.",
-  "when": "S requests a one-time key for T and then sends its first message.",
-  "then": "The PrekeyReply carries T's bundle for the device named in field 2 and no field 3, and S still opens the session and delivers the message. An implementation that refuses to send without a one-time key fails.",
+  "kind": "withdrawn",
+  "spec": [],
+  "rule": [],
+  "given": "Withdrawn.",
+  "when": "Withdrawn.",
+  "then": "Withdrawn.",
   "oracle": "behaviour",
-  "interpretation": "Re-derived 2026-09-22 to a bundle per device (wire-format.md §7.8).",
-  "families": [
-   "PAY-002",
-   "MAIL-004",
-   "MAIL-007"
-  ]
+  "interpretation": "Withdrawn 2026-11-19. The payload construction is the split seal [author, 2026-11-19] (design §14.2.4, wire-format.md §7.8), and the prekeys, ratchet and per-device sessions are gone with the scheme they belonged to: there are no one-time keys, so nothing proceeds without one. Nothing replaces this entry."
  },
  {
   "id": "PAY-13",
   "area": "payload",
   "gap": "payload",
-  "title": "Instantiate PQXDH with X25519 and ML-KEM-768 and run at least the Double Ratchet, matching the adopted specifications",
+  "title": "Seal with X-Wing, HKDF-SHA-256 and AES-256-GCM as the seal's steps state, and open only with both halves",
   "milestone": "after-5",
   "kind": "positive",
   "spec": [
-   "design §14.2.4.2",
-   "design §14.2.4.3",
-   "design §14.2.4"
+   "wire-format.md §7.8.1",
+   "design §14.2.4.2"
   ],
   "rule": [
    {
+    "where": "wire-format.md §7.8.1",
+    "text": "Each half is an X-Wing encapsulation"
+   },
+   {
     "where": "design §14.2.4.2",
-    "text": "this profile instantiates it with X25519 and ML-KEM-768"
-   },
-   {
-    "where": "design §14.2.4.3",
-    "text": "A conforming client MUST run at least the Double Ratchet over a PQXDH session"
-   },
-   {
-    "where": "design §14.2.4",
-    "text": "The requirement below is to adopt it, not to design a replacement."
+    "text": "The two shared secrets are combined with the ciphertexts and both keys' identifiers, so that the message key needs both shared secrets and breaking either half leaves nothing."
    }
   ],
-  "given": "Two clients with fixed key material and the adopted specifications' published vectors. The identity binding, prekey cadence and last-resort policy are open integration decisions (design §22.2) and are supplied to the test as parameters.",
-  "when": "They establish a session and exchange messages.",
-  "then": "The primitives the profile names reproduce the vectors their own specifications publish — X25519 against RFC 7748 §6.1, HKDF-SHA-256 against RFC 5869 A.1 — and the KEM carries FIPS 203's parameter set for ML-KEM-768 and round-trips. The composition reproduces this project's own canonical vectors, derived once and pinned, and a message decrypts only at its recipient. The floor is what is asserted; a client running the Triple Ratchet satisfies it too, and PAY-22 covers the seam the post-quantum half plugs into.",
+  "given": "Fixed key material for a sender, a recipient and the recipient's node key, and the published vectors of the primitives the seal names.",
+  "when": "A message is sealed and opened.",
+  "then": "The primitives reproduce the vectors their own specifications publish — X25519 against RFC 7748 §6.1, HKDF-SHA-256 against RFC 5869 A.1 — and the KEM carries FIPS 203's parameter set for ML-KEM-768 and round-trips. The seal reproduces this project's canonical vectors, and a key derived with either shared secret replaced does not open the body.",
   "oracle": "fixture",
-  "interpretation": "How the session is bound to the hybrid identity is open; the test parameterises the binding. Re-derived 2026-09-26 when §14.2.4.3 made the Double Ratchet the floor and the Triple Ratchet recommended. **The oracle was restated** [author, 2026-11-08], on the same grounds as the vector bar on 2026-10-02. It had read *\"the key agreement and ratchet outputs match the adopted specifications for the same inputs\"*, which no one in this project can check: PQXDH and the Double Ratchet are adopted rather than designed here (design §14.2.4) and their specifications are prose with formal analysis — neither publishes known-answer vectors. The only ways to compare against the composition would be another implementation, and libsignal is AGPL-3.0, which the licence policy admits only in segregated client apps and never as a gate dependency. A bar nobody here can meet is a permanent open item that re-finds itself in every review, which is exactly why the \"independent implementation reproduces every vector\" bar was removed before. **What replaced it splits the claim in two.** The *primitives* publish vectors and are checked against them: `crypto/tests/primitives.rs` holds X25519 against RFC 7748 §6.1 (both sides reaching the shared secret, not one direction of the arithmetic) and HKDF-SHA-256 against RFC 5869 A.1. The hex is published rather than computed here, which is the point — a vector this project produced would say only that the implementation agrees with itself. The *composition* is held by this project's own canonical vectors and its independent harness in another language over independent cryptography, which is the restated bar. **ML-KEM-768's published known answers are not carried, and the reason is stated rather than left blank**: NIST distributes them as ACVP JSON rather than in FIPS 203's text, and pulling that corpus in is a decision about what this repository holds. What is checked is the parameter set — 1184-byte encapsulation key, 1088-byte ciphertext, 32-byte secret, which is what tells 768 from 512 and 1024 — the round trip, the refusal of a short ciphertext, and that the seed regenerates the key. **Still owed**: the composition's own canonical vectors and the ratchet, at this entry's milestone."
+  "interpretation": "The bar is the one restated [author, 2026-11-08]: the primitives against the vectors their own specifications publish, the composition against this project's canonical vectors and its independent harness, the composition having no one else's vectors to meet (design §14.2.4.6). ML-KEM-768's published known answers are not carried, for the reason given when the bar was restated; the parameter set, the round trip and the refusal of a short ciphertext are. Whether X-Wing's own draft vectors are carried is not stated. **Still owed**: the seal's canonical vectors."
  },
  {
   "id": "PAY-14",
@@ -6463,28 +6306,28 @@
   "id": "PAY-16",
   "area": "payload",
   "gap": "payload",
-  "title": "Open an initial session only under the identity key bound to the sender it names",
+  "title": "Attribute a sealed message only to the sender whose tag verifies, and discard one that does not open or whose tag fails",
   "milestone": "after-5",
   "kind": "negative",
   "spec": [
-   "design §14.2.3",
-   "design §14.2.4.2"
+   "wire-format.md §7.8.1",
+   "light-client-requirements.md §3"
   ],
   "rule": [
    {
-    "where": "design §14.2.3",
-    "text": "Identity keys sign; encryption requires KEM keys, which are distinct and must be bound to the identity."
+    "where": "wire-format.md §7.8.1",
+    "text": "A body that does not open, or whose tag fails, is discarded and contributes nothing."
    },
    {
-    "where": "design §14.2.4.2",
-    "text": "this profile instantiates it with X25519 and ML-KEM-768, matching the transport"
+    "where": "light-client-requirements.md §3",
+    "text": "a message that does not open or whose tag fails is discarded and shown as nothing"
    }
   ],
-  "given": "Recipient B holds A's verified prekey bundle. C composes an initial message with C's own identity and ephemeral keys against B's bundle.",
-  "when": "The message is delivered to B named as coming from A, and then the same message named as coming from C.",
-  "then": "Named as A's it is refused, no session is opened for A, no plaintext is dispatched, and the person is told it could not be attributed. Named as C's it decrypts.",
+  "given": "Recipient B holds A's introduction. C seals a message to B whose body names A in field 1 and carries a tag under C's own key.",
+  "when": "The message is delivered to B; then one C seals naming itself, with its introduction in field 3; then a copy of that one with a byte of its body ciphertext flipped.",
+  "then": "The first is discarded: nothing is dispatched and nothing is shown. The second opens and is attributed to C. The third does not open and is discarded the same way.",
   "oracle": "behaviour",
-  "interpretation": "The binding of a keyhash to a payload identity key is the prekey bundle, which its subject signs. A recipient holding no bundle for the sender cannot check the binding, so it refuses and asks for the bundle; that message is not recovered.",
+  "interpretation": null,
   "families": [
    "PAY-001",
    "PAY-004",
@@ -6496,202 +6339,118 @@
   "id": "PAY-17",
   "area": "payload",
   "gap": "payload",
-  "title": "Spend a one-time prekey only when the message it opened authenticates",
+  "title": "Withdrawn: spend a one-time prekey only when the message it opened authenticates",
   "milestone": "after-5",
-  "kind": "negative",
-  "spec": [
-   "design §14.2.4",
-   "design §14.2.4.2"
-  ],
-  "rule": [
-   {
-    "where": "design §14.2.4",
-    "text": "There is directly applicable prior art, specified and formally verified. The requirement below is to adopt it, not to design a replacement."
-   },
-   {
-    "where": "design §14.2.4.2",
-    "text": "one party offline having published prekeys, the other wanting to send immediately and establish a session"
-   }
-  ],
-  "given": "A sends B an initial message consuming one of B's one-time prekeys. A corrupted copy of that message, one ciphertext byte flipped, reaches B first.",
-  "when": "B takes the corrupted copy, and then the original.",
-  "then": "The corrupted copy fails and the one-time pair it named is still held; the original then opens the session and decrypts, and only then is the pair gone. A second message naming the same pair finds nothing.",
+  "kind": "withdrawn",
+  "spec": [],
+  "rule": [],
+  "given": "Withdrawn.",
+  "when": "Withdrawn.",
+  "then": "Withdrawn.",
   "oracle": "behaviour",
-  "interpretation": "PQXDH's receiving procedure deletes the one-time private key after the initial message decrypts. Deleting it on arrival lets one injected copy destroy the key the real message needs.",
-  "families": [
-   "PAY-004"
-  ]
+  "interpretation": "Withdrawn 2026-11-19. The payload construction is the split seal [author, 2026-11-19] (design §14.2.4, wire-format.md §7.8), and the prekeys, ratchet and per-device sessions are gone with the scheme they belonged to: opening a message consumes nothing a corrupted copy could destroy. A body that does not open is discarded (PAY-16), and only what opened is remembered against replay (PAY-23)."
  },
  {
   "id": "PAY-18",
   "area": "payload",
   "gap": "payload",
-  "title": "Serving a one-time key leaves no record of who asked for whose bundle",
+  "title": "Withdrawn: serving a one-time key leaves no record of who asked for whose bundle",
   "milestone": "after-5",
-  "kind": "negative",
-  "spec": [
-   "infra-client-requirements.md §6",
-   "design §19.8"
-  ],
-  "rule": [
-   {
-    "where": "infra-client-requirements.md §6",
-    "text": "serve the request,\n  keep no record of who asked for whose bundle."
-   },
-   {
-    "where": "design §19.8",
-    "text": "an ordinary fetch names a population rather than a person and carries no intent signal"
-   }
-  ],
-  "given": "A node whose prekey service is kept on disk, holding a published bundle and a stocked pool for a subject.",
-  "when": "A requester is served a one-time key, the node writes its state back, and the rate-limit window later expires.",
-  "then": "Nothing anywhere under the node's directories contains the requester's keyhash beside the subject's, at any point. The allowance still binds within a window in memory, and a restart opens a fresh one, which costs the rate and not the budget since a served key is unlinked before its reply.",
+  "kind": "withdrawn",
+  "spec": [],
+  "rule": [],
+  "given": "Withdrawn.",
+  "when": "Withdrawn.",
+  "then": "Withdrawn.",
   "oracle": "behaviour",
-  "interpretation": null,
-  "families": [
-   "MAIL-006",
-   "OPS-014"
-  ]
+  "interpretation": "Withdrawn 2026-11-19. The payload construction is the split seal [author, 2026-11-19] (design §14.2.4, wire-format.md §7.8), and the prekeys, ratchet and per-device sessions are gone with the scheme they belonged to: no one-time key is served and the rate-limit window it reasoned about is gone; keeping no record of who asked is PAY-09's."
  },
  {
   "id": "PAY-19",
   "area": "payload",
   "gap": "payload",
-  "title": "A deposit the node cannot store whole is refused, not acknowledged",
+  "title": "Withdrawn: a deposit the node cannot store whole is refused, not acknowledged",
   "milestone": "after-5",
-  "kind": "negative",
-  "spec": [
-   "wire-format.md §7.10",
-   "infra-client-requirements.md §6.1"
-  ],
-  "rule": [
-   {
-    "where": "wire-format.md §7.10",
-    "text": "A deposit is bounded by the array limits like everything else"
-   },
-   {
-    "where": "infra-client-requirements.md §6.1",
-    "text": "a client that asks for more than you lend is refused with the code rather than silently trimmed"
-   }
-  ],
-  "given": "A node serving a client whose bundle it holds, with its prekey service kept somewhere it cannot write.",
-  "when": "The client deposits one-time keys.",
-  "then": "The reply refuses, the pool holds none of the deposited keys, and nothing partially written survives. A client is never told a pool was replenished that was not.",
+  "kind": "withdrawn",
+  "spec": [],
+  "rule": [],
+  "given": "Withdrawn.",
+  "when": "Withdrawn.",
+  "then": "Withdrawn.",
   "oracle": "behaviour",
-  "interpretation": null,
-  "families": [
-   "MAIL-002",
-   "OPS-010"
-  ]
+  "interpretation": "Withdrawn 2026-11-19. The payload construction is the split seal [author, 2026-11-19] (design §14.2.4, wire-format.md §7.8), and the prekeys, ratchet and per-device sessions are gone with the scheme they belonged to: there are no deposits. A submission the store cannot take is QUE-22's."
  },
  {
   "id": "PAY-20",
   "area": "payload",
   "gap": "payload",
-  "title": "Fetch a bundle per device, open a session with each, and send to each",
+  "title": "Withdrawn: fetch a bundle per device, open a session with each, and send to each",
   "milestone": "after-5",
-  "kind": "positive",
-  "spec": [
-   "wire-format.md §7.8",
-   "light-client-requirements.md §4.1",
-   "design §14.2.4"
-  ],
-  "rule": [
-   {
-    "where": "wire-format.md §7.8",
-    "text": "A reply therefore carries every device's bundle, an initiator opens one session against each and sends to each"
-   },
-   {
-    "where": "light-client-requirements.md §4.1",
-    "text": "Open a session with each of a recipient's devices, and send to each."
-   }
-  ],
-  "given": "Subject T has two devices, d1 and d2, each with its own bundle at N; client S holds T's KeyMaterial.",
-  "when": "S fetches T's material with field 4 absent and sends T one message.",
-  "then": "The reply's field 2 carries two bundles, one naming d1 and one d2, each verifying under T; S opens two sessions and submits two ciphertexts, one naming d1 and one d2; each device decrypts the one addressed to it and cannot decrypt the other.",
+  "kind": "withdrawn",
+  "spec": [],
+  "rule": [],
+  "given": "Withdrawn.",
+  "when": "Withdrawn.",
+  "then": "Withdrawn.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": "Withdrawn 2026-11-19. The payload construction is the split seal [author, 2026-11-19] (design §14.2.4, wire-format.md §7.8), and the prekeys, ratchet and per-device sessions are gone with the scheme they belonged to: a message is sealed to the person and never to a device (design §14.2.2), so there is no bundle and no session per device. Replaced by QUE-21, delivery to every device that proves the identity."
  },
  {
   "id": "PAY-21",
   "area": "payload",
   "gap": "payload",
-  "title": "Publish a device's bundle only once the ceremony device has signed it, and refuse a signature over another subject or other material",
+  "title": "Withdrawn: publish a device's bundle only once the ceremony device has signed it, and refuse a signature over another subject or other material",
   "milestone": "after-5",
-  "kind": "positive",
-  "spec": [
-   "wire-format.md §7.8",
-   "design §23.3",
-   "light-client-requirements.md §4.1"
-  ],
-  "rule": [
-   {
-    "where": "wire-format.md §7.8",
-    "text": "Each device generates its own material and the identity signs it on the ceremony device"
-   },
-   {
-    "where": "light-client-requirements.md §4.1",
-    "text": "the bundle it publishes carries material it generated and a signature your ceremony device made over it"
-   }
-  ],
-  "given": "Subject T's phone holds the seed and a desktop D2 holds a delegation and no seed; both are served by node W; S is another client of W.",
-  "when": "D2 attaches, offers its unsigned bundle payload, and takes back what the phone signed; S then fetches T's material and sends.",
-  "then": "D2's attach publishes no bundle; the payload names T and D2; another identity's phone refuses to sign it; a signature by another identity, or one over material D2 does not hold, is refused by D2; the phone's signature is published under D2 and republished on a later attach; S sends to both devices and only D2 opens the ciphertext addressed to it.",
+  "kind": "withdrawn",
+  "spec": [],
+  "rule": [],
+  "given": "Withdrawn.",
+  "when": "Withdrawn.",
+  "then": "Withdrawn.",
   "oracle": "behaviour",
-  "interpretation": null,
-  "families": [
-   "MAIL-025",
-   "APP-010"
-  ]
+  "interpretation": "Withdrawn 2026-11-19. The payload construction is the split seal [author, 2026-11-19] (design §14.2.4, wire-format.md §7.8), and the prekeys, ratchet and per-device sessions are gone with the scheme they belonged to: a device publishes no bundle; a paired device receives the identity's encryption secrets with its credential (wire-format.md §14.3.3). Replaced by PAY-30."
  },
  {
   "id": "PAY-22",
   "area": "payload",
   "gap": "payload",
-  "title": "The post-quantum ratchet plugs into a seam that mixes into the root chain and carries in the header",
+  "title": "Withdrawn: the post-quantum ratchet plugs into a seam that mixes into the root chain and carries in the header",
   "milestone": "after-5",
-  "kind": "positive",
-  "spec": [
-   "design §14.2.4.3"
-  ],
-  "rule": [
-   {
-    "where": "design §14.2.4.3",
-    "text": "SHOULD run the Triple Ratchet where an implementation of the post-quantum half is available to it"
-   }
-  ],
-  "given": "A session at the floor, and a second implementation of the post-quantum half behind the same interface.",
-  "when": "Both parties run the same construction and exchange messages across a ratchet step.",
-  "then": "What the post-quantum half carries crosses in the header and what it contributes reaches the root chain, so the same messages under the same keys encrypt differently from the floor's. A session at the floor derives and persists exactly what it did before the seam existed, and a state written before it still opens.",
+  "kind": "withdrawn",
+  "spec": [],
+  "rule": [],
+  "given": "Withdrawn.",
+  "when": "Withdrawn.",
+  "then": "Withdrawn.",
   "oracle": "behaviour",
-  "interpretation": "No Sparse Post-Quantum Ratchet is available to this tree, so the test exercises the seam with a stand-in. It asserts that the seam is load-bearing, never that any particular construction is correct.",
-  "families": [
-   "PAY-001",
-   "MAIL-027"
-  ]
+  "interpretation": "Withdrawn 2026-11-19. The payload construction is the split seal [author, 2026-11-19] (design §14.2.4, wire-format.md §7.8), and the prekeys, ratchet and per-device sessions are gone with the scheme they belonged to: there is no ratchet, and so no seam for a post-quantum half of one. Nothing replaces this entry."
  },
  {
   "id": "PAY-23",
   "area": "payload",
   "gap": "payload",
-  "title": "Refuse a replayed initial message and leave the live session standing, across a restart",
-  "milestone": 4,
+  "title": "Open a replayed sealed message once, across a restart, remembering what was opened under the node's two newest keys",
+  "milestone": "after-5",
   "kind": "negative",
   "spec": [
-   "wire-format.md §7.8",
-   "design §14.2.4"
+   "wire-format.md §7.8.1",
+   "light-client-requirements.md §3"
   ],
   "rule": [
    {
-    "where": "wire-format.md §7.8",
-    "text": "**Only the one-time key is consumed on serving.**"
+    "where": "wire-format.md §7.8.1",
+    "text": "A recipient discards a sealed message it has already opened, by the hash of its ciphertext, remembering those opened under the node's two newest keys it has seen"
+   },
+   {
+    "where": "light-client-requirements.md §3",
+    "text": "A message you have already opened is not opened twice."
    }
   ],
-  "given": "A client holding a live payload session with a peer, and a copy of the initial message that opened it, captured by an adversary.",
-  "when": "The copy is presented again, both within the run and after the client has been restarted from its persisted state.",
-  "then": "The message is refused as a replay and the live ratchet is untouched, so the session continues and the adversary has neither read nor reset it. The refusal survives the restart: the cache of seen initials is persisted with the session state, since a cache that emptied on restart reopened the window it closes.",
+  "given": "A client that has opened a sealed message under node key n, and a copy of that submission captured by an adversary and submitted again within the grace after the node rotated to n+1.",
+  "when": "The copy is delivered, both within the run and after the client has been restarted from its persisted state.",
+  "then": "The copy is discarded both times, neither dispatched nor shown, and the message already opened stands as it was.",
   "oracle": "behaviour",
-  "interpretation": "Refusing every initial message for a peer that already has a ratchet would also close it, and would break a peer that legitimately lost its state and re-initiates; the replay cache keeps that case working [2026-09-30].",
+  "interpretation": "The record of what was opened is persisted with the client's state, since a record that emptied on restart would reopen the window it closes. A device restored from the phrase holds no such record and opens what its node hands it, which is the restore design §14.2.2 intends.",
   "families": [
    "PAY-004"
   ]
@@ -6720,7 +6479,7 @@
   ],
   "given": "Two running nodes, N1 serving a client C1 and N2 serving a client C2, and a sender S attached to neither; S holds N2's address and no direct path to C2.",
   "when": "S hands payload for C2 to the node serving C2, dialled request-only from S's own endpoint with no attach submission preceding it.",
-  "then": "N2 answers accepted and queues one message for C2; N1 queues nothing. C2, attaching afterwards, collects exactly the ciphertext sent with S named in front of it. The same submission put to N1, which serves nobody by that name, is refused, and the refusal reaches the caller as a refusal rather than as a delivery. A reply echoing another submission's nonce is not treated as an answer to this one.",
+  "then": "N2 answers accepted and queues one message for C2; N1 queues nothing. C2, attaching afterwards, collects exactly the sealed message sent, with N2's half beside it, and attributes it to S on opening. The same submission put to N1, which serves nobody by that name, is refused, and the refusal reaches the caller as a refusal rather than as a delivery. A reply echoing another submission's nonce is not treated as an answer to this one.",
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
@@ -6760,27 +6519,16 @@
   "id": "PAY-26",
   "area": "payload",
   "gap": "payload",
-  "title": "Payload queued for a session is not stranded when the session opens the other way",
+  "title": "Withdrawn: payload queued for a session is not stranded when the session opens the other way",
   "milestone": 3,
-  "kind": "robustness",
-  "spec": [
-   "wire-format.md §7.8",
-   "design §14.2.4"
-  ],
-  "rule": [
-   {
-    "where": "wire-format.md §7.8",
-    "text": "Only the one-time key is consumed on serving. The reusable material may be returned any number of times to anyone."
-   }
-  ],
-  "given": "A client A that has written to a peer W before W published a bundle, so A's plaintext waits and A's one-time-key request was answered with no bundle; A then holds W's reusable material from a later sweep, which opens no session.",
-  "when": "W writes to A first, so the session between them is established from W's side, and A never asks for a one-time key again because a session now exists.",
-  "then": "What A queued before the session existed is encrypted on that session and sent, ahead of anything queued after it, and reaches W. Nothing A queued is dropped and no error is reported to A in place of a delivery.",
+  "kind": "withdrawn",
+  "spec": [],
+  "rule": [],
+  "given": "Withdrawn.",
+  "when": "Withdrawn.",
+  "then": "Withdrawn.",
   "oracle": "behaviour",
-  "interpretation": null,
-  "families": [
-   "PAY-014"
-  ]
+  "interpretation": "Withdrawn 2026-11-19. The payload construction is the split seal [author, 2026-11-19] (design §14.2.4, wire-format.md §7.8), and the prekeys, ratchet and per-device sessions are gone with the scheme they belonged to: there are no payload sessions to open either way; each message is sealed on its own. Nothing replaces this entry."
  },
  {
   "id": "PRD-01",
@@ -8123,23 +7871,23 @@
   "kind": "positive",
   "spec": [
    "light-client-requirements.md §3",
-   "design §14.2.4"
+   "design §14.2.4.5"
   ],
   "rule": [
    {
     "where": "light-client-requirements.md §3",
-    "text": "Publish a prekey bundle and keep it stocked."
+    "text": "Prefetch node keys for the whole trust horizon as a batch request"
    },
    {
-    "where": "design §14.2.4",
-    "text": "A batch request names the population it sweeps; a single-subject\nrequest is visibly targeted"
+    "where": "design §14.2.4.5",
+    "text": "A batch request names the population it sweeps; a single-subject request is visibly targeted"
    }
   ],
   "given": "A node process started from its own configuration, and two participant processes each started from an identity file and told nothing else.",
-  "when": "One attaches and publishes, the other attaches naming it and sweeps it, the first attaches again naming the second, and payload is sent.",
-  "then": "Each attach reports the node it reached and that the session is the primary one. The payload comes out of the recipient's events decrypted, having crossed two sockets and a process that never held the plaintext. Nothing is asserted from inside a process: every claim is what one printed or what arrived at one.",
+  "when": "Both attach, one sweeps the other's node key from the node, and payload is sent.",
+  "then": "Each attach reports the node it reached and that the session is the primary one. The payload comes out of the recipient's events opened and attributed to its sender, having crossed two sockets and a process that never held the plaintext. Nothing is asserted from inside a process: every claim is what one printed or what arrived at one.",
   "oracle": "behaviour",
-  "interpretation": "The order of the three attaches is the protocol's: a bundle must be published before it can be swept, and a recipient attributes an initial message only under a binding it already holds.",
+  "interpretation": null,
   "families": [
    "PAY-012",
    "INT-001",
@@ -8399,7 +8147,7 @@
    },
    {
     "where": "design §14.2.4.1",
-    "text": "Leaf → patron | The full construction, the same as any leaf."
+    "text": "Leaf → patron | The split seal, the same as any leaf."
    }
   ],
   "given": "Two daemons, each started under the identity that launched it (gxv, gxv2); participants gxv, gxv2, mrk and two witnesses; gxv adopts mrk on the record of their meeting and serves from its node; gxv2 adopts mrk and serves from its own.",
@@ -8469,12 +8217,12 @@
    },
    {
     "where": "design §12.6.3",
-    "text": "The recipient's serving node holds ciphertext until reconnect"
+    "text": "The recipient's serving node holds ciphertext until its devices have collected it"
    }
   ],
   "given": "k messages are queued at N for C, each a distinct ciphertext the harness recorded at submission.",
   "when": "C attaches to N and reads its unidirectional streams.",
-  "then": "C receives k drain deliveries, and the set of ciphertexts received equals the set submitted, byte for byte.",
+  "then": "C receives k deliveries, and the sealed messages received equal those submitted, byte for byte, each with the node's half beside it.",
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
@@ -8485,33 +8233,29 @@
   "id": "QUE-03",
   "area": "queue",
   "gap": "queue",
-  "title": "Delete on delivery: a second attach finds nothing and redelivers nothing.",
-  "milestone": 3,
+  "title": "A device that names what it holds is handed only what is newer, and what it was handed stays held",
+  "milestone": "after-5",
   "kind": "positive",
   "spec": [
+   "wire-format.md §7.10",
    "design §14.1.6",
-   "infra-client-requirements.md §2",
    "wire-format.md §8.2"
   ],
   "rule": [
    {
+    "where": "wire-format.md §7.10",
+    "text": "`Attach` field 5 carries the newest position the attaching device has of this queue, and the node delivers what is newer"
+   },
+   {
     "where": "design §14.1.6",
-    "text": "No copy outlives delivery. Deletion on delivery is immediate and leaves nothing recoverable — no journal, no tombstone."
-   },
-   {
-    "where": "infra-client-requirements.md §2",
-    "text": "Delete on delivery, immediately, leaving nothing recoverable."
-   },
-   {
-    "where": "wire-format.md §8.2",
-    "text": "messages queued for this client AT THE RESPONDING NODE"
+    "text": "A delivered message stays for thirty days from its first delivery"
    }
   ],
-  "given": "k messages were queued at N for C; C attached and received all k on drain streams, then closed the session.",
-  "when": "C attaches to N again.",
-  "then": "N's AttachAck carries field 4 equal to 0 and no drain delivery follows; N's inspectable queue store holds no copy of any of the k ciphertexts.",
+  "given": "k messages were queued at N for C; a device of C attached with no field 5, received all k, and closed the session; a further message then arrived.",
+  "when": "The device attaches to N again, field 5 naming the newest position it received.",
+  "then": "Exactly the one newer message is delivered. N's inspectable queue store still holds all k + 1 ciphertexts, none removed by having been delivered.",
   "oracle": "behaviour",
-  "interpretation": null,
+  "interpretation": "AttachAck field 4 counts messages queued for this client, and whether a delivered message still held counts is not stated; the test does not read it.",
   "families": [
    "VAL-003",
    "MAIL-014",
@@ -8522,8 +8266,8 @@
   "id": "QUE-04",
   "area": "queue",
   "gap": "queue",
-  "title": "Keep no crash-recovery copy that outlives a delivery.",
-  "milestone": 3,
+  "title": "Keep no crash-recovery copy that outlives a removal.",
+  "milestone": "after-5",
   "kind": "negative",
   "spec": [
    "infra-client-requirements.md §2",
@@ -8536,12 +8280,12 @@
    },
    {
     "where": "design §14.1.6",
-    "text": "No copy outlives delivery."
+    "text": "No copy outlives removal."
    }
   ],
-  "given": "k messages were queued at N for C; C attached and received all k, then closed the session.",
-  "when": "N's process is killed without warning and restarted from whatever it persisted; C attaches to N again.",
-  "then": "N's AttachAck carries field 4 equal to 0, no drain delivery follows, and none of the k ciphertexts is present in N's storage after the restart.",
+  "given": "k messages were queued at N for C and delivered, and their retention, a test parameter (thirty days as shipped), has run out, so N has removed them.",
+  "when": "N's process is killed without warning and restarted from whatever it persisted; a device of C attaches with no field 5.",
+  "then": "No delivery follows, and none of the k ciphertexts, nor the private half of any node key held only for them, is present in N's storage after the restart.",
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
@@ -8553,8 +8297,8 @@
   "id": "QUE-05",
   "area": "queue",
   "gap": "queue",
-  "title": "Hold only ciphertext, recipient keyhash and device, and arrival time while a message waits.",
-  "milestone": 3,
+  "title": "Hold only the ciphertext, recipient keyhash, node key, position, arrival time and first delivery while a message waits.",
+  "milestone": "after-5",
   "kind": "negative",
   "spec": [
    "infra-client-requirements.md §2",
@@ -8563,18 +8307,18 @@
   "rule": [
    {
     "where": "infra-client-requirements.md §2",
-    "text": "Hold the minimum while a message waits: ciphertext, recipient keyhash and device, arrival time. Nothing further."
+    "text": "Hold the minimum while a message waits: ciphertext, recipient keyhash, the node key it was sealed to, its position, arrival time and first delivery."
    },
    {
     "where": "design §14.1.6",
-    "text": "Queue metadata is the minimum: ciphertext, recipient keyhash and device, arrival time."
+    "text": "Queue metadata is the minimum: ciphertext, recipient keyhash, the node key it was sealed to, its position in the recipient's queue, arrival time, and the time of first delivery."
    }
   ],
   "given": "Sender X submitted one message addressed to C to N while C was not attached, and N accepted it; N exposes its queue store to the test.",
-  "when": "The test inspects N's record of the waiting message.",
-  "then": "The record consists of the ciphertext, C's keyhash, the device the submission named and an arrival time, and carries nothing further: in particular no identity or address of X.",
+  "when": "The test inspects N's record of the waiting message, and again after a device of C has collected it.",
+  "then": "The record consists of the ciphertext, C's keyhash, the number of the node key it was sealed to, its position and an arrival time, with the time of first delivery added once collected, and carries nothing further: in particular no identity, address or transport key of X, and nothing naming the device that collected it.",
   "oracle": "behaviour",
-  "interpretation": "Re-derived 2026-09-22: the queue is per device, so the device the submission named is part of the minimum.",
+  "interpretation": "design §14.1.6 lists no position and infra-client-requirements.md §2 does; the test admits it, a position being what Attach field 5 names.",
   "families": [
    "VAL-001",
    "MAIL-012"
@@ -8584,7 +8328,7 @@
   "id": "QUE-06",
   "area": "queue",
   "gap": "queue",
-  "title": "Refuse the newest message at the cap and tell the sender; keep what is queued.",
+  "title": "When everything held is undelivered, refuse the newest message at the cap and tell the sender; keep what is queued.",
   "milestone": 3,
   "kind": "negative",
   "spec": [
@@ -8594,14 +8338,14 @@
   "rule": [
    {
     "where": "design §14.1.6",
-    "text": "At the ceiling: refuse the newest message and tell the sender. Never drop the oldest."
+    "text": "only when every message held is undelivered, refuse the newest and tell the sender. Never drop an undelivered message"
    },
    {
     "where": "infra-client-requirements.md §2",
-    "text": "At the cap, refuse the newest message and tell the sender"
+    "text": "when everything held is undelivered, refuse the newest and tell the sender"
    }
   ],
-  "given": "The queue cap is unset (design §21.1) and is a test parameter: N is configured with a per-subordinate storage cap sized so that exactly k test messages for one subordinate fit. C is not attached; X has submitted k messages for C and N accepted each.",
+  "given": "The queue cap is unset (design §21.1) and is a test parameter: N is configured with a per-subordinate storage cap sized so that exactly k test messages for one subordinate fit. C is not attached; X has submitted k messages for C, N accepted each, and none has been delivered.",
   "when": "X submits a (k+1)th message addressed to C.",
   "then": "X receives a refusal for the (k+1)th message, distinguishable from acceptance; at C's next attach field 4 equals k and the k earlier ciphertexts are all delivered.",
   "oracle": "behaviour",
@@ -8625,14 +8369,14 @@
   "rule": [
    {
     "where": "infra-client-requirements.md §2",
-    "text": "Never drop the oldest: it destroys a message the sender believes was accepted, and it lets anyone who can reach the queue flush what is already in it."
+    "text": "Never drop an undelivered message: it destroys one the sender believes was accepted, and it lets anyone who can reach the queue flush what is already in it."
    },
    {
     "where": "design §14.1.6",
     "text": "Refuse-newest bounds an attacker to denying new delivery, which the sender sees."
    }
   ],
-  "given": "The queue cap is unset (design §21.1) and is a test parameter: N is configured with a per-subordinate storage cap sized so that exactly k test messages for one subordinate fit. C is not attached; k legitimate messages for C are queued and N is at C's cap.",
+  "given": "The queue cap is unset (design §21.1) and is a test parameter: N is configured with a per-subordinate storage cap sized so that exactly k test messages for one subordinate fit. C is not attached; k legitimate messages for C are queued, none yet delivered, and N is at C's cap.",
   "when": "An attacker A submits several times k further messages addressed to C in quick succession, then C attaches.",
   "then": "Every one of A's messages is refused to A; C's AttachAck carries field 4 equal to k and the k legitimate ciphertexts are all delivered, none replaced by A's.",
   "oracle": "behaviour",
@@ -8689,7 +8433,7 @@
    },
    {
     "where": "infra-client-requirements.md §2",
-    "text": "Queue indefinitely, bounded by a per-subordinate storage cap"
+    "text": "Queue an undelivered message indefinitely, bounded by a per-subordinate storage cap"
    }
   ],
   "given": "The queue cap is unset (design §21.1) and is a test parameter: N is configured with a per-subordinate storage cap sized so that exactly k test messages for one subordinate fit. N serves C1 and C2, neither attached; C1's queue holds k messages and is at its cap.",
@@ -8906,7 +8650,7 @@
   "rule": [
    {
     "where": "design §14.1.6",
-    "text": "Queue metadata is the minimum: ciphertext, recipient keyhash and device, arrival time."
+    "text": "Queue metadata is the minimum: ciphertext, recipient keyhash, the node key it was sealed to, its position in the recipient's queue, arrival time, and the time of first delivery."
    },
    {
     "where": "design §12.6.5",
@@ -8941,7 +8685,7 @@
    },
    {
     "where": "infra-client-requirements.md §2",
-    "text": "Queue indefinitely, bounded by a per-subordinate storage cap"
+    "text": "Queue an undelivered message indefinitely, bounded by a per-subordinate storage cap"
    }
   ],
   "given": "N's mailbox on disk holding two messages for C that arrived in one second; N restarts within that second and accepts a third for C.",
@@ -8989,12 +8733,12 @@
   "id": "QUE-19",
   "area": "queue",
   "gap": "queue",
-  "title": "Delete a message on delivery and not before: a delivery the peer never took leaves it in the mailbox for the next session",
-  "milestone": 5,
+  "title": "A delivery the device never took is handed again at its next attach, and nothing is lost",
+  "milestone": "after-5",
   "kind": "negative",
   "spec": [
    "design §14.1.6",
-   "infra-client-requirements.md §2"
+   "wire-format.md §7.10"
   ],
   "rule": [
    {
@@ -9002,15 +8746,15 @@
     "text": "Undelivered messages queue indefinitely at the recipient's serving node"
    },
    {
-    "where": "infra-client-requirements.md §2",
-    "text": "Delete on delivery, immediately, leaving nothing recoverable."
+    "where": "wire-format.md §7.10",
+    "text": "`Attach` field 5 carries the newest position the attaching device has of this queue, and the node delivers what is newer"
    }
   ],
-  "given": "N holding forty messages for C. C attaches, receives what arrives within a moment, and its connection dies mid-drain; C attaches again later. Separately, C attached and three messages submitted for it.",
-  "when": "N drains on each attach; the submissions for the attached client are delivered.",
-  "then": "After the failed session the store still holds every message C never took and none it took; the second AttachAck reports that count and the drain delivers exactly those, so across both sessions every accepted message was received and nothing was lost. For the attached client each message is stored on acceptance and gone once taken. An implementation that empties the mailbox before delivering, or reports success before the peer has taken the message, fails.",
+  "given": "N holding forty messages for C. A device of C attaches with no field 5, takes in position order what arrives within a moment, and its connection dies mid-drain; it attaches again later naming the newest position it took. Separately, a device of C attached and three messages submitted for it.",
+  "when": "N drains on each attach; the submissions for the attached device are delivered.",
+  "then": "The second attach delivers exactly the messages the device never took, so across both sessions every accepted message was received and nothing was lost, and the store still holds all forty. For the attached device each message is stored on acceptance and delivered. An implementation that removes a message on delivery fails.",
   "oracle": "behaviour",
-  "interpretation": "Taken means the peer acknowledged every byte of the delivery stream, the transport's own boundary; a message whose acknowledgement the failure swallowed may be delivered again, which is the failure mode the design's no-loss rule chooses.",
+  "interpretation": "Taken means the device acknowledged every byte of the delivery stream, the transport's own boundary, and that is the first delivery its thirty days run from. The test delivers in position order, so the newest position the device names has every earlier one beside it; what a device names when it holds a gap is not stated.",
   "families": [
    "MAIL-011",
    "MAIL-014"
@@ -9030,14 +8774,14 @@
   "rule": [
    {
     "where": "infra-client-requirements.md §2",
-    "text": "At the cap, refuse the newest message and tell the sender"
+    "text": "At the cap, remove the oldest message already delivered; when everything held is undelivered, refuse the newest and tell the sender"
    },
    {
     "where": "design §14.1.6",
     "text": "bounded by a per-subordinate storage cap"
    }
   ],
-  "given": "N with a one-byte cap for C and a store slow to answer how full it is; two one-byte submissions for C at once.",
+  "given": "N with a cap of one block for C, nothing delivered, and a store slow to answer how full it is; two submissions for C of one block each, at once.",
   "when": "Both run.",
   "then": "Exactly one is accepted and one refused at the cap, and the store holds one message. An implementation that reads the cap and stores in two steps, so both submissions see the room for one, fails.",
   "oracle": "behaviour",
@@ -9051,7 +8795,7 @@
   "id": "QUE-21",
   "area": "queue",
   "gap": "queue",
-  "title": "Queue a ciphertext for the device it names and deliver it to that device's session alone",
+  "title": "Queue a message for the recipient and hand it to every device that proves the identity",
   "milestone": "after-5",
   "kind": "positive",
   "spec": [
@@ -9061,16 +8805,16 @@
   "rule": [
    {
     "where": "design §14.1.6",
-    "text": "The queue is per device"
+    "text": "The queue is per recipient and names no device"
    },
    {
     "where": "wire-format.md §7.10",
-    "text": "the recipient's device this ciphertext is for"
+    "text": "It hands every message it holds to any device that proves the identity, or presents a delegation under it (§8.2), and names no sender, since it knows none."
    }
   ],
-  "given": "Subject T's devices d1 and d2 are both offline; N accepts a submission for T naming d1.",
-  "when": "d2 attaches, drains, and detaches; then d1 attaches.",
-  "then": "d2's AttachAck field 4 is 0 and d2 receives nothing; d1's AttachAck field 4 is 1 and d1 receives the ciphertext.",
+  "given": "Subject T's two devices are offline, d1 holding the seed and d2 a delegation under T; N accepts a submission for T.",
+  "when": "d2 attaches with no field 5, drains and detaches; then d1 attaches with no field 5.",
+  "then": "Both are handed the message and each opens it. The submission named no device, and neither delivery depends on the other device's having collected.",
   "oracle": "behaviour",
   "interpretation": null
  },
@@ -9100,6 +8844,96 @@
    "MAIL-015",
    "OPS-010"
   ]
+ },
+ {
+  "id": "QUE-23",
+  "area": "queue",
+  "gap": "queue",
+  "title": "Keep a delivered message thirty days from its first delivery, so a second device collects it, and then remove it",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "design §14.1.6",
+   "infra-client-requirements.md §2",
+   "wire-format.md §7.10"
+  ],
+  "rule": [
+   {
+    "where": "design §14.1.6",
+    "text": "A delivered message stays for thirty days from its first delivery"
+   },
+   {
+    "where": "infra-client-requirements.md §2",
+    "text": "Keep a delivered one thirty days from its first delivery"
+   },
+   {
+    "where": "wire-format.md §7.10",
+    "text": "The node records the time of a message's first delivery, which starts its thirty days, and nothing per device."
+   }
+  ],
+  "given": "The retention is a test parameter, thirty days as shipped (design §21.1.1). A message queued at N for T; T's device d1 collects it at time t.",
+  "when": "T's device d2 attaches with no field 5 just before t plus the retention; after it, a device restored from T's phrase attaches with no field 5.",
+  "then": "d2 is handed the message and its collection does not restart the clock; the restored device is handed nothing, and N's storage no longer holds the message.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "QUE-24",
+  "area": "queue",
+  "gap": "queue",
+  "title": "At the cap, remove the oldest delivered message before refusing anything",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "design §14.1.6",
+   "infra-client-requirements.md §2"
+  ],
+  "rule": [
+   {
+    "where": "design §14.1.6",
+    "text": "At the ceiling: remove the oldest message already delivered, and only when every message held is undelivered, refuse the newest and tell the sender."
+   },
+   {
+    "where": "infra-client-requirements.md §2",
+    "text": "At the cap, remove the oldest message already delivered"
+   }
+  ],
+  "given": "The cap is a test parameter: N's per-subordinate cap for C is sized so exactly k equal messages fit. k are queued, the oldest two of them delivered to a device of C.",
+  "when": "X submits two further messages for C, then a third.",
+  "then": "The first two are accepted and the two delivered messages are removed, oldest first; the third is refused, everything then held being undelivered. A device of C attaching with no field 5 is handed the k messages now held, every undelivered one among them.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "QUE-25",
+  "area": "queue",
+  "gap": "queue",
+  "title": "Count each message, the incoming one included, as the blocks it occupies against the cap",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "infra-client-requirements.md §2",
+   "design §14.1.6"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §2",
+    "text": "Count the incoming message in blocks too, as the held ones are counted."
+   },
+   {
+    "where": "infra-client-requirements.md §2",
+    "text": "count each queued message as the blocks it occupies"
+   },
+   {
+    "where": "design §14.1.6",
+    "text": "What is counted is the data blocks"
+   }
+  ],
+  "given": "N's store on a filesystem whose block size is B; C's cap is two blocks, a test parameter; nothing is queued for C.",
+  "when": "X submits two messages for C of 200 bytes each, then a third. Separately, with C's queue empty again, a message of B plus one bytes, then one of 200.",
+  "then": "The first two are accepted and the third refused, although the three hold well under 2B bytes of content. The message of B plus one bytes is accepted and the one after it refused.",
+  "oracle": "behaviour",
+  "interpretation": "A file's own metadata is not counted (design §14.1.6). What an incoming message is counted as before it is written is read as the blocks its size will occupy on the store's filesystem, which the text does not spell out."
  },
  {
   "id": "REC-01",
@@ -11217,10 +11051,10 @@
    },
    {
     "where": "infra-client-requirements.md §9.2",
-    "text": "no topology, no liveness state, no queue contents, no prekey requests, no role-evaluation inputs"
+    "text": "no topology, no liveness state, no queue contents, no node-key requests, no role-evaluation inputs"
    }
   ],
-  "given": "A package whose manifest imports a binding for topology, queue contents, prekeys or role inputs, on a host using the expected component-model sandbox.",
+  "given": "A package whose manifest imports a binding for topology, queue contents, node keys or role inputs, on a host using the expected component-model sandbox.",
   "when": "The host instantiates it.",
   "then": "Instantiation fails for want of the import, and the host's export list contains no such binding.",
   "oracle": "behaviour",
@@ -11590,7 +11424,7 @@
   "rule": [
    {
     "where": "infra-client-requirements.md §9.2",
-    "text": "and its own request traffic, and nothing else: no topology, no liveness state,\nno queue contents, no prekey requests, no role-evaluation inputs"
+    "text": "and its own request traffic, and nothing else: no topology, no liveness state,\nno queue contents, no node-key requests, no role-evaluation inputs"
    },
    {
     "where": "design §11",
@@ -12485,7 +12319,7 @@
   ],
   "given": "Subject T's phone presents T's classical component and T's desktop presents a delegated key under T's delegation.",
   "when": "Both attach to serving node N with field 1 = T.",
-  "then": "N holds two sessions for T, one per presented key, refuses neither, and binds each device's later publication, deposit and wake registration to the session it arrived on.",
+  "then": "N holds two sessions for T, one per presented key, refuses neither, and binds each device's later wake registration to the session it arrived on.",
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
@@ -12574,27 +12408,16 @@
   "id": "SES-30",
   "area": "session",
   "gap": "session",
-  "title": "When two initial messages cross, the lower keyhash's session stands",
+  "title": "Withdrawn: when two initial messages cross, the lower keyhash's session stands",
   "milestone": 4,
-  "kind": "positive",
-  "spec": [
-   "wire-format.md §7.10",
-   "design §14.2.2"
-  ],
-  "rule": [
-   {
-    "where": "wire-format.md §7.10",
-    "text": "The session the lower keyhash opened stands; the other is held only for what\nwas already sent on it, bounded (the reference client holds two), and then let\ngo"
-   }
-  ],
-  "given": "Two devices that hold no session with each other, each opening one to the other at the same moment, as a ceremony's two participants do when they ask their witnesses.",
-  "when": "Both initial messages are delivered.",
-  "then": "Each side keeps the session the lower keyhash opened; the message the other side sent on its own opening is still read, since that session is held for what was already sent on it, bounded, and then let go; nothing sent on either is lost.",
+  "kind": "withdrawn",
+  "spec": [],
+  "rule": [],
+  "given": "Withdrawn.",
+  "when": "Withdrawn.",
+  "then": "Withdrawn.",
   "oracle": "behaviour",
-  "interpretation": "The reference client holds two displaced sessions; the bound is the holder's.",
-  "families": [
-   "NET-023"
-  ]
+  "interpretation": "Withdrawn 2026-11-19. The payload construction is the split seal [author, 2026-11-19] (design §14.2.4, wire-format.md §7.8), and the prekeys, ratchet and per-device sessions are gone with the scheme they belonged to: there are no payload sessions, so none can cross. Nothing replaces this entry."
  },
  {
   "id": "SES-31",
@@ -12631,88 +12454,46 @@
   "id": "SUB-01",
   "area": "submission",
   "gap": "submission",
-  "title": "A publication is taken only from the subject the bundle names",
+  "title": "Withdrawn: a publication is taken only from the subject the bundle names",
   "milestone": "after-5",
-  "kind": "negative",
-  "spec": [
-   "wire-format.md §7.10",
-   "infra-client-requirements.md §6.1"
-  ],
-  "rule": [
-   {
-    "where": "wire-format.md §7.10",
-    "text": "The node refuses a publication whose subject is not the authenticated requester"
-   },
-   {
-    "where": "infra-client-requirements.md §6.1",
-    "text": "Take a prekey publication only from the subject it names"
-   }
-  ],
-  "given": "Node N serves clients S and T. S holds a prekey bundle signed by S; T holds one signed by T.",
-  "when": "T sends a type-9 PrekeyPublication on its own request stream carrying S's bundle, and then one carrying its own.",
-  "then": "The first reply echoes T's nonce with code 1 and N holds no bundle for S from it; the second echoes its nonce with code 0 and N holds T's bundle.",
+  "kind": "withdrawn",
+  "spec": [],
+  "rule": [],
+  "given": "Withdrawn.",
+  "when": "Withdrawn.",
+  "then": "Withdrawn.",
   "oracle": "behaviour",
-  "interpretation": null,
-  "families": [
-   "MAIL-001"
-  ]
+  "interpretation": "Withdrawn 2026-11-19. The payload construction is the split seal [author, 2026-11-19] (design §14.2.4, wire-format.md §7.8), and the prekeys, ratchet and per-device sessions are gone with the scheme they belonged to: there is no prekey publication. A publication taken only from its subject survives for profiles, which SES-32 holds."
  },
  {
   "id": "SUB-02",
   "area": "submission",
   "gap": "submission",
-  "title": "A publication and a deposit from an attached client are held and served",
+  "title": "Withdrawn: a publication and a deposit from an attached client are held and served",
   "milestone": "after-5",
-  "kind": "positive",
-  "spec": [
-   "wire-format.md §7.10",
-   "wire-format.md §7.8"
-  ],
-  "rule": [
-   {
-    "where": "wire-format.md §7.10",
-    "text": "It cannot publish its own\nprekey bundle, stock its own one-time pool, hold its own mail, be woken by a\nservice it is not connected to, or hold its own profile where a stranger can\nfetch it."
-   },
-   {
-    "where": "wire-format.md §7.8",
-    "text": "The bundle is opaque to this protocol"
-   }
-  ],
-  "given": "Client S is attached to node N over a session and N holds nothing for S.",
-  "when": "S sends a type-9 publication of its own bundle and a type-10 deposit of k one-time keys.",
-  "then": "Both replies echo their nonces with code 0, and a later type-3 fetch of S from any requester returns that bundle byte for byte among S's bundles and, when the fetch names S's device, one of the deposited keys.",
+  "kind": "withdrawn",
+  "spec": [],
+  "rule": [],
+  "given": "Withdrawn.",
+  "when": "Withdrawn.",
+  "then": "Withdrawn.",
   "oracle": "behaviour",
-  "interpretation": "Re-derived 2026-09-22 to a bundle per device (wire-format.md §7.8)."
+  "interpretation": "Withdrawn 2026-11-19. The payload construction is the split seal [author, 2026-11-19] (design §14.2.4, wire-format.md §7.8), and the prekeys, ratchet and per-device sessions are gone with the scheme they belonged to: there is no bundle to publish and no pool to stock; what a client hands its serving node is a relay submission, a wake registration and a profile (wire-format.md §7.10). Nothing replaces this entry."
  },
  {
   "id": "SUB-03",
   "area": "submission",
   "gap": "submission",
-  "title": "A deposit past the node's bound is refused whole, and the pool is unchanged",
+  "title": "Withdrawn: a deposit past the node's bound is refused whole, and the pool is unchanged",
   "milestone": "after-5",
-  "kind": "negative",
-  "spec": [
-   "wire-format.md §7.10",
-   "infra-client-requirements.md §6.1"
-  ],
-  "rule": [
-   {
-    "where": "wire-format.md §7.10",
-    "text": "a node applies its own storage bound on top: the pool is space it lends"
-   },
-   {
-    "where": "infra-client-requirements.md §6.1",
-    "text": "a client that asks for more than you lend is refused with the code rather than silently trimmed"
-   }
-  ],
-  "given": "Node N lends a pool of p keys per client and client S is attached with q keys already stocked.",
-  "when": "S deposits more than p minus q keys in one type-10 request.",
-  "then": "The reply echoes S's nonce with code 2, and N's pool for S still holds exactly q keys.",
+  "kind": "withdrawn",
+  "spec": [],
+  "rule": [],
+  "given": "Withdrawn.",
+  "when": "Withdrawn.",
+  "then": "Withdrawn.",
   "oracle": "behaviour",
-  "interpretation": null,
-  "families": [
-   "MAIL-002"
-  ]
+  "interpretation": "Withdrawn 2026-11-19. The payload construction is the split seal [author, 2026-11-19] (design §14.2.4, wire-format.md §7.8), and the prekeys, ratchet and per-device sessions are gone with the scheme they belonged to: there are no deposits and no pool. Nothing replaces this entry."
  },
  {
   "id": "SUB-04",
@@ -12926,57 +12707,37 @@
   "id": "SUB-11",
   "area": "submission",
   "gap": "submission",
-  "title": "Remove the requester/subject log an earlier version left behind",
+  "title": "Withdrawn: remove the requester/subject log an earlier version left behind",
   "milestone": 5,
-  "kind": "positive",
-  "spec": [
-   "infra-client-requirements.md §6"
-  ],
-  "rule": [
-   {
-    "where": "infra-client-requirements.md §6",
-    "text": "serve the request,\nkeep no record of who asked for whose bundle."
-   }
-  ],
-  "given": "A prekey directory carrying the old requester/subject/window/count file an earlier version wrote, and an operator's own unrelated file beside it.",
-  "when": "The service is loaded, its counters expired, and its state saved.",
-  "then": "The prohibited file is removed and stays removed across a save and a second load; the operator's own file is untouched. Nothing writes the log back, because the window lives in memory.",
+  "kind": "withdrawn",
+  "spec": [],
+  "rule": [],
+  "given": "Withdrawn.",
+  "when": "Withdrawn.",
+  "then": "Withdrawn.",
   "oracle": "behaviour",
-  "interpretation": "The section forbids the record; issuance stopped writing it, and an upgrade that left the old one in place kept exactly what it forbids. One named file, removed once, with the failure visible.",
-  "families": [
-   "OPS-016"
-  ]
+  "interpretation": "Withdrawn 2026-11-19. The payload construction is the split seal [author, 2026-11-19] (design §14.2.4, wire-format.md §7.8), and the prekeys, ratchet and per-device sessions are gone with the scheme they belonged to: the prekey service is gone, and the log an earlier version of it wrote with it. Nothing replaces this entry."
  },
  {
   "id": "SUB-12",
   "area": "submission",
   "gap": "submission",
-  "title": "Refuse a publication whose device is not the key the session presented",
+  "title": "Withdrawn: refuse a publication whose device is not the key the session presented",
   "milestone": "after-5",
-  "kind": "negative",
-  "spec": [
-   "wire-format.md §7.10"
-  ],
-  "rule": [
-   {
-    "where": "wire-format.md §7.10",
-    "text": "and one whose device is not the key this session presented"
-   }
-  ],
-  "given": "Client S attached to N from device d1; a valid bundle by S naming device d2.",
-  "when": "S publishes it on d1's session.",
-  "then": "The reply echoes the nonce with code 1 and N holds no bundle for (S, d2) from it; the same bundle published on a session d2 presented is taken.",
+  "kind": "withdrawn",
+  "spec": [],
+  "rule": [],
+  "given": "Withdrawn.",
+  "when": "Withdrawn.",
+  "then": "Withdrawn.",
   "oracle": "behaviour",
-  "interpretation": null,
-  "families": [
-   "MAIL-001"
-  ]
+  "interpretation": "Withdrawn 2026-11-19. The payload construction is the split seal [author, 2026-11-19] (design §14.2.4, wire-format.md §7.8), and the prekeys, ratchet and per-device sessions are gone with the scheme they belonged to: there is no publication naming a device; a device is named by the key it presents and nothing else (wire-format.md §8.2). Nothing replaces this entry."
  },
  {
   "id": "SUB-13",
   "area": "submission",
   "gap": "submission",
-  "title": "Keep no history of publications and deposits beyond the bundle and the pool they produced",
+  "title": "Keep no history of profile publications beyond the profile they produced",
   "milestone": "after-5",
   "kind": "negative",
   "spec": [
@@ -12985,12 +12746,12 @@
   "rule": [
    {
     "where": "infra-client-requirements.md §1",
-    "text": "a publication or deposit that it is making itself reachable"
+    "text": "Keep the state that serving needs and no history of the requests that produced it, whatever the request class"
    }
   ],
-  "given": "Node N; client S publishes a bundle, deposits keys, publishes again with a new bundle and deposits again.",
+  "given": "Node N; client S publishes a profile, then a later one.",
   "when": "N's state is inspected after each, and after a save and restart.",
-  "then": "N holds S's current bundle and its current pool and nothing else: no prior bundle, no count of publications, no times of deposit.",
+  "then": "N holds S's current profile and nothing else: no prior profile, no count of publications, and no time of arrival beyond what the profile itself carries.",
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
@@ -13031,31 +12792,69 @@
   "id": "SUB-15",
   "area": "submission",
   "gap": "submission",
-  "title": "A delivery carries the submitter's binding where the node holds one",
+  "title": "Withdrawn: a delivery carries the submitter's binding where the node holds one",
   "milestone": "after-5",
-  "kind": "positive",
+  "kind": "withdrawn",
+  "spec": [],
+  "rule": [],
+  "given": "Withdrawn.",
+  "when": "Withdrawn.",
+  "then": "Withdrawn.",
+  "oracle": "behaviour",
+  "interpretation": "Withdrawn 2026-11-19. The payload construction is the split seal [author, 2026-11-19] (design §14.2.4, wire-format.md §7.8), and the prekeys, ratchet and per-device sessions are gone with the scheme they belonged to: a delivery names no sender, since the node knows none, and the sender's introduction rides inside the seal (wire-format.md §7.8.1). Replaced by SUB-17."
+ },
+ {
+  "id": "SUB-16",
+  "area": "submission",
+  "gap": "submission",
+  "title": "Take a submission sealed to the newest node key, or to the one before within the grace after rotation, and refuse any other",
+  "milestone": "after-5",
+  "kind": "negative",
   "spec": [
    "wire-format.md §7.10",
-   "design §14.2.2"
+   "wire-format.md §7.8"
   ],
   "rule": [
    {
     "where": "wire-format.md §7.10",
-    "text": "A serving node can withhold this and cannot forge it, which is the same authority it already has over delivery itself."
+    "text": "and one sealed to a node key it no longer accepts for that recipient, which the sender meets by fetching the newest"
    },
    {
-    "where": "design §14.2.2",
-    "text": "A recipient cannot have asked for the bundle of a party who has not written to it yet"
+    "where": "wire-format.md §7.8",
+    "text": "It accepts a submission sealed to its newest key, and to the one before for a grace after the rotation"
    }
   ],
-  "given": "Node N serves S and R. S has published a bundle for the device it presents on its session; R holds no binding for S.",
-  "when": "S submits ciphertext for R, and R collects it.",
-  "then": "What R collects carries S's bundle for that device as its third element, byte-for-byte as S signed it; where N holds no bundle for the submitting device the two-element form is delivered instead, and R accepts both.",
+  "given": "N serving R, with a grace of g, has rotated R's key from n to n+1 at time t, while a message sealed to n-1 is still held.",
+  "when": "Submissions for R arrive sealed to n-1 and to n before t+g, then sealed to n and to n+1 after t+g.",
+  "then": "Before t+g, the one sealed to n is accepted and the one sealed to n-1 is refused; after t+g, the one sealed to n is refused and the one sealed to n+1 accepted. A refused submission queues nothing, and each accepted one is handed to R's device with the half that opens it.",
   "oracle": "behaviour",
-  "interpretation": null,
-  "families": [
-   "MAIL-026"
-  ]
+  "interpretation": null
+ },
+ {
+  "id": "SUB-17",
+  "area": "submission",
+  "gap": "submission",
+  "title": "Deliver a submission as its position, the seal unchanged and the node's half, naming no sender",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.10"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.10",
+    "text": "The node hands over the shared secret and not its key"
+   },
+   {
+    "where": "wire-format.md §7.10",
+    "text": "so each delivery opens one message and no other, on a session the transport already encrypts"
+   }
+  ],
+  "given": "Node N serving R; S submits two sealed messages for R.",
+  "when": "A device of R attaches with no field 5.",
+  "then": "Each delivery is three elements: a position, greater for the later arrival; the sealed message byte for byte as submitted; and 32 bytes with which R's own decapsulation opens that message, the half delivered with one not opening the other. Nothing in either delivery names S or the key S submitted under.",
+  "oracle": "behaviour",
+  "interpretation": null
  },
  {
   "id": "TOP-01",
@@ -15173,7 +14972,7 @@
   "rule": [
    {
     "where": "wire-format.md §9.1",
-    "text": "A connection on which none holds is refused, whether or not it would have opened a session."
+    "text": "A connection on which none holds is refused, whether or not it would have opened a session,"
    },
    {
     "where": "wire-format.md §8.2",
@@ -15396,28 +15195,32 @@
   "id": "TRN-29",
   "area": "transport",
   "gap": "transport",
-  "title": "Bind a dialler by the introduction it presents first on the direct connection, and answer its prekey request on the same path",
+  "title": "Bind a dialler by the introduction it presents first on the direct connection, and ask it for nothing more",
   "milestone": "after-5",
   "kind": "positive",
   "spec": [
    "wire-format.md §9.1",
-   "wire-format.md §14.3.4"
+   "wire-format.md §7.10.1"
   ],
   "rule": [
    {
     "where": "wire-format.md §9.1",
-    "text": "the peer\npresents its introduction (§2.3) first on the connection and the recipient's\npolicy admits a cold call"
+    "text": "the peer presents its introduction (§2.3) first on the connection and the recipient's policy admits a cold call"
    },
    {
     "where": "wire-format.md §9.1",
-    "text": "the recipient answers on the same stream with a `PrekeyReply` exactly as its\nnode would"
+    "text": "The introduction is all a direct path needs"
+   },
+   {
+    "where": "wire-format.md §7.10.1",
+    "text": "A message on the direct path (design §12.6.3) is `uint kind || bytes` on a connection whose transport is end to end between the two parties"
    }
   ],
   "given": "A client that holds nothing binding a dialler's key — not pinned, no delegation held — and no node; the dialler holds the client as a contact and has an introduction of its own.",
-  "when": "The dialler opens a connection, presents its introduction on the first control stream, and then asks for the client's prekey material on another.",
-  "then": "The client takes the introduction as a cold call, pins the party and holds the path; the prekey request is answered from the client's own signed bundle and one-time pool; a request for another subject's material is not answered.",
+  "when": "The dialler opens a connection, presents its introduction on the first control stream, and then sends application payload on a unidirectional stream.",
+  "then": "The client takes the introduction as a cold call, pins the party, answers 1 and holds the path; the payload, a kind and its bytes with no seal around them, reaches the application attributed to the dialler. Neither side asks the other for key material beyond the introduction.",
   "oracle": "behaviour",
-  "interpretation": ""
+  "interpretation": null
  },
  {
   "id": "TRN-30",
@@ -16101,7 +15904,7 @@
   "rule": [
    {
     "where": "wire-format.md §7.10",
-    "text": "a node takes one only from the subject it names"
+    "text": "a node takes one only from the authenticated requester it names"
    },
    {
     "where": "infra-client-requirements.md §6.2",
@@ -18100,7 +17903,7 @@
   ],
   "given": "Two subnets of live nodes sharing no node, the far one three infra nodes deep with two light clients under its last. A client of the home subnet holds the far subnet's anchor entry and a position under it, and nothing else of it; ahead of that anchor it holds an address nothing answers on.",
   "when": "The client sends payload to the far party, then again inside the resolution's lifetime, then to a party deeper under the same serving node.",
-  "then": "The dark node is asked and passed over; the anchor refers to its infra child and that child to the next, each asked under the one nonce; the last answers as serving node with the residual naming the party, and the payload is handed to it alone, never to the sender's own node. The second message asks nobody where the party is. The deeper party resolves to the same serving node under a nonce of its own. What was queued reaches the party when it attaches, named by its sender.",
+  "then": "The dark node is asked and passed over; the anchor refers to its infra child and that child to the next, each asked under the one nonce; the last answers as serving node with the residual naming the party, and the payload is handed to it alone, never to the sender's own node. The second message asks nobody where the party is. The deeper party resolves to the same serving node under a nonce of its own. What was queued reaches the party when it attaches, and is attributed to its sender on opening.",
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
@@ -18127,13 +17930,190 @@
   ],
   "given": "Two subnets of live nodes sharing no node; a client attached in each, holding the other's position and the other subnet's anchor entry and nothing more.",
   "when": "Each sends the other payload.",
-  "then": "Each descent runs from the other subnet's anchor through its referrals to the node serving the recipient, which takes the submission; neither sender's own node is asked anything; each client collects the other's payload on its own session, named by its sender.",
+  "then": "Each descent runs from the other subnet's anchor through its referrals to the node serving the recipient, which takes the submission; neither sender's own node is asked anything; each client collects the other's payload on its own session and attributes it to its sender on opening.",
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
    "PAY-012",
    "RES-016"
   ]
+ },
+ {
+  "id": "PAY-28",
+  "area": "payload",
+  "gap": "payload",
+  "title": "Keep a signed key for each recipient served, rotate it, and delete its private half with the last message sealed to it",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.8",
+   "infra-client-requirements.md §6",
+   "design §14.2.4.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.8",
+    "text": "A node generates a key for each identity it serves, publishes its successor on its own schedule"
+   },
+   {
+    "where": "wire-format.md §7.8",
+    "text": "holds each private half while any message sealed to it is queued, deleting it when the last such message is removed"
+   },
+   {
+    "where": "infra-client-requirements.md §6",
+    "text": "One per recipient and never one shared between them"
+   }
+  ],
+  "given": "Node N serving recipients R1 and R2, its rotation interval a test parameter (one day as shipped); a message for R1 sealed to R1's key numbered n.",
+  "when": "The interval elapses twice, both recipients' keys are fetched after each, and the message is then delivered and its retention runs out.",
+  "then": "R1's and R2's keys are distinct, each verifying under N with external_aad rhtn/1:node-key and naming its recipient in field 1 and N in field 2, and each rotation serves a key with a greater field 3. While the message is held its delivery carries the half that opens it; once it is removed, a submission sealed to key n is refused.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PAY-29",
+  "area": "payload",
+  "gap": "payload",
+  "title": "Derive the identity's encryption key from its seed, so a device restored from the phrase opens what was sealed before it",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §2.5",
+   "design §14.2.2",
+   "wire-format.md §2.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §2.5",
+    "text": "Every device restored from the phrase computes the same two keys, so none is carried between devices except to one paired without the seed"
+   },
+   {
+    "where": "design §14.2.2",
+    "text": "So any device holding the identity reads what was sent to it, including one restored from the phrase after the message was sent."
+   },
+   {
+    "where": "wire-format.md §2.3",
+    "text": "The material's hash MUST equal the locator's subject and the encryption key's, and both signatures MUST verify under it"
+   }
+  ],
+  "given": "Identity T on one device; a message sealed to T queued at T's serving node; a second device restored from T's phrase. Separately, two introductions of T, one whose encryption key names another keyhash in field 1 and one whose encryption-key signature does not verify under T.",
+  "when": "The restored device attaches with no field 5 and collects; a client is handed each malformed introduction and asked to send to T through it.",
+  "then": "The restored device's encryption key is byte for byte the first device's, and the message opens on it. Neither malformed introduction is taken: nothing is sealed to the key it carried, and the send reports a refusal.",
+  "oracle": "behaviour",
+  "interpretation": "What a client does with an introduction it did not take is not stated beyond its contributing nothing; the test reads that as having no key to seal to, so the send is refused rather than sealed to the key carried."
+ },
+ {
+  "id": "PAY-30",
+  "area": "payload",
+  "gap": "payload",
+  "title": "A paired device's credential carries the identity's two encryption secrets, and with them it opens and sends as the person",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "design §23.3",
+   "wire-format.md §14.3.3"
+  ],
+  "rule": [
+   {
+    "where": "design §23.3",
+    "text": "a paired desktop receives the identity's encryption key with its transport credential, across the same local interface"
+   },
+   {
+    "where": "design §23.3",
+    "text": "It reads every message and still signs nothing, and no sender learns that it exists."
+   }
+  ],
+  "given": "Alice's phone holding her seed, and a desktop holding no seed, introduced to it across the local interface; bob holds alice's card.",
+  "when": "The phone answers the desktop's DeviceIntroduction with a DeviceCredential; bob seals a message to alice, and the desktop sends one to bob.",
+  "then": "The credential carries the run of delegations and two 32-byte secrets, alice's X-Wing decapsulation seed and her sealing-authentication key, equal to what her phone derives. The desktop opens bob's message, bob attributes the desktop's to alice, and alice's card as bob holds it is the same before and after the pairing.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PAY-31",
+  "area": "payload",
+  "gap": "payload",
+  "title": "Fetch a node key and submit under a transport key minted for the connection, never the identity's, even when attached to that node, with the introduction inside the seal on a first message",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "light-client-requirements.md §3",
+   "wire-format.md §7.10",
+   "wire-format.md §7.8.1"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §3",
+    "text": "Fetch its key and submit under a transport key you mint for that connection, never your identity's"
+   },
+   {
+    "where": "light-client-requirements.md §3",
+    "text": "Your introduction rides inside the seal on your first message to a recipient."
+   },
+   {
+    "where": "wire-format.md §7.10",
+    "text": "It is taken from nobody the node can name"
+   }
+  ],
+  "given": "Client S, attached to the node that also serves R, holding R's card and never having had a message from R.",
+  "when": "S fetches R's node key and sends R two messages; R replies; S sends a third.",
+  "then": "Every connection S opens to R's node for the fetch and the submissions presents a key that is neither S's classical component nor one a delegation from S names, and no two of those connections present the same key; none rides S's attached session. The first sealed body carries S's introduction and the second and third carry nil in its place. R's node takes each submission.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PAY-33",
+  "area": "payload",
+  "gap": "payload",
+  "title": "Show a message from a sender not held as a contact as unverified under its alias and keyhash, and offer no reply",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "design §14.2.4.3",
+   "wire-format.md §7.8.1",
+   "light-client-requirements.md §3"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §3",
+    "text": "is shown under the alias it carries and marked unverified, never as the person."
+   },
+   {
+    "where": "design §14.2.4.3",
+    "text": "a recipient replies to a sender it holds as a contact, and to no other"
+   }
+  ],
+  "given": "A, restored from its phrase with nothing of B held, collects a message B sealed after its first, so field 3 is nil; and a second sender C who chose B's alias.",
+  "when": "A lists its threads and tries to reply to B's message.",
+  "then": "A shows B's message under the alias in field 2, marked unverified, in a thread kept apart from C's by the keyhash in field 1; nothing in it is dispatched as B's; and no reply is sealed or submitted, since A holds no contact for B.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "PAY-32",
+  "area": "payload",
+  "gap": "payload",
+  "title": "Answer a node-key batch with one reply per recipient asked, in the request's own order, a failure in place of a key it cannot give",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.8"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.8",
+    "text": "one reply per recipient asked, in the request's own ; ascending keyhash order, which is what associates ; a reply with its recipient"
+   },
+   {
+    "where": "wire-format.md §7.8",
+    "text": "0 not a recipient this node serves | 1 refused"
+   }
+  ],
+  "given": "Node N serving R1 and R3 and not R2, where R1 < R2 < R3 by keyhash.",
+  "when": "A NodeKeyBatchRequest names R1, R2 and R3.",
+  "then": "The reply is three NodeKeyReplies, each echoing the one nonce: the first carries R1's newest key, the second no key and failure code 0, the third R3's newest key.",
+  "oracle": "behaviour",
+  "interpretation": null
  },
  {
   "id": "ARC-30",

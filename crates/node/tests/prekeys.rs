@@ -156,7 +156,6 @@ fn the_corpus_prekey_objects_read_here() {
     assert_eq!(r6.encode(), fixture("P-reply-06"));
 }
 
-// acceptance: PAY-02
 #[test]
 fn a_one_time_key_is_served_once_and_never_again() {
     let mut svc = stocked("alice", 3);
@@ -227,7 +226,6 @@ fn reusable_material_is_served_freely_and_consumes_nothing() {
     assert_eq!(svc.pool_size(&kh("alice")), 3);
 }
 
-// acceptance: PAY-05
 #[test]
 fn one_time_issuance_is_limited_per_requester_per_subject() {
     let mut svc = PrekeyService::new(PrekeyConfig {
@@ -281,7 +279,6 @@ fn one_time_issuance_is_limited_per_requester_per_subject() {
     );
 }
 
-// acceptance: PAY-06
 #[test]
 fn the_subject_is_told_when_its_pool_is_exhausted() {
     let mut svc = stocked("alice", 2);
@@ -367,7 +364,6 @@ mod walkdir {
     }
 }
 
-// acceptance: PAY-10
 #[test]
 fn a_bundle_is_stored_and_served_without_its_blob_being_read() {
     let mut svc = PrekeyService::default();
@@ -486,7 +482,6 @@ fn a_one_time_key_is_spent_on_disk_before_its_reply_and_never_returns() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-// acceptance: DMN-07
 #[test]
 fn a_snapshot_holds_what_is_held_and_a_served_key_does_not_survive_it() {
     let dir = std::env::temp_dir().join(format!("rhtn-snap-{}", std::process::id()));
@@ -609,7 +604,6 @@ fn a_snapshot_holds_what_is_held_and_a_served_key_does_not_survive_it() {
 
 // ------------------------------- what the service keeps, and what it does not
 
-// acceptance: PAY-18
 #[test]
 fn serving_a_one_time_key_leaves_no_record_of_who_asked_for_whose_bundle() {
     let dir = std::env::temp_dir().join(format!("rhtn-prekey-privacy-{}", std::process::id()));
@@ -703,7 +697,6 @@ fn serving_a_one_time_key_leaves_no_record_of_who_asked_for_whose_bundle() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-// acceptance: PAY-19
 #[test]
 fn a_deposit_the_node_cannot_store_whole_is_refused_not_acknowledged() {
     let dir = std::env::temp_dir().join(format!("rhtn-prekey-unwritable-{}", std::process::id()));
@@ -780,7 +773,6 @@ fn a_deposit_the_node_cannot_store_whole_is_refused_not_acknowledged() {
 /// record the section forbids keeping, and an earlier version of this
 /// service wrote one.  Issuance stopped; an upgrade must also remove what
 /// is already there.
-// acceptance: SUB-11
 #[test]
 fn an_upgrade_removes_the_requester_subject_log_an_earlier_version_left_behind() {
     let dir = std::env::temp_dir().join(format!("rhtn-prekey-legacy-{}", std::process::id()));

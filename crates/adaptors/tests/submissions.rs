@@ -113,7 +113,6 @@ async fn code(l: &Light, request_type: u64, nonce: [u8; 16], body: Vec<u8>) -> O
     l.serving.reply(request_type, nonce, body).await
 }
 
-// acceptance: SUB-01
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_publication_is_taken_only_from_the_subject_the_bundle_names() {
     let node = node_with("bob", |_, _| {});
@@ -161,7 +160,6 @@ async fn a_publication_is_taken_only_from_the_subject_the_bundle_names() {
     );
 }
 
-// acceptance: SUB-02
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_publication_and_a_deposit_are_held_and_then_served_to_anyone() {
     let node = node_with("bob", |_, _| {});
@@ -234,7 +232,6 @@ async fn a_publication_and_a_deposit_are_held_and_then_served_to_anyone() {
     );
 }
 
-// acceptance: SUB-03
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_deposit_past_the_nodes_bound_is_refused_whole() {
     // this node lends a pool of five
@@ -341,7 +338,6 @@ async fn a_relay_submission_is_answered_on_taking_and_collected_later() {
 /// session it authenticated, so a recipient that has never held one can
 /// attribute the first message instead of refusing it for want of a
 /// binding it had no occasion to ask for.
-// acceptance: SUB-15
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_delivery_carries_the_submitters_binding_where_the_node_holds_one() {
     let node = node_with("bob", |_, _| {});

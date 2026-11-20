@@ -15,7 +15,6 @@ use rhtn_client::payload::*;
 use rhtn_client::query::KeyGrant;
 use rhtn_client::store::{Capture, Frame, SealParams, seal};
 
-// acceptance: PAY-01
 #[test]
 fn attaching_publishes_a_signed_bundle_and_stocks_the_pool() {
     let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);
@@ -60,7 +59,6 @@ fn attaching_publishes_a_signed_bundle_and_stocks_the_pool() {
     assert_eq!(blob.pqspk.0.len(), 1184);
 }
 
-// acceptance: PAY-03
 #[test]
 fn the_pool_is_replenished_before_exhaustion_and_the_signed_prekey_rotated_on_its_interval() {
     let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1"), ("carol", "w1")]);
@@ -166,7 +164,6 @@ fn reusable_material_is_prefetched_for_the_whole_org_as_one_sweep() {
     );
 }
 
-// acceptance: PAY-08
 #[test]
 fn a_one_time_key_is_requested_only_when_opening_a_session() {
     let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);
@@ -268,7 +265,6 @@ fn the_patron_is_reached_by_the_construction_like_any_leaf() {
     assert!(n.delivered.iter().any(|d| d.2.contains("to a leaf")));
 }
 
-// acceptance: PAY-12
 #[test]
 fn a_session_opens_on_reusable_material_alone_when_no_one_time_key_remains() {
     let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);
@@ -515,7 +511,6 @@ fn an_initial_session_opens_only_under_the_identity_key_bound_to_its_named_sende
     );
 }
 
-// acceptance: PAY-17
 #[test]
 fn a_one_time_prekey_is_spent_only_when_the_message_it_opened_authenticates() {
     let mut n = net(&["w1", "w2"], &[("alice", "w1"), ("bob", "w2")]);
@@ -693,7 +688,6 @@ fn an_unsolicited_reply_is_not_taken_and_a_subject_answers_only_for_itself() {
     );
 }
 
-// acceptance: PAY-20
 #[test]
 fn pay_20_a_bundle_per_device_a_session_with_each_and_a_ciphertext_to_each() {
     let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);
@@ -853,7 +847,6 @@ fn pay_20_a_bundle_per_device_a_session_with_each_and_a_ciphertext_to_each() {
 /// signed on the phone and published under its own device; a session with
 /// it is a session with a device, and the phone cannot read what it was
 /// sent.
-// acceptance: PAY-21
 #[test]
 fn a_device_holding_no_seed_publishes_what_the_ceremony_device_signed_and_receives_on_it() {
     let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);
@@ -1204,7 +1197,6 @@ fn a_replayed_initial_message_is_refused_and_the_live_session_stands() {
 /// the lower keyhash opened stands at both ends, what either sent on the
 /// other before learning so still opens, and from then on one session
 /// carries both directions.
-// acceptance: SES-30
 #[test]
 fn two_opens_that_cross_settle_on_one_session_and_nothing_sent_meanwhile_is_lost() {
     let mut n = net(&["w1"], &[("alice", "w1"), ("carol", "w1"), ("bob", "w1")]);
@@ -1254,7 +1246,6 @@ fn two_opens_that_cross_settle_on_one_session_and_nothing_sent_meanwhile_is_lost
     assert_eq!(n.collect("bob"), vec!["Application(from carol, fourth)"]);
 }
 
-// acceptance: PAY-26
 #[test]
 fn a_step_queued_before_a_session_travels_when_the_peer_opens_one() {
     // **the defect this closes.** A send with no session queues its

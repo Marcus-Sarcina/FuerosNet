@@ -60,9 +60,9 @@ scopes, catalog, abuse reporting, credential, and request framing; group
 operations. Encoding for all of it is in
 `wire-format.md`.
 
-**Not specified.** Nothing currently blocks a subsystem (§22.1). End-to-end payload encryption is *adopt PQXDH and
-the Triple Ratchet* (§14.2.4) rather than designed here, with four integration
-decisions open. **Eleven parameters
+**Not specified.** Nothing currently blocks a subsystem (§22.1). End-to-end payload encryption is the split seal
+(§14.2.4), composed from standard hybrid encapsulation rather than a new
+primitive. **Ten parameters
 remain unset** (§21.1), sorted by how provisional they actually are in §21.1.1, and
 none of them currently hardens on first deployment. **The test vectors are
 canonical** (§23.4): regenerated under the specification pins whenever the
@@ -710,7 +710,7 @@ payload, so apex load scales with churn and introductions, not with usage.
   `wire-format.md` §4.6)
 - **End-to-end payload encryption** to the addressed endpoint (§14.2). The
   endpoint may be another leaf, the patron, or a resource. Requirements sketched
-  §14.2.4 adopts PQXDH and the Triple Ratchet; four integration decisions open
+  §14.2.4 specifies the split seal
 - **Resources** (§11): object, permission scopes, service catalog, abuse
   reporting and the interaction protocol specified (§22.1, `wire-format.md` §11);
   the owner-movement rule stated (§11.2)
@@ -791,7 +791,7 @@ Post-quantum from the start, tiered by how long authenticity must hold.
 | Layer | Choice | Why |
 |---|---|---|
 | Transport (hop) | **QUIC + TLS 1.3, group `X25519MLKEM768`.** Peer authentication by raw public key (RFC 7250); where the presenting device holds no seed, that key is a delegated one bound to its identity by the attach (§23.3, `wire-format.md` §8.2) | "Harvest now, decrypt later" is a real threat to confidentiality. The hybrid group survives either primitive failing. Identities here are keyhashes and there is no CA, so X.509 has nothing to validate against, which is also why a delegation is carried in the attach rather than in the handshake, raw public keys having nowhere to put one |
-| Payload (end-to-end) | **PQXDH + Triple Ratchet** (§14.2.4) | Adopted rather than designed here. Both have published specifications; PQXDH carries machine-checked ProVerif and CryptoVerif analysis, the Triple Ratchet a published security proof |
+| Payload (end-to-end) | **The split seal: hybrid encapsulation to the recipient's key and to its serving node's** (§14.2.4) | Each half is the transport's own hybrid; the node's half rotates daily and is deleted with the message, so a recorded ciphertext outlives every key that opens it |
 | Identity keys | Hybrid classical + PQ (§5.1) | Long validity window justifies the cost |
 | **Every transaction retained in the archive** | Post-quantum | §5.1 |
 | Evidence embedded inside a signed body | Classical | §5.1 |
@@ -917,11 +917,11 @@ and the requirement does not wait on measuring it.
 post-quantum horizon, and permits the classical component alone where relevance
 expires before it. The objects taking that permission are the short-lived ones:
 a locator, which expires when the node next moves (`wire-format.md` §2.3); an
-endpoint record, for the same reason (§7.6); a prekey bundle's signature, which
-expires on replacement (§7.8); a subtree acknowledgement, which lapses with the
+endpoint record, for the same reason (§7.6); a node key's signature, which
+expires on rotation (§14.2.4.3); a subtree acknowledgement, which lapses with the
 relationship it acknowledges; a currency attestation, which vouches that a key
-is live now (§7.1); an anchor entry; a catalog entry; and the Diffie-Hellman
-ratchet of the payload session (§14.2.4.3).
+is live now (§7.1); an anchor entry; a catalog entry; and the sender's
+authentication inside the split seal (§14.2.4.2).
 
 **The version is global and all-or-nothing** [author, 2026-09-26]. None of
 those classes migrates on its own, and the list above is not a set of
@@ -936,7 +936,8 @@ them.
 **What the pre-positioning buys is that such a version costs no
 redistribution.** The keyhash covers both components (§5.1), so every party
 already holds every counterparty's post-quantum half; the transport already
-negotiates `X25519MLKEM768`; and payload establishment is already PQXDH. A
+negotiates `X25519MLKEM768`; and the split seal's encapsulations are already
+hybrid. A
 version that moved the short-lived classes to the post-quantum component would
 therefore be a change of construction alone — not a key rollover, not a new
 trust establishment, and not a change of anybody's identity. **That is the
@@ -1275,8 +1276,8 @@ consequence of subnet plurality, not a gap in this mechanism.
   from the blob the peer holds. **No node is needed for the restore**
   [author, 2026-10-30]: the peer dials the last address it held, presents
   its introduction first on the connection so a client that knows nobody
-  can take it as a cold call, asks that client for its prekey material on
-  the same path, and opens the session; the greeting, the record, the
+  can take it as a cold call, and speaks on that connection, whose
+  transport is end to end between the two; the greeting, the record, the
   request and the return all travel direct. A node is needed only where
   the address moved, and a meeting with the peer serves the same.
   **The deposit and its return
@@ -1578,7 +1579,7 @@ asking its operator about something the operator did not see.
 **Two carriages, by what has to be agreed in the room** [author, 2026-10-02].
 What the two devices must fix between themselves while facing each other — the
 optical anchor, the intent, traversal candidates, the
-capture key and each other's prekey material — crosses the local interface
+capture key and each other's cards — crosses the local interface
 between them (§14.1.0, `wire-format.md` §14).
 
 **And so does the conversation between the two participants** [author,
@@ -5056,13 +5057,19 @@ the local network and therefore travel the tree.
 
 **Payload takes the direct path where it can, and the relayed path when it
 cannot.** A verification query and its response are payload (§7.3,
-`wire-format.md` §5.6), and take the same paths.
+`wire-format.md` §5.6), and take the same paths. **A direct message is the
+exception: it always passes the recipient's serving node** [author,
+2026-11-19], whether or not the two could reach each other, because it is
+sealed to the person and collected by whichever of their devices comes for it
+(§14.2.2). On the direct path the transport is end to end between the two
+parties, each authenticated by its identity key or a delegation under it
+(§14.1.3), so what travels there needs no seal of its own.
 
 | Path | When | Who sees the flow |
 |---|---|---|
 | **Direct** | Each side holds the other as a **contact** (`light-client-requirements.md` §4.2) — met, introduced, nominated or selected — both online, traversal succeeds | Nobody. The peers exchange addresses during setup and connect |
 | **Relayed** | Either side holds **no contact** for the other, *or* traversal fails — symmetric NAT, CGNAT, two mobile peers | Both serving infra nodes, as TURN relays carrying ciphertext |
-| **Queued** | Recipient offline | The recipient's serving node holds ciphertext until reconnect (§14.1.4) |
+| **Queued** | Recipient offline, **and every direct message** | The recipient's serving node holds ciphertext until its devices have collected it (§14.1.6) |
 
 **"Relays" in the table is about who sees the flow, not about whose cooperation a
 sender needs** [author, 2026-10-06]. The two nodes on that row are not
@@ -5145,12 +5152,12 @@ address, not a path.**
 
 **Serving infra nodes are a metadata chokepoint, not a content one.** Payload
 **MUST** be encrypted end to end to its addressed endpoint, so a node acting as a
-relay carries ciphertext it cannot read (§14.2, §15). **The requirement is
-settled; the cryptographic construction is not.** Key agreement, prekeys and
-forward secrecy follow from §14.2.4's adopted constructions, with integration
-decisions open. An implementation that shipped hop
+relay carries ciphertext it cannot read (§14.2, §15). **The requirement and the
+construction are both settled**: §14.2.4's split seal, under which the serving
+node holds a ciphertext and one of the two secrets that open it, and never the
+other. An implementation that shipped hop
 encryption alone would leak payload to both serving nodes, which is why the
-requirement is stated normatively before the construction exists.
+requirement is stated normatively and not left to the construction.
 
 **Anchors resolve; they never carry.** Anchor load therefore scales with
 out-of-horizon first contact, not with traffic, and most traffic is inside the
@@ -5600,8 +5607,7 @@ subject and the subnet (§13.8) and is signed by the subject, so a user bound in
 several subnets decides an alias and an image for each binding separately — the
 postal model (§3.1.1), where each institution holds its own name for you. **It
 is hosted as local data on the subnet's infrastructure and compiled into no
-transaction**: a client publishes its profile to its serving node as it
-publishes its prekeys (§14.2.4), anyone holding the locator fetches it from
+transaction**: a client publishes its profile to its serving node, anyone holding the locator fetches it from
 there, and the archive never carries it. A name is replaceable; a record is
 not, and a name in a record would outlive every reason it was chosen.
 
@@ -5638,11 +5644,24 @@ each subnet it has been adopted into (§6, §13). Each such position is an
 effectively a unique FN address. Work, school, home."*]: it has its own
 locator (§12.1, held by a counterparty one per anchor), its own path, and
 its own serving node — the node that serves the identity *in that subnet* —
-where its bundle is published and its mail for that subnet is held
-(§14.1.6). A sender reaches an address down that subnet's path and no
+where its key for that recipient is served (§14.2.4.3) and its mail for that
+subnet is held (§14.1.6). A sender reaches an address down that subnet's path and no
 other; the addresses of one identity are never merged into one path, since
 a merged path would disclose to a counterparty in one subnet which others
 the identity is in.
+
+**A card is what reaches an address** [author, 2026-11-19]: everything a
+sender needs to deliver to the identity through that subnet, given the
+protocol and nothing else — the identity's keyhash and key material, its
+encryption key (§14.2.3), and its signed locator in that subnet, signed by
+the identity, so that anyone holding the card checks it with nothing more and
+can send without having met the subject. It is what goes in a signature block
+or on a printed code, and what a meeting's introductions hand over
+(`wire-format.md` §2.3). **How long a card stays good is a property of the
+network and not of the card**: it reaches the address until the position its
+locator names changes (§12.1), as a mailing address does until a move. The
+serving node's key for the recipient is not on it, since that rotates
+(§14.2.4.3); the sender fetches it from the node the locator walks to.
 
 **Everything above in this section, and the sessions of §14, is said of one
 address.** The resolution walk, the mailbox, the attach, the failover to a
@@ -5655,8 +5674,8 @@ identity, several identities per device (`light-client-requirements.md` §2)
 wire.
 
 **The key is a name, and identities are the unit of unlinkability**
-[author, 2026-11-11]. The same bundle reaches every address's node, so two
-nodes that compare notes can link an identity's addresses by its key. That
+[author, 2026-11-11]. The same key is on every address's card, so two
+nodes that compare notes can link an identity's addresses by it. That
 is intended: *"If you choose to introduce yourself by the same name to
 different people, you are inviting them to link your visibility to other
 people through the key of that name."* Where audiences must not be linked
@@ -6052,8 +6071,8 @@ Session establishment, attestation pulls, resolution and queue operations are al
 client-server at the edge and server-server in the core, and none needs hole
 punching.
 
-**Payload takes a direct path where it can** (§12.6.3), meaning *between
-contacts*, since a direct connection reveals each peer's IP (P17), and that does
+**Payload other than a direct message takes a direct path where it can**
+(§12.6.3), meaning *between contacts*, since a direct connection reveals each peer's IP (P17), and that does
 need traversal. **There is no way to avoid it**: an always-relay model would make
 traversal unnecessary at the cost of routing every payload byte through
 infrastructure, which §12.6.3 declines for both cost and privacy reasons.
@@ -6317,7 +6336,12 @@ it and a patron does not cache one as an immutable identifier.
 
 **Undelivered messages queue indefinitely at the recipient's serving node — its
 direct patron, where that patron is infrastructure (§14.1.2): bounded by a
-per-subordinate storage cap.** No time limit; a space limit.
+per-subordinate storage cap.** No time limit; a space limit. **A delivered
+message stays for thirty days from its first delivery** [author, 2026-11-19],
+so that every device of the identity collects it and not only the first to
+connect (§14.2.2): the clock starts at delivery, so what follows about time
+limits is about undelivered messages and stands. **Thirty days is the shipped
+default and each node sets its own** (§21.1.1), the same class as the cap.
 
 **The space is the disk consumed and not the content held** [author,
 2026-11-06]. A queue keeps a file per message, so a two-hundred-byte message
@@ -6350,8 +6374,10 @@ node once that node returns. **The message waits; it is not lost.** This removes
 metadata-spreading question entirely. Who has mail waiting, from whom, and for how
 long is known to one node rather than to a replica set.
 
-**What the patron still learns** is the chokepoint §12.6.3 already accepts,
-deepened: not only who talks to whom, but what is queued and for how long.
+**What the patron still learns** is the chokepoint §12.6.3 already accepts, in
+a narrower form: not who writes to its subordinate, since a submission names
+the recipient and nothing of the sender (§14.2.2), but that someone did, what
+is queued and for how long.
 End-to-end encryption (§14.2.4) means the queue holds ciphertext, so the residual
 is **queue metadata**, which encryption does not touch and which C5 joins with
 heartbeat data to reveal when someone came online to collect a particular message.
@@ -6359,8 +6385,12 @@ heartbeat data to reveal when someone came online to collect a particular messag
 **What remains open is the cap's *value* alone**, which §21.1.1 classifies as
 freely tunable per node and which nothing here fixes.
 
-**At the ceiling: refuse the newest message and tell the sender. Never drop the
-oldest.** Two reasons, and the second is the decisive one.
+**At the ceiling: remove the oldest message already delivered, and only when
+every message held is undelivered, refuse the newest and tell the sender. Never
+drop an undelivered message** [author, 2026-11-19]. A delivered message has
+reached the person on at least one device, so removing it early loses nothing
+they have not seen and costs only a second device's copy. For undelivered
+messages, two reasons, and the second is the decisive one.
 
 Dropping the oldest destroys a message the sender believes was accepted, which is an
 invisible failure; refusing the newest produces an error the sender receives and can
@@ -6376,8 +6406,10 @@ does not connect often enough to keep their queue drained appears unreliable, an
 that is the correct signal. The discipline is chosen on the adversarial case, not the
 honest one.*
 
-**No copy outlives delivery.** Deletion on delivery is immediate and leaves
-nothing recoverable — no journal, no tombstone. Sibling replication was already
+**No copy outlives removal.** A message leaves the queue when the time bound
+or the cap removes it, and removal is immediate and leaves nothing
+recoverable — no journal, no tombstone — the node's half of the seal going
+with it (§14.2.4.3). Sibling replication was already
 declined above, so a patron failure already loses queued messages; a crash-recovery
 copy buys durability against a strictly smaller failure than the one already accepted
 and pays for it with the retention window C5 joins against heartbeat state. **Durable
@@ -6387,15 +6419,21 @@ in the protocol adds complexity for a guarantee the design does not make.
 **This bounds the node's retention, not the provider's** [author, 2026-09-03].
 §18.1's observation boundary is the provider, and a provider snapshotting
 below the guest keeps the queue tuple — recipient, arrival time, duration —
-after the VM forgets it. Against that adversary, deletion on delivery is
+after the VM forgets it. Against that adversary, removal is
 hygiene; against every party above the hypervisor — the operator, a thief, a
 later compromise of the node; it is the real bound C5 relies on, and both
 statements are true at once.
 
-**Queue metadata is the minimum: ciphertext, recipient keyhash and device, arrival
-time.** Anything richer is C5's ingredient list. The queue is per device
-[author, 2026-09-22]: a session is with a device (§14.2.4), a ciphertext is
-readable by one, and the submission names it (`wire-format.md` §7.10).
+**Queue metadata is the minimum: ciphertext, recipient keyhash, the node key it
+was sealed to, its position in the recipient's queue, arrival time, and the
+time of first delivery.** Anything richer
+is C5's ingredient list, and the first-delivery time is a new ingredient: it
+says when the person first came online after the message arrived, which C5
+already joins heartbeat data to learn. **The queue is per recipient and names
+no device** [author, 2026-11-19]: a message is sealed to the person
+(§14.2.2), and any device proving the identity collects it. A collecting device
+names the newest arrival it already holds and is served what came after, so the
+node keeps no record of which device took what.
 
 **Operator logging is a commitment, not a rule.** §1.1 returns *no enforcement
 available*, so a MUST would be a wish. §15's process-and-discard extends to queue
@@ -6427,7 +6465,7 @@ socket, where ordinary HTTP is sufficient because nothing is in between.
 
 | Case | Endpoint | Who sees plaintext |
 |---|---|---|
-| **Leaf → leaf** | The recipient node | Recipient only. On the direct path nobody relays; on the fallback path both serving infra nodes carry ciphertext (§12.6.3) |
+| **Leaf → leaf** | The recipient | The recipient, on any device holding its identity. **A direct message always passes the recipient's serving node** [author, 2026-11-19], which holds its ciphertext and one of the two secrets that open it (§14.2.4). Other payload takes the direct path where it can, where nobody relays, and on the fallback both serving infra nodes carry ciphertext (§12.6.3) |
 | **Leaf → patron** | The patron | The patron, legitimately. It is the addressed party, not a relay. Attach, heartbeat, queue operations, currency requests |
 | **Leaf → resource**, hosted on the node | The resource (§11) | The resource **and its hosting node**, which parses and re-serialises the request to insert the credential (§11.0.1, `wire-format.md` §11.2). An endpoint, not a relay, and the same visibility §11.2 gives it over role and membership |
 | **Leaf → resource**, brokered | The resource | **The resource alone**, and this is the default (§11.7): the node authenticates and hands off, the client connects to the service itself, and no application traffic crosses the node |
@@ -6447,218 +6485,196 @@ are reconciled.
 the key. Nothing to observe, weight or attest (§1.1's diagnostic comes out
 affirmative, as it does for resource access control (§11.1)).
 
-#### 14.2.2 Store-and-forward forces asynchronous key agreement
+#### 14.2.2 Store-and-forward: the sender knows the recipient, not its devices
 
 §14.1.4 makes store-and-forward the default, because mobile clients are usually
 backgrounded. **You cannot run an interactive handshake with a recipient who is
-not there.** Therefore:
+not there**, and a direct message is delivered asynchronously through the
+recipient's serving node in every case [author, 2026-11-19].
 
-- Each node **publishes prekeys**, which its patron serves on request, the X3DH
-  shape. Carriage is in `wire-format.md` §7.8; the bundle itself is opaque to this
-  protocol, since only the endpoints hold the state to interpret it.
-- **A serving node attaches the submitter's bundle to a relayed payload**
-  [author, 2026-09-24], carried as `wire-format.md` §7.10's third element. A
-  recipient cannot have asked for the bundle of a party who has not written to
-  it yet, and §14.2.4's attribution needs one: the first message would
-  otherwise arrive unattributable however well it decrypts. The node serves
-  that bundle already. It is not trusted with it — the bundle carries the
-  submitter's own signature, so a substituted one does not verify — and it can
-  withhold it, which is the authority it already holds over delivery.
-- **Two initial messages can cross** when both sides open a session to each
-  other at once, as a ceremony's two participants do. The session the lower
-  keyhash opened stands, and the other side's is held only for what was
-  already sent on it (`wire-format.md` §7.10) [2026-10-02].
-- **Prekey exhaustion degrades forward secrecy rather than blocking messaging**: an
-  attacker drains a target's one-time prekeys, after which sessions open from
-  reusable or last-resort material and the first message loses one-time-key forward
-  secrecy (§14.2.4). Delivery continues. Standard mitigation is a reusable
-  **last-resort prekey** at reduced forward secrecy, which must be an explicit
-  accepted degradation rather than an accident.
-- **Rotation policy** for prekeys is open (see §14.2.4).
+**A message is sealed to the recipient, never to a device** [author,
+2026-11-19]. A sender holds the recipient's card (§12.9) and nothing else: the
+card says how to reach a person through one of their subnets and nothing about
+the hardware they use or where it is, and **a construction that had the sender
+encrypt to each of the recipient's devices would hand every sender the count of
+those devices and a key per device**, which the network exists not to disclose.
+Encryption to a device is the transport's, between the serving node and the
+device that collects (§14.1.3), and ends there.
 
-**New metadata event:** fetching a prekey tells the patron you are about to
-message someone, *before* you do. For leaf-to-leaf traffic the patron already sees
-the routing, so this is early warning rather than new information, but it is new
-for any traffic that would otherwise not have traversed them. Belongs in §19's
-composition analysis once designed.
+**So any device holding the identity reads what was sent to it**, including one
+restored from the phrase after the message was sent. The cost is stated rather
+than designed around: no construction gives a device restored from the identity
+alone what it does not give a thief holding the identity, since the node cannot
+tell the two apart. What §14.2.4 adds is that the identity alone is not enough
+for anything the node no longer holds.
 
-#### 14.2.3 Signing keys are not encryption keys
+**The recipient's node does not learn who sent a message** [author,
+2026-11-19]. A sender submits under a transport key minted for the
+submission and not its identity's, and its card travels inside the seal, so
+the node sees a recipient, a size and a time. The reason is the recipient's
+and not only the sender's: a node that saw senders could eclipse its
+subordinate selectively, holding back the mail of one correspondent or of
+everyone from one subnet, and it serves few enough recipients that one
+intercept of who wrote would be most of who talks to whom. **The cost is
+accepted rather than designed around: the node cannot be a control point
+against spam or flooding by sender.** What bounds a flood is the
+per-subordinate cap (§14.1.6), which refuses new mail until the recipient
+next collects, after which what was delivered is the first to go.
 
-**§5.1 specifies signature tiering only.** Identity keys sign; encryption requires
-KEM keys, which are distinct and must be bound to the identity. §5's table assigns
-a PQ KEM to *transport* and says nothing about payload encryption keys, prekeys,
-or how any of them relate to the hybrid identity construction.
+#### 14.2.3 The identity's encryption key, carried on its card
 
-This is a gap in §5, not merely in this section.
+**§5.1's identity keys sign; they do not encrypt.** Encryption needs a KEM key,
+distinct from them and bound to the identity. **The identity's encryption key is
+hybrid**, X25519 with ML-KEM-768 as the transport is (§14.1.3), **derived from the
+identity's seed**, so every device restored from the phrase holds it and nothing
+has to carry it between devices.
 
-#### 14.2.4 Construction — import rather than invent
+**It travels on the card, signed by the identity, and outside the key material**
+[author, 2026-11-19]. The keyhash is taken over the signing keys
+(`wire-format.md` §2.2), so an encryption key inside them would make every
+existing identity a different one; as an element of its own, signed by the
+identity, it is checked against the keyhash the card names and changes nothing
+the keyhash already identifies.
 
-**There is directly applicable prior art, specified and formally verified.** The
-requirement below is to adopt it, not to design a replacement.
+#### 14.2.4 Construction — the split seal
 
-##### 14.2.4.1 Only a resource is reached without the asynchronous machinery
+**Two keys open a message, and no one party holds both** [author, 2026-11-19]:
+the recipient's encryption key (§14.2.3), which every device of the identity
+holds, and a key its serving node generates for that recipient and holds alone.
+A sender seals to both, the node keeps its half only while the message is
+queued, and a device holding the identity collects the message and the node's
+half together.
+
+##### 14.2.4.1 Only a resource is reached without it
 
 | Case | What it needs |
 |---|---|
-| **Leaf → patron** | The full construction, the same as any leaf. A patron is an identity: a person on devices of their own that may be offline, and one who runs no node is a light client like any other [author, 2026-11-14]. Where the patron runs a node, that node is online for the mailbox and the bundle, never as the patron |
+| **Leaf → patron** | The split seal, the same as any leaf. A patron is an identity: a person on devices of their own that may be offline, and one who runs no node is a light client like any other [author, 2026-11-14]. Where the patron runs a node, that node is online for the mailbox and for its own key, not as the patron |
 | **Leaf → resource** | Nothing new. The resource is reached through an infra node that is online by definition (§11) |
-| **Leaf → leaf** | **The full construction below.** The recipient may be offline, which is the whole difficulty |
+| **Leaf → leaf** | **The split seal.** The recipient may be offline, which is the whole difficulty |
 
-That narrows the import: one of the three endpoint cases is covered by transport
-alone, and the other two are one case.
+##### 14.2.4.2 The seal
 
-##### 14.2.4.2 Key agreement: PQXDH
+**Each half is a hybrid encapsulation**, X25519 with ML-KEM-768 under the
+X-Wing combiner (`wire-format.md` §7.8.1): one to the recipient's encryption
+key, one to the node's key for that recipient. **The two shared secrets are
+combined with the ciphertexts and both keys' identifiers**, so that the message
+key needs both shared secrets and breaking either half leaves nothing. The plaintext
+is sealed under the message key with an AEAD.
 
-**Signal's PQXDH** is designed for exactly this situation, one party offline
-having published prekeys, the other wanting to send immediately and establish a
-session. **It composes a classical Diffie-Hellman with a post-quantum KEM** and is
-parameterised over both rather than fixed to particular primitives; this profile
-instantiates it with X25519 and ML-KEM-768, matching the transport (§14.1.3).
+**The sender is authenticated inside the seal and not by a signature.** The
+two encapsulations open the message, and inside it are the sender's card and a
+tag keyed by a static Diffie-Hellman between the classical components of the
+sender's encryption key and the recipient's, checked after opening, so a
+recipient who held nothing of the sender attributes a first message all the
+same. It knows who sealed the message and can prove it to nobody, because it
+could have computed the same tag itself. That is the arrangement the network wants of its two planes:
+attestations are deliberately non-repudiable (§19), and **you should be able to
+prove you met someone and not be able to prove what you said to them.**
+Authentication is therefore classical where confidentiality is post-quantum,
+which costs a quantum adversary's ability to forge a message as someone and not
+its ability to read one.
 
-It has a **published specification and formal verification**: ProVerif and
-CryptoVerif analysis (Bhargavan et al., USENIX Security 2024) found flaws in the
-first version, and the resulting fixes were incorporated into the published second
-revision with a security proof. Adopting a construction that has been through that
-is strictly better than a hand-rolled equivalent.
+##### 14.2.4.3 The node's key, one per recipient
 
-**§14.2.2 had already reached the X3DH shape independently.** Prekeys published by
-each node, served by its patron, with exhaustion as a denial-of-service and a
-reusable last-resort key as the mitigation. Importing PQXDH replaces a
-reconstruction of that with the analysed original.
+**A serving node keeps a rotating key for each identity it serves** [author,
+2026-11-19], signs its public half, and serves it to a sender who has walked
+down to that node from the card's anchor (§12.6.1). **One per recipient and not
+one per node**: a key shared across the node's subordinates would live as long
+as the oldest message of whichever one connects most rarely, and keep every
+other subordinate's recorded ciphertext openable for that long.
 
-**One decision this design must make differently.** PQXDH's published revision
-relies on the discrete-log problem for **mutual authentication**, while providing
-post-quantum *confidentiality*. §5.1's identity keys are hybrid, so authentication
-here can bind to the post-quantum component as well. That is a place where this
-design should exceed the deployed profile rather than inherit its limit.
+**The node holds each private key while any message sealed to it is queued, and
+deletes it when the last one is removed** (§14.1.6). When a device proves the
+identity on its session (§14.1.2), the node opens its own half of each queued
+message and hands over the shared secret with the ciphertext, on the session the
+transport already encrypts. **The node never holds the recipient's key**, so it
+never holds the message key: what it keeps is ciphertext and one of two secrets.
 
-##### 14.2.4.3 Session: the Triple Ratchet
+**Rotation is the node's** (§21.1.1), under the same class as the queue's
+bounds, **and ships at one day** [author, 2026-11-19]: a direct message from a
+mobile device is sent over a connection that seldom lasts more than a few
+hours, and much interception is as short-lived — a subverted public network, a
+false cell tower — so a key that changes daily confines what one such position
+records to the messages of a day, and a month of keys for each of a node's
+subordinates is little to store. A rotation bounds how many messages share a
+key, and deletion is still by message. **A node accepts a message sealed to
+its newest key for the recipient, and to the one before only for a grace of
+generous network latency after the rotation** [author, 2026-11-19] — thirty
+seconds as shipped, the node's own to change — so a sealed message cannot be
+replayed into the queue past its key's day. A sender refused for a stale key
+fetches the newest and seals again, which costs it nothing, and a recipient
+remembers what it has opened under the two newest keys alone (`wire-format.md`
+§7.8.1).
 
-**Signal's Triple Ratchet.** The Double Ratchet running alongside the **Sparse
-Post-Quantum Ratchet (SPQR)**, with their outputs mixed — provides forward secrecy
-and post-compromise security against a quantum adversary. Released October 2025,
-specified publicly, and formally analysed.
+**A recipient that cannot attribute a message still shows it, as
+unverified** [author, 2026-11-19]. Every message carries a header of the
+sender's alias and keyhash, inside the seal: the alias is display only, and
+the two together tell apart two senders who chose one alias wherever messages
+are indexed [author, 2026-11-20]. The header is not an address: **a recipient
+replies to a sender it holds as a contact, and to no other** [author,
+2026-11-20], which is wanted, since a stranger's mail that cannot be answered
+gives a spammer or an impostor nothing to work. And the sender's introduction rides on the first message to a
+recipient and not after, so a device that has lost what it held of a sender —
+one restored from the phrase, collecting mail still queued — opens a message it
+has no introduction to check the tag against. It shows it under the alias as
+unverified. A sender it holds as a contact it holds an introduction for, so
+what cannot be checked is a stranger's, and a stranger is not answered.
 
-**SPQR solves a problem this design would otherwise hit head-on**: ML-KEM keys are
-too large to put in every message header, so it transmits them as erasure-coded
-chunks across successive headers. This design is unusually sensitive to object
-size (§5), so a construction that already addresses key-size inflation is worth
-more here than elsewhere.
+##### 14.2.4.4 What it protects, and what it does not
 
-**The Double Ratchet is the floor and the Triple Ratchet is recommended**
-[author, 2026-09-26]. A conforming client MUST run at least the Double Ratchet
-over a PQXDH session and SHOULD run the Triple Ratchet where an implementation
-of the post-quantum half is available to it.
-
-**What the floor already has, and what it lacks.** PQXDH makes the session's
-initial root key post-quantum secure, so an adversary recording traffic against
-a future quantum capability gains nothing — that property does not depend on
-SPQR. What the post-quantum ratchet adds is **post-compromise security against
-a quantum adversary**: after a device compromise the Double Ratchet heals
-through fresh Diffie-Hellman, which such an adversary follows, and SPQR's
-contributions are what evict it. The gap is therefore a compound case —
-state compromise *and* a quantum adversary — rather than the whole of
-post-quantum security, and §19.4's P5 already prices a compromised device as
-critical on other grounds.
-
-**Why recommended and not required.** §1.1's test: a rule aimed at a party you
-share no state with is a wish. **Neither end can verify the other's ratchet
-construction** — the session either derives the same keys or does not — so a
-MUST here would be unenforceable in exactly the way this document declines to
-issue rules. The floor is what a peer can hold you to; the ceiling is what a
-client owes its own user. The practical cost of requiring it is that the only
-implementation of SPQR is licensed such that every conforming client would
-inherit that licence, which would close the door this protocol holds open to
-alternate clients.
-
-##### 14.2.4.4 A property that falls out, and is wanted
-
-PQXDH provides **a form of cryptographic deniability** for the session, subject to
-the limitations Signal's specification states about what each party holds and
-publishes. That is the opposite
-of what the control plane wants. Attestations are deliberately non-repudiable
-(§19), and exactly what the data plane wants: **you should be able to prove you
-met someone and not be able to prove what you said to them.**
-
-The split is not a compromise between the two goals. It is the correct arrangement
-of them, and it arrives free with the imported construction.
+- **Interception outside the node.** A ciphertext recorded on the way to the
+  node, or after it, opens only with the node's half, and that is deleted with
+  the message. A later theft of the identity reads nothing recorded.
+- **The node.** It holds ciphertext and its own half and never the recipient's
+  key, so it holds no plaintext.
+- **A stolen identity reads what is still queued.** The thief proves the
+  identity as any device does and collects what the node still holds, and what
+  the node has removed is gone for the thief as for the owner. **This bounds the
+  node's retention, not the provider's**: a snapshot below the guest holds
+  ciphertext and the node's half together, and with the identity reads what it
+  caught, the same boundary §14.1.6 states.
+- **Rotation of the identity still cuts the thief off.** A node logged by someone
+  holding a stolen identity keeps handing over its halves, but after the
+  identity rotates (§9.0) senders seal to the new key and the old one opens
+  nothing sent from then on.
 
 ##### 14.2.4.5 Blanket prefetch defeats the intent signal
 
-**A prekey fetch discloses intent to message, before any message exists** (C11).
-Fetching on demand therefore announces each intended conversation to whoever serves
-the bundle.
+**A key fetch discloses intent to message, before any message exists** (C11).
+Fetching on demand therefore announces each intended conversation to the node
+that serves the key.
 
 **The two fetch classes are structurally distinct on the wire, so intent need not
 be inferred.** A batch request names the population it sweeps; a single-subject
 request is visibly targeted (`wire-format.md` §7.8). **Asking that fetches be
-*made independent of intent* would state a property no observer could check**, since
-the fact of a fetch is shared and the motive is not (§1.1).
+*made independent of intent* would state a property no observer could check**,
+since the fact of a fetch is shared and the motive is not (§1.1).
 
-**Speculative depletion of consumable material is bounded, not forbidden.** A
-serving node cannot know whether a requester is really opening a session, and
-binding consumption to session-opening evidence is circular: under PQXDH the key is
-needed before the session exists. The node therefore rate-limits one-time key
-issuance per requester per subject, which bounds the harm — draining a pool to
-force someone onto their last-resort key — without anyone having to prove motive.
-
-Present encoding: reusable prekey material is prefetched across the trust horizon as a
-batch; one-time keys are requested singly and rate-limited.
-
-Two properties follow:
+**A node's key is not consumed by being served**, so nothing a requester fetches
+depletes it, and the keys of the whole trust horizon can be fetched as a batch on
+the nodes' rotation schedules. Properties follow:
 
 - **A uniform fetch carries no information about intentions.** Everyone is fetched
   whether or not they will be messaged, the same shape as defeating access-pattern
   leakage by reading every record.
-- **The timing inverts.** A refresh is driven by *peers' rotation schedules*, so it
-  reveals **past** activity. That someone rotated, rather than **future** activity.
-  That is a strictly weaker disclosure.
-
-**One-time keys are excluded from the prefetch**, and the exclusion is what makes
-it work. Serving a one-time key consumes it, so blanket prefetch across an org of
-that size
-would drain every pool continuously — and, worse, **make exhaustion the normal
-state.** Exhaustion is currently a usable signal that someone is draining a pool
-deliberately; under blanket prefetch of one-time keys an attacker would be
-indistinguishable from ordinary traffic.
-
-**A session is opened with a device, and an identity with several devices has a
-bundle per device** [author, 2026-09-22]. The ratchet advances on the device
-that receives, so material shared between two devices would part them at the
-first message; each device holds its own, signed by the identity on the ceremony
-device (§23.3), and an initiator opens one session against each device's bundle
-and sends to each.
-
-So: **reusable material prefetched for the whole org; a one-time key requested only
-when actually opening a session.** The cost is that a session opened from prefetched
-material alone lacks one-time-key forward secrecy **for its first message**: a later
-compromise of that peer's long-lived private keys — identity key, signed prekey
-and PQ prekey together — exposes it. **Protection improves as ratchet
-contributions are incorporated**, not immediately — how quickly depends on the
-message pattern and the compromise model. Against announcing each intended
-conversation, that is still the better trade.
+- **The timing inverts.** A refresh is driven by the nodes' rotation schedules, so
+  it says when a key changed and not when anyone meant to write.
 
 **This is the horizon's eighth job** (§15.1): prefetch scope. Outside the org the
 intent signal returns, since blanket prefetch does not scale past a bounded set —
 but given A2 that is the rarer case, and such traffic is relayed anyway (§12.6.3).
+A single-subject fetch at send time tells the node only what it learns a moment
+later when the message arrives.
 
-##### 14.2.4.6 Who serves prekey material, and what is still to settle
+##### 14.2.4.6 What is still to settle
 
-**One-time keys come from the patron alone; reusable material may come from a
-sibling too** [author, 2026-10-16]. Serving a one-time key is a metadata event
-(§14.2.2, C11) — it says somebody is about to open a channel with that subject
-— so the party that learns it is the one already serving them, and spreading it
-across siblings would widen who sees it for nothing. Reusable material leaks
-nothing of the kind: it is published to be fetched, and a sibling holding a copy
-is a cache that costs the subject no disclosure. A node asked for a one-time key
-for a subject it does not serve answers that it holds none, which is what it
-would answer in any case.
-
-
-- **Prekey rotation and last-resort policy.** Cadence, and the accepted reduction
-  in forward secrecy when the last-resort key is used.
-- **Binding the session to §5.1's hybrid identity**, per the authentication point
-  above.
+- **The composition is not an analysed construction** [author, 2026-11-19].
+  Each part is standard — the hybrid encapsulation, the combiner, the key
+  derivation, the AEAD — and their combination, two encapsulations with one
+  half held by a node and the sender authenticated by a static exchange, has
+  had no analysis of its own. It wants one before it carries anything that
+  matters.
 - **Crate maturity.** §5.2's audit caveat applies here too.
 
 ---
@@ -6833,7 +6849,7 @@ increase in one must be paid for in the other.
 | Catalog **query** range | §11.5 — the nodes a client asks. The catalog is answered on request and never propagates, so this is a range of *asking*, not of replication |
 | **Direct payload path eligibility** | §12.6.3 |
 | **Resource access eligibility** | §11.2 — membership in the owner's trust horizon gates all resource access |
-| **Prekey prefetch scope** | §14.2.4 — reusable material is prefetched org-wide so that fetching carries no intent signal |
+| **Node-key prefetch scope** | §14.2.4.5 — the serving nodes' keys for everyone in the horizon are fetched as a batch, so that fetching carries no intent signal |
 
 Each was adopted independently and for its own reason, which is some evidence the
 horizon is the right primitive, a boundary that keeps turning out to be the
@@ -7779,15 +7795,22 @@ several at once, not one per acquisition.
   either. Sealed captures sit on light-client devices and are not reachable from
   infrastructure (§7.5.2).
 
-  **And a compromised node is not on the direct path.** Payload between two clients
-  inside the horizon goes point-to-point, and §12.6.3's table gives who sees that flow
-  as **nobody**, so an actor holding an infra node's key sees the connection *setup*
-  and nothing after it. This bites hardest for the node's **own operator**, whose
-  light client is a different device (§23.3): traffic addressed to them as a
-  participant never reaches the instance the actor controls, and cannot be read or
-  even measured there. Forcing the relayed path gains nothing either, since a relay
-  carries ciphertext (§14.2). **The actor's reach is prospective rather than
-  retrospective**, which is the part *"bulk access"* overstates.
+  **And a compromised node reads none of what it carries.** Payload other than a
+  direct message goes point-to-point between two clients inside the horizon, and
+  §12.6.3's table gives who sees that flow as **nobody**. A direct message always
+  passes the recipient's serving node (§14.2.2), and the split seal leaves that node
+  holding ciphertext and one of the two secrets that open it (§14.2.4), so an actor
+  holding an infra node's key collects ciphertext in bulk and reads none of it
+  without each recipient's identity key, which no infra node holds. This bites
+  hardest for the node's **own operator**, whose light client is a different device
+  and whose instance holds a delegated credential and not the seed (§23.3): what is
+  addressed to them as a participant cannot be read on the instance the actor
+  controls, though a direct message queued there can be measured. Forcing the
+  relayed path gains nothing either, since a relay carries ciphertext (§14.2).
+  **The actor's reach is prospective rather than retrospective**: halves it logs
+  from the compromise on open, with a recipient's identity key taken later, only
+  what arrived after it took the node, which is the part *"bulk access"*
+  overstates.
 
   **The residual there is narrower than impersonation of the operator.** An instance
   holds a delegated credential rather than its operator's seed (§23.3), so an actor
@@ -8254,10 +8277,9 @@ who have established connection, identity and trust through the network layer.**
 The control and attestation records are the scaffolding that makes that possible;
 they are sparse and deliberately so.
 
-**End-to-end payload encryption is adopted rather than designed here** — PQXDH
-and the Triple Ratchet, §14.2.4 — with integration decisions open, which is the
-residual risk P12 records. The analysis below describes the exposure in an
-implementation that lacks it.
+**End-to-end payload encryption is the split seal** (§14.2.4), and an
+implementation that lacks it is the residual risk P12 records. The analysis
+below describes the exposure in such an implementation.
 
 §12.6.3 routes payload client → own serving infra → recipient's serving infra →
 recipient, with PQ KEM protecting each *hop*. Hop encryption terminates at each
@@ -8280,8 +8302,8 @@ and therefore a genuine MUST (Appendix A). It also disposes of most of §19.5's 
 question, a queue holding ciphertext is a much smaller problem than one holding
 messages.
 
-**Construction: §14.2.4**, which adopts PQXDH for asynchronous key agreement and
-the Triple Ratchet for session secrecy rather than designing either here. Note the
+**Construction: §14.2.4**, the split seal, which reaches a recipient who is
+offline and holds nothing of the sender beyond its card. Note the
 endpoint may be a **patron** or a **resource** rather than a person, so the
 requirement is "encrypted to the endpoint", whoever the endpoint is, and both of
 those cases are already covered by the §14.1.1 transport handshake, since such an
@@ -8378,7 +8400,7 @@ and a citation to a missing number resolves there.
 | P4 | Patron metadata plus mailbox queue | High | **Queue policy settled** (§14.1.6): indefinite retention at the serving node, no sibling replication, ceiling refuses the newest, no copy outlives delivery, metadata bounded to ciphertext, recipient keyhash and device, and arrival time. The residual is queue *metadata* held while a message waits, which encryption does not touch, operator logging, which §1.1 cannot reach — and, below everything, a compelled provider retaining what the guest deleted (§18.1, §14.1.6): deletion bounds the node, never the hypervisor [2026-09-03] |
 | P5 | Endpoint and backup aggregation | Critical on compromise | Acknowledged (§13.7, §13.7.1). The device is the global correlation point the network architecture otherwise avoids |
 | P11 | Heartbeat patterns reveal sleep, work and travel routines | Medium | Process-and-discard (§15) materially helps; the residual risk is implementations that log what the protocol discards |
-| **P12** | **End-to-end payload encryption is adopted rather than designed here, and an implementation shipping hop encryption alone leaks payload to both serving nodes** | **Critical for any implementation without it** | §14.2.4 adopts PQXDH and the Triple Ratchet; four integration decisions remain (§22.2). The patron was accepted as a metadata chokepoint, never a content one |
+| **P12** | **End-to-end payload encryption is composed here rather than adopted, and an implementation shipping hop encryption alone leaks payload to both serving nodes** | **Critical for any implementation without it** | §14.2.4 specifies the split seal; that the composition has had no analysis of its own, and crate maturity, are what remain (§22.2). The patron was accepted as a metadata chokepoint, never a content one |
 | **P13** | **Retention promises are undetectable against hostile clients**, though §7.5.2's keystream encryption makes a *compliant* client structurally unable to retain, a client that retains photographs past its declared window runs the match and reports `basis = personal_knowledge` | Medium | §13.7.1. No protocol fix exists, and the mechanism is not detectable by its own use |
 | P14 | **Chain back-pointers leak activity level to counterparties.** Signing over a predecessor hash reveals the subject's chain head, so a counterparty meeting the same person twice sees how far it advanced | Low | **Accepted, not open.** It discloses nothing past §8.1's selection threshold, which is `min(floor(n/2), 10, |candidates|)` where *n* is the subject's presence count and **the evaluator learns *n* from the subject by design**. Activity level is already an input every evaluator receives; a chain head is a coarser view of the same fact, given to a party who has met them |
 | **P15** | **Service catalog entries reveal what a node runs, to anyone in its horizon who asks.** Resource type, instance name and connection info are served on request (§11.5) | Medium | `discover_scope` filtering at the source limits the audience to those who could use the resource, which is a genuine mitigation. Residual: running a resource at all is visible to everyone in scope, and the *set* of resources a node runs is a fingerprint. Unassessed under §19.1 **Subsumes the former P8** (*topology deanonymisation by association*), withdrawn: identifying one member by real name yields their job, not a label for any of their subtrees — §3.1.1's membership plurality means a member belongs to several, and nothing in the protocol says which is a workplace rather than a bowling team. **What labels a subtree is its catalog**, which is this finding, and the catalog is answered on request within horizon, so a party holding topology from further away cannot obtain the labels at all. An attacker who holds both the topology and a real-name link within their horizon gets the disclosures membership carries (§1.2) |
@@ -8391,7 +8413,7 @@ and a citation to a missing number resolves there.
 | **P23** | **Witnesses and verifiers get no disclosure of what their participation creates** (§19.6) | High | The consent machinery protects the *subject* of a query; the verifier, whose own prior relationship is what the response exposes, is asked nothing. **Accepted** [author, 2026-09-17]: neither role is a user action, consent to perform protocol actions is given by choosing to use the network, and a per-query notice would tell an operator only who is meeting whom (§7.3). The disclosure §19.6 does require reaches the participant at capture, not these roles |
 | **P24** | **A gateway operator sees their subnet's external traffic** (§11.7) | **Medium, reduced** | Socially trusted is not accountable, and the design ensures no patron sees payload content (§14.2) while a gateway hands a subnet member exactly that one layer up. **The user can now evaluate before routing**: the signed `CatalogEntry` binds the service to what the owner published and carries a declared `data_practice`, and it reaches them at catalog lookup, which precedes any connection (§11.5). **The residual is that a declaration is a claim, not a guarantee** (§1.1), and the operator sees the traffic whatever they declared. Beyond that the remedy is not to use the resource |
 | **P25** | **A hosted operator can invert a pairwise principal identifier** (§11.0.2) | Low | They know the resource identity and their own org's keyhashes, so one hash per member recovers the mapping. Deliberate, the scheme withholds network identity from parties who do not already know you, not from the operator you chose |
-| **P26** | **A resolution request reveals intent to reach someone before any contact** (`wire-format.md` §7.7) | Medium | The same shape C11's prekey fetch had **before** batch prefetch addressed it, and **no equivalent defence has been considered here**: the serving node learns who a client wants to find, whether or not anything follows. Unlike the prekey case, no uniform-prefetch defence has been considered |
+| **P26** | **A resolution request reveals intent to reach someone before any contact** (`wire-format.md` §7.7) | Medium | The same shape C11's key fetch had **before** batch prefetch addressed it, and **no equivalent defence has been considered here**: the serving node learns who a client wants to find, whether or not anything follows. Unlike the key fetch, no uniform-prefetch defence has been considered |
 | P27 | **`AbuseReport.detail` puts arbitrary particulars into a signed, portable object** (§11.6) | **Low, reduced** | Not a disclosure to the recipient, who is the resource owner and already holds the context (see the withdrawn C16). **The residual was portability by a third-party reporter**, and there is no such party: the signer is the owner's own resource, so the object does not leave the owner's control unless the owner releases it. **That choice remains unreachable by any rule** (§1.1), which is why this is reduced rather than closed — a signature still makes forwarded particulars credible in a way an unsigned account would not. **`detail` may carry an application's own record of which of its users complained**, which is where any real personal particular now sits. Bounded at 1 KB (`wire-format.md` §6.3), which limits volume rather than kind |
 | P28 | **Source photographs may carry EXIF and contextual background** (§7.5) | Low | See C17. Encryption under the subject's keystream (§7.5.2) means a compliant client holds nothing readable; stripping still applies because a legitimate decryption during verification puts plaintext in the holder's hands |
 | **P29** | **A ceremony counterparty holds the victim's raw capture indefinitely** (§7.5) — **substantially answered by §7.5.2** for compliant clients, where the capture is ciphertext the subject holds the key to | Medium–High | Retention is a client commitment with no detection mechanism (P13). An adversary attending one meeting acquires a biometric sample joined to a record naming time, coarse place and social position. The ceremony is a collection event as much as an evidence event, and the victim consents to the second |
@@ -8405,7 +8427,6 @@ and a citation to a missing number resolves there.
 | **P36** | **`seqno` gaps disclose out-of-subnet activity** (`wire-format.md` §2.3) | Low–Medium, **largely answered** by the `{series, counter}` split | The threat was that a node sharing **one** counter across two bindings advances it in both, so an observer in one subnet sees jumps it cannot account for and learns the node is active elsewhere. **Distinct from P3**, which needs an observer present in both subnets; this works from inside one. **The `{series, counter}` split answers it** by giving each patron relationship its own series and so its own counter (`wire-format.md` §2.3, `wire-format.md` §4.6): a per-binding counter, which was previously rejected as breaking `seqno`'s double duty as freshness test and stale-cache detector — until the series tag made within-series the only comparison and cross-series unrankable, which is what removes the breakage. **Residuals**: a node that has not yet reissued since binding elsewhere still shares a line, and the *number* of reissues it has taken is itself visible in the chain. See C19 for what sharpens the pre-split case |
 | **P37** | **A ceremony counterparty is handed a bundle of the subject's prior counterparties — who they have met, and where each can be reached — and credibility pushes that bundle wide** (§8.1.2, §19.2) | Medium | Selecting the other's verifiers needs a candidate set, and the subject supplies it as introductions (`wire-format.md` §2.3, §5.4): a party's key and the most recent locator held for them, nothing of the meeting — no record, no witnesses, no verifiers, no time. **The disclosure is elective, not compelled** — nobody walks another party's archive, but the incentive runs one way: a bundle holding nobody the selector recognises is worth nothing to them (§16.1), so being believed means showing counterparties in common. **Bounded by design to a handful** [author, 2026-10-11]: the bundle is meant to suffice at a few names, and what it leaves unmet is fished one candidate at a time, in turns, so a party is never asked for its history in the bundle and cannot have it drawn out in successive ones — it accepts the next proposal and stops. **Distinct from P19**, which is the *adoption* disclosure a prospective patron drives by fetching and walking; this one the subject hands over. **Distinct from P2/C2**, which price the verifier set carried *in the record* rather than the pool it was drawn from. **The floor is a real choice**, since what a ceremony gives its participants is a face they will know again (§7), which no bundle affects. Disclosing narrowly costs third-party weight and the counterparty's continuity assurance, not the relationship |
 | **P38** | **A filtered catalog query reveals what kind of service the asker seeks** (`wire-format.md` §6.4), to the answering node, whether or not any connection follows — P26's shape at the catalog: interest disclosed before contact | Low–Medium | **The reference client already blunts it** (`light-client-requirements.md` §8): sweep the horizon, cache, refresh on schedule — a browsing click is answered from cache, so no per-interaction query exists to observe. **Residual**: a targeted type-filtered query from any client remains a dated, authenticated statement of interest in a service class — clinical, employment, family, and repetition makes it a history |
-| **P39** | **A prekey fetch reveals how many devices a subject has** (`wire-format.md` §7.8): a reply carries one bundle per device, where it carried one | Low | **A consequence of a session being with a device** (§23.3, §14.2.4), stated rather than hidden. The audience is the horizon that could open a session with the subject at all, the count is held near three by construction (§23.3), and what it reveals is that a person has a phone and a desktop, which the resource types the desktop exists for reveal anyway. **Residual**: the count changes when a device is added or lost, and a party sweeping on schedule sees when |
 | **P40** | **Offering traversal candidates at a ceremony discloses an IP to the counterparty** (§12.6.3) | Low–Medium | New with the 2026-09-25 ruling that a ceremony in person opened the direct path past the horizon; since 2026-10-24 the counterparty is a contact from the exchange on and the path opens under P17's own rule. **The exposure is chosen rather than bounded**: the counterparty is a party the user decided to meet and §14.1's interfaces put them in the room, and a first ceremony may be with somebody the user has no standing with at all. Residual: §7.6 makes an IP a coarse location signal, so a counterparty met once holds an ongoing one for as long as the address lasts and nothing obliges them to discard it. **The location it yields is not new** — the counterparty was in the room — so C1 is untouched and C24 records why; what the address can add is the carrier behind it. **The disclosure is the price of the exit right** §12.6.3 states — a route no patron carried is a route the counterparty knows — and it is refusable: the ceremony completes without candidates, and `light-client-requirements.md` §4 requires the client to offer it as the disclosure it is |
 
 ### 19.5 Queue policy had to settle more than size
@@ -8601,14 +8622,14 @@ acknowledged and whose join is not.
 | **C8** | Peering ASN and zone + ordinary provider records | Maps a pseudonymous infra key to a **natural person.** Sharpened by §3.3's rule that each server corresponds to a user, and **sharpened again by the zone** [author, 2026-11-06]: an ASN is a company's whole customer base and an ASN with a zone is that company's customers in one of its places, so the set an observer correlates against is smaller by the ratio of the provider's regions. The placement disclosure is accepted (§19.7) and the zone is accepted on the same terms, dispersal by the pair being what remediates a place rather than only a company (§3.4); this identification consequence was not worked through | Medium–High |
 | **C9** | Local face archive + transaction archive, on one device | **§7.5.2 breaks this for compliant clients.** A seized device yields an archive and ciphertext, and the join requires per-counterparty cooperation from the depicted person. **A face-to-key-to-social-history database.** Either store alone is far less sensitive: photos identify faces without network history, the archive identifies keys without biometrics. On a compromised device they coexist and join. **This is the central consequence of P5**, not a separate risk | Critical |
 | **C10** | Stable key + catalog + multi-subnet membership | The same person's **services** followed across socially independent contexts — P3's linkage plus P15's fingerprint. **Conditional on a single-identity client**, since the linkage half disappears when a user presents different identities in different subnets | High for such a client |
-| C11 | **One-time key request** + queue and routing metadata | **Largely addressed** (§14.2.4). Reusable prekey material is prefetched across the trust horizon as a **batch**, so an ordinary fetch names a population rather than a person and carries no intent signal, and the two request forms are structurally distinct on the wire, so a serving node sees which it received rather than inferring motive. **What remains** is the on-demand one-time key request, which is made when a session is actually being opened and therefore precedes its message by a short interval: a node sees a request followed by traffic or by nothing, so an abandoned contact still leaves a trace. Depletion is bounded by per-requester rate limiting rather than by policing motive | Low–Medium |
+| C11 | **Single-subject key request** + queue and routing metadata | **Largely addressed** (§14.2.4.5). The serving nodes' keys are prefetched across the trust horizon as a **batch**, so an ordinary fetch names a population rather than a person and carries no intent signal, and the two request forms are structurally distinct on the wire, so a serving node sees which it received rather than inferring motive. **What remains** is the single-subject request a sender makes for a recipient outside its batch, which precedes its message by a short interval: a node sees a request followed by a message or by nothing, so an abandoned contact still leaves a trace. A node's key is not consumed by being served, so there is nothing to deplete | Low–Medium |
 | C15 | Pairwise principal + vendor account data + several resource ids | **Accepted, not open** (§19.7 item 11). Pairwise identifiers address cross-*operator* linkage; one vendor running several resources correlates them from account, device and network data it holds anyway, and no identifier scheme changes that. **Which resources a subnet offers is part of how it sets its security posture**, and a user may decline one their organisation accepts | — |
 | C17 | Source photograph + archive or locator | **Largely obviated by §7.5.2.** A compliant client holds captures as ciphertext under the *subject's* keystream, so retained EXIF and background are unreadable. **A non-compliant client keeps plaintext, and that is the baseline**: the same bad actor with an ordinary camera app obtains the same thing, which is the test §1.2.1 sets. **Residual**: a compliant holder decrypts legitimately during a later verification, and has the plaintext in hand for that window, which is why stripping remains a client obligation | Low |
 | **C19** | **Memo table + per-node `seqno`** | A durable, subtree-wide index of **out-of-subnet activity** for every member. Each ingredient is registered — the table at P35, the counter at P36, and the join is what turns an incidental gap into a longitudinal series an ancestor holds for everyone below it. **Bounded by what a memo carries**: positions and keys, never addresses (§15.2). **Substantially reduced**: a memo no longer carries the subject's own counter, so the join that produced the series is gone — an ancestor sees patron counters, which say nothing about a subordinate's out-of-subnet activity. What replaces it is smaller: field 4's timestamp, retained per current row rather than as a history, so an ancestor holds when each slot last changed and not a series of when it changed before | Medium |
 | **C20** | Pairwise fanout deliveries + patron queue metadata | **Latent group membership.** §14.3 is deliberate that a fanout is a set of independent pairwise messages with no group identity on the wire — true at every endpoint, and **not true for the patron**: a burst of same-sender deliveries, tightly timed, to a recurring set is a cluster, and repetition yields the group's membership and cadence. Both ingredients are priced — pairwise expansion at §14.3, the metadata chokepoint at P4, and the join was not. **No traffic-shaping mitigation is specified, and none is promised** | Medium |
 | **C21** | Capability set + attachment continuity | **An implementation and configuration fingerprint** at the serving node. Greasing (`wire-format.md` §8.1.1) defeats ossification, not identification: a greased parameter is indistinguishable from an unknown one, but the **real** supported set is visible on every attach, and a distinctive set distinguishes a rare client population or tracks a device across software migrations. P32 prices retaining the history; this is what the history identifies | Low–Medium |
 | **C22** | Materialised role table + catalog entry store, at one host | **An operator-readable classification matrix**: person, role, service — topology and trust evidence the operator already holds as inputs (`infra-client-requirements.md` §10.2 derives the table from nothing else), precomputed into the form compulsion or compromise finds most useful. **No new disclosure crosses any interface; the cost of extraction drops.** C7 composes the access log with topology across parties; this is the same yield sitting pre-joined at one | Low–Medium |
-| **C23** | Every request class one serving node answers, kept as histories | **An interest graph** [author, 2026-09-18]. A resolution says whom a client wants to reach (P26), a one-time key request that a session is opening (C11), a filtered catalog query what kind of service it seeks (P38), a currency fallback whom it is evaluating (§19.7 item 12), a publication or deposit that it is making itself reachable. Each is priced alone, and one node answers all of them, so histories of them join into whom a client looks for, listens to and asks about, which no single class yields. §19.1's rule applied to the serving node: the mitigation is one obligation rather than one per class, the state serving needs and no history of the requests that produced it (`infra-client-requirements.md` §1). **And for one address**: the node serving an identity in one subnet answers that subnet's requests and sees that subnet's share; the identity's other addresses are served elsewhere and are not in this history (§12.9) | High for a node keeping histories; the obligation is what keeps it low |
+| **C23** | Every request class one serving node answers, kept as histories | **An interest graph** [author, 2026-09-18]. A resolution says whom a client wants to reach (P26), a single-subject key request that a message is coming (C11), a filtered catalog query what kind of service it seeks (P38), a currency fallback whom it is evaluating (§19.7 item 12), a publication or deposit that it is making itself reachable. Each is priced alone, and one node answers all of them, so histories of them join into whom a client looks for, listens to and asks about, which no single class yields. §19.1's rule applied to the serving node: the mitigation is one obligation rather than one per class, the state serving needs and no history of the requests that produced it (`infra-client-requirements.md` §1). **And for one address**: the node serving an identity in one subnet answers that subnet's requests and sees that subnet's share; the identity's other addresses are served elsewhere and are not in this history (§12.9) | High for a node keeping histories; the obligation is what keeps it low |
 | **C24** | A candidate's IP handed over at a ceremony + the presence the two parties already share | **No location that was not disclosed by standing there, and possibly the network operator** [author, 2026-09-25]. The join that looks alarming is not one: §7.6 makes an IP a coarse location, but this counterparty was in the room, so the geography it yields is geography they already have. P40 therefore adds nothing to C1's third ingredient, and C1's withholding mitigation (§8.1.1) is not weakened by it. **What the address can add is the carrier or ISP behind it**, which physical presence does not imply, which the user carries between places, and which is a handle for parties other than the counterparty. Light clients are recommended a transport order that minimises it (`light-client-requirements.md` §4) | Low |
 | **C25** | A patron's adoption topology + the plaintext number each member's device reported | *A contact graph with identifiers in it.* Both halves already sit with the patron: the topology because they adopted, and the number because the member's device handed it over at the meeting so an invitation to the patron's node could reach them (`light-client-requirements.md` §1.5). The join resolves a subnet's members to people reachable outside it. **Unlike every other capture this one has no structural limit** [author, 2026-11-05]: a likeness is sealed under its subject's keys, so a holder retains nothing it can open and the window enforces itself by the subject declining a capture key (§7.5.1, §7.5.2), where a number is plaintext in the holder's hands. **It is ordinary contact information and is kept as long as the contact is** [author, 2026-11-10], so §1.1's test makes nothing about its retention enforceable — what bounds the exposure is that it crosses only the local session between two devices present, enters no transaction, reaches no witness or verifier, and is not handed on when the contact is introduced | High for a patron holding many, and not detectable |
 
@@ -8832,7 +8853,6 @@ than by the chooser:
 | Queue **cap value** only. *(Retention, sibling replication, ceiling behaviour, crash-recovery copies and operator logging are all settled, §14.1.6)* | §14.1.6 |
 | Replication depth beyond the floor | §3.4 |
 | Contact-locator and negative cache TTLs | §12.5 |
-| Prekey rotation cadence and last-resort policy | §14.2.4 |
 | Resolution cache TTL, how long a cached intermediate address stays valid | §12.6.1 |
 | Anchor caching threshold per node | §12.7.3 |
 | Periodic re-score cadence for time-dependent predicates | §11.4 |
@@ -8865,8 +8885,11 @@ territory and were never going to be fixed.
 
 **Not on that list, deliberately.** There is no durable query log to set retention
 for — only an anti-oracle counter expiring with the ceremony window (§7.4.1), and
-**queue retention is not tunable at all**: it is indefinite by decision (§14.1.6),
-and what a node chooses is the storage cap, a different quantity.
+**an undelivered message's retention is not tunable at all**: it is indefinite by
+decision (§14.1.6), and what a node chooses is the storage cap, a different
+quantity. The time a *delivered* message is kept for the identity's other
+devices, and how often a node's key for a recipient rotates (§14.2.4.3), are
+freely tunable and ship at thirty days and one day.
 
 **Set by one side, obeyed by the other.** Heartbeat interval: the serving node
 states it in `AttachAck`, changeable per relationship at the cost of a
@@ -8913,13 +8936,11 @@ order and refusal behaviour, with the role row consulted as a lookup.
 
 ### 22.2 Decide during implementation
 
-- **Eleven unset parameters** (§21.1), sorted in §21.1.1 by how provisional they
+- **Ten unset parameters** (§21.1), sorted in §21.1.1 by how provisional they
   actually are. **None is currently in the class that hardens on first deployment**,
   which is a change worth noting rather than a permanent property.
-- **`§14.2.4`'s remaining integration decisions**: binding the session to §5.1's hybrid
-  identity; prekey rotation cadence and last-resort policy; and §5.2's
-  crate-maturity caveat. **Who serves which prekey material is settled**
-  (§14.2.4.6).
+- **`§14.2.4`'s remaining caveats**: the split seal's composition wants an
+  analysis of its own, and §5.2's crate maturity applies.
   **Payload-type demultiplexing is settled** [2026-09-30]: `wire-format.md`
   §7.10.1 registers the kind tag and its twenty values, the ceremony's own
   conversation (§7.1) among them and the arranging of an adoption after the
@@ -9162,6 +9183,22 @@ from then on (§6.3). Restoring is for the desktop the phone never shares a
 network with — a workstation wired behind a firewall — where no local carrier
 joins the two.
 
+**A node introduces a restored device to the identity's place under it, in
+signed records** [author, 2026-11-19]. The identity's whole state — its peers,
+its meetings, its memberships elsewhere — comes back from a backup or from a
+ceremony device and from no node, for the reasons above. What a node holds of
+the identity is another matter: the adoption that placed the identity under it,
+which both signed, the chain that places the node under its own patron up to the
+subnet's root, and the subnet's profile. Those are the node's to serve, and it
+serves them to a device that has proved the identity's key on the session; the
+device checks every signature itself and compiles its positions from them as it
+would from its own archive, so the node is believed about nothing its signers
+did not sign. **This returns standing and not history**, the distinction §10.2
+draws for a rotation, and it reaches only as far as the subnets of the nodes
+the device is introduced to. The catalogue follows from the same proof: a node
+sweeps (§11.5) for the identity a device has proved, and not for a device it
+has a record of.
+
 **No per-capture deletion state has to be allocated**, because §7.5.2 makes a
 capture decryptable only when its subject releases a key and **the ordinary
 control is withholding rather than erasure** (§7.5.2.3): the retention the
@@ -9183,15 +9220,17 @@ which is why it needs no enclave to be safe (P33). One restored from the phrase
 holds the key as well, and its seal is the client's custody
 (`light-client-requirements.md` §9), as the phone's is.
 
-**A delegated device is nevertheless a payload endpoint of its own**
+**A delegated device is nevertheless a payload endpoint**
 [author, 2026-09-22]. A desktop's anticipated use is duplex interaction with
 resources, and resource types used chiefly from a desktop are expected once the
-network serves as a team's intranet, so a device that could hold no session
-would forfeit the case it exists for. Each device therefore generates its own
-payload key material, the ceremony device signs the public halves as it signs
-the transport credential, and the device publishes them under its own
-delegation; an identity with several devices has a prekey bundle per device
-(§14.2.4), and a session is with a device, never with an identity.
+network serves as a team's intranet, so a device that could read nothing sent
+to its holder would forfeit the case it exists for. **It is an endpoint of the
+identity and not of its own** [author, 2026-11-19]: a message is sealed to the
+person and never to a device (§14.2.2), so a paired desktop receives the
+identity's encryption key with its transport credential, across the same local
+interface, and its serving node hands it what is queued as it hands any device
+proving the identity. It reads every message and still signs nothing, and no
+sender learns that it exists.
 
 ### 23.4 Test vectors, and what a test suite would add
 
@@ -9236,8 +9275,8 @@ rules that conflict only on malformed input.
 7. Verification-by-query and the local face store (§7.2–7.3).
 8. Rotation adoption (§9), depends on 7, since the local photo archives are
    the rotation substrate.
-9. End-to-end payload encryption (§14.2) — **integrate PQXDH and the Triple
-   Ratchet** (§14.2.4) rather than designing key agreement. Independent of 1–8 and
+9. End-to-end payload encryption (§14.2) — **the split seal** (§14.2.4),
+   composed from hybrid encapsulations the transport already uses. Independent of 1–8 and
    can proceed in parallel once transport exists. **Leaf-to-leaf only**: patron and
    resource endpoints are covered by step 1's transport handshake.
 9b. **ICE for the direct payload path** (§14.1.1), with the serving infra node as

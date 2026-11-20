@@ -3,22 +3,128 @@
 //! still owed for this area.  tests/rustfmt.toml keeps rustfmt off
 //! this directory: the titles are the catalogue's, not hand-laid code.
 
-/// Instantiate PQXDH with X25519 and ML-KEM-768 and run at least the Double Ratchet, matching the adopted specifications
+/// Seal with X-Wing, HKDF-SHA-256 and AES-256-GCM as the seal's steps state, and open only with both halves
 ///
-/// Spec: design §14.2.4.2; design §14.2.4.3; design §14.2.4
+/// Spec: wire-format.md §7.8.1; design §14.2.4.2
 /// Milestone: after-5.  Kind: positive.  Oracle: fixture.
 ///
-/// Rule (design §14.2.4.2): "this profile instantiates it with X25519 and ML-KEM-768"
-/// Rule (design §14.2.4.3): "A conforming client MUST run at least the Double Ratchet over a PQXDH session"
-/// Rule (design §14.2.4): "The requirement below is to adopt it, not to design a replacement."
+/// Rule (wire-format.md §7.8.1): "Each half is an X-Wing encapsulation"
+/// Rule (design §14.2.4.2): "The two shared secrets are combined with the ciphertexts and both keys' identifiers, so that the message key needs both shared secrets and breaking either half leaves nothing."
 ///
-/// Given: Two clients with fixed key material and the adopted specifications' published vectors. The identity binding, prekey cadence and last-resort policy are open integration decisions (design §22.2) and are supplied to the test as parameters.
-/// When: They establish a session and exchange messages.
-/// Then: The primitives the profile names reproduce the vectors their own specifications publish — X25519 against RFC 7748 §6.1, HKDF-SHA-256 against RFC 5869 A.1 — and the KEM carries FIPS 203's parameter set for ML-KEM-768 and round-trips. The composition reproduces this project's own canonical vectors, derived once and pinned, and a message decrypts only at its recipient. The floor is what is asserted; a client running the Triple Ratchet satisfies it too, and PAY-22 covers the seam the post-quantum half plugs into.
+/// Given: Fixed key material for a sender, a recipient and the recipient's node key, and the published vectors of the primitives the seal names.
+/// When: A message is sealed and opened.
+/// Then: The primitives reproduce the vectors their own specifications publish — X25519 against RFC 7748 §6.1, HKDF-SHA-256 against RFC 5869 A.1 — and the KEM carries FIPS 203's parameter set for ML-KEM-768 and round-trips. The seal reproduces this project's canonical vectors, and a key derived with either shared secret replaced does not open the body.
 ///
-/// Interpretation: How the session is bound to the hybrid identity is open; the test parameterises the binding. Re-derived 2026-09-26 when §14.2.4.3 made the Double Ratchet the floor and the Triple Ratchet recommended. **The oracle was restated** [author, 2026-11-08], on the same grounds as the vector bar on 2026-10-02. It had read *"the key agreement and ratchet outputs match the adopted specifications for the same inputs"*, which no one in this project can check: PQXDH and the Double Ratchet are adopted rather than designed here (design §14.2.4) and their specifications are prose with formal analysis — neither publishes known-answer vectors. The only ways to compare against the composition would be another implementation, and libsignal is AGPL-3.0, which the licence policy admits only in segregated client apps and never as a gate dependency. A bar nobody here can meet is a permanent open item that re-finds itself in every review, which is exactly why the "independent implementation reproduces every vector" bar was removed before. **What replaced it splits the claim in two.** The *primitives* publish vectors and are checked against them: `crypto/tests/primitives.rs` holds X25519 against RFC 7748 §6.1 (both sides reaching the shared secret, not one direction of the arithmetic) and HKDF-SHA-256 against RFC 5869 A.1. The hex is published rather than computed here, which is the point — a vector this project produced would say only that the implementation agrees with itself. The *composition* is held by this project's own canonical vectors and its independent harness in another language over independent cryptography, which is the restated bar. **ML-KEM-768's published known answers are not carried, and the reason is stated rather than left blank**: NIST distributes them as ACVP JSON rather than in FIPS 203's text, and pulling that corpus in is a decision about what this repository holds. What is checked is the parameter set — 1184-byte encapsulation key, 1088-byte ciphertext, 32-byte secret, which is what tells 768 from 512 and 1024 — the round trip, the refusal of a short ciphertext, and that the seed regenerates the key. **Still owed**: the composition's own canonical vectors and the ratchet, at this entry's milestone.
+/// Interpretation: The bar is the one restated [author, 2026-11-08]: the primitives against the vectors their own specifications publish, the composition against this project's canonical vectors and its independent harness, the composition having no one else's vectors to meet (design §14.2.4.6). ML-KEM-768's published known answers are not carried, for the reason given when the bar was restated; the parameter set, the round trip and the refusal of a short ciphertext are. Whether X-Wing's own draft vectors are carried is not stated. **Still owed**: the seal's canonical vectors.
 #[test]
 #[ignore = "acceptance PAY-13: owed at milestone after-5"]
-fn pay_13_instantiate_pqxdh_with_x25519_and_ml_kem_768_and() {
-    todo!("PAY-13: Instantiate PQXDH with X25519 and ML-KEM-768 and run at least the Double Ratchet, matching the adopted specifications")
+fn pay_13_seal_with_x_wing_hkdf_sha_256_and_aes_256_gcm_as() {
+    todo!("PAY-13: Seal with X-Wing, HKDF-SHA-256 and AES-256-GCM as the seal's steps state, and open only with both halves")
+}
+
+/// Keep a signed key for each recipient served, rotate it, and delete its private half with the last message sealed to it
+///
+/// Spec: wire-format.md §7.8; infra-client-requirements.md §6; design §14.2.4.3
+/// Milestone: after-5.  Kind: positive.  Oracle: behaviour.
+///
+/// Rule (wire-format.md §7.8): "A node generates a key for each identity it serves, publishes its successor on its own schedule"
+/// Rule (wire-format.md §7.8): "holds each private half while any message sealed to it is queued, deleting it when the last such message is removed"
+/// Rule (infra-client-requirements.md §6): "One per recipient and never one shared between them"
+///
+/// Given: Node N serving recipients R1 and R2, its rotation interval a test parameter (one day as shipped); a message for R1 sealed to R1's key numbered n.
+/// When: The interval elapses twice, both recipients' keys are fetched after each, and the message is then delivered and its retention runs out.
+/// Then: R1's and R2's keys are distinct, each verifying under N with external_aad rhtn/1:node-key and naming its recipient in field 1 and N in field 2, and each rotation serves a key with a greater field 3. While the message is held its delivery carries the half that opens it; once it is removed, a submission sealed to key n is refused.
+#[test]
+#[ignore = "acceptance PAY-28: owed at milestone after-5"]
+fn pay_28_keep_a_signed_key_for_each_recipient_served_rota() {
+    todo!("PAY-28: Keep a signed key for each recipient served, rotate it, and delete its private half with the last message sealed to it")
+}
+
+/// Derive the identity's encryption key from its seed, so a device restored from the phrase opens what was sealed before it
+///
+/// Spec: wire-format.md §2.5; design §14.2.2; wire-format.md §2.3
+/// Milestone: after-5.  Kind: positive.  Oracle: behaviour.
+///
+/// Rule (wire-format.md §2.5): "Every device restored from the phrase computes the same two keys, so none is carried between devices except to one paired without the seed"
+/// Rule (design §14.2.2): "So any device holding the identity reads what was sent to it, including one restored from the phrase after the message was sent."
+/// Rule (wire-format.md §2.3): "The material's hash MUST equal the locator's subject and the encryption key's, and both signatures MUST verify under it"
+///
+/// Given: Identity T on one device; a message sealed to T queued at T's serving node; a second device restored from T's phrase. Separately, two introductions of T, one whose encryption key names another keyhash in field 1 and one whose encryption-key signature does not verify under T.
+/// When: The restored device attaches with no field 5 and collects; a client is handed each malformed introduction and asked to send to T through it.
+/// Then: The restored device's encryption key is byte for byte the first device's, and the message opens on it. Neither malformed introduction is taken: nothing is sealed to the key it carried, and the send reports a refusal.
+///
+/// Interpretation: What a client does with an introduction it did not take is not stated beyond its contributing nothing; the test reads that as having no key to seal to, so the send is refused rather than sealed to the key carried.
+#[test]
+#[ignore = "acceptance PAY-29: owed at milestone after-5"]
+fn pay_29_derive_the_identity_s_encryption_key_from_its_se() {
+    todo!("PAY-29: Derive the identity's encryption key from its seed, so a device restored from the phrase opens what was sealed before it")
+}
+
+/// A paired device's credential carries the identity's two encryption secrets, and with them it opens and sends as the person
+///
+/// Spec: design §23.3; wire-format.md §14.3.3
+/// Milestone: after-5.  Kind: positive.  Oracle: behaviour.
+///
+/// Rule (design §23.3): "a paired desktop receives the identity's encryption key with its transport credential, across the same local interface"
+/// Rule (design §23.3): "It reads every message and still signs nothing, and no sender learns that it exists."
+///
+/// Given: Alice's phone holding her seed, and a desktop holding no seed, introduced to it across the local interface; bob holds alice's card.
+/// When: The phone answers the desktop's DeviceIntroduction with a DeviceCredential; bob seals a message to alice, and the desktop sends one to bob.
+/// Then: The credential carries the run of delegations and two 32-byte secrets, alice's X-Wing decapsulation seed and her sealing-authentication key, equal to what her phone derives. The desktop opens bob's message, bob attributes the desktop's to alice, and alice's card as bob holds it is the same before and after the pairing.
+#[test]
+#[ignore = "acceptance PAY-30: owed at milestone after-5"]
+fn pay_30_a_paired_device_s_credential_carries_the_identit() {
+    todo!("PAY-30: A paired device's credential carries the identity's two encryption secrets, and with them it opens and sends as the person")
+}
+
+/// Fetch a node key and submit under a transport key minted for the connection, never the identity's, even when attached to that node, with the introduction inside the seal on a first message
+///
+/// Spec: light-client-requirements.md §3; wire-format.md §7.10; wire-format.md §7.8.1
+/// Milestone: after-5.  Kind: negative.  Oracle: behaviour.
+///
+/// Rule (light-client-requirements.md §3): "Fetch its key and submit under a transport key you mint for that connection, never your identity's"
+/// Rule (light-client-requirements.md §3): "Your introduction rides inside the seal on your first message to a recipient."
+/// Rule (wire-format.md §7.10): "It is taken from nobody the node can name"
+///
+/// Given: Client S, attached to the node that also serves R, holding R's card and never having had a message from R.
+/// When: S fetches R's node key and sends R two messages; R replies; S sends a third.
+/// Then: Every connection S opens to R's node for the fetch and the submissions presents a key that is neither S's classical component nor one a delegation from S names, and no two of those connections present the same key; none rides S's attached session. The first sealed body carries S's introduction and the second and third carry nil in its place. R's node takes each submission.
+#[test]
+#[ignore = "acceptance PAY-31: owed at milestone after-5"]
+fn pay_31_fetch_a_node_key_and_submit_under_a_transport_ke() {
+    todo!("PAY-31: Fetch a node key and submit under a transport key minted for the connection, never the identity's, even when attached to that node, with the introduction inside the seal on a first message")
+}
+
+/// Answer a node-key batch with one reply per recipient asked, in the request's own order, a failure in place of a key it cannot give
+///
+/// Spec: wire-format.md §7.8
+/// Milestone: after-5.  Kind: positive.  Oracle: behaviour.
+///
+/// Rule (wire-format.md §7.8): "one reply per recipient asked, in the request's own ; ascending keyhash order, which is what associates ; a reply with its recipient"
+/// Rule (wire-format.md §7.8): "0 not a recipient this node serves | 1 refused"
+///
+/// Given: Node N serving R1 and R3 and not R2, where R1 < R2 < R3 by keyhash.
+/// When: A NodeKeyBatchRequest names R1, R2 and R3.
+/// Then: The reply is three NodeKeyReplies, each echoing the one nonce: the first carries R1's newest key, the second no key and failure code 0, the third R3's newest key.
+#[test]
+#[ignore = "acceptance PAY-32: owed at milestone after-5"]
+fn pay_32_answer_a_node_key_batch_with_one_reply_per_recip() {
+    todo!("PAY-32: Answer a node-key batch with one reply per recipient asked, in the request's own order, a failure in place of a key it cannot give")
+}
+
+/// Show a message from a sender not held as a contact as unverified under its alias and keyhash, and offer no reply
+///
+/// Spec: design §14.2.4.3; wire-format.md §7.8.1; light-client-requirements.md §3
+/// Milestone: after-5.  Kind: positive.  Oracle: behaviour.
+///
+/// Rule (light-client-requirements.md §3): "is shown under the alias it carries and marked unverified, never as the person."
+/// Rule (design §14.2.4.3): "a recipient replies to a sender it holds as a contact, and to no other"
+///
+/// Given: A, restored from its phrase with nothing of B held, collects a message B sealed after its first, so field 3 is nil; and a second sender C who chose B's alias.
+/// When: A lists its threads and tries to reply to B's message.
+/// Then: A shows B's message under the alias in field 2, marked unverified, in a thread kept apart from C's by the keyhash in field 1; nothing in it is dispatched as B's; and no reply is sealed or submitted, since A holds no contact for B.
+#[test]
+#[ignore = "acceptance PAY-33: owed at milestone after-5"]
+fn pay_33_show_a_message_from_a_sender_not_held_as_a_conta() {
+    todo!("PAY-33: Show a message from a sender not held as a contact as unverified under its alias and keyhash, and offer no reply")
 }

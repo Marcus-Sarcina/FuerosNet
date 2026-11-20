@@ -1,8 +1,8 @@
 {
  "specs": {
-  "wire-format.md": "37210fc5943c5625d4eb2d2ea6230e6b5b8fd6f0d029ff4062e470424d9c793f",
-  "network-design.md": "3f68e3f297e9f69c04b9a9aacf37251b26c2689c106552eea829880bb5300e9e",
-  "light-client-requirements.md": "42a301a0e48933953006adf9f9535b71df0ba0b7af0a07e1cff6c647a1ffeeb8"
+  "wire-format.md": "3c55c1f58f5c2a724820b2c17be3f68dc2a36987cb734ad6d0560c22344be13d",
+  "network-design.md": "baf4e0059cedfc10192f009c734bbe0fcb71620439610a7c526333b677dbc863",
+  "light-client-requirements.md": "3b6ec31a89f1561a39d2605ed4601428af8a2983ef4b7e37aa1d0edbaa7c93dc"
  },
  "generator": "f91f92e930b3d80005e125576f9db32e348be67ff8a515a0a62e88a19cbfce32",
  "verifier": "05119f5b112c443481681e4ec144d3446eb648542422dd078fee9b1e2a9b4f1e",
@@ -11,15 +11,15 @@
   "cryptography": "41.0.7"
  },
  "outputs": {
-  "keys.md": "7234364922648c8b74e9a800c7ad7bc69b6ddcf7fd0ed66a5b8e5ff2b0d87157",
-  "primitives.md": "1748397f9d9f8288b026e3593f43f1e36846a53360b795d034b73a930d11f570",
-  "transactions.md": "77f7f82d22dec7f0705a7a3062cd92fa00f41ad6c26f6b55cf655bbe86ead823",
-  "records.md": "f5c176473cdd550eae7dd8bd89f80296e70a61049723f0a916193d2bb59185ec",
-  "verifier-selection.md": "dec481ff5823672da0e7308e42ab0d754648235c31350f36705df83a85181da6",
-  "messages.md": "3f5626b9347c800c8ab43fa4cf1f0a51c87fe730ec29b77e994eae2a269ba1c4",
-  "local-interfaces.md": "263925a93953eebc4eecb82d9ea89d0560e7110ac62436dbe6acd8404adf4dfb",
-  "corpus.json": "d06772078c6dcdf7b739a0902dcac35941fba46274be6326da57da8fac5bbca9",
-  "README.md": "954d105a6a3ab08475ec341fca52a82e357a02d93977b66f107e13421a92156c",
-  "negative-vectors.md": "26ece97bcc5ed4f85d33ba255a55929aeb331f9f71edea74dd3fdea4433aea8d"
+  "keys.md": "c0feaed15a2e7c3c1f4318e3642e723be78c25857167af695ec75cd4af98585c",
+  "primitives.md": "7de82248e8ec98b90e4868402de1789b6080e52225495cecd4f3c3f29412ece7",
+  "transactions.md": "3090f9bb78f574aa4ebab26aa99c60c8e1982acab5d09207a66bc3c1b421163c",
+  "records.md": "85df270d31e7cbde35f71732ee0919a9add021f3cd3e16284a311339210e506a",
+  "verifier-selection.md": "4dc95ee72df2deb58ac80c474b2aa8a312299bb7f036c547dca7c6b4227240fa",
+  "messages.md": "52f7ae94f436df46a472c8b4463b95f7b9cdfbb24d3e2efa616ff239bf0014c0",
+  "local-interfaces.md": "80c876e0655c1450dc7cef7bb838c9329f25b735725061bc52e597b8e97a991b",
+  "corpus.json": "960b6c995ff458befbda18056ac5b4bbf274e098b20b3f3dbaa372a24fcd97db",
+  "README.md": "22e84092de5ae52bdb50b5a4edb1421ed800c9b2b39c853b0bb53e900c006061",
+  "negative-vectors.md": "bc34c0b193a5a3d67f33d5291c8761304a8eb0b67a7f6d393ac8968b0fc14584"
  }
 }
