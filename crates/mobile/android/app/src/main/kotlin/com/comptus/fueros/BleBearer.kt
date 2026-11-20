@@ -75,7 +75,12 @@ import timber.log.Timber
  * discovery, the subscription, the link coming ready, the disconnect, and
  * every refusal by the platform.
  */
-class BleBearer(private val context: Context) {
+class BleBearer(context: Context) {
+
+    /** The application's context whatever screen made this: the bearer is
+     *  held statically for the length of a meeting ([Ceremony.ble]), and
+     *  holding a screen there would keep it alive past its own end. */
+    private val appContext: Context = context.applicationContext
 
     companion object {
         /**
@@ -240,7 +245,7 @@ class BleBearer(private val context: Context) {
     private val dialsAllowed = 4
 
     private fun manager(): BluetoothManager? =
-        context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+        appContext.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
 
     /** Whether a packet given to [link] now would cross: a peer is
      *  connected and its subscription to `OUTBOUND` is confirmed. */
@@ -395,7 +400,7 @@ class BleBearer(private val context: Context) {
         val adapter: BluetoothAdapter = m.adapter ?: return "no Bluetooth adapter"
         if (!adapter.isEnabled) return "Bluetooth is off"
         return try {
-            val s = m.openGattServer(context, serverCallback) ?: return "no GATT server"
+            val s = m.openGattServer(appContext, serverCallback) ?: return "no GATT server"
             server = s
             val service = BluetoothGattService(SERVICE, BluetoothGattService.SERVICE_TYPE_PRIMARY)
             service.addCharacteristic(
@@ -673,7 +678,13 @@ class BleBearer(private val context: Context) {
             // bounds the whole
             if (newState == BluetoothProfile.STATE_DISCONNECTED && !subscription.active) {
                 val d = peer
-                runCatching { g.close() }
+                try {
+                    g.close()
+                } catch (e: SecurityException) {
+                    refused("close")
+                } catch (e: Exception) {
+                    // a link already gone, which is what closing it was for
+                }
                 if (d != null && gatt === g) {
                     gatt = null
                     Thread({
@@ -764,7 +775,7 @@ class BleBearer(private val context: Context) {
         }
         Diag.event("ble", "op" to "connect", "state" to "dialling", "attempt" to n)
         try {
-            gatt = d.connectGatt(context, false, clientCallback)
+            gatt = d.connectGatt(appContext, false, clientCallback)
         } catch (e: SecurityException) {
             refused("connect")
         }
@@ -791,8 +802,17 @@ class BleBearer(private val context: Context) {
      */
     fun quiet() {
         manager()?.adapter?.let { stopScan(it) }
-        runCatching {
-            advertiser?.let { manager()?.adapter?.bluetoothLeAdvertiser?.stopAdvertising(it) }
+        stopAdvertising()
+    }
+
+    private fun stopAdvertising() {
+        val a = advertiser ?: return
+        try {
+            manager()?.adapter?.bluetoothLeAdvertiser?.stopAdvertising(a)
+        } catch (e: SecurityException) {
+            refused("stopAdvertising")
+        } catch (e: Exception) {
+            // an adapter already off has stopped it anyway
         }
         advertiser = null
     }
@@ -803,12 +823,21 @@ class BleBearer(private val context: Context) {
         writeDone.release()
         if (gatt != null || server != null) Diag.event("ble", "op" to "close")
         manager()?.adapter?.let { stopScan(it) }
-        runCatching {
-            advertiser?.let { manager()?.adapter?.bluetoothLeAdvertiser?.stopAdvertising(it) }
+        stopAdvertising()
+        try {
+            gatt?.close()
+        } catch (e: SecurityException) {
+            refused("close")
+        } catch (e: Exception) {
+            // closing is giving it back, whatever state it is in
         }
-        runCatching { gatt?.close() }
-        runCatching { server?.close() }
-        advertiser = null
+        try {
+            server?.close()
+        } catch (e: SecurityException) {
+            refused("close")
+        } catch (e: Exception) {
+            // closing is giving it back, whatever state it is in
+        }
         gatt = null
         server = null
         peer = null

@@ -10,4 +10,20 @@
     <issue id="NewApi">
         <ignore path="src/generated/kotlin" />
     </issue>
+    <!-- SetTextI18n: the app is not localised yet, and the words a screen
+         shows are written where it shows them, in the author's wording.
+         Moving them into resources is the translation's work, not lint's;
+         revisit this when the app is translated. -->
+    <issue id="SetTextI18n" severity="ignore" />
+    <!-- UnusedResources, for two sets this shell does not own and so
+         cannot prune. `colors.xml` is generated from
+         `crates/brand/tokens.toml` by `crates/brand/generate.py`, which
+         checks it for drift: it carries the whole dark set, whichever of it
+         the theme happens to name. The italic faces are the brand's
+         (`crates/brand/res/font`), shared with the desktop, which draws
+         them; this shell draws the upright two. -->
+    <issue id="UnusedResources">
+        <ignore path="src/main/res/values/colors.xml" />
+        <ignore regexp="R\.font\.geist(_mono)?_italic" />
+    </issue>
 </lint>

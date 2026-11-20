@@ -530,7 +530,7 @@ class ResourceActivity : Activity() {
             answer(ask, declined("this device has no location service turned on"))
             return
         }
-        runCatching {
+        try {
             lm.getCurrentLocation(provider, null, mainExecutor) { where ->
                 runOnUiThread {
                     if (where == null) {
@@ -540,7 +540,13 @@ class ResourceActivity : Activity() {
                     }
                 }
             }
-        }.onFailure { answer(ask, declined("this device would not give its place: $it")) }
+        } catch (e: SecurityException) {
+            // asked for before this screen; a permission taken back since
+            // is a refusal, said as one
+            answer(ask, declined("the location permission is not held"))
+        } catch (e: Exception) {
+            answer(ask, declined("this device would not give its place: $e"))
+        }
     }
 
     private fun placed(ask: Gateway.Ask, where: android.location.Location) {

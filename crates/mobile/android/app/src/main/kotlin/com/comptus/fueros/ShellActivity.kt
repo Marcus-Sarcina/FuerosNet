@@ -1,5 +1,6 @@
 package com.comptus.fueros
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
@@ -7,6 +8,7 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.drawable.Drawable
+import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -214,6 +216,7 @@ class ShellActivity : Activity() {
     private fun go(where: Chrome.Place) {
         place = where
         val on = Chrome.chrome(where)
+        holdBack(!on)
         rail.visibility = if (on) View.VISIBLE else View.GONE
         footBar.visibility = if (on) View.VISIBLE else View.GONE
         connection = null
@@ -225,18 +228,60 @@ class ShellActivity : Activity() {
      * **Back is out of a chromeless place and no further.** From Home it
      * is the system's, which leaves the app; from a subnet's options it
      * is that subnet; from anywhere else chromeless it is Home, the way
-     * the rail would have been.
+     * the rail would have been. This is the chromeless half; the system's
+     * half is left to the system.
+     */
+    private fun back(here: Chrome.Place) {
+        when (here) {
+            is Chrome.Place.SubnetOptions -> go(Chrome.Place.Subnet(here.id))
+            else -> go(Chrome.Place.Home)
+        }
+    }
+
+    /**
+     * **API 33 and up: back reaches the shell by a callback**, held only
+     * while the place is chromeless, so that in a place with the chrome
+     * the system's own back, which leaves the app, is untouched. An app
+     * targeting API 36 is not sent [onBackPressed] on an API 36 device
+     * at all, so without this the back from a chromeless place left the
+     * app there. Typed loosely so that no API 33 class is named in a
+     * field an API 31 device loads.
+     */
+    private var backCallback: Any? = null
+
+    private fun holdBack(on: Boolean) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val held = backCallback as android.window.OnBackInvokedCallback?
+        if (on && held == null) {
+            val callback = android.window.OnBackInvokedCallback { back(place) }
+            onBackInvokedDispatcher.registerOnBackInvokedCallback(
+                android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                callback,
+            )
+            backCallback = callback
+        } else if (!on && held != null) {
+            onBackInvokedDispatcher.unregisterOnBackInvokedCallback(held)
+            backCallback = null
+        }
+    }
+
+    /**
+     * **Where the callback is not used, back still arrives here**: below
+     * API 33, which has no callback, and on 33 to 35, where the platform
+     * ignores one unless the manifest opts in. The same rule as [back].
+     * Lint asks for AndroidX's dispatcher instead; that would be this
+     * shell's first AndroidX runtime library, for what the platform's
+     * own callback already does from 33 up.
      */
     @Deprecated("the platform's own, which this overrides deliberately")
+    @SuppressLint("GestureBackNavigation")
     override fun onBackPressed() {
         val here = place
-        when {
-            Chrome.chrome(here) -> {
-                @Suppress("DEPRECATION")
-                super.onBackPressed()
-            }
-            here is Chrome.Place.SubnetOptions -> go(Chrome.Place.Subnet(here.id))
-            else -> go(Chrome.Place.Home)
+        if (Chrome.chrome(here)) {
+            @Suppress("DEPRECATION")
+            super.onBackPressed()
+        } else {
+            back(here)
         }
     }
 

@@ -1,6 +1,7 @@
 package com.comptus.fueros
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -501,9 +502,16 @@ class MeetActivity : Activity() {
      * the platform would not give. Every bench phone answers null: all
      * four report `gsm.sim.state=ABSENT`.
      */
+    // HardwareIds: the handset's own number, read on purpose to be
+    // reported at a meeting [author, 2026-11-10; light-client-requirements.md §1.5]
+    @SuppressLint("HardwareIds")
     @Suppress("DEPRECATION")
     private fun ownNumber(): String? {
-        if (!held(numberPermission)) return null
+        // the check spelled out rather than through [held], so that lint
+        // sees the guard on the calls below
+        if (checkSelfPermission(Manifest.permission.READ_PHONE_NUMBERS) != PackageManager.PERMISSION_GRANTED) {
+            return null
+        }
         return runCatching {
             val tm = getSystemService(TelephonyManager::class.java) ?: return null
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -585,7 +593,7 @@ class MeetActivity : Activity() {
         val moduleMm = if (dpi > 0f) scale / dpi * 25.4f else 0f
         Diag.event(
             "qr.shown", "which" to which, "bytes" to bytes.size, "modules" to m.width,
-            "scale" to scale, "module_mm" to String.format("%.2f", moduleMm),
+            "scale" to scale, "module_mm" to String.format(java.util.Locale.ROOT, "%.2f", moduleMm),
         )
         lastModules = m.width
         lastScale = scale

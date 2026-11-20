@@ -96,7 +96,7 @@ class Still(private val context: Context) {
         }, h)
         open.set(true)
         return try {
-            openCamera(manager, id, r, preview, h)
+            manager.openCamera(id, opening(r, preview, h), h)
             null
         } catch (e: SecurityException) {
             close()
@@ -174,69 +174,68 @@ class Still(private val context: Context) {
         tell?.invoke("the camera stopped: $e")
     }
 
-    private fun openCamera(
-        manager: CameraManager,
-        id: String,
+    /**
+     * What an opening camera is answered with. The caller hands it to
+     * `openCamera` itself, inside the try that turns a refused camera
+     * permission into its message, so the call that needs the permission
+     * and the catch for its refusal are in one place.
+     */
+    private fun opening(
         reader: ImageReader,
         preview: Surface?,
         h: Handler,
-    ) {
-        manager.openCamera(
-            id,
-            object : CameraDevice.StateCallback() {
-                override fun onOpened(camera: CameraDevice) {
-                    device = camera
-                    Diag.event("camera", "which" to "still", "op" to "open")
-                    val surfaces = listOfNotNull(reader.surface, preview)
-                    try {
-                        @Suppress("DEPRECATION")
-                        camera.createCaptureSession(
-                            surfaces,
-                            object : CameraCaptureSession.StateCallback() {
-                                override fun onConfigured(s: CameraCaptureSession) {
-                                    if (!open.get()) {
-                                        runCatching { s.close() }
-                                        return
-                                    }
-                                    session = s
-                                    // the preview alone repeats; the still
-                                    // is one request at the person's press
-                                    if (preview == null) return
-                                    try {
-                                        val b = camera.createCaptureRequest(
-                                            CameraDevice.TEMPLATE_PREVIEW,
-                                        )
-                                        b.addTarget(preview)
-                                        b.set(
-                                            CaptureRequest.CONTROL_AF_MODE,
-                                            CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE,
-                                        )
-                                        s.setRepeatingRequest(b.build(), null, h)
-                                    } catch (e: Exception) {
-                                        onThread("preview", e)
-                                    }
+    ): CameraDevice.StateCallback =
+        object : CameraDevice.StateCallback() {
+            override fun onOpened(camera: CameraDevice) {
+                device = camera
+                Diag.event("camera", "which" to "still", "op" to "open")
+                val surfaces = listOfNotNull(reader.surface, preview)
+                try {
+                    @Suppress("DEPRECATION")
+                    camera.createCaptureSession(
+                        surfaces,
+                        object : CameraCaptureSession.StateCallback() {
+                            override fun onConfigured(s: CameraCaptureSession) {
+                                if (!open.get()) {
+                                    runCatching { s.close() }
+                                    return
                                 }
-
-                                override fun onConfigureFailed(s: CameraCaptureSession) {
-                                    onThread("configure", IllegalStateException("session refused"))
+                                session = s
+                                // the preview alone repeats; the still
+                                // is one request at the person's press
+                                if (preview == null) return
+                                try {
+                                    val b = camera.createCaptureRequest(
+                                        CameraDevice.TEMPLATE_PREVIEW,
+                                    )
+                                    b.addTarget(preview)
+                                    b.set(
+                                        CaptureRequest.CONTROL_AF_MODE,
+                                        CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE,
+                                    )
+                                    s.setRepeatingRequest(b.build(), null, h)
+                                } catch (e: Exception) {
+                                    onThread("preview", e)
                                 }
-                            },
-                            h,
-                        )
-                    } catch (e: Exception) {
-                        onThread("session", e)
-                    }
-                }
+                            }
 
-                override fun onDisconnected(camera: CameraDevice) {
-                    onThread("disconnected", IllegalStateException("the camera was taken away"))
+                            override fun onConfigureFailed(s: CameraCaptureSession) {
+                                onThread("configure", IllegalStateException("session refused"))
+                            }
+                        },
+                        h,
+                    )
+                } catch (e: Exception) {
+                    onThread("session", e)
                 }
+            }
 
-                override fun onError(camera: CameraDevice, error: Int) {
-                    onThread("error", IllegalStateException("camera error $error"))
-                }
-            },
-            h,
-        )
-    }
+            override fun onDisconnected(camera: CameraDevice) {
+                onThread("disconnected", IllegalStateException("the camera was taken away"))
+            }
+
+            override fun onError(camera: CameraDevice, error: Int) {
+                onThread("error", IllegalStateException("camera error $error"))
+            }
+        }
 }

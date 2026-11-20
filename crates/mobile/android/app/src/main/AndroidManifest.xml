@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- The kernel dials the serving node itself; nothing else here talks
          to the network. -->
@@ -38,6 +39,12 @@
     <!-- A tag read for a check-in or an asset: read only, never written,
          and only while the resource screen is in front. -->
     <uses-permission android:name="android.permission.NFC" />
+    <!-- The platform's own unlock, which authorises a `sign` ask
+         (`light-client-requirements.md` §8.1): a normal permission,
+         granted at install and never asked for. Without it the platform
+         refuses even the question of whether an unlock is enrolled, and
+         every device reads as having none. -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <!-- A resource's standing permission to be shown notifications
          (API 33 and up; below it the declaration is enough). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -107,9 +114,13 @@
         <activity android:name=".ConversationsActivity" android:exported="false" />
         <!-- Portrait, fixed: D2 has the phone turned around to face the
              counterparty, and a rotation would rebuild the screen, restart
-             the camera and reset the read at the moment it matters. -->
+             the camera and reset the read at the moment it matters. Lint's
+             two orientation checks are silenced here for that reason;
+             from API 36 the platform ignores the lock on a large screen
+             (600dp and wider) whatever this says. -->
         <activity android:name=".MeetActivity" android:exported="false"
-            android:screenOrientation="portrait" />
+            android:screenOrientation="portrait"
+            tools:ignore="LockedOrientationActivity,DiscouragedApi" />
         <activity android:name=".ConversationActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
         <!-- F's catalog, reached from inside a subnet, and the device's own
              attach, reached from Options. An Activity a screen names and a

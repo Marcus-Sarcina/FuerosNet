@@ -68,7 +68,7 @@ class WipeTest {
         val shell = sources().first { it.name == "AndroidShell.kt" }.readText()
         assertTrue(
             "the shell no longer takes its directory from Wipe.KERNEL_DIR",
-            stripped(shell).contains("File(context.filesDir, Wipe.KERNEL_DIR)"),
+            stripped(shell).contains("File(appContext.filesDir, Wipe.KERNEL_DIR)"),
         )
         assertEquals("and that directory is still the one a wipe clears", "kernel", Wipe.KERNEL_DIR)
     }

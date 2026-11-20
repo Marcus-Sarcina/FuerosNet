@@ -27,8 +27,11 @@
   its operator gave it, so there is no domain to name here: a list of hosts
   would be a list nobody could write in advance.
 -->
-<network-security-config>
-    <base-config cleartextTrafficPermitted="true">
+<!-- Lint's InsecureBaseConfiguration is silenced on the base config for
+     the reasons above: the cleartext allowance is the point of it. -->
+<network-security-config xmlns:tools="http://schemas.android.com/tools">
+    <base-config cleartextTrafficPermitted="true"
+        tools:ignore="InsecureBaseConfiguration">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>

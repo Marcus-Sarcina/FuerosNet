@@ -143,12 +143,15 @@ class CatalogActivity : Activity() {
                 }
                 isEnabled = false
                 answer.text = "asking ${entry.row.node}…"
+                // read here, on the main thread, which is the only one a
+                // view may be read on
+                val asked = path.text.toString().trim()
                 Thread {
                     val got = Gateway.askAs(
                         entry.by,
                         entry.row.node.hex(),
                         entry.row.resource.hex(),
-                        path.text.toString().trim(),
+                        asked,
                     )
                     runOnUiThread {
                         answer.text = when {

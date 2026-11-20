@@ -135,6 +135,9 @@ class ManifestTest {
             "FOREGROUND_SERVICE",
             "FOREGROUND_SERVICE_REMOTE_MESSAGING",
             "READ_PHONE_NUMBERS",
+            // the platform's own unlock behind a `sign` ask
+            // (light-client-requirements.md §8.1); normal, granted at install
+            "USE_BIOMETRIC",
             "VIBRATE",
         )
         assertEquals(

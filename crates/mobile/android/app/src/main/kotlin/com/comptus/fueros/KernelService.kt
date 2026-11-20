@@ -7,6 +7,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.IBinder
 
 /**
@@ -45,7 +46,13 @@ class KernelService : Service() {
                 .setContentIntent(tap)
                 .setOngoing(true)
                 .build()
-            startForeground(ID, built, ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(ID, built, ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING)
+            } else {
+                // the type has no constant below API 34; the two-argument
+                // start takes the manifest's, which is the same type
+                startForeground(ID, built)
+            }
         }
     }
 

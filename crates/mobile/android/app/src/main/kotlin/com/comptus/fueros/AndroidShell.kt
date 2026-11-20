@@ -37,7 +37,7 @@ import timber.log.Timber
  * contain no path.
  */
 class AndroidShell(
-    private val context: Context,
+    context: Context,
     /**
      * **Which identity's storage this shell reads and writes** — the
      * directory under [Wipe.KERNEL_DIR] an identity's own files live in,
@@ -57,12 +57,17 @@ class AndroidShell(
     private val scope: String? = null,
 ) : Camera, Clock, Random, Operator, Notices, Storage, Custody, Diagnostics {
 
+    /** The application's context whatever was passed: a shell is held
+     *  statically ([Gateway.shell]), where a screen would be kept alive
+     *  past its own end. */
+    private val appContext: Context = context.applicationContext
+
     /** An asset's bytes, or none where the app ships without it. */
     fun asset(name: String): ByteArray =
-        runCatching { context.assets.open(name).use { it.readBytes() } }.getOrDefault(ByteArray(0))
+        runCatching { appContext.assets.open(name).use { it.readBytes() } }.getOrDefault(ByteArray(0))
 
 
-    private val dir: File = File(context.filesDir, Wipe.KERNEL_DIR)
+    private val dir: File = File(appContext.filesDir, Wipe.KERNEL_DIR)
         .let { if (scope == null) it else File(it, scope) }
         .apply { mkdirs() }
     private val rng = SecureRandom()
@@ -77,7 +82,7 @@ class AndroidShell(
     // closes it; an empty frame is a capture that did not happen, which the
     // kernel's template-length check fails rather than seals.
     override fun capture(ask: Ask): ByteArray {
-        val cam = face ?: FaceCamera(context).also { face = it }
+        val cam = face ?: FaceCamera(appContext).also { face = it }
         // **a camera that will not open is asked again**: the selfie
         // camera the exchange just closed can still be held when the first
         // prompt arrives, and the platform says "disabled by policy" or
@@ -106,7 +111,7 @@ class AndroidShell(
      *  cannot give once open is an absent face, which is what the loop is
      *  there to notice. */
     override fun probe(): ByteArray {
-        val cam = face ?: FaceCamera(context).also { face = it }
+        val cam = face ?: FaceCamera(appContext).also { face = it }
         cam.open()?.let { Timber.w("face camera (probe): %s", it) }
         return cam.frame()
     }

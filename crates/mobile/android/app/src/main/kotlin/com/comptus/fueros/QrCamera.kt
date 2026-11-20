@@ -354,7 +354,7 @@ class QrCamera(private val context: Context) {
             }
         }, h)
         return try {
-            open(manager, id, r, preview, h)
+            manager.openCamera(id, opening(r, preview, h), h)
             null
         } catch (e: SecurityException) {
             close()
@@ -738,116 +738,115 @@ class QrCamera(private val context: Context) {
         }
     }
 
-    private fun open(
-        manager: CameraManager,
-        id: String,
+    /**
+     * What an opening camera is answered with. The caller hands it to
+     * `openCamera` itself, inside the try that turns a refused camera
+     * permission into its message, so the call that needs the permission
+     * and the catch for its refusal are in one place.
+     */
+    private fun opening(
         reader: ImageReader,
         preview: Surface?,
         h: Handler,
-    ) {
-        manager.openCamera(
-            id,
-            object : CameraDevice.StateCallback() {
-                override fun onOpened(camera: CameraDevice) {
-                    device = camera
-                    Diag.event(
-                        "camera",
-                        "which" to "qr",
-                        "op" to "open",
-                        "facing" to facing,
-                        "width" to width,
-                        "height" to height,
-                        "took_ms" to (Diag.ms() - startedMs),
-                    )
-                    val surfaces = listOfNotNull(reader.surface, preview)
-                    try {
-                    @Suppress("DEPRECATION")
-                    camera.createCaptureSession(
-                        surfaces,
-                        object : CameraCaptureSession.StateCallback() {
-                            override fun onConfigured(s: CameraCaptureSession) {
-                                if (!reading.get()) {
-                                    // closed, or replaced, while configuring
-                                    runCatching { s.close() }
-                                    return
-                                }
-                                session = s
-                                try {
-                                    val b = camera.createCaptureRequest(
-                                        CameraDevice.TEMPLATE_PREVIEW,
-                                    )
-                                    surfaces.forEach { b.addTarget(it) }
-                                    b.set(
-                                        CaptureRequest.CONTROL_AF_MODE,
-                                        CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE,
-                                    )
-                                    // **the middle of the frame is the
-                                    // subject** ([middle]): a camera given
-                                    // no region focuses and meters on
-                                    // whatever it likes, which at any
-                                    // distance where the other phone is
-                                    // not most of the scene is not the
-                                    // other phone
-                                    val region = middle()
-                                    if (region != null && afRegions > 0) {
-                                        b.set(CaptureRequest.CONTROL_AF_REGIONS, region)
-                                    }
-                                    if (region != null && aeRegions > 0) {
-                                        b.set(CaptureRequest.CONTROL_AE_REGIONS, region)
-                                    }
-                                    // **a floor under the frame rate is a
-                                    // ceiling over the shutter** ([fps]),
-                                    // and the screen is underexposed on
-                                    // purpose ([darken])
-                                    fps?.let { b.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
-                                    if (darken != 0) {
-                                        b.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, darken)
-                                    }
-                                    Diag.event(
-                                        "camera",
-                                        "which" to "qr",
-                                        "op" to "request",
-                                        "template" to "preview",
-                                        "af" to "continuous_picture",
-                                        "exposure" to "auto",
-                                        "antibanding" to "default",
-                                        "af_regions" to afRegions,
-                                        "ae_regions" to aeRegions,
-                                        "region" to (region?.get(0)?.rect?.toShortString() ?: "none"),
-                                        "fps" to (fps?.toString() ?: "none"),
-                                        "darken_steps" to darken,
-                                        "screen_hz" to screenHz(),
-                                    )
-                                    s.setRepeatingRequest(b.build(), focusWatch, h)
-                                } catch (e: Exception) {
-                                    failedOnThread("requesting frames", e)
-                                }
+    ): CameraDevice.StateCallback =
+        object : CameraDevice.StateCallback() {
+            override fun onOpened(camera: CameraDevice) {
+                device = camera
+                Diag.event(
+                    "camera",
+                    "which" to "qr",
+                    "op" to "open",
+                    "facing" to facing,
+                    "width" to width,
+                    "height" to height,
+                    "took_ms" to (Diag.ms() - startedMs),
+                )
+                val surfaces = listOfNotNull(reader.surface, preview)
+                try {
+                @Suppress("DEPRECATION")
+                camera.createCaptureSession(
+                    surfaces,
+                    object : CameraCaptureSession.StateCallback() {
+                        override fun onConfigured(s: CameraCaptureSession) {
+                            if (!reading.get()) {
+                                // closed, or replaced, while configuring
+                                runCatching { s.close() }
+                                return
                             }
-
-                            override fun onConfigureFailed(s: CameraCaptureSession) {
-                                failedOnThread("configuring", IllegalStateException("the session would not configure"))
+                            session = s
+                            try {
+                                val b = camera.createCaptureRequest(
+                                    CameraDevice.TEMPLATE_PREVIEW,
+                                )
+                                surfaces.forEach { b.addTarget(it) }
+                                b.set(
+                                    CaptureRequest.CONTROL_AF_MODE,
+                                    CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE,
+                                )
+                                // **the middle of the frame is the
+                                // subject** ([middle]): a camera given
+                                // no region focuses and meters on
+                                // whatever it likes, which at any
+                                // distance where the other phone is
+                                // not most of the scene is not the
+                                // other phone
+                                val region = middle()
+                                if (region != null && afRegions > 0) {
+                                    b.set(CaptureRequest.CONTROL_AF_REGIONS, region)
+                                }
+                                if (region != null && aeRegions > 0) {
+                                    b.set(CaptureRequest.CONTROL_AE_REGIONS, region)
+                                }
+                                // **a floor under the frame rate is a
+                                // ceiling over the shutter** ([fps]),
+                                // and the screen is underexposed on
+                                // purpose ([darken])
+                                fps?.let { b.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
+                                if (darken != 0) {
+                                    b.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, darken)
+                                }
+                                Diag.event(
+                                    "camera",
+                                    "which" to "qr",
+                                    "op" to "request",
+                                    "template" to "preview",
+                                    "af" to "continuous_picture",
+                                    "exposure" to "auto",
+                                    "antibanding" to "default",
+                                    "af_regions" to afRegions,
+                                    "ae_regions" to aeRegions,
+                                    "region" to (region?.get(0)?.rect?.toShortString() ?: "none"),
+                                    "fps" to (fps?.toString() ?: "none"),
+                                    "darken_steps" to darken,
+                                    "screen_hz" to screenHz(),
+                                )
+                                s.setRepeatingRequest(b.build(), focusWatch, h)
+                            } catch (e: Exception) {
+                                failedOnThread("requesting frames", e)
                             }
-                        },
-                        h,
-                    )
-                    } catch (e: Exception) {
-                        failedOnThread("opening a session", e)
-                    }
-                }
+                        }
 
-                override fun onDisconnected(camera: CameraDevice) {
-                    if (device === camera) failedOnThread("open", IllegalStateException("the camera was disconnected"))
-                    else runCatching { camera.close() }
+                        override fun onConfigureFailed(s: CameraCaptureSession) {
+                            failedOnThread("configuring", IllegalStateException("the session would not configure"))
+                        }
+                    },
+                    h,
+                )
+                } catch (e: Exception) {
+                    failedOnThread("opening a session", e)
                 }
+            }
 
-                override fun onError(camera: CameraDevice, error: Int) {
-                    if (device === camera) failedOnThread("open", IllegalStateException("camera error $error"))
-                    else runCatching { camera.close() }
-                }
-            },
-            h,
-        )
-    }
+            override fun onDisconnected(camera: CameraDevice) {
+                if (device === camera) failedOnThread("open", IllegalStateException("the camera was disconnected"))
+                else runCatching { camera.close() }
+            }
+
+            override fun onError(camera: CameraDevice, error: Int) {
+                if (device === camera) failedOnThread("open", IllegalStateException("camera error $error"))
+                else runCatching { camera.close() }
+            }
+        }
 
     /** Stop and give the camera back. Safe to call twice. */
     fun close() {

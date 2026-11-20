@@ -2,6 +2,7 @@ package com.comptus.fueros
 
 import android.app.Activity
 import android.app.AlertDialog
+import java.lang.ref.WeakReference
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -18,22 +19,24 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 object Consent {
 
-    @Volatile private var host: Activity? = null
+    /** Held weakly: a screen that has gone is no host, and an object
+     *  holding it would keep it alive past its own end. */
+    @Volatile private var host: WeakReference<Activity>? = null
 
     /** Put questions to `a` from now on. */
     fun host(a: Activity) {
-        host = a
+        host = WeakReference(a)
     }
 
     /** Stop putting questions to `a`, where it is still the host. */
     fun release(a: Activity) {
-        if (host === a) host = null
+        if (host?.get() === a) host = null
     }
 
     /** Put `question` to the person and wait for their answer.  No
      *  foreground screen means no, as nobody was shown it. */
     fun ask(question: String): Boolean {
-        val a = host ?: return false
+        val a = host?.get() ?: return false
         val latch = CountDownLatch(1)
         val answer = AtomicBoolean(false)
         a.runOnUiThread {

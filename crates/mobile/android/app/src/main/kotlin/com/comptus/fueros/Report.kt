@@ -1,5 +1,6 @@
 package com.comptus.fueros
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.nfc.NfcAdapter
@@ -27,6 +28,11 @@ object Report {
      *  live stream's hello carries (`DiagStream`). */
     fun headerFields(context: Context): List<Pair<String, Any?>> {
         val pm = context.packageManager
+        // InlinedApi: the constant is API 34's, but its value is only the
+        // feature's name, which `hasSystemFeature` answers on any API
+        // (false wherever it is not declared)
+        @SuppressLint("InlinedApi")
+        val uwb = pm.hasSystemFeature(PackageManager.FEATURE_UWB)
         return listOf(
             "run" to Diag.runId,
             "commit" to BuildConfig.GIT_COMMIT,
@@ -40,7 +46,7 @@ object Report {
             "radios" to mapOf(
                 "nfc" to (NfcAdapter.getDefaultAdapter(context) != null),
                 "ble" to pm.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE),
-                "uwb" to pm.hasSystemFeature(PackageManager.FEATURE_UWB),
+                "uwb" to uwb,
             ),
             "started_wall_ms" to Diag.startedWallMs,
             "reported_wall_ms" to System.currentTimeMillis(),
