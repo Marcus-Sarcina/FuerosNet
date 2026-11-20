@@ -709,6 +709,14 @@ paragraph above says your surface should match.
 **Distributed as a container or VM image**, so the client must be set up at the OS
 level to load additional packages (`resource-requirements.md` §8).
 
+**The machine under your image installs its operating system's security
+updates by itself** [author, 2026-11-20]. Your node runs unattended on a
+machine its operator may never open a shell on (§9.4), so nobody stands
+by to apply a fix by hand: the host takes them as they are published,
+unasked. A machine your operator's client launches
+(`light-client-requirements.md` §10) is set up so by the script it runs
+once; a machine set up by hand is its operator's to set up the same way.
+
 **Accepting extensions is not accepting arbitrary programs.** A package must
 declare its roles, tolerate the sandbox, and accept the node's credential
 (`resource-requirements.md` §5). A package that cannot declare roles gives

@@ -30,6 +30,24 @@ gate:
     # trouble.  A retry re-runs the whole step, which re-initialises that
     # repository before fetching again.
     GET_SOURCES_ATTEMPTS: 3
+    # **The two scanners of `check.sh` steps 3d and 3e, pinned, and each
+    # download checked against the sha256 recorded here** [author,
+    # 2026-11-20], so CI runs what the author's machine runs and a
+    # tampered or substituted download stops the job before it runs.
+    # Installed where `check.sh` looks by default, under `$HOME/opt`.
+    # OSV-Scanner's digest is the one in the release's SHA256SUMS;
+    # Opengrep's is the one GitHub publishes for the release asset, whose
+    # sigstore signature was checked when it was pinned. The rules are the
+    # opengrep-rules repository at one commit, as GitHub's tarball of it:
+    # its digest is this file's own, taken twice on the day it was pinned
+    # and equal both times. A bump changes the version and its digest
+    # together, and `check.sh`'s default path with them.
+    OSV_SCANNER_VERSION: "2.7.1"
+    OSV_SCANNER_SHA256: "fb7dab19a8bd9bbe5c3189f09d4b7ee1820c9553a23bac202648a56efd2f6ee8"
+    OPENGREP_VERSION: "2.0.0"
+    OPENGREP_SHA256: "37e93f4da5fd04a18c5c1febbdd12f7e98dfccd4d0c9cf2593bcb25eeb462da0"
+    OPENGREP_RULES_COMMIT: "f1d2b562b414783763fd02a6ed2736eaed622efa"
+    OPENGREP_RULES_SHA256: "9a5f1cd5c625418cc1c776120123e2d4371df9bb66e099426b17c3488e13619d"
   before_script:
     - apt-get update -qq && apt-get install -y -qq python3 openjdk-17-jdk-headless unzip curl > /dev/null
     - rustup component add rustfmt clippy
@@ -37,6 +55,15 @@ gate:
     - mkdir -p "$HOME/opt/downloads" && cd "$HOME/opt"
     - curl -sSL -o kotlin.zip "https://github.com/JetBrains/kotlin/releases/download/v$KOTLIN_VERSION/kotlin-compiler-$KOTLIN_VERSION.zip" && unzip -q kotlin.zip
     - curl -sSL -o "downloads/jna-$JNA_VERSION.jar" "https://repo1.maven.org/maven2/net/java/dev/jna/jna/$JNA_VERSION/jna-$JNA_VERSION.jar"
+    - mkdir -p "osv-scanner/v$OSV_SCANNER_VERSION" "opengrep/v$OPENGREP_VERSION" "opengrep/rules-$(printf %.7s "$OPENGREP_RULES_COMMIT")"
+    - curl -sSfL -o "osv-scanner/v$OSV_SCANNER_VERSION/osv-scanner_linux_amd64" "https://github.com/google/osv-scanner/releases/download/v$OSV_SCANNER_VERSION/osv-scanner_linux_amd64"
+    - echo "$OSV_SCANNER_SHA256  osv-scanner/v$OSV_SCANNER_VERSION/osv-scanner_linux_amd64" | sha256sum -c -
+    - curl -sSfL -o "opengrep/v$OPENGREP_VERSION/opengrep_linux_x86" "https://github.com/opengrep/opengrep/releases/download/v$OPENGREP_VERSION/opengrep_linux_x86"
+    - echo "$OPENGREP_SHA256  opengrep/v$OPENGREP_VERSION/opengrep_linux_x86" | sha256sum -c -
+    - chmod +x "osv-scanner/v$OSV_SCANNER_VERSION/osv-scanner_linux_amd64" "opengrep/v$OPENGREP_VERSION/opengrep_linux_x86"
+    - curl -sSfL -o "downloads/opengrep-rules-$OPENGREP_RULES_COMMIT.tar.gz" "https://codeload.github.com/opengrep/opengrep-rules/tar.gz/$OPENGREP_RULES_COMMIT"
+    - echo "$OPENGREP_RULES_SHA256  downloads/opengrep-rules-$OPENGREP_RULES_COMMIT.tar.gz" | sha256sum -c -
+    - tar -xzf "downloads/opengrep-rules-$OPENGREP_RULES_COMMIT.tar.gz" -C "opengrep/rules-$(printf %.7s "$OPENGREP_RULES_COMMIT")" --strip-components=1
     - cd "$CI_PROJECT_DIR"
   script:
     - export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 RHTN_JNA_JAR="$HOME/opt/downloads/jna-$JNA_VERSION.jar"

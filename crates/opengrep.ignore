@@ -1,0 +1,26 @@
+# What the gate's Opengrep step (`check.sh` step 3e) does not scan, in
+# gitignore syntax, anchored at the repository root.  Named to Opengrep by
+# --semgrepignore-filename, which also REPLACES its built-in default list:
+# that list skipped 212 of the 522 tracked Rust, Kotlin, Python and shell
+# files outside test-vectors/: the crates' `tests/` directories and the Android
+# shell's `src/test/` [2026-11-20].  So the list is this
+# file's and nothing else's.
+#
+# Files git ignores are not scanned either way: Opengrep takes its targets
+# from git, so the build trees and the generated bindings are named below
+# for the reader rather than for the tool.
+
+# the canonical vectors and their generator's output: data, not code
+/test-vectors/
+
+# build output, cargo's and gradle's
+target/
+/crates/mobile/android/app/build/
+/crates/mobile/android/build/
+
+# the Kotlin binding uniffi generates (`mobile/android/tools/build-native.sh`)
+/crates/mobile/android/app/src/generated/
+
+# the symlinks into ../FuerosNet-output, which is output and never source
+/runs
+/conformance-review

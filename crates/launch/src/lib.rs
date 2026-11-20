@@ -123,6 +123,21 @@ pub const HOST_SHELL: &str = "127.0.0.1:22";
 /// chose from locking out the one its operator did.
 pub const CLEAR_EXPIRY: &str = "chage -M -1 -d $(date +%Y-%m-%d) root || true";
 
+/// **The machine takes Debian's security updates by itself** [author,
+/// 2026-11-20] (`infra-client-requirements.md` §9): nobody may ever open a
+/// shell on it to apply one. The script upgrades what the image shipped
+/// with at first boot (`package_upgrade`) and installs
+/// `unattended-upgrades`, left in its stock Debian configuration, which
+/// takes the release's security archive; this line turns its periodic run on
+/// the way Debian documents, by answering the package's own question and
+/// reconfiguring it, which writes `/etc/apt/apt.conf.d/20auto-upgrades`.
+/// It runs among the commands the machine runs once, after the packages
+/// are installed, so the package is there to be reconfigured. A failure
+/// here stops nothing after it.
+pub const ENABLE_SECURITY_UPDATES: &str = "echo unattended-upgrades \
+     unattended-upgrades/enable_auto_updates boolean true | debconf-set-selections \
+     && dpkg-reconfigure -f noninteractive unattended-upgrades || true";
+
 /// **The runner, as the repository holds it** (`packaging/package-runner.sh`):
 /// carried into the machine by the script it runs once, so the vocabulary
 /// an instance may ask for is one file, versioned with this crate and
@@ -294,7 +309,8 @@ impl Image {
 }
 
 /// **The script the machine runs once, as cloud-init user-data**: the
-/// engine installed, the configuration and the operator's public material
+/// engine installed, the machine upgraded and set to install its security
+/// updates by itself ([`ENABLE_SECURITY_UPDATES`]), the configuration and the operator's public material
 /// written, the state directory handed to the image's uid, and the
 /// container started on the host's network and restarted with the machine.
 /// The operator's seed is in none of it (design §23.3).
@@ -373,8 +389,10 @@ pub fn user_data(
     format!(
         "#cloud-config\n\
          package_update: true\n\
+         package_upgrade: true\n\
          packages:\n\
          \x20 - podman\n\
+         \x20 - unattended-upgrades\n\
          ssh_pwauth: false\n\
          chpasswd:\n\
          \x20 expire: false\n\
@@ -400,6 +418,7 @@ pub fn user_data(
          \x20 - chown -R {IMAGE_UID}:{IMAGE_UID} /var/lib/rhtn\n\
          \x20 - chmod 0700 /var/lib/rhtn\n\
          \x20 - chmod 0700 /root/.ssh\n\
+         \x20 - {ENABLE_SECURITY_UPDATES}\n\
          \x20 - systemctl enable --now podman-restart.service\n\
          \x20 - podman run -d --name rhtnd --restart=always --network=host -v /var/lib/rhtn:/var/lib/rhtn {}\n",
         image.reference()
@@ -1173,6 +1192,7 @@ mod tests {
         assert_eq!(script.matches("\nssh_keys:\n").count(), 1);
     }
 
+    // functional: OPS-031
     #[test]
     fn the_configuration_and_the_script_carry_what_the_instance_needs_and_no_seed() {
         let token = "ab".repeat(32);
@@ -1279,6 +1299,7 @@ mod tests {
                     || line.starts_with("#cloud-config")
                     || line.ends_with(':')
                     || line.starts_with("package_update")
+                    || line.starts_with("package_upgrade")
                     || line.starts_with("ssh_pwauth"),
                 "a line of the script is outside its block: {line:?}"
             );
@@ -1308,6 +1329,29 @@ mod tests {
         }
         // the seed is in none of it, keyed or not
         assert!(!keyed.contains("seed"));
+        // **and the machine takes its security updates by itself**
+        // [author, 2026-11-20], keyed or not: the lists refreshed, what
+        // the image shipped upgraded, the service among the packages, and
+        // its periodic run turned on among the commands run once, which
+        // come after the packages are installed
+        for s in [&script, &keyed, &both] {
+            assert!(s.contains("\npackage_update: true\n"), "{s}");
+            assert!(s.contains("\npackage_upgrade: true\n"), "{s}");
+            assert!(
+                s.contains("packages:\n  - podman\n  - unattended-upgrades\n"),
+                "{s}"
+            );
+            let runcmd = s.find("runcmd:\n").expect("a runcmd block");
+            assert!(
+                s[runcmd..].contains(&format!("  - {ENABLE_SECURITY_UPDATES}\n")),
+                "{s}"
+            );
+        }
+        assert!(
+            ENABLE_SECURITY_UPDATES
+                .contains("unattended-upgrades/enable_auto_updates boolean true")
+        );
+        assert!(ENABLE_SECURITY_UPDATES.contains("dpkg-reconfigure -f noninteractive"));
         assert!(script.contains("-v /var/lib/rhtn:/var/lib/rhtn reg.example/x/rhtnd:abc123\n"));
         assert!(!script.contains("seed"));
     }

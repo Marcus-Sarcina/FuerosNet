@@ -100,6 +100,17 @@ tasks.withType<Test>().configureEach {
         .withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
+// **Every configuration resolves against a lockfile** [author,
+// 2026-11-20]: `gradle.lockfile` beside this file names the exact version
+// of everything the shell resolves, test classpaths included, so a
+// dependency moves only by a commit that rewrites it, and the gate's
+// OSV-Scanner step reads the versions the APK is built from. Rewritten by
+// `./gradlew :app:dependencies buildEnvironment --write-locks` from
+// `mobile/android` after a change below.
+dependencyLocking {
+    lockAllConfigurations()
+}
+
 dependencies {
     // The generated binding speaks JNA and nothing else; the @aar carries
     // libjnidispatch.so for each ABI.

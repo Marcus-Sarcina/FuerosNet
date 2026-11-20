@@ -20,6 +20,10 @@
 #  3b2. The same lint over the other feature flavours, which the default
 #       build does not compile.  Linted, not built and not tested.
 #  3c. Licences and advisories under cargo-deny, against deny.toml.
+#  3d. Known vulnerabilities under OSV-Scanner, against osv-scanner.toml:
+#      both Cargo lockfiles and the Android shell's Gradle lockfiles.
+#  3e. Static analysis under Opengrep, reported and not halting until the
+#      author has reviewed its first triage.
 #  3. The workspace compiles and its live tests pass, under cargo-nextest
 #     where it is installed and cargo test where it is not.  Stubs are
 #     #[ignore] and are not run: they are the tests still owed, and
@@ -229,6 +233,88 @@ if cargo deny --version > /dev/null 2>&1; then
   fi
 else
   echo "  cargo-deny absent: cargo install cargo-deny --locked"; fail=1
+fi
+
+echo "=== 3d. Known vulnerabilities (OSV-Scanner) ==="
+# Every lockfile the project resolves from, against osv.dev, and **a
+# finding fails** [author, 2026-11-20].  What does not fail is listed in
+# osv-scanner.toml with a reason per id: RustSec's informational
+# advisories, which cargo-deny above passes and OSV-Scanner reports, and
+# the Android build tooling's, which expire there.  The lockfiles are named
+# rather than found by a recursive walk, so what was scanned is this list
+# and not whatever a walk reached: a walk from a path with a hidden
+# directory in it (a worktree under `.claude/`) visits nothing and says
+# "No package sources found".  A Python manifest belongs on this list the
+# day one exists; none does.  Pinned at 2.7.1, as `.gitlab-ci.yml`
+# installs it; absence is a failure, as cargo-deny's is.
+OSV="${OSV_SCANNER:-$HOME/opt/osv-scanner/v2.7.1/osv-scanner_linux_amd64}"
+if [ -x "$OSV" ]; then
+  osvout="$(mktemp)"
+  if (cd "$HERE" && nice -n 19 "$OSV" scan source --config osv-scanner.toml \
+        -L Cargo.lock -L codec/fuzz/Cargo.lock \
+        -L mobile/android/app/gradle.lockfile \
+        -L mobile/android/buildscript-gradle.lockfile > "$osvout" 2>&1); then
+    echo "  osv-scanner: clean ($(grep -c '^Scanned ' "$osvout") lockfiles, $(grep -oE '^Filtered [0-9]+' "$osvout" | grep -oE '[0-9]+' || echo 0) advisories ignored by osv-scanner.toml)"
+  else
+    # 1 is findings; anything else is the scanner's own failure (127, 128
+    # for no lockfile, or a network error), and fails the same
+    echo "  osv-scanner: FAILED"; fail=1
+    grep -vE 'have been filtered out because|^Starting filesystem walk' "$osvout" | tail -30 | sed 's/^/  /'
+  fi
+  rm -f "$osvout"
+else
+  echo "  osv-scanner absent at $OSV: see .gitlab-ci.yml for the pinned download"; fail=1
+fi
+
+echo "=== 3e. Static analysis (Opengrep, non-halting) ==="
+# Opengrep, with the opengrep-rules repository's rules for the languages
+# the tree is written in: Rust, Kotlin, Python, shell and the two
+# Containerfiles.  **Reporting, not halting** [author, 2026-11-20]: this
+# project implements a novel network architecture and knowingly accepts
+# trade-offs a generic rule reads as a bug, so every finding is first
+# triaged by hand in Robot/static-analysis-triage.md -- real defect,
+# accepted trade-off with the section that accepts it, or noise.
+# **This step becomes halting once the author has reviewed that triage**:
+# `fail=1` on a finding the triage does not account for.  Until then it
+# prints the count and where the triage is, and never changes the exit
+# status, nor the non-halting count on the final line, which is the
+# author's own definition of that word.
+#
+# Two passes, because Opengrep knows a Dockerfile by its name and not a
+# Containerfile: the second names the two files and runs the Dockerfile
+# rules over them.  opengrep.ignore replaces the tool's built-in list of
+# what to skip, which would otherwise skip every tests/ directory.
+OPENGREP="${OPENGREP:-$HOME/opt/opengrep/v2.0.0/opengrep_linux_x86}"
+OPENGREP_RULES="${OPENGREP_RULES:-$HOME/opt/opengrep/rules-f1d2b56}"
+if [ -x "$OPENGREP" ] && [ -d "$OPENGREP_RULES/rust" ]; then
+  ogdir="$(mktemp -d)"
+  (cd "$HERE/.." && nice -n 19 "$OPENGREP" scan --quiet -j 8 \
+      --semgrepignore-filename="$HERE/opengrep.ignore" \
+      --config "$OPENGREP_RULES/rust" --config "$OPENGREP_RULES/kotlin" \
+      --config "$OPENGREP_RULES/python" --config "$OPENGREP_RULES/bash" \
+      --json-output="$ogdir/tree.json" . > "$ogdir/tree.log" 2>&1)
+  (cd "$HERE/.." && nice -n 19 "$OPENGREP" scan --quiet -j 8 --scan-unknown-extensions \
+      --config "$OPENGREP_RULES/dockerfile" \
+      --json-output="$ogdir/containers.json" \
+      crates/packaging/Containerfile crates/packaging/Containerfile.testapp \
+      > "$ogdir/containers.log" 2>&1)
+  python3 - "$ogdir/tree.json" "$ogdir/containers.json" <<'PY'
+import json, sys
+found = unparsed = 0
+for path in sys.argv[1:]:
+    try:
+        d = json.load(open(path, encoding="utf-8"))
+    except (OSError, ValueError):
+        print(f"  opengrep: no result from {path.rsplit('/', 1)[-1]} (the run failed)")
+        continue
+    found += len(d.get("results", []))
+    unparsed += len(d.get("errors", []))
+print(f"  opengrep: {found} findings, {unparsed} files not wholly parsed; "
+      "triage in Robot/static-analysis-triage.md (non-halting until reviewed)")
+PY
+  rm -rf "$ogdir"
+else
+  echo "  opengrep or its rules absent ($OPENGREP, $OPENGREP_RULES): see .gitlab-ci.yml; not run"
 fi
 
 echo "=== 3. Build and live tests ==="
