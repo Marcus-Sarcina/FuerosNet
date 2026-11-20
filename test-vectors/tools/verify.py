@@ -576,6 +576,18 @@ def verify_delegation(d, expect_signer):
         tbs = hd(4, 5) + ts('Signature') + bs(b'') + bs(prot) + bs(b'rhtn/1:delegation') + bs(payload)
         ok = ok and verify_sig(expect_signer, alg, sig, tbs)
     return ok
+def verify_encryption_key(d, expect_signer):
+    """§2.5: hybrid COSE_Sign over fields 1-3 under rhtn/1:encryption-key,
+    field 2 an X-Wing key of 1,216 bytes and field 3 an X25519 key."""
+    payload = enc({k: v for k, v in d.items() if k != 4})
+    entries = d[4][3]
+    ok = len(entries) == 2 and len(bytes.fromhex(d[2])) == 1216 and len(bytes.fromhex(d[3])) == 32
+    for ent in entries:
+        prot = bytes.fromhex(ent[0]); sig = bytes.fromhex(ent[2])
+        alg = canonical(prot)[1]
+        tbs = hd(4, 5) + ts('Signature') + bs(b'') + bs(prot) + bs(b'rhtn/1:encryption-key') + bs(payload)
+        ok = ok and verify_sig(expect_signer, alg, sig, tbs)
+    return ok
 check(verify_delegation(cur_obj[8], 'bob') and cur_obj[8][2] == KH['bob'] and cur_obj[8][1] == TKPUB['bob-instance'].hex(),
       'currency: the stapled delegation is bob\'s, names bob-instance, and verifies hybrid')
 cur_id = canonical(bytes.fromhex(re.findall(r'```\n([0-9a-f\n]+?)```', cur_seg)[2].replace('\n', '')))
@@ -809,25 +821,35 @@ check(_ix[1] == _oc_a[2],
       "s14.3: the intent echoes alice's optical contribution byte-for-byte")
 check(enc(_ix[2][0]).hex() == byid['P-introduction']['hex'],
       "s14.3: the intent's bundle entry is the introduction of c1 byte-for-byte")
-# the nominees no longer ride the intent [author, 2026-10-19]: eight fields
-check(len(_ix) == 8 and isinstance(_ix[7], dict) and {1, 2, 3} <= set(_ix[7]) and _ix[7][1] == KH['alice'],
-      "s14.3: eight fields, the last the sender's own signed locator, alice's")
+_ek = canonical(bytes.fromhex(byid['P-encryption-key']['hex']))
+_ekw = canonical(bytes.fromhex(byid['N-encryption-key-wrong-signer']['hex']))
+check(verify_encryption_key(_ek, 'alice') and _ek[1] == KH['alice'],
+      "encryption key: alice's, hybrid, both entries verify under her, field 1 naming her")
+check(not verify_encryption_key(_ekw, 'alice') and verify_encryption_key(_ekw, 'carol') and _ekw[1] == KH['alice'],
+      'encryption key wrong-signer: valid under carol, never under the alice it names')
+# the nominees no longer ride the intent [author, 2026-10-19]: nine fields,
+# the sender's signed locator then its encryption key (§2.5)
+check(len(_ix) == 9 and isinstance(_ix[7], dict) and {1, 2, 3} <= set(_ix[7]) and _ix[7][1] == KH['alice']
+      and verify_encryption_key(_ix[8], 'alice') and _ix[8][1] == KH['alice'],
+      "s14.3: nine fields, the sender's own signed locator and then its encryption key, alice's")
 _ixr = canonical(bytes.fromhex(byid['P-intent-exchange-responder']['hex']))
-check(_ixr[1] == _oc_b[2] and _ixr[2] == [] and _ixr[3] == _ix[3] and len(_ixr) == 8,
-      "s14.3: the responder's intent echoes bob's contribution, carries an empty bundle, the same start and his locator")
+check(_ixr[1] == _oc_b[2] and _ixr[2] == [] and _ixr[3] == _ix[3] and len(_ixr) == 9
+      and verify_encryption_key(_ixr[8], 'bob'),
+      "s14.3: the responder's intent echoes bob's contribution, carries an empty bundle, the same start, his locator and his encryption key")
 
 # ---------------------------------------------------------------- curated bundle entries (bar 3, corpus)
 # the six entries are corpus objects: each well-formed one verifies as an
 # introduction under its own material, and the mismatch does not
 def _intro_ok(hexstr):
     a = canonical(bytes.fromhex(hexstr))
-    km, sl = a[1], a[2]
-    return H(enc(km)).hex() == sl[1] and isinstance(sl[3], list)
+    km, ek, sl = a[1], a[2], a[3]
+    kh = H(enc(km)).hex()
+    return kh == sl[1] and kh == ek[1] and isinstance(sl[3], list)
 check(all(_intro_ok(byid[f'P-vs-bundle-{i}']['hex']) for i in (1, 2, 3, 4, 6))
       and not _intro_ok(byid['P-vs-bundle-5']['hex']),
       'bundle: entries 1-4 and 6 bind material to subject, entry 5 does not')
-check(canonical(bytes.fromhex(byid['P-vs-bundle-1']['hex']))[2][1]
-      == canonical(bytes.fromhex(byid['P-vs-bundle-3']['hex']))[2][1],
+check(canonical(bytes.fromhex(byid['P-vs-bundle-1']['hex']))[3][1]
+      == canonical(bytes.fromhex(byid['P-vs-bundle-3']['hex']))[3][1],
       'bundle: entries 1 and 3 introduce one subject, counted once')
 check(_ix[5] is True and _ixr[5] is False,
       's14.3: the pair of intents disagree on who began, the initiator true and the responder false')

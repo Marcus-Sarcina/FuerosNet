@@ -92,6 +92,12 @@ pub struct Contact {
     /// in (§2.4), since it was given to this device and not to its
     /// friends (`light-client-requirements.md` §1.5).
     pub number: Option<String>,
+    /// **The party's `EncryptionKey`** (`wire-format.md` §2.5), as its
+    /// introduction carried it and verified under the material: what a
+    /// message to it is sealed to, and what an introduction of it hands
+    /// on. A contact held without one is neither written to nor
+    /// introduced until one arrives.
+    pub encryption_key: Option<Vec<u8>>,
 }
 
 impl Contact {
@@ -126,6 +132,7 @@ impl Contact {
             image: None,
             profile_at: 0,
             number: None,
+            encryption_key: None,
         }
     }
 
@@ -164,12 +171,19 @@ impl Contact {
 
     /// The bytes the store writes: `[1, material, locator or null, last_at,
     /// count, how, endpoint record, anchor entry, heard, alias or null,
-    /// image or null, profile_at]`.
+    /// image or null, profile_at, number, encryption key]`, the last two
+    /// each written only where it or a later one is held.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
-        // thirteen where a number is held, twelve where none is: an
-        // older store reads back as a contact with no number
-        emit_array_head(&mut out, if self.number.is_some() { 13 } else { 12 });
+        // fourteen where an encryption key is held, thirteen where a
+        // number is and no key, twelve where neither is: an older store
+        // reads back as a contact with neither
+        let len = match (&self.number, &self.encryption_key) {
+            (_, Some(_)) => 14,
+            (Some(_), None) => 13,
+            (None, None) => 12,
+        };
+        emit_array_head(&mut out, len);
         emit_uint(&mut out, 1);
         emit_bstr(&mut out, &self.material);
         match &self.locator {
@@ -202,8 +216,14 @@ impl Contact {
             None => out.push(0xf6),
         }
         emit_uint(&mut out, self.profile_at);
-        if let Some(n) = &self.number {
-            emit_tstr(&mut out, n);
+        if len >= 13 {
+            match &self.number {
+                Some(n) => emit_tstr(&mut out, n),
+                None => out.push(0xf6),
+            }
+        }
+        if let Some(k) = &self.encryption_key {
+            emit_bstr(&mut out, k);
         }
         out
     }
@@ -215,8 +235,8 @@ impl Contact {
         // six before a contact could hold an address, eight with the
         // records it publishes, nine with the addresses a referral
         // asserted, twelve with the profile it published, thirteen with
-        // the number its device reported
-        if !matches!(a.len(), 6 | 8 | 9 | 12 | 13) || as_uint(&a[0]) != Some(1) {
+        // the number its device reported, fourteen with its encryption key
+        if !matches!(a.len(), 6 | 8 | 9 | 12 | 13 | 14) || as_uint(&a[0]) != Some(1) {
             return None;
         }
         let bytes = |it: &Item| match it {
@@ -252,6 +272,7 @@ impl Contact {
             Some(Item::Text(r)) => Some(std::str::from_utf8(&b[r.clone()]).ok()?.to_string()),
             _ => None,
         };
+        let encryption_key = held(a.get(13)).ok()?;
         Some(Contact {
             material: bytes(&a[1])?,
             locator,
@@ -265,6 +286,7 @@ impl Contact {
             image,
             profile_at,
             number,
+            encryption_key,
         })
     }
 }

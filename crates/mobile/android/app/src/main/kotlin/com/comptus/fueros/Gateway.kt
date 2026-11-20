@@ -293,7 +293,7 @@ object Gateway {
     // ---- intake: a party who was never met ----------------------------
 
     /**
-     * **Take whatever an intake code carries.** An `AnchoredIntroduction`
+     * **Take whatever an intake code carries.** A `Card`
      * (`wire-format.md` §2.4) is somebody's key and locator together with
      * the anchor that locator names and where it answers — which is what a
      * code handed over at a meeting carries [author, 2026-10-13] — and a

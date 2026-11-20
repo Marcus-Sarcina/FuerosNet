@@ -207,8 +207,14 @@ fn pruning_removes_what_an_upstream_still_discovers_first_and_the_lonely_last() 
 // functional: TOP-040
 #[test]
 fn a_contact_round_trips_through_the_store_and_a_bare_locator_is_not_one() {
-    let (k, c) = placed("bob", "alice", &[0x30], 1, 77, 4);
+    let (k, mut c) = placed("bob", "alice", &[0x30], 1, 77, 4);
     assert_eq!(Contact::decode(&c.encode()).as_ref(), Some(&c));
+    // an encryption key held and no number: fourteen elements, the number
+    // null, and both read back as they were
+    c.encryption_key = Some(rhtn_crypto::encryption_key::own(&id("bob")));
+    let fourteen = c.encode();
+    assert_eq!(fourteen[0], 0x8e, "fourteen elements");
+    assert_eq!(Contact::decode(&fourteen).as_ref(), Some(&c));
     let bare = c.locator.clone().unwrap();
     assert!(
         Contact::decode(&bare).is_none(),
@@ -266,6 +272,7 @@ fn an_introduction_taken_leaves_an_identity_a_contact_and_a_position() {
     };
     let intro = rhtn_archive::locator::introduction(
         &id("bob").public.key_material(),
+        &rhtn_crypto::encryption_key::own(&id("bob")),
         &signed_locator(&id("bob"), &under),
     );
 
@@ -301,6 +308,7 @@ fn an_introduction_taken_leaves_an_identity_a_contact_and_a_position() {
     assert!(
         a.take_introduction(&rhtn_archive::locator::introduction(
             &id("alice").public.key_material(),
+            &rhtn_crypto::encryption_key::own(&id("alice")),
             &signed_locator(&id("alice"), &under),
         ))
         .is_err()
@@ -330,6 +338,7 @@ fn an_endpoint_record_gives_an_introduced_party_an_address_to_start_from() {
     };
     let intro = rhtn_archive::locator::introduction(
         &id("bob").public.key_material(),
+        &rhtn_crypto::encryption_key::own(&id("bob")),
         &signed_locator(&id("bob"), &under),
     );
     // w1 publishes where it answers, and signs it: a `NetworkPoint` as
@@ -432,9 +441,10 @@ fn a_card_carries_an_introduction_and_the_records_of_its_anchor() {
         },
         subnet: Some(SUBNET),
     };
-    let card = rhtn_archive::locator::anchored_introduction(
+    let card = rhtn_archive::locator::card(
         &rhtn_archive::locator::introduction(
             &id("bob").public.key_material(),
+            &rhtn_crypto::encryption_key::own(&id("bob")),
             &signed_locator(&id("bob"), &under),
         ),
         &id("w1").public.key_material(),
@@ -444,10 +454,7 @@ fn a_card_carries_an_introduction_and_the_records_of_its_anchor() {
 
     // alice takes the one code, and holds both halves of what it said
     let a = s.client("alice");
-    assert_eq!(
-        a.take_anchored_introduction(&card).expect("one code"),
-        kh("bob")
-    );
+    assert_eq!(a.take_card(&card).expect("one code"), kh("bob"));
     assert!(a.store.contacts[&kh("bob")].locator.is_some());
     assert!(a.store.contacts[&kh("w1")].endpoint_record.is_some());
 
@@ -465,16 +472,17 @@ fn a_card_carries_an_introduction_and_the_records_of_its_anchor() {
 
     // a card whose anchor material is not the anchor the locator names is
     // not this kind at all: the codec refuses it before any signature
-    let crossed = rhtn_archive::locator::anchored_introduction(
+    let crossed = rhtn_archive::locator::card(
         &rhtn_archive::locator::introduction(
             &id("bob").public.key_material(),
+            &rhtn_crypto::encryption_key::own(&id("bob")),
             &signed_locator(&id("bob"), &under),
         ),
         &id("alice").public.key_material(),
         &record,
         None,
     );
-    assert!(a.take_anchored_introduction(&crossed).is_err());
+    assert!(a.take_card(&crossed).is_err());
 }
 
 // functional: TOP-040
@@ -533,6 +541,7 @@ fn a_hop_of_the_walk_is_filed_with_the_address_it_was_heard_at() {
     };
     a.take_introduction(&rhtn_archive::locator::introduction(
         &id("bob").public.key_material(),
+        &rhtn_crypto::encryption_key::own(&id("bob")),
         &signed_locator(&id("bob"), &under),
     ))
     .expect("bob arrives");
@@ -659,7 +668,9 @@ fn a_number_is_kept_with_the_contact_and_is_not_handed_on_with_it() {
         let a = s.client("alice");
         let mut contact = a.store.contacts.get(&kh("bob")).expect("a contact").clone();
         contact.number = None;
+        contact.encryption_key = None;
         let twelve = contact.encode();
+        assert_eq!(twelve[0], 0x8c, "twelve elements");
         assert_eq!(
             rhtn_client::contacts::Contact::decode(&twelve)
                 .expect("decodes")

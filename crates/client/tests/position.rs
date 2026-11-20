@@ -473,10 +473,7 @@ fn a_client_makes_a_card_of_its_own_once_it_knows_where_its_anchor_answers() {
     let card = s.client("bob").own_card().expect("a card to show");
 
     // and carol, who has met nobody, can act on that one code
-    let who = s
-        .client("carol")
-        .take_anchored_introduction(&card)
-        .expect("one code");
+    let who = s.client("carol").take_card(&card).expect("one code");
     assert_eq!(who, kh("bob"));
     let reach = s.client("carol").reach_for(&kh("bob"));
     assert_eq!(

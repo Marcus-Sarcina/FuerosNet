@@ -104,6 +104,12 @@ pub fn describe<L: Lookup + ?Sized>(raw: &[u8], what: As, ids: &L) -> String {
                         "signature {}\n",
                         signature(verify::delegation(ids, raw).map(|_| ()))
                     ));
+                } else if k == "EncryptionKey" {
+                    // hybrid, under the identity field 1 names (§2.5)
+                    out.push_str(&format!(
+                        "signature {}\n",
+                        signature(verify::encryption_key(ids, raw).map(|_| ()))
+                    ));
                 }
             }
         }

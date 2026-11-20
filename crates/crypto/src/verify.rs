@@ -399,6 +399,52 @@ pub fn delegation<L: Lookup + ?Sized>(ids: &L, raw: &[u8]) -> Result<Delegation,
     Ok(d)
 }
 
+/// An identity's encryption key (`wire-format.md` §2.5), verified hybrid
+/// under the identity field 1 names: the two public keys a sender seals
+/// and authenticates against.
+#[derive(Clone, PartialEq, Eq)]
+pub struct EncryptionKey {
+    /// The identity, field 1.
+    pub keyhash: [u8; 32],
+    /// The X-Wing encapsulation key, field 2.
+    pub kem: [u8; crate::xwing::PUBLIC_BYTES],
+    /// The sealing-authentication key, field 3.
+    pub auth: [u8; 32],
+}
+
+impl std::fmt::Debug for EncryptionKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "EncryptionKey({:02x?}…)", &self.keyhash[..4])
+    }
+}
+
+/// Verify an encryption key: the shape, then both signatures under the
+/// identity field 1 names.  One failing either is discarded wherever it
+/// arrives (`wire-format.md` §2.5).
+pub fn encryption_key<L: Lookup + ?Sized>(ids: &L, raw: &[u8]) -> Result<EncryptionKey, Failure> {
+    let item = parse_all(raw).map_err(|_| "cbor")?;
+    rhtn_codec::schema::check_kind(raw, "EncryptionKey", &item)
+        .map_err(|e| Failure::Invalid(e.0.into()))?;
+    let Item::Map(m) = &item else {
+        return Err("not map".into());
+    };
+    let field = |k: u64| match map_get(m, k) {
+        Some(Item::Bytes(r)) => Some(&raw[r.clone()]),
+        _ => None,
+    };
+    let keyhash: [u8; 32] = field(1).and_then(|b| b.try_into().ok()).ok_or("field 1")?;
+    let kem = field(2).and_then(|b| b.try_into().ok()).ok_or("field 2")?;
+    let auth = field(3).and_then(|b| b.try_into().ok()).ok_or("field 3")?;
+    let id = ids
+        .identity(&keyhash)
+        .ok_or_else(|| Failure::MissingKey(keyhash.to_vec()))?;
+    let payload = map_without_key(raw, 4).ok_or("payload")?;
+    let r4 = value_slice(raw, 4).ok_or("signature")?;
+    verify_sign_block(id, &raw[r4], aad::ENCRYPTION_KEY, &payload)
+        .map_err(|e| Failure::Invalid(format!("encryption key: {e}")))?;
+    Ok(EncryptionKey { keyhash, kem, auth })
+}
+
 /// A delegation's fields with its shape checked and its signature not
 /// verified: what a holder reads to know whose it is and whether it is
 /// worth verifying, and what it reads back from its own store.

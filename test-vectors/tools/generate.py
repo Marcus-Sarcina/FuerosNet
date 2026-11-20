@@ -27,6 +27,13 @@ except ImportError:
     raise SystemExit('dilithium-py is required for the ML-DSA-65 values: '
                      'pip install dilithium-py (any environment this '
                      'interpreter can import from)')
+try:
+    from kyber_py.ml_kem import ML_KEM_768
+except ImportError:
+    raise SystemExit('kyber-py is required for the ML-KEM-768 half of X-Wing: '
+                     'pip install kyber-py (any environment this '
+                     'interpreter can import from)')
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
 H = lambda b: hashlib.sha256(b).digest()
 
@@ -190,6 +197,9 @@ class Identity:
         # KeyMaterial = [classical, post-quantum], fixed order (wire §2.2)
         self.key_material = e_arr([self.cose_ed, self.cose_pq])
         self.keyhash = H(self.key_material)
+        # the identity root (design §7.5.2.6), which the encryption key
+        # derives from (wire §2.5)
+        self.root = H(b'rhtn/1:identity-root' + self.seed + self.pq_seed)
     def sign(self, data):
         return self.sk.sign(data)
     def sign_pq(self, data):
@@ -247,6 +257,46 @@ def cose_signature_entry(protected_bytes, signature):
     """[protected: bstr, unprotected: {} (empty map — nonempty is malformed,
     wire §3.5), signature: bstr]"""
     return e_arr([e_bstr(protected_bytes), b'\xa0', e_bstr(signature)])
+
+# --- The encryption key (wire §2.5): X-Wing (draft-connolly-cfrg-xwing-kem-11)
+# from the identity root, here from kyber-py's ML-KEM-768 and cryptography's
+# X25519, independently of the Rust side's ml-kem and x25519-dalek.
+AAD_ENCRYPTION_KEY = b'rhtn/1:encryption-key'
+
+def _hkdf32(ikm, info):
+    prk = hmac.new(b'\x00' * 32, ikm, hashlib.sha256).digest()  # empty salt
+    return hmac.new(prk, info + b'\x01', hashlib.sha256).digest()
+
+def _x25519_pub(sk):
+    return X25519PrivateKey.from_private_bytes(sk).public_key().public_bytes(
+        Encoding.Raw, PublicFormat.Raw)
+
+def xwing_public(seed):
+    """X-Wing's expandDecapsulationKey, public half: SHAKE256 of the seed to
+    96 bytes, ML-KEM-768 from the first 64 (d || z), X25519 from the last 32;
+    the ML-KEM key first."""
+    e = hashlib.shake_256(seed).digest(96)
+    ek, _ = ML_KEM_768.key_derive(e[:64])
+    return ek + _x25519_pub(e[64:])
+
+def encryption_key(who, signer=None, algs=(-8, -49), kem=None):
+    """wire §2.5: `who`'s X-Wing key and sealing-authentication key, both
+    from its identity root, signed hybrid.  `signer` other than `who` is the
+    wrong-signer analogue, `algs=(-8,)` the classical-only malformation,
+    `kem` a substitute field 2."""
+    signer = signer or who
+    pairs = [(e_uint(1), e_bstr(who.keyhash)),
+             (e_uint(2), e_bstr(kem if kem is not None else xwing_public(_hkdf32(who.root, AAD_ENCRYPTION_KEY)))),
+             (e_uint(3), e_bstr(_x25519_pub(_hkdf32(who.root, b'rhtn/1:seal-auth'))))]
+    payload = e_map(pairs)
+    entries = []
+    for alg in algs:
+        prot = sig_protected(alg)
+        tbs = sig_structure_sign(prot, AAD_ENCRYPTION_KEY, payload)
+        sig = signer.sign(tbs) if alg == -8 else signer.sign_pq(tbs)
+        entries.append(cose_signature_entry(prot, sig))
+    cose = e_arr([e_bstr(b''), b'\xa0', NULL, e_arr(entries)])
+    return e_map(pairs + [(e_uint(4), cose)])
 
 SIGNER_COUNT = {1: 2, 2: 1, 3: 1, 4: 2, 7: 2}  # per-type logical signers (§3.1)
 # type 5's signer set is dynamic (participants + witnesses); callers assert it
@@ -2256,23 +2306,23 @@ def _signed_locator_by(who, loc_bytes):
                   e_bstr(who.sign(sig_structure_sign1(sl_protected, AAD_LOCATOR, payload)))])
     return e_map([(e_uint(1), e_bstr(who.keyhash)), (e_uint(2), loc_bytes), (e_uint(3), cose)])
 def _introduction(who, loc_bytes):
-    return e_arr([e_uint(1), who.key_material, _signed_locator_by(who, loc_bytes)])
+    return e_arr([e_uint(1), who.key_material, encryption_key(who), _signed_locator_by(who, loc_bytes)])
 vs_c1 = _introduction(IDS['c1'], locator(bob.keyhash, p_odd, seqno(2, 7)))
 vs_c1_later = _introduction(IDS['c1'], locator(bob.keyhash, p_odd, seqno(2, 9)))
 vs_carol = _introduction(carol, locator(carol.keyhash, b'\x40', seqno(1, 0)))
 vs_bob = _introduction(bob, locator(bob.keyhash, b'\x40', seqno(1, 0)))
-vs_mismatch = e_arr([e_uint(1), alice.key_material, _signed_locator_by(IDS['c1'], locator(bob.keyhash, p_odd, seqno(2, 7)))])
+vs_mismatch = e_arr([e_uint(1), alice.key_material, encryption_key(alice), _signed_locator_by(IDS['c1'], locator(bob.keyhash, p_odd, seqno(2, 7)))])
 vs_self = _introduction(alice, locator(alice.keyhash, b'\x40', seqno(1, 0), subnet=None))  # a lone identity names no subnet
 vs_bundle = [vs_c1, vs_carol, vs_c1_later, vs_bob, vs_mismatch, vs_self]
 
-# §2.4's anchored introduction: c1's introduction, whose locator is anchored
+# §2.4's card: c1's introduction, whose locator is anchored
 # at bob, with bob's key material and bob's own endpoint record — the code a
 # party hands over at a meeting [author, 2026-10-13]. The anchor entry slot
 # is null here: a holder offers one where it has one.
-vs_anchored = e_arr([e_uint(1), vs_c1, bob.key_material, endpoint_record, NULL])
+vs_card = e_arr([e_uint(1), vs_c1, bob.key_material, endpoint_record, NULL])
 # and the negative: the same introduction with carol's material in the anchor
 # slot, which hashes to no anchor the locator names
-vs_anchored_crossed = e_arr([e_uint(1), vs_c1, carol.key_material, endpoint_record, NULL])
+vs_card_crossed = e_arr([e_uint(1), vs_c1, carol.key_material, endpoint_record, NULL])
 
 emit('verifier-selection.md', f"""# Verifier selection — the reasonableness criterion
 
@@ -2917,9 +2967,9 @@ def signed_locator_by(who, loc_bytes):
                   e_bstr(who.sign(sig_structure_sign1(sl_protected, AAD_LOCATOR, payload)))])
     return e_map([(e_uint(1), e_bstr(who.keyhash)), (e_uint(2), loc_bytes), (e_uint(3), cose)])
 def introduction(who, loc_bytes):
-    return e_arr([e_uint(1), who.key_material, signed_locator_by(who, loc_bytes)])
+    return e_arr([e_uint(1), who.key_material, encryption_key(who), signed_locator_by(who, loc_bytes)])
 sl_c1 = signed_locator_by(IDS['c1'], locator(bob.keyhash, p_odd, seqno(2, 7)))
-intro_c1 = e_arr([e_uint(1), IDS['c1'].key_material, sl_c1])
+intro_c1 = e_arr([e_uint(1), IDS['c1'].key_material, encryption_key(IDS['c1']), sl_c1])
 sl_bob = signed_locator_by(bob, locator(bob.keyhash, b'\x40', seqno(1, 0)))
 # one candidate per proposal, in turns (§5.1): the proposal is the introduction
 fishing_proposal = intro_c1
@@ -2930,7 +2980,7 @@ fishing_proposal = intro_c1
 conv_handle = H(b'rhtn-test-vectors:engagement-handle:alice')
 # both participants' introductions in field 2's order (field 6) [author,
 # 2026-11-15]: how a witness reaches the participant that did not nominate it
-conv_intros = {alice.keyhash: e_arr([e_uint(1), alice.key_material, signed_locator]),
+conv_intros = {alice.keyhash: e_arr([e_uint(1), alice.key_material, encryption_key(alice), signed_locator]),
                bob.keyhash: introduction(bob, locator(bob.keyhash, p_even, seqno(1, 0)))}
 witness_request = e_map([(e_uint(1), e_bstr(npr_precommit)),
                          (e_uint(2), e_arr([e_bstr(i.keyhash) for i in conv_parts])),
@@ -3177,6 +3227,7 @@ for fid, by, kind in [
     ('P-currency-identity', currency_identity, 'CurrencyAttestation'),
     ('P-currency-successor', currency_successor, 'CurrencyAttestation'),
     ('P-delegation', deleg_bob, 'Delegation'), ('P-delegation-carol', deleg_carol, 'Delegation'),
+    ('P-encryption-key', encryption_key(alice), 'EncryptionKey'),
     ('P-delegation-alice-desktop', deleg_alice_desktop, 'Delegation'),
     ('P-verification-query', rec_query, 'VerificationQuery'),
     ('P-relayed', relayed, 'RelayedPayload'),
@@ -3953,13 +4004,14 @@ tconfirm = e_arr([e_uint(1), e_bstr(pc_demo)])
 # the intent alice's bearer carries: her echoed contribution, carol nominated
 # her one introduction (c1, a prior counterparty, with the most recent
 # locator she holds for them; §2.3, §5.4), the defaults the documents
-# state, and her own signed locator.  The nominees no longer ride the
+# state, her own signed locator and her encryption key (wire §2.5), so bob
+# can write to her afterwards with no fetch.  The nominees no longer ride the
 # intent [author, 2026-10-19]: the sets travel by locator at the prune
 # (s7.10.2, kind 22)
 intent_x = e_arr([e_uint(1), e_bstr(pc_a),
                   e_arr([intro_c1]),
                   e_uint(TS_REC), e_uint(2), b'\xf5', e_uint(0),
-                  signed_locator])
+                  signed_locator, encryption_key(alice)])
 
 # the intent bob's bearer carries back, the responder's: his echoed
 # contribution, no prior record (a bundle may be empty, §5.4), the same
@@ -3968,7 +4020,7 @@ intent_x = e_arr([e_uint(1), e_bstr(pc_a),
 intent_r = e_arr([e_uint(1), e_bstr(pc_b),
                   e_arr([]),
                   e_uint(TS_REC), e_uint(3), b'\xf4', e_uint(0),
-                  sl_bob])
+                  sl_bob, encryption_key(bob)])
 
 # a bundle past its first carriage: the first continuation, one entry,
 # anchored to the ceremony-id both screens fixed (§14.3.2; the bundle has no
@@ -4205,7 +4257,7 @@ for fid, by, kind, note in [
     ('P-vs-bundle-2', vs_carol, 'Introduction', 'bar 3, entry 2: carol'),
     ('P-vs-bundle-3', vs_c1_later, 'Introduction', 'bar 3, entry 3: c1 again at seqno [2, 9], counted once'),
     ('P-vs-bundle-4', vs_bob, 'Introduction', 'bar 3, entry 4: bob, the current counterparty, counted and never a candidate'),
-    ('P-anchored-introduction', vs_anchored, 'AnchoredIntroduction', "the code handed over at a meeting (§2.4): c1's introduction, the anchor its locator names, and that anchor's endpoint record"),
+    ('P-card', vs_card, 'Card', "the code handed over at a meeting (§2.4): c1's introduction, the anchor its locator names, and that anchor's endpoint record"),
     ('P-intent-exchange', intent_x, 'IntentExchange', 'echoes the optical contribution; one introduction in the bundle; the sender\'s own signed locator last'),
     ('P-intent-exchange-responder', intent_r, 'IntentExchange', "the responder's: echoes bob's contribution, an empty bundle, initiator false; the flags of the pair differ"),
     ('P-bundle-continuation', cont_x, 'BundleContinuation', 'the bundle past its first carriage, anchored and numbered from one'),
@@ -4351,22 +4403,42 @@ reg('N-intent-with-nominees', 'bytes',
     REJ('IntentExchange', 'schema', 'the nominees no longer ride the intent - the pre-reorder nine-field encoding rejects (2026-10-19)'),
     e_arr([e_uint(1), e_bstr(pc_a),
            e_arr([e_bstr(carol.keyhash)]),
-           e_arr([intro_c1]), e_uint(TS_REC), e_uint(2), b'\xf5', e_uint(0), signed_locator]))
+           e_arr([intro_c1]), e_uint(TS_REC), e_uint(2), b'\xf5', e_uint(0), signed_locator,
+           encryption_key(alice)]))
 reg('N-intent-continuations-missing', 'bytes',
     REJ('IntentExchange', 'schema', 'an intent says how many continuations follow, even none'),
     e_arr([e_uint(1), e_bstr(pc_a), e_arr([intro_c1]),
-           e_uint(TS_REC), e_uint(2), b'\xf5', signed_locator]))
+           e_uint(TS_REC), e_uint(2), b'\xf5', signed_locator, encryption_key(alice)]))
 reg('N-intent-locator-missing', 'bytes',
     REJ('IntentExchange', 'schema', "an intent carries the sender's own signed locator"),
     e_arr([e_uint(1), e_bstr(pc_a), e_arr([intro_c1]),
-           e_uint(TS_REC), e_uint(2), b'\xf5', e_uint(0)]))
+           e_uint(TS_REC), e_uint(2), b'\xf5', e_uint(0), encryption_key(alice)]))
+reg('N-intent-encryption-key-missing', 'bytes',
+    REJ('IntentExchange', 'schema', "an intent carries the sender's encryption key (§2.5)"),
+    e_arr([e_uint(1), e_bstr(pc_a), e_arr([intro_c1]),
+           e_uint(TS_REC), e_uint(2), b'\xf5', e_uint(0), signed_locator]))
 reg('N-intent-bundle-record', 'bytes',
     REJ('IntentExchange', 'schema', 'a bundle entry is an introduction, not a record'),
     e_arr([e_uint(1), e_bstr(pc_a), e_arr([pc1_env]),
-           e_uint(TS_REC), e_uint(2), b'\xf5', e_uint(0), signed_locator]))
+           e_uint(TS_REC), e_uint(2), b'\xf5', e_uint(0), signed_locator, encryption_key(alice)]))
 reg('N-introduction-hash-mismatch', 'bytes',
     REJ('Introduction', 'schema', "an introduction's key material hashes to its locator's subject"),
-    e_arr([e_uint(1), alice.key_material, sl_c1]))
+    e_arr([e_uint(1), alice.key_material, encryption_key(alice), sl_c1]))
+reg('N-introduction-encryption-key-other', 'bytes',
+    REJ('Introduction', 'schema', "an introduction's encryption key names the identity its key material does (§2.5)"),
+    e_arr([e_uint(1), IDS['c1'].key_material, encryption_key(alice), sl_c1]))
+reg('N-introduction-no-encryption-key', 'bytes',
+    REJ('Introduction', 'schema', 'an introduction carries the encryption key (§2.3, §2.5)'),
+    e_arr([e_uint(1), IDS['c1'].key_material, sl_c1]))
+reg('N-encryption-key-wrong-signer', 'bytes',
+    REJ('EncryptionKey', 'semantic', 'signature valid under a key the encryption key does not name'),
+    encryption_key(alice, signer=carol))
+reg('N-encryption-key-classical-only', 'bytes',
+    REJ('EncryptionKey', 'schema', 'hybrid: one entry per algorithm (§2.5, §3.5)'),
+    encryption_key(alice, algs=(-8,)))
+reg('N-encryption-key-short', 'bytes',
+    REJ('EncryptionKey', 'schema', 'an X-Wing encapsulation key is 1216 bytes'),
+    encryption_key(alice, kem=bytes(1215)))
 reg('P-vs-bundle-5', 'bytes',
     REJ('Introduction', 'schema', "bar 3, entry 5: alice's material with c1's locator, not in the pool"),
     vs_mismatch)
@@ -4374,13 +4446,13 @@ reg('P-vs-bundle-6', 'bytes', ACC('Introduction', 'bar 3, entry 6: alice introdu
     vs_self)
 reg('N-introduction-bare-locator', 'bytes',
     REJ('Introduction', 'schema', 'a bare locator presented alone is rejected (§2.3)'),
-    e_arr([e_uint(1), IDS['c1'].key_material, locator(bob.keyhash, p_odd, seqno(2, 7))]))
-reg('N-anchored-introduction-crossed', 'bytes',
-    REJ('AnchoredIntroduction', 'schema',
+    e_arr([e_uint(1), IDS['c1'].key_material, encryption_key(IDS['c1']), locator(bob.keyhash, p_odd, seqno(2, 7))]))
+reg('N-card-crossed', 'bytes',
+    REJ('Card', 'schema',
         "the anchor material hashes to the anchor the locator names (§2.4)"),
-    vs_anchored_crossed)
-reg('N-anchored-introduction-other-node', 'bytes',
-    REJ('AnchoredIntroduction', 'schema',
+    vs_card_crossed)
+reg('N-card-other-node', 'bytes',
+    REJ('Card', 'schema',
         "each record names the anchor and no other node (§2.4)"),
     e_arr([e_uint(1), vs_carol, carol.key_material, endpoint_record, NULL]))
 reg('N-continuation-index-0', 'bytes',

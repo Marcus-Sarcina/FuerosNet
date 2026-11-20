@@ -467,6 +467,9 @@ pub struct Intent {
     pub initiator: bool,
     /// Its own `SignedLocator`, the most recent it has signed.
     pub locator: Vec<u8>,
+    /// Its own `EncryptionKey` (`wire-format.md` §2.5), so the
+    /// counterparty can write to it afterwards with no fetch.
+    pub encryption_key: Vec<u8>,
     /// The number this device reports for itself, where the shell read one
     /// ([`Client::declare_number`]).
     pub number: Option<String>,
@@ -1213,6 +1216,7 @@ impl Client {
             retention_years: self.cfg.retention_years,
             initiator: a.initiator,
             locator: self.own_locator()?,
+            encryption_key: self.own_encryption_key()?,
             number: self.number.clone(),
         })
     }
@@ -1243,8 +1247,9 @@ impl Client {
     /// [`Client::reach_for`] reads.
     ///
     /// The introduction is verified before anything is kept: the codec
-    /// binds the material to the locator's subject and the signature is
-    /// checked under that material alone. Whose it is, or why not.
+    /// binds the material to the encryption key's identity and the
+    /// locator's subject, and both signatures are checked under that
+    /// material alone. Whose it is, or why not.
     pub fn take_introduction(&mut self, bytes: &[u8]) -> Result<Keyhash, String> {
         let intro = rhtn_archive::locator::Introduction::parse(bytes)?;
         let who = intro.identity.keyhash;
@@ -1252,6 +1257,7 @@ impl Client {
             return Err("an introduction to myself".into());
         }
         self.contact(&intro.identity, crate::contacts::How::Introduced, true);
+        self.hold_encryption_key(&who, &intro.encryption_key);
         // the §2.3 rule decides whether this replaces a locator already
         // held: the same series with a greater counter, never outright
         self.hold_locator(&who, &intro.locator.bytes, false)
@@ -1265,9 +1271,9 @@ impl Client {
         Ok(who)
     }
 
-    /// **Take an anchored introduction** (`wire-format.md` §2.4): an
-    /// introduction together with the key material and published records
-    /// of the anchor its locator names.
+    /// **Take a card** (`wire-format.md` §2.4): an introduction together
+    /// with the key material and published records of the anchor its
+    /// locator names.
     ///
     /// **One code carries both** [author, 2026-10-13]. An introduction on
     /// its own leaves a holder with a position and nobody to dial — the
@@ -1278,8 +1284,8 @@ impl Client {
     ///
     /// The anchor is taken first, because the introduction is only useful
     /// once there is somewhere to start the walk from.
-    pub fn take_anchored_introduction(&mut self, bytes: &[u8]) -> Result<Keyhash, String> {
-        let card = rhtn_archive::locator::AnchoredIntroduction::parse(bytes)?;
+    pub fn take_card(&mut self, bytes: &[u8]) -> Result<Keyhash, String> {
+        let card = rhtn_archive::locator::Card::parse(bytes)?;
         // the anchor's identity, so its records check and a dial to it
         // binds (`wire-format.md` §9.1)
         if !self.known.iter().any(|i| i.keyhash == card.anchor.keyhash) {
@@ -1298,6 +1304,7 @@ impl Client {
         }
         let introduction = rhtn_archive::locator::introduction(
             &card.introduction.material,
+            &card.introduction.encryption_key,
             &card.introduction.locator.bytes,
         );
         let who = self.take_introduction(&introduction)?;
@@ -1332,10 +1339,35 @@ impl Client {
             .get(&anchor)
             .and_then(|c| c.endpoint_record.clone())
             .ok_or(Abort::NoRelationship(anchor))?;
-        let intro = rhtn_archive::locator::introduction(&self.public.key_material(), &locator);
-        Ok(rhtn_archive::locator::anchored_introduction(
+        let intro = rhtn_archive::locator::introduction(
+            &self.public.key_material(),
+            &self.own_encryption_key()?,
+            &locator,
+        );
+        Ok(rhtn_archive::locator::card(
             &intro, &material, &record, None,
         ))
+    }
+
+    /// **This identity's own `EncryptionKey`** (`wire-format.md` §2.5):
+    /// both keys derived from the identity root and signed hybrid by the
+    /// identity, so every device the phrase restores issues the same
+    /// bytes. Refused where this device holds no signing identity.
+    pub fn own_encryption_key(&self) -> Result<Vec<u8>, Abort> {
+        Ok(rhtn_crypto::encryption_key::own(self.signer()?))
+    }
+
+    /// Keep `key` as the encryption key held for `who`, where a contact is
+    /// held for them. The caller has verified it under their material;
+    /// it changes only when the identity does (§2.5), so the latest
+    /// verified one is the one held.
+    fn hold_encryption_key(&mut self, who: &Keyhash, key: &[u8]) {
+        if let Some(c) = self.store.contacts.get_mut(who)
+            && c.encryption_key.as_deref() != Some(key)
+        {
+            c.encryption_key = Some(key.to_vec());
+            self.changed.insert(rhtn_model::Noun::Contacts);
+        }
     }
 
     /// **Note a node the resolution walk went through** (§7.7's descent;
@@ -1479,19 +1511,21 @@ impl Client {
                     return None;
                 }
                 let sl = c.locator.as_deref()?;
-                Some(rhtn_archive::locator::introduction(&c.material, sl))
+                let ek = c.encryption_key.as_deref()?;
+                Some(rhtn_archive::locator::introduction(&c.material, ek, sl))
             })
             .collect()
     }
 
     /// One contact's introduction (`wire-format.md` §2.3): its material
-    /// with the most recent locator held for it, or nothing where no
-    /// locator is held.
+    /// and encryption key with the most recent locator held for it, or
+    /// nothing where no locator or no encryption key is held.
     #[must_use]
     pub fn introduction_of(&self, who: &Keyhash) -> Option<Vec<u8>> {
         let c = self.store.contacts.get(who)?;
         let sl = c.locator.as_deref()?;
-        Some(rhtn_archive::locator::introduction(&c.material, sl))
+        let ek = c.encryption_key.as_deref()?;
+        Some(rhtn_archive::locator::introduction(&c.material, ek, sl))
     }
 
     /// **A contact learned, or dealt with again** (`light-client-requirements.md`
@@ -1614,7 +1648,8 @@ impl Client {
     }
 
     /// **This client's own introduction** (`wire-format.md` §2.3): its key
-    /// material and its own `SignedLocator`, as a party hands one on so
+    /// material, its encryption key and its own `SignedLocator`, as a
+    /// party hands one on so
     /// that a holder can address it and offer it by locator — which is how
     /// a nominee travels to the counterparty's prune ([`Client::my_witness_set`]
     /// in `sequence.rs`).
@@ -1623,6 +1658,7 @@ impl Client {
         let sl = rhtn_archive::locator::signed_locator(me, &self.acting_position());
         Ok(rhtn_archive::locator::introduction(
             &me.public.key_material(),
+            &self.own_encryption_key()?,
             &sl,
         ))
     }
@@ -1806,6 +1842,7 @@ impl Client {
                 initiator: intent.initiator,
                 continuations: 0,
                 locator: intent.locator,
+                encryption_key: intent.encryption_key,
                 number: intent.number,
             },
             &cid,
@@ -1858,6 +1895,7 @@ impl Client {
                 retention_years: read.retention_years,
                 initiator: read.initiator,
                 locator: read.locator,
+                encryption_key: read.encryption_key,
                 number: read.number,
             },
         )?;
@@ -2033,6 +2071,24 @@ impl Client {
         // leaves the ceremony where it stood [2026-11-14]
         self.own_locator_of(&from, &intent.locator)
             .map_err(|e| anchor_refused("intent", Abort::Locator(e)))?;
+        // and its encryption key by the same rule: verified under the same
+        // pinned key and naming the sender, or the intent refuses whole
+        // (`wire-format.md` §2.5)
+        match rhtn_crypto::verify::encryption_key(&self.known[..], &intent.encryption_key) {
+            Ok(ek) if ek.keyhash == from => {}
+            Ok(_) => {
+                return Err(anchor_refused(
+                    "intent",
+                    Abort::Malformed("the sender's encryption key names another identity".into()),
+                ));
+            }
+            Err(e) => {
+                return Err(anchor_refused(
+                    "intent",
+                    Abort::Malformed(format!("the sender's encryption key: {e}")),
+                ));
+            }
+        }
         let a = self.active()?;
         if intent.initiator && !a.initiator {
             a.started_at = intent.started_at;
@@ -2056,6 +2112,8 @@ impl Client {
         // the sender's own position, kept as the locator held for them:
         // its own statement replaces whatever a third party said of it
         self.hold_locator(&from, &intent.locator, true)?;
+        // and its encryption key, checked above
+        self.hold_encryption_key(&from, &intent.encryption_key);
         self.touch_contact(&from);
         // **the number goes with the rest of what is held of them**
         // [author, 2026-11-10]: a later meeting replaces it, and a
@@ -5555,15 +5613,13 @@ impl Client {
     }
 
     /// **The introduction this device carries on a first message**
-    /// [author, 2026-10-30]: its material and a signed locator, where it
-    /// holds a position to be found at; none where it does not. Refreshed
-    /// at attach and whenever its positions move, so a stranger it writes
-    /// to first can attribute the message and answer.
+    /// [author, 2026-10-30]: its material, its encryption key and a
+    /// signed locator, where it holds a position to be found at; none
+    /// where it does not. Refreshed at attach and whenever its positions
+    /// move, so a stranger it writes to first can attribute the message
+    /// and answer.
     pub fn refresh_card(&mut self) {
-        self.payload.sessions.card = self
-            .own_locator()
-            .ok()
-            .map(|l| rhtn_archive::locator::introduction(&self.public.key_material(), &l));
+        self.payload.sessions.card = self.own_introduction().ok();
     }
 
     /// **A cold call** [author, 2026-10-30: anyone with a locator can
@@ -5590,6 +5646,7 @@ impl Client {
         // knowing a participant's material held no locator for it, dropped
         // the introduction whole, and could ask nobody for the bundle.
         if self.known.iter().any(|k| k.keyhash == *from) {
+            self.hold_encryption_key(from, &intro.encryption_key);
             let held = |c: &Self| c.store.contacts.get(from).and_then(|c| c.locator.clone());
             let before = held(self);
             return match self.hold_locator(from, &intro.locator.bytes, false) {

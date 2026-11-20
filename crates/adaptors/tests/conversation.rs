@@ -130,6 +130,7 @@ async fn the_conversation_runs_over_the_payload_path_to_a_record_every_signer_ho
                     1,
                 );
                 contact.locator = Some(sl);
+                contact.encryption_key = Some(rhtn_crypto::encryption_key::own(&id(n)));
                 c.store.contacts.insert(k, contact);
             }
         })

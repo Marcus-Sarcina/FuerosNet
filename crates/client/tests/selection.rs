@@ -33,6 +33,7 @@ fn intro(who: &str, series: u32, counter: u32) -> Vec<u8> {
     let loc = Locator::root(kh(who), Seqno { series, counter });
     introduction(
         &signer.public.key_material(),
+        &rhtn_crypto::encryption_key::own(&signer),
         &signed_locator(&signer, &loc),
     )
 }
@@ -52,6 +53,7 @@ fn n_counts_introductions_once_by_subject_and_the_pool_excludes_the_counterparty
     );
     let mismatch = introduction(
         &id("alice").public.key_material(),
+        &rhtn_crypto::encryption_key::own(&id("alice")),
         &signed_locator(&id("c1"), &c1_loc),
     );
     let bundle = vec![

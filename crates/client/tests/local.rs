@@ -222,7 +222,6 @@ fn an_object_the_schema_refuses_does_not_decode_here_either() {
     assert!(CandidateHandover::decode(&fixture("P-capture-key-handover")).is_err());
 }
 
-// functional: NET-025
 /// The prekey handover encodes to the canonical bytes, with and without a
 /// one-time key.
 #[test]
@@ -247,7 +246,6 @@ fn the_prekey_handover_encodes_to_the_canonical_bytes() {
     assert_ne!(dry, fx, "the fifth element is present or not");
 }
 
-// functional: NET-025
 /// What the checker refuses, each against the corpus's own negative.
 #[test]
 fn the_prekey_handover_refuses_what_it_should() {
@@ -276,6 +274,7 @@ fn a_sealed_carriage_opens_only_under_its_own_key_and_ceremony() {
         initiator: true,
         continuations: 0,
         locator: fixture("P-signedlocator"),
+        encryption_key: fixture("P-encryption-key"),
         number: None,
     }
     .encode();
@@ -385,8 +384,8 @@ fn hex(b: &[u8]) -> String {
 
 // functional: NET-033
 /// **An intent carries a number or does not, and both are well formed**
-/// (`wire-format.md` §14.3.2's ninth field; NET-033) [author, 2026-11-10]:
-/// a handset without a subscription sends the eight fields it always sent,
+/// (`wire-format.md` §14.3.2's tenth field; NET-033) [author, 2026-11-10]:
+/// a handset without a subscription sends the nine fields it always sent,
 /// so nothing has to be true of the counterparty's build.
 #[test]
 fn an_intent_carries_a_number_or_does_not() {
@@ -398,12 +397,13 @@ fn an_intent_carries_a_number_or_does_not() {
         initiator: true,
         continuations: 0,
         locator: fixture("P-signedlocator"),
+        encryption_key: fixture("P-encryption-key"),
         number,
     };
     let with = plain(Some("+15550001111".into())).encode();
     let without = plain(None).encode();
-    assert_eq!(with[0], 0x89, "nine fields with a number");
-    assert_eq!(without[0], 0x88, "eight without");
+    assert_eq!(with[0], 0x8a, "ten fields with a number");
+    assert_eq!(without[0], 0x89, "nine without");
     assert_eq!(
         IntentExchange::decode(&with)
             .expect("reads")

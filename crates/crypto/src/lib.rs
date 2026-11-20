@@ -16,6 +16,8 @@
 /// Transport delegations (`wire-format.md` §8.2): a window-bounded
 /// credential an identity signs for a key that is not its own.
 pub mod delegation;
+/// Issuing an identity's encryption key (`wire-format.md` §2.5).
+pub mod encryption_key;
 
 /// The proof an instance offers for the transport key it minted
 /// (`infra-client-requirements.md` §8.2).

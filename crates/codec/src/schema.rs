@@ -316,6 +316,16 @@ const DELEGATION: Fields = &[
     (4, true, Uint),
     (5, true, Any),
 ];
+// §2.5: the identity, the X-Wing encapsulation key, the sealing-
+// authentication key, and a hybrid `COSE_Sign` over fields 1 to 3
+const ENCRYPTION_KEY: Fields = &[
+    (1, true, Keyhash),
+    (2, true, Bstr),
+    (3, true, Bytes32),
+    (4, true, Any),
+];
+/// An X-Wing encapsulation key, in bytes (§2.5, §7.8.1).
+pub const XWING_PUBLIC_BYTES: usize = 1216;
 /// A transport delegation's window, **exactly** 48 hours (§8.2): field 4
 /// is this many seconds after field 3 and no other value is well-formed.
 ///
@@ -1132,6 +1142,7 @@ fn record_extension_bounds(b: &[u8], kind: &str, item: &Item) -> Result<(), Erro
         "PrekeyBundle" => Some(6),
         "Profile" => Some(7),
         "AnchorEntry" | "SubtreeAck" | "AbuseReport" | "Witness" | "Delegation" => Some(5),
+        "EncryptionKey" => Some(4),
         "EndpointRecord" => Some(4),
         "CatalogEntry" => Some(9),
         "Locator" => Some(4),
@@ -1266,19 +1277,49 @@ fn device_bundle_ok(b: &[u8], f: &Item, signed: bool) -> Result<(), Error> {
     }
 }
 
+/// A hybrid `COSE_Sign` in a signed map's signature field: the detached
+/// container and two entries, one per algorithm (§3.5).  What a
+/// delegation (§8.2) and an encryption key (§2.5) carry, the identity
+/// being hybrid; a classical-only one is malformed.
+fn hybrid_sign_ok(it: Option<&Item>) -> Result<(), Error> {
+    let Some(Item::Array(cs)) = it else {
+        return Err(Error("signature not COSE_Sign"));
+    };
+    if cs.len() != 4
+        || !matches!(cs[0], Item::Bytes(_))
+        || !matches!(&cs[1], Item::Map(u) if u.is_empty())
+        || !matches!(cs[2], Item::Null)
+    {
+        return Err(Error("COSE_Sign container departs from the profile"));
+    }
+    let Item::Array(entries) = &cs[3] else {
+        return Err(Error("signature entries not array"));
+    };
+    if entries.len() != 2 {
+        return Err(Error("a hybrid signature carries one entry per algorithm"));
+    }
+    for e in entries {
+        if !matches!(e, Item::Array(ea) if ea.len() == 3 && matches!(ea[0], Item::Bytes(_)) && matches!(&ea[1], Item::Map(u) if u.is_empty()) && matches!(ea[2], Item::Bytes(_)))
+        {
+            return Err(Error("signature entry shape"));
+        }
+    }
+    Ok(())
+}
+
 /// An `Introduction` (§2.3) at offset `at`: version 1, the subject's key
-/// material, and a `SignedLocator` whose subject is that material's hash.
-/// The signature is the holder's to verify; the shape and the binding
-/// between the two halves are structural, and an introduction failing
-/// either is not one.
+/// material, its encryption key (§2.5), and a `SignedLocator`, the
+/// encryption key and the locator each naming that material's hash.  The
+/// signatures are the holder's to verify; the shape and the bindings are
+/// structural, and an introduction failing either is not one.
 fn introduction_ok(b: &[u8], at: usize) -> Result<(), Error> {
     let p = Parser { b };
     let (v, _) = p.item(at)?;
     let Item::Array(a) = &v else {
         return Err(Error("an introduction is an array"));
     };
-    if a.len() != 3 {
-        return Err(Error("an introduction has three fields"));
+    if a.len() != 4 {
+        return Err(Error("an introduction has four fields"));
     }
     if as_uint(&a[0]) != Some(1) {
         return Err(Error("version 1"));
@@ -1286,7 +1327,18 @@ fn introduction_ok(b: &[u8], at: usize) -> Result<(), Error> {
     let parts = array_item_ranges(b, at).ok_or(Error("array walk"))?;
     check_type(b, parts[1].start, KeyMaterial)?;
     let material = &b[parts[1].clone()];
-    let sub = &b[parts[2].clone()];
+    let ek = &b[parts[2].clone()];
+    let ek_item = parse_all(ek)?;
+    check_kind(ek, "EncryptionKey", &ek_item)?;
+    let Item::Map(em) = &ek_item else {
+        return Err(Error("an encryption key is a map"));
+    };
+    if keyhash_at(ek, em, 1) != Some(&crate::cose::sha256(material)[..]) {
+        return Err(Error(
+            "an introduction's encryption key names another identity than its key material",
+        ));
+    }
+    let sub = &b[parts[3].clone()];
     let loc = parse_all(sub)?;
     check_kind(sub, "SignedLocator", &loc)?;
     let Item::Map(m) = &loc else {
@@ -1301,9 +1353,9 @@ fn introduction_ok(b: &[u8], at: usize) -> Result<(), Error> {
     Ok(())
 }
 
-/// An `AnchoredIntroduction` (§2.4) at offset `at`: version 1, an
-/// `Introduction`, and the key material and published records of the
-/// anchor its locator names.
+/// A `Card` (§2.4) at offset `at`: version 1, an `Introduction`, and the
+/// key material and published records of the anchor its locator names —
+/// everything that reaches an address (design §12.9).
 ///
 /// **This is what a code handed over at a meeting carries** [author,
 /// 2026-10-13]: "one code should carry the introduction and its anchor
@@ -1317,14 +1369,14 @@ fn introduction_ok(b: &[u8], at: usize) -> Result<(), Error> {
 /// kind: the anchor material hashes to the anchor the locator names, and
 /// each record names that same node. The signatures are the holder's to
 /// verify, as an introduction's is.
-fn anchored_introduction_ok(b: &[u8], at: usize) -> Result<(), Error> {
+fn card_ok(b: &[u8], at: usize) -> Result<(), Error> {
     let p = Parser { b };
     let (v, _) = p.item(at)?;
     let Item::Array(a) = &v else {
-        return Err(Error("an anchored introduction is an array"));
+        return Err(Error("a card is an array"));
     };
     if a.len() != 5 {
-        return Err(Error("an anchored introduction has five fields"));
+        return Err(Error("a card has five fields"));
     }
     if as_uint(&a[0]) != Some(1) {
         return Err(Error("version 1"));
@@ -1338,7 +1390,7 @@ fn anchored_introduction_ok(b: &[u8], at: usize) -> Result<(), Error> {
     // the anchor the introduction's locator names, reached through the
     // introduction's own shape, which `introduction_ok` has just checked
     let intro = array_item_ranges(b, parts[1].start).ok_or(Error("introduction walk"))?;
-    let sl = &b[intro[2].clone()];
+    let sl = &b[intro[3].clone()];
     // the locator is field 2 of the signed locator and field 1 of the
     // locator is the anchor (§2.1); the archive's own reader is above this
     // crate, so the walk is done here rather than borrowed
@@ -1591,14 +1643,15 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             };
             // the nominees no longer ride the intent [author, 2026-10-19]:
             // the sets travel by locator once the id has fixed (§7.10.2,
-            // kind 22), so an intent is eight fields — **nine where the
+            // kind 22), so an intent is nine fields with the sender's
+            // encryption key [author, 2026-11-19] — **ten where the
             // sender's own number rides with it** [author, 2026-11-10],
-            // which a device that has none, or an older one, simply does
-            // not send. The counterparty keeps it with the rest of what it
-            // holds of that party and it goes in no transaction and to no
-            // witness or verifier.
-            if a.len() != 8 && a.len() != 9 {
-                return Err(Error("eight fields, or nine with a number"));
+            // which a device that has none simply does not send. The
+            // counterparty keeps it with the rest of what it holds of
+            // that party and it goes in no transaction and to no witness
+            // or verifier.
+            if a.len() != 9 && a.len() != 10 {
+                return Err(Error("nine fields, or ten with a number"));
             }
             if as_uint(&a[0]) != Some(1) {
                 return Err(Error("version 1"));
@@ -1630,9 +1683,15 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             let sub = &b[r.clone()];
             check_kind(sub, "SignedLocator", &parse_all(sub)?)
                 .map_err(|_| Error("the sender's locator is a SignedLocator"))?;
+            // the sender's encryption key, so the receiver can write to it
+            // afterwards with no fetch (§14.3.2)
+            let r = top.get(8).ok_or(Error("encryption key"))?;
+            let ek = &b[r.clone()];
+            check_kind(ek, "EncryptionKey", &parse_all(ek)?)
+                .map_err(|_| Error("the sender's encryption key is an EncryptionKey"))?;
             // **bounded, and text**: a number is what a handset reports
             // and nothing reads it as anything else
-            if let Some(it) = a.get(8) {
+            if let Some(it) = a.get(9) {
                 match it {
                     Item::Text(t) if !t.is_empty() && t.len() <= NUMBER_CHARS => {}
                     _ => return Err(Error("a number is 1 to 32 characters of text")),
@@ -1666,7 +1725,7 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             introductions_ok(b, 3)
         }
         "Introduction" => introduction_ok(b, 0),
-        "AnchoredIntroduction" => anchored_introduction_ok(b, 0),
+        "Card" => card_ok(b, 0),
         "Candidates" => candidates_ok(item),
         "CandidateHandover" => {
             let Item::Array(a) = item else {
@@ -2234,31 +2293,20 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             if na.checked_sub(nb) != Some(DELEGATION_WINDOW_SECONDS) {
                 return Err(Error("a delegation's window is exactly 172,800 seconds"));
             }
-            // a hybrid COSE_Sign: the detached container and two entries,
-            // one per algorithm; a classical-only delegation is malformed
-            let Some(Item::Array(cs)) = map_get(m, 5) else {
-                return Err(Error("signature not COSE_Sign"));
+            // a hybrid COSE_Sign; a classical-only delegation is malformed
+            hybrid_sign_ok(map_get(m, 5))
+        }
+        "EncryptionKey" => {
+            check_map_signed(b, 0, ENCRYPTION_KEY)?;
+            let Item::Map(m) = item else {
+                return Err(Error("not map"));
             };
-            if cs.len() != 4
-                || !matches!(cs[0], Item::Bytes(_))
-                || !matches!(&cs[1], Item::Map(u) if u.is_empty())
-                || !matches!(cs[2], Item::Null)
+            if bs(b, map_get(m, 2).ok_or(Error("field 2"))?).map(|s| s.len())
+                != Some(XWING_PUBLIC_BYTES)
             {
-                return Err(Error("COSE_Sign container departs from the profile"));
+                return Err(Error("an X-Wing encapsulation key is 1216 bytes"));
             }
-            let Item::Array(entries) = &cs[3] else {
-                return Err(Error("signature entries not array"));
-            };
-            if entries.len() != 2 {
-                return Err(Error("a hybrid delegation carries one entry per algorithm"));
-            }
-            for e in entries {
-                if !matches!(e, Item::Array(ea) if ea.len() == 3 && matches!(ea[0], Item::Bytes(_)) && matches!(&ea[1], Item::Map(u) if u.is_empty()) && matches!(ea[2], Item::Bytes(_)))
-                {
-                    return Err(Error("signature entry shape"));
-                }
-            }
-            Ok(())
+            hybrid_sign_ok(map_get(m, 4))
         }
         "ResolveReply" => check_unsigned(Family::ResolveReply, b, 0),
         "ResourceResponse" => check_unsigned(Family::ResourceResponse, b, 0),

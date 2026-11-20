@@ -783,12 +783,14 @@ pub async fn knows(p: &Party, name: &'static str) {
     );
     let sl = rhtn_archive::locator::signed_locator(&id(name), &loc);
     let material = id(name).public.key_material();
+    let ek = rhtn_crypto::encryption_key::own(&id(name));
     let k = kh(name);
     p.with(move |c| {
         let contact = c.store.contacts.entry(k).or_insert_with(|| {
             rhtn_client::contacts::Contact::new(material, rhtn_client::contacts::How::Nominee, 1)
         });
         contact.locator = Some(sl);
+        contact.encryption_key = Some(ek);
     })
     .await;
 }
@@ -968,6 +970,7 @@ impl Meeting {
                         1,
                     );
                     contact.locator = Some(rhtn_archive::locator::signed_locator(&id(n), &loc));
+                    contact.encryption_key = Some(rhtn_crypto::encryption_key::own(&id(n)));
                     c.store.contacts.insert(k, contact);
                 }
             })
@@ -1026,6 +1029,7 @@ impl Meeting {
             for n in noms {
                 let sl = self.party(n).with(|c| c.own_locator()).await?;
                 let material = id(n).public.key_material();
+                let ek = rhtn_crypto::encryption_key::own(&id(n));
                 let k = kh(n);
                 self.party(who)
                     .with(move |c| {
@@ -1037,6 +1041,7 @@ impl Meeting {
                             )
                         });
                         contact.locator = Some(sl);
+                        contact.encryption_key = Some(ek);
                     })
                     .await;
             }

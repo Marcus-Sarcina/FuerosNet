@@ -148,3 +148,37 @@ fn the_encryption_key_follows_the_identity_root_and_crosses_as_two_secrets() {
         "two keys, not one used twice"
     );
 }
+
+/// **The encryption key is the vectors', to the byte** (`wire-format.md`
+/// §2.5): alice's, issued here from her identity root, equals the one the
+/// generator derived through kyber-py's ML-KEM and its own HKDF, so the
+/// derivation is checked against an implementation that is not this one.
+/// It verifies under alice and not under another, and field 1 names her.
+#[test]
+fn an_issued_encryption_key_matches_the_vectors_and_verifies_under_its_identity() {
+    use rhtn_crypto::encryption_key;
+    use rhtn_crypto::identity::testkit::test_identity;
+    use rhtn_crypto::verify;
+    let corpus: serde_json::Value =
+        serde_json::from_str(include_str!("../../../test-vectors/corpus.json")).expect("corpus");
+    let vector = corpus["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["id"] == "P-encryption-key")
+        .and_then(|e| e["hex"].as_str())
+        .map(|h| hex::decode(h).unwrap())
+        .expect("the vector");
+    let alice = test_identity("alice");
+    let issued = encryption_key::own(&alice);
+    assert_eq!(issued, vector, "the vectors' bytes");
+    let key = verify::encryption_key(std::slice::from_ref(&alice.public), &issued).expect("hers");
+    assert_eq!(key.keyhash, alice.public.keyhash);
+    let mine = EncryptionSecret::from_identity_root(alice.identity_root());
+    assert_eq!(&key.kem, mine.kem_public());
+    assert_eq!(key.auth, mine.auth_public());
+    // carol's key does not verify as alice's (the corpus carries the
+    // wrong-signer case as N-encryption-key-wrong-signer)
+    let carol = test_identity("carol").public;
+    assert!(verify::encryption_key(std::slice::from_ref(&carol), &issued).is_err());
+}

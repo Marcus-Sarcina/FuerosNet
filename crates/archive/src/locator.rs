@@ -50,16 +50,22 @@ impl SignedLocator {
 }
 
 /// An `Introduction` (`wire-format.md` §2.3): a third party's locator handed
-/// with its key, as a bundle carries one (§5.4) and a fishing proposal is
-/// one (§7.10.2).  Parsed, the material names an identity, the locator's
-/// subject is that identity's hash, and the signature verifies under it;
-/// nothing else about the subject is said.
+/// with its key and its encryption key (§2.5), as a bundle carries one
+/// (§5.4) and a fishing proposal is one (§7.10.2).  Parsed, the material
+/// names an identity, the encryption key and the locator each name that
+/// identity's hash, and both signatures verify under it; nothing else
+/// about the subject is said.
 #[derive(Clone)]
 pub struct Introduction {
     /// The subject, from the carried material.
     pub identity: rhtn_crypto::Identity,
     /// The material as carried, for handing onward.
     pub material: Vec<u8>,
+    /// The encryption key as carried, for handing onward.
+    pub encryption_key: Vec<u8>,
+    /// The encryption key, verified under the material: what a message
+    /// to the subject is sealed to.
+    pub encryption: rhtn_crypto::verify::EncryptionKey,
     /// The locator, verified under the material.
     pub locator: SignedLocator,
 }
@@ -68,7 +74,9 @@ impl PartialEq for Introduction {
     /// Two introductions are the same when their bytes are: the identity
     /// is a function of the material.
     fn eq(&self, other: &Self) -> bool {
-        self.material == other.material && self.locator == other.locator
+        self.material == other.material
+            && self.encryption_key == other.encryption_key
+            && self.locator == other.locator
     }
 }
 impl Eq for Introduction {}
@@ -84,8 +92,9 @@ impl std::fmt::Debug for Introduction {
 
 impl Introduction {
     /// Parse an introduction and verify it: the codec's shape check binds
-    /// the material to the locator's subject, and the locator's signature
-    /// is checked under that material and nothing else.
+    /// the material to the encryption key's identity and the locator's
+    /// subject, and both signatures are checked under that material and
+    /// nothing else.
     pub fn parse(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         schema::check_kind(b, "Introduction", &item).map_err(|e| e.0)?;
@@ -93,26 +102,32 @@ impl Introduction {
         let material = b[parts[1].clone()].to_vec();
         let identity = rhtn_crypto::Identity::from_key_material(&material)
             .ok_or("the key material does not name an identity")?;
-        let locator = SignedLocator::parse(&b[parts[2].clone()])?;
+        let encryption_key = b[parts[2].clone()].to_vec();
+        let encryption = verify::encryption_key(std::slice::from_ref(&identity), &encryption_key)
+            .map_err(|e| e.to_string())?;
+        let locator = SignedLocator::parse(&b[parts[3].clone()])?;
         locator.verify(std::slice::from_ref(&identity))?;
         Ok(Introduction {
             identity,
             material,
+            encryption_key,
+            encryption,
             locator,
         })
     }
 }
 
-/// An `AnchoredIntroduction` (`wire-format.md` §2.4) as a holder reads it:
-/// an introduction, and the anchor its locator names with the records
-/// that say where that anchor answers.
+/// A `Card` (`wire-format.md` §2.4) as a holder reads it: an
+/// introduction, and the anchor its locator names with the records that
+/// say where that anchor answers — everything that reaches an address
+/// (design §12.9).
 ///
 /// **What a code handed over at a meeting carries** [author, 2026-10-13]:
 /// "one code should carry the introduction and its anchor records". An
 /// introduction names an anchor and a path and no address, and a holder
 /// with no node of its own has nothing to dial without these.
 #[derive(Clone)]
-pub struct AnchoredIntroduction {
+pub struct Card {
     /// The introduction itself.
     pub introduction: Introduction,
     /// The anchor's identity, from its key material.
@@ -123,14 +138,14 @@ pub struct AnchoredIntroduction {
     pub entry: Option<Vec<u8>>,
 }
 
-impl AnchoredIntroduction {
+impl Card {
     /// Parse and verify one: the codec's shape check binds the anchor
     /// material to the anchor the locator names and each record to that
     /// node, the introduction verifies under its own material, and the
     /// endpoint record verifies under the anchor's.
     pub fn parse(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
-        schema::check_kind(b, "AnchoredIntroduction", &item).map_err(|e| e.0)?;
+        schema::check_kind(b, "Card", &item).map_err(|e| e.0)?;
         let parts = array_item_ranges(b, 0).ok_or("not an array")?;
         let introduction = Introduction::parse(&b[parts[1].clone()])?;
         let material = b[parts[2].clone()].to_vec();
@@ -144,7 +159,7 @@ impl AnchoredIntroduction {
             [0xf6] => None,
             bytes => Some(bytes.to_vec()),
         };
-        Ok(AnchoredIntroduction {
+        Ok(Card {
             introduction,
             anchor,
             endpoint,
@@ -153,10 +168,10 @@ impl AnchoredIntroduction {
     }
 }
 
-/// Compose an `AnchoredIntroduction` from an introduction, the key
-/// material of the anchor its locator names, and that anchor's published
-/// records.  The entry is optional; everything else is not.
-pub fn anchored_introduction(
+/// Compose a `Card` from an introduction, the key material of the anchor
+/// its locator names, and that anchor's published records.  The entry is
+/// optional; everything else is not.
+pub fn card(
     introduction: &[u8],
     anchor_material: &[u8],
     endpoint_record: &[u8],
@@ -175,14 +190,14 @@ pub fn anchored_introduction(
     out
 }
 
-/// Compose an `Introduction` from a subject's key material and a
-/// Compose an `Introduction` from a subject's key material and a
-/// `SignedLocator` of theirs, as a holder hands it on.
-pub fn introduction(material: &[u8], signed_locator: &[u8]) -> Vec<u8> {
+/// Compose an `Introduction` from a subject's key material, encryption
+/// key and a `SignedLocator` of theirs, as a holder hands it on.
+pub fn introduction(material: &[u8], encryption_key: &[u8], signed_locator: &[u8]) -> Vec<u8> {
     let mut out = Vec::new();
-    emit_array_head(&mut out, 3);
+    emit_array_head(&mut out, 4);
     emit_uint(&mut out, 1);
     out.extend_from_slice(material);
+    out.extend_from_slice(encryption_key);
     out.extend_from_slice(signed_locator);
     out
 }

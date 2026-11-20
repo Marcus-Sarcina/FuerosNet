@@ -190,4 +190,6 @@ pub mod aad {
     pub const TRANSFER: &[u8] = b"rhtn/1:transfer";
     /// A transport delegation (§1.1, §8.2).
     pub const DELEGATION: &[u8] = b"rhtn/1:delegation";
+    /// An identity's encryption key (§1.1, §2.5).
+    pub const ENCRYPTION_KEY: &[u8] = b"rhtn/1:encryption-key";
 }

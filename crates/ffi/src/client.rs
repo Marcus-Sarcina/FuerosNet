@@ -3019,7 +3019,8 @@ impl Participant {
     }
 
     /// **This client's own introduction** (`wire-format.md` §2.3): its key
-    /// material with its own signed locator, for another party to take with
+    /// material and encryption key with its own signed locator, for
+    /// another party to take with
     /// [`Participant::take_introduction`] and hold it by.
     pub fn own_introduction(&self) -> Result<Vec<u8>, Refused> {
         self.call("own_introduction", || {
@@ -3048,8 +3049,8 @@ impl Participant {
         })
     }
 
-    /// **Take whatever an intake code carries**: an anchored introduction
-    /// (`wire-format.md` §2.4), a bare introduction (§2.3), or a node's
+    /// **Take whatever an intake code carries**: a card (`wire-format.md`
+    /// §2.4), a bare introduction (§2.3), or a node's
     /// endpoint record (§7.6). The kernel decides which by parsing, so
     /// nobody has to be asked what kind of code they were handed.
     ///
@@ -3057,7 +3058,7 @@ impl Participant {
     pub fn take_intake(&self, bytes: Vec<u8>) -> Result<Intake, Refused> {
         self.call("take_intake", || {
             let took = self.handle.with_blocking(move |c| {
-                if let Ok(who) = c.take_anchored_introduction(&bytes) {
+                if let Ok(who) = c.take_card(&bytes) {
                     return Ok(Intake {
                         kind: "an introduction, with where its anchor answers".into(),
                         who: id_of(&who),

@@ -472,6 +472,84 @@ fn the_number_a_device_reports_crosses_with_the_intent_and_lands_on_the_contact(
     }
 }
 
+// functional: NET-025
+/// **The sender's encryption key crosses with its intent, both ways, and
+/// lands on the counterparty's contact** (`wire-format.md` §14.3.2, §2.5):
+/// after a ceremony that needed no node, each side holds the key the
+/// other's identity root derives, so it can write afterwards with no fetch
+/// of it. An intent whose key names another identity, or whose signature
+/// fails, is refused whole and leaves nothing behind.
+#[test]
+fn the_encryption_key_crosses_with_the_intent_and_a_bad_one_refuses_it() {
+    let mut s = setup(&["alice", "bob"]);
+    s.face_off("alice", "bob");
+    s.client("alice")
+        .begin(Some(kh("bob")), vec![], true)
+        .expect("alice begins");
+    s.client("bob")
+        .begin(Some(kh("alice")), vec![], false)
+        .expect("bob begins");
+    let oa = s.client("alice").optical_contribution().unwrap();
+    let ob = s.client("bob").optical_contribution().unwrap();
+    s.client("alice").take_optical(&carry(&ob)).unwrap();
+    s.client("bob").take_optical(&carry(&oa)).unwrap();
+    let ta = s.client("alice").transcript_confirm().unwrap();
+    let tb = s.client("bob").transcript_confirm().unwrap();
+    s.client("alice").take_transcript(&carry(&tb)).unwrap();
+    s.client("bob").take_transcript(&carry(&ta)).unwrap();
+
+    let ib = s.client("bob").intent().unwrap();
+    let before = s.client("alice").ceremony_id();
+    // alice's key in bob's intent names another identity; bob's own with
+    // a byte of its signature changed does not verify under him
+    let anothers = rhtn_crypto::encryption_key::own(&id("alice"));
+    let mut tampered = rhtn_crypto::encryption_key::own(&id("bob"));
+    *tampered.last_mut().unwrap() ^= 1;
+    for (why, ek) in [("another's", anothers), ("tampered", tampered)] {
+        let bad = Intent {
+            encryption_key: ek,
+            ..ib.clone()
+        };
+        let got = s.client("alice").take_intent(kh("bob"), &bad);
+        assert!(
+            matches!(got, Err(Abort::Malformed(_))),
+            "{why}: refused, got {got:?}"
+        );
+        assert!(
+            s.client("alice")
+                .store
+                .contacts
+                .get(&kh("bob"))
+                .and_then(|c| c.encryption_key.as_ref())
+                .is_none(),
+            "{why}: no key is kept"
+        );
+        assert_eq!(
+            s.client("alice").ceremony_id(),
+            before,
+            "{why}: the ceremony stands where it stood"
+        );
+    }
+
+    let ia = s.client("alice").intent_carriage().unwrap();
+    let ib = s.client("bob").intent_carriage().unwrap();
+    let carried: Vec<Vec<u8>> = ia.iter().map(|m| carry(m)).collect();
+    s.client("bob")
+        .take_intent_carriage(kh("alice"), &carried)
+        .unwrap();
+    let carried: Vec<Vec<u8>> = ib.iter().map(|m| carry(m)).collect();
+    s.client("alice")
+        .take_intent_carriage(kh("bob"), &carried)
+        .unwrap();
+    for (holder, of) in [("alice", "bob"), ("bob", "alice")] {
+        assert_eq!(
+            s.client(holder).store.contacts[&kh(of)].encryption_key,
+            Some(rhtn_crypto::encryption_key::own(&id(of))),
+            "{holder} holds the key {of}'s root derives"
+        );
+    }
+}
+
 // functional: NET-028
 /// **A carriage that will not open says nothing about why** (`wire-format.md`
 /// §14.3.2's Lifetime row; design §7.1).  The session key lives exactly as

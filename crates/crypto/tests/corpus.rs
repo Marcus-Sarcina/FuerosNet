@@ -139,6 +139,9 @@ fn every_bytes_entry_agrees_with_its_expectation() {
                     "Delegation" => verify::delegation(&ids, &raw)
                         .map(|_| ())
                         .map_err(|e| e.to_string()),
+                    "EncryptionKey" => verify::encryption_key(&ids, &raw)
+                        .map(|_| ())
+                        .map_err(|e| e.to_string()),
                     "envelope" => verify::envelope(&ids, &raw)
                         .map(|_| ())
                         .map_err(|e| e.to_string()),
@@ -164,7 +167,8 @@ fn every_bytes_entry_agrees_with_its_expectation() {
                     let sig_fails = (verified_record_kind(kind)
                         && !stale
                         && verify::record(&ids, kind, &raw).is_err())
-                        || (kind == "Delegation" && verify::delegation(&ids, &raw).is_err());
+                        || (kind == "Delegation" && verify::delegation(&ids, &raw).is_err())
+                        || (kind == "EncryptionKey" && verify::encryption_key(&ids, &raw).is_err());
                     if !schema_ok || sig_fails {
                         Ok(())
                     } else if implemented_kind(kind) || verified_record_kind(kind) {
@@ -300,6 +304,7 @@ fn implemented_kind(kind: &str) -> bool {
             | "CatalogReply"
             | "RelayedPayload"
             | "Delegation"
+            | "EncryptionKey"
             | "ArchiveReply"
             | "PrekeyReply"
             | "OpticalContribution"
@@ -315,7 +320,7 @@ fn implemented_kind(kind: &str) -> bool {
             // this side does not read: the schema implements each
             // (`wire-format.md` §§2.3, 2.4) [2026-10-13]
             | "Introduction"
-            | "AnchoredIntroduction"
+            | "Card"
             | "DeviceCredential"
             | "ConsentReply"
             | "FishingProposal"

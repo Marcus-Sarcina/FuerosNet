@@ -195,8 +195,8 @@ impl TranscriptConfirm {
 /// What the bearer carries first (§14.3.2): the sender's echoed
 /// contribution, the first carriage of its bundle of introductions, its
 /// clock, the retention it commits to, who initiated, how many
-/// `BundleContinuation` messages follow, and the sender's own
-/// `SignedLocator`.  The nominees no longer ride it [author, 2026-10-19]:
+/// `BundleContinuation` messages follow, the sender's own
+/// `SignedLocator` and its `EncryptionKey`.  The nominees no longer ride it [author, 2026-10-19]:
 /// the sets travel by locator once the id has fixed (§7.10.2, kind 22).
 #[derive(Clone, PartialEq, Eq)]
 pub struct IntentExchange {
@@ -214,6 +214,8 @@ pub struct IntentExchange {
     pub continuations: u64,
     /// The sender's own `SignedLocator`, the most recent it has signed.
     pub locator: Vec<u8>,
+    /// The sender's own `EncryptionKey` (§2.5).
+    pub encryption_key: Vec<u8>,
     /// **The number this device reports for itself**, where it has one
     /// and the platform gave it [author, 2026-11-10]: *"Pull from the
     /// handset at meeting time and pass it to the counterparty during the
@@ -241,6 +243,7 @@ impl std::fmt::Debug for IntentExchange {
             .field("initiator", &self.initiator)
             .field("continuations", &self.continuations)
             .field("locator", &self.locator.len())
+            .field("encryption_key", &self.encryption_key.len())
             // **the number is not printed**: it is the counterparty's,
             // and a log is not where it belongs
             .field("number", &self.number.is_some())
@@ -252,10 +255,10 @@ impl IntentExchange {
     /// The bytes of this `IntentExchange`, as §14.3.2 composes them.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
-        // **eight fields, or nine with a number**: a device with none
+        // **nine fields, or ten with a number**: a device with none
         // sends what it always sent, so nothing has to be true of the
         // counterparty's build for the exchange to work
-        emit_array_head(&mut out, if self.number.is_some() { 9 } else { 8 });
+        emit_array_head(&mut out, if self.number.is_some() { 10 } else { 9 });
         emit_uint(&mut out, 1);
         emit_bstr(&mut out, &self.contribution);
         emit_array_head(&mut out, self.bundle.len());
@@ -267,6 +270,7 @@ impl IntentExchange {
         emit_bool(&mut out, self.initiator);
         emit_uint(&mut out, self.continuations);
         out.extend_from_slice(&self.locator);
+        out.extend_from_slice(&self.encryption_key);
         if let Some(n) = &self.number {
             emit_tstr(&mut out, n);
         }
@@ -285,7 +289,8 @@ impl IntentExchange {
             initiator: matches!(a[5], Item::Bool(true)),
             continuations: as_uint(&a[6]).ok_or("continuations")?,
             locator: raw_field(b, 7)?,
-            number: match a.get(8) {
+            encryption_key: raw_field(b, 8)?,
+            number: match a.get(9) {
                 Some(Item::Text(r)) => Some(String::from_utf8_lossy(&b[r.clone()]).into_owned()),
                 _ => None,
             },
@@ -501,6 +506,7 @@ pub fn intent_carriage(intent: &IntentExchange, ceremony_id: &[u8; 32]) -> Vec<V
             bundle: first,
             continuations: rest.len() as u64,
             locator: intent.locator.clone(),
+            encryption_key: intent.encryption_key.clone(),
             number: intent.number.clone(),
             ..*intent
         }

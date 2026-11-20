@@ -630,16 +630,12 @@ impl Client {
     }
 
     /// This side's nominees as introductions (§2.3), by locator, for the
-    /// counterparty's prune.  A nominee whose material or locator is not
-    /// held cannot travel by locator and is not offered.
+    /// counterparty's prune.  A nominee whose material, encryption key or
+    /// locator is not held cannot travel by locator and is not offered.
     fn my_witness_set(&self, nominees: &[Keyhash]) -> Vec<Vec<u8>> {
         nominees
             .iter()
-            .filter_map(|k| {
-                let c = self.store.contacts.get(k)?;
-                let sl = c.locator.as_deref()?;
-                Some(rhtn_archive::locator::introduction(&c.material, sl))
-            })
+            .filter_map(|k| self.introduction_of(k))
             .collect()
     }
 
