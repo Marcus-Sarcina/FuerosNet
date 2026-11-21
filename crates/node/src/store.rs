@@ -288,6 +288,23 @@ impl TopologyStore {
         self.own.insert(txid, bytes);
     }
 
+    /// **The adoption that placed `subordinate` under `me`**, the newest in
+    /// the relationship, from this node's own acts: what an attach by that
+    /// identity is answered with (`wire-format.md` §8.2 field 7). Both
+    /// signed it, so it tells the identity nothing about anyone else.
+    pub fn placement_of(&self, me: &Keyhash, subordinate: &Keyhash) -> Option<Vec<u8>> {
+        self.own
+            .values()
+            .filter_map(|b| Record::parse(b).ok())
+            .filter(|r| {
+                r.tx_type == TYPE_ADOPTION
+                    && r.field_hash(1) == Some(*subordinate)
+                    && r.field_hash(2) == Some(*me)
+            })
+            .max_by_key(|r| r.seqno().map(|s| (s.series, s.counter)))
+            .map(|r| r.bytes)
+    }
+
     /// The seen-set, as `(effective, txid)` pairs.
     pub fn seen(&self) -> Vec<(u64, Txid)> {
         let mut out: Vec<(u64, Txid)> = self.seen.iter().map(|(t, e)| (*e, *t)).collect();

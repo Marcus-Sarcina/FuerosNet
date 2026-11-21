@@ -154,6 +154,15 @@ impl Contact {
         self.count = self.count.saturating_add(1);
     }
 
+    /// The subnet the contact's locator places it in, where one is held
+    /// and names one (`wire-format.md` §2.3 field 4).
+    pub fn subnet(&self) -> Option<crate::Txid> {
+        SignedLocator::parse(self.locator.as_deref()?)
+            .ok()?
+            .locator
+            .subnet
+    }
+
     /// The contact's position as its locator states it: the anchor and
     /// the significant nibbles of the path; none where no locator is held
     /// or it does not read.

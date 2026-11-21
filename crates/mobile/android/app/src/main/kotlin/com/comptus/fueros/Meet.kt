@@ -500,6 +500,9 @@ class Meet(
     private var bootstrapCrossed = false
     private var scope: Scope? = kind.scope
     private var claim: Claim? = null
+    /** Who of the people this device has met is in the claimed subnet,
+     *  by name; null until asked. */
+    private var corroborating: List<String>? = null
     private var carrying: Scope? = null
     /** What the counterparty's code asked for, once one has been read. */
     private var theirAdopt: Adopt? = null
@@ -839,6 +842,21 @@ class Meet(
                     } ?: "You are being invited into a subnet $counterpartyName has not named; " +
                         "their device will say which before you sign.",
                 )
+                // UX-034: who you have met is in it, where the claim names
+                // a subnet by its id [author, 2026-11-20]
+                if (claim?.subnet != null) {
+                    corroborating?.let { names ->
+                        out += Item(
+                            "UX-034",
+                            if (names.isEmpty()) {
+                                "None of the people you have met is in this subnet."
+                            } else {
+                                "Of the people you have met, ${listed(names)} " +
+                                    (if (names.size == 1) "is" else "are") + " in this subnet."
+                            },
+                        )
+                    }
+                }
                 carrying?.let { c ->
                     out += Item(
                         "UX-016",
@@ -1531,6 +1549,20 @@ class Meet(
     }
 
     /**
+     * **Who of the people this device has met is in the subnet the
+     * invitation names** [author, 2026-11-20], by name, as the kernel
+     * reads it off their locators (`light-client-requirements.md` §7):
+     * the brief says so, or that none is. An id is what a lookalike
+     * subnet cannot copy; this corroborates and proves nothing.
+     */
+    fun corroboratedBy(names: List<String>) {
+        synchronized(lock) {
+            corroborating = names
+            changed()
+        }
+    }
+
+    /**
      * **The label of the subnet this adoption is into**, as this device
      * can say it: as patron, the scope it chose; as the party being
      * adopted, the inviter's claim; null where neither is known yet.
@@ -1647,4 +1679,12 @@ class Meet(
         arrived || patienceLeftMs(nowMs) == 0L ||
             (since != 0L && nowMs - since > STALE_MS)
     }
+}
+
+/** Names as a sentence lists them: "A", "A and B", "A, B and C", and past
+ *  five the first four and how many more. */
+internal fun listed(names: List<String>): String = when {
+    names.size <= 1 -> names.joinToString("")
+    names.size <= 5 -> names.dropLast(1).joinToString(", ") + " and " + names.last()
+    else -> names.take(4).joinToString(", ") + " and ${names.size - 4} others"
 }

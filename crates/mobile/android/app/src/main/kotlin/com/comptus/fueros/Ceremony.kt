@@ -507,6 +507,8 @@ object Ceremony {
         // and what it claimed about where it leads, which the brief states
         // as a claim (`light-client-requirements.md` §7)
         m.invitedBy(Meet.Claim(read.subnet, read.alias, read.subnetAlias))
+        // and who of the people met is in the subnet it names, by its id
+        read.subnet?.let { m.corroboratedBy(Gateway.contactsIn(m.by, it)) }
         // and what they call themselves, from the scan [author, 2026-10-29]
         m.heard(read.alias)
         return null

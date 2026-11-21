@@ -338,6 +338,14 @@ pub struct ClientStore {
     /// client does not hold; the newest deposit replaces the one before,
     /// and the blob goes back to its owner on request and nowhere else.
     pub held_for: BTreeMap<Keyhash, Vec<u8>>,
+    /// **The adoptions the nodes this client attaches to placed it by**,
+    /// by node (`wire-format.md` §8.2 field 7): each a record this identity
+    /// signed, handed back at attach. Held beside the archive and not in
+    /// it, since a device restored from the phrase holds none of the
+    /// records an adoption points back to; what is wanted is the
+    /// position, not the chain. A backup or a ceremony device brings the
+    /// archive itself, which speaks first.
+    pub placements: BTreeMap<Keyhash, Vec<u8>>,
 }
 
 impl ClientStore {
@@ -492,6 +500,10 @@ impl ClientStore {
             &dir.join("held-for"),
             self.held_for.iter().map(|(k, b)| (*k, b.clone())),
         )?;
+        rewrite(
+            &dir.join("placements"),
+            self.placements.iter().map(|(k, b)| (*k, b.clone())),
+        )?;
         Ok(())
     }
 
@@ -501,7 +513,7 @@ impl ClientStore {
     pub fn encode(&self) -> Vec<u8> {
         use rhtn_codec::encode::*;
         let mut out = Vec::new();
-        emit_array_head(&mut out, 12);
+        emit_array_head(&mut out, 13);
         keyed(&mut out, self.records.iter().map(|(t, b)| (*t, b.clone())));
         keyed(
             &mut out,
@@ -543,6 +555,10 @@ impl ClientStore {
             Some(a) => emit_tstr(&mut out, a),
             None => emit_null(&mut out),
         }
+        keyed(
+            &mut out,
+            self.placements.iter().map(|(k, b)| (*k, b.clone())),
+        );
         out
     }
 
@@ -558,9 +574,10 @@ impl ClientStore {
         // since, nine with profiles (2026-10-15), ten with the direct hints
         // and eleven with the blobs held for peers (both 2026-10-24; the
         // ten-shape ran on the bench for an afternoon and opens), twelve
-        // with the default alias (2026-10-29): a store written by an
-        // earlier shape opens with none of what it did not hold
-        if !matches!(f.len(), 6 | 7 | 9 | 10 | 11 | 12) {
+        // with the default alias (2026-10-29), thirteen with the
+        // placements (2026-11-20): a store written by an earlier shape
+        // opens with none of what it did not hold
+        if !matches!(f.len(), 6 | 7 | 9 | 10 | 11 | 12 | 13) {
             return None;
         }
         let m = |i: usize| unkeyed(b, &f[i]);
@@ -617,7 +634,7 @@ impl ClientStore {
                 st.held_for.insert(k, v);
             }
         }
-        if f.len() == 12 {
+        if f.len() >= 12 {
             st.default_alias = match &f[11] {
                 rhtn_codec::cbor::Item::Text(r) => {
                     Some(std::str::from_utf8(&b[r.clone()]).ok()?.to_string())
@@ -625,6 +642,11 @@ impl ClientStore {
                 rhtn_codec::cbor::Item::Null => None,
                 _ => return None,
             };
+        }
+        if f.len() == 13 {
+            for (k, v) in m(12)? {
+                st.placements.insert(k, v);
+            }
         }
         Some(st)
     }
@@ -684,6 +706,9 @@ impl ClientStore {
         }
         for (k, b) in read_dir_of(&dir.join("held-for"))? {
             st.held_for.insert(k, b);
+        }
+        for (k, b) in read_dir_of(&dir.join("placements"))? {
+            st.placements.insert(k, b);
         }
         Ok(st)
     }

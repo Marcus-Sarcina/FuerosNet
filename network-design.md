@@ -9184,17 +9184,18 @@ from then on (§6.3). Restoring is for the desktop the phone never shares a
 network with — a workstation wired behind a firewall — where no local carrier
 joins the two.
 
-**A node introduces a restored device to the identity's place under it, in
-signed records** [author, 2026-11-19]. The identity's whole state — its peers,
-its meetings, its memberships elsewhere — comes back from a backup or from a
-ceremony device and from no node, for the reasons above. What a node holds of
-the identity is another matter: the adoption that placed the identity under it,
-which both signed, the chain that places the node under its own patron up to the
-subnet's root, and the subnet's profile. Those are the node's to serve, and it
-serves them to a device that has proved the identity's key on the session; the
-device checks every signature itself and compiles its positions from them as it
-would from its own archive, so the node is believed about nothing its signers
-did not sign. **This returns standing and not history**, the distinction §10.2
+**A node introduces a restored device to the identity's place under it, by
+the one record that put it there** [author, 2026-11-19, 2026-11-20]. The
+identity's whole state — its peers, its meetings, its memberships elsewhere —
+comes back from a backup or from a ceremony device and from no node, for the
+reasons above. What a node holds of the identity is another matter: the
+adoption that placed the identity under it, which both signed. The node answers
+every attach by the identity with it (`wire-format.md` §8.2), and the device
+checks both signatures itself and takes its position from the record's locator
+as it would from its own archive, so the node is believed about nothing the
+identity did not sign and nothing of anyone else's crosses. The subnet's
+profile and the node's siblings reach it as they reach any member (§14.1.2,
+`wire-format.md` §7.11). **This returns standing and not history**, the distinction §10.2
 draws for a rotation, and it reaches only as far as the subnets of the nodes
 the device is introduced to. The catalogue follows from the same proof: a node
 sweeps (§11.5) for the identity a device has proved, and not for a device it

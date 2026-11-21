@@ -586,6 +586,9 @@ impl LiveNode {
             let me = v.me();
             *k == me || v.slot_of(k).is_some() || v.table.nearest_infra_is(&me, k)
         });
+        // the adoption that placed an attaching identity here (§8.2 field 7)
+        let pv = view.clone();
+        cfg.placement = Some(Arc::new(move |k| pv.lock().unwrap().placement_of(k)));
         let (sv, si) = (view.clone(), ids.clone());
         cfg.siblings = Arc::new(move || {
             let v = sv.lock().unwrap();

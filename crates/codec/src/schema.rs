@@ -57,6 +57,8 @@ pub enum T {
     CatalogEntries,
     /// An array of transaction envelopes (§3).
     Envelopes,
+    /// One transaction envelope (§3); its signatures are the verifier's.
+    Envelope,
     /// An array of keyhashes.
     Keyhashes,
     /// A currency attestation (§7.1), checked as its own kind.
@@ -184,6 +186,8 @@ const ATTACH_ACK: Fields = &[
     (4, true, Uint),
     (5, true, Capabilities),
     (6, false, Delegation),
+    // the adoption that placed the attaching identity under this node
+    (7, false, Envelope),
 ];
 const HEARTBEAT: Fields = &[(1, true, Uint), (2, true, Uint)];
 const SIBLING_UPDATE: Fields = &[(1, false, SiblingRefs)];
@@ -718,6 +722,9 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
                 let es = &b[r];
                 check_kind(es, "CatalogEntry", &parse_all(es)?)?;
             }
+        }
+        Envelope => {
+            crate::envelope::parse(slice)?;
         }
         Envelopes => {
             let Item::Array(ref a) = v else {

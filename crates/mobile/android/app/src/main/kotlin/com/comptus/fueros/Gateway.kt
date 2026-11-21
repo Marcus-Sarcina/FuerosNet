@@ -813,6 +813,13 @@ object Gateway {
         return call("contacts", { emptyList() }) { p.contacts() }
     }
 
+    /** **Who of this identity's contacts is in `subnet`** (hex), by name
+     *  [author, 2026-11-20]: what an invitation's brief says. */
+    fun contactsIn(by: String, subnet: String): List<String> {
+        val p = loaded[by] ?: return emptyList()
+        return call("contactsIn", { emptyList() }) { p.contactsIn(subnet) }
+    }
+
     fun subnets(by: String): List<Subnet> {
         val p = loaded[by] ?: return emptyList()
         return call("subnets", { emptyList() }) { p.subnets() }

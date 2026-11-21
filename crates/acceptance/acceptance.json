@@ -17790,6 +17790,32 @@
   ]
  },
  {
+  "id": "TOP-56",
+  "area": "topology",
+  "gap": "topology",
+  "title": "A restored device takes its place under a node from the adoption the node answers its attach with",
+  "milestone": 3,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §8.2",
+   "design §23.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §8.2",
+    "text": "the device verifies\nboth signatures, that field 1 is its own identity and field 2 the node it\nattached to, and holds field 3 as its position under that node"
+   }
+  ],
+  "given": "A node N that adopted identity B, B holding the slot; B's phone holding the adoption in its archive; a desktop restored from B's phrase holding no archive.",
+  "when": "The desktop attaches to N; separately, it is handed an adoption naming another identity, one naming another node, and one whose signature fails; and later N answers an attach with no field 7.",
+  "then": "N's AttachAck carries the adoption in force for B in field 7 and none for an identity holding no slot there, a departed one included. The desktop holds the position the phone holds once the good adoption verifies, refuses each of the other three and keeps nothing from them, and drops the position when N says nothing. The phone, whose archive records the relationship, is unmoved by being handed the record.",
+  "oracle": "behaviour",
+  "interpretation": null,
+  "families": [
+   "APP-019"
+  ]
+ },
+ {
   "id": "DMN-42",
   "area": "daemon",
   "gap": "daemon",
@@ -18179,6 +18205,32 @@
   "families": [
    "NET-022",
    "RES-016"
+  ]
+ },
+ {
+  "id": "CER-74",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "The party being adopted is told which of its contacts are in the subnet the invitation names",
+  "milestone": 3,
+  "kind": "positive",
+  "spec": [
+   "light-client-requirements.md §7",
+   "design §13.8"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §7",
+    "text": "Where\n  the invitation names the subnet by its id, the brief names the contacts\n  whose locators place them in it, or says that none does."
+   }
+  ],
+  "given": "A client holding contacts whose signed locators place one of them in subnet S and none in subnet S'; an invitation to be adopted naming S by its id, and another naming S'.",
+  "when": "The invited party reads each invitation and is shown its brief.",
+  "then": "The brief for S names the contact in S; the brief for S' says none of the people met is in it; a contact whose locator was never handed is named in neither; an invitation naming no subnet adds no such line.",
+  "oracle": "behaviour",
+  "interpretation": "Corroboration only: the line rests on what the person was handed in person and proves nothing about a subnet none of their contacts are in.",
+  "families": [
+   "UX-034"
   ]
  }
 ]

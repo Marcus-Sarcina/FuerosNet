@@ -1180,6 +1180,11 @@ fn every_arrival_order_of_one_replacement_leaves_the_same_slot() {
             "and the slot with it, whatever the order"
         );
         assert_eq!(n.slot_of(&kh("alice")), Some(slot));
+        // acceptance: TOP-56
+        // **and an attach by alice is answered with the adoption in force**
+        // (`wire-format.md` §8.2 field 7), not the one it replaced
+        assert_eq!(n.placement_of(&kh("alice")), Some(a2.bytes.clone()));
+        assert_eq!(n.placement_of(&kh("carol")), None, "nobody else's");
     }
     // and the ending that closes the binding actually open still empties it
     let d2 = w.depart(
@@ -1199,6 +1204,8 @@ fn every_arrival_order_of_one_replacement_leaves_the_same_slot() {
     }
     assert!(n.table.patrons(&kh("alice")).is_empty());
     assert_eq!(n.child_at(slot as u8), None);
+    // a party that left is not told it is still here
+    assert_eq!(n.placement_of(&kh("alice")), None);
 }
 
 // ------------------------------- what a relationship ending takes with it

@@ -474,6 +474,9 @@ pub struct AttachAck {
     /// Field 6: the serving node's own delegation, present whenever the
     /// key it presented is a delegated one (`wire-format.md` §8.2).
     pub delegation: Option<Vec<u8>>,
+    /// Field 7: the adoption that placed the attaching identity under
+    /// this node, where this node is its patron and holds it.
+    pub placement: Option<Vec<u8>>,
 }
 
 impl AttachAck {
@@ -482,7 +485,9 @@ impl AttachAck {
         let mut out = Vec::new();
         emit_map_head(
             &mut out,
-            4 + !self.siblings.is_empty() as usize + self.delegation.is_some() as usize,
+            4 + !self.siblings.is_empty() as usize
+                + self.delegation.is_some() as usize
+                + self.placement.is_some() as usize,
         );
         emit_uint(&mut out, 1);
         emit_uint(&mut out, self.mode);
@@ -496,6 +501,10 @@ impl AttachAck {
         if let Some(d) = &self.delegation {
             emit_uint(&mut out, 6);
             out.extend_from_slice(d);
+        }
+        if let Some(p) = &self.placement {
+            emit_uint(&mut out, 7);
+            out.extend_from_slice(p);
         }
         out
     }
@@ -516,6 +525,7 @@ impl AttachAck {
             queued: map_get(m, 4).and_then(as_uint)?,
             capabilities: decode_capabilities(b, map_get(m, 5)?),
             delegation: field_bytes(b, at, 6),
+            placement: field_bytes(b, at, 7),
         })
     }
 }
@@ -1043,6 +1053,10 @@ async fn control_loop(
 /// A decision about one keyhash, which the caller supplies.
 pub type Predicate = Arc<dyn Fn(&[u8; 32]) -> bool + Send + Sync>;
 
+/// The bytes a node answers an attaching identity with, where it has any:
+/// the adoption that placed it here (`wire-format.md` §8.2 field 7).
+pub type PlacementHook = Arc<dyn Fn(&[u8; 32]) -> Option<Vec<u8>> + Send + Sync>;
+
 /// Where a client's reachability goes when the detector settles it.
 pub type ReplicateHook = Arc<dyn Fn([u8; 32], Reachability) + Send + Sync>;
 
@@ -1142,6 +1156,11 @@ pub struct NodeConfig {
     pub policy: Predicate,
     /// The node's own topology: true means the client is in this node's subtree (mode 0).
     pub in_subtree: Predicate,
+    /// **The adoption that placed an attaching identity under this node**
+    /// (`wire-format.md` §8.2 field 7), asked at each attach: a record the
+    /// identity signed itself, so the device believes it on its own key.
+    /// Absent, or None for a keyhash, the field is left out.
+    pub placement: Option<PlacementHook>,
     /// What this node will not send outward, where it has a rule.
     pub filter: Option<OutboundFilter>,
     /// The mailbox (design §14.1.6).
@@ -1222,6 +1241,7 @@ impl NodeConfig {
             capabilities: BTreeMap::new(),
             policy: Arc::new(|_| true),
             in_subtree: Arc::new(|_| true),
+            placement: None,
             filter: None,
             serves: Arc::new(|_| true),
             accepts_direct: Arc::new(|_| true),
@@ -1887,6 +1907,7 @@ impl Node {
             queued,
             capabilities: caps,
             delegation: self.cfg.bind.own_delegation(),
+            placement: self.cfg.placement.as_ref().and_then(|p| p(&claimed)),
         };
         sender
             .frame(FRAME_ATTACH_ACK, &ack.encode())
@@ -3340,6 +3361,7 @@ mod bounds_and_validity {
             queued: 0,
             capabilities: BTreeMap::new(),
             delegation: None,
+            placement: None,
         };
         let me = [9u8; 32];
         let ok = ack(vec![sib(1), sib(2)]).encode();

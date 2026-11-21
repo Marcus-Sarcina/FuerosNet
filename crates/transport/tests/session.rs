@@ -135,6 +135,7 @@ fn ack_body(interval: u64) -> Vec<u8> {
         queued: 0,
         capabilities: BTreeMap::new(),
         delegation: None,
+        placement: None,
     }
     .encode()
 }
@@ -605,6 +606,7 @@ async fn trn_09_malformed_sibling_update_is_discarded_whole_and_the_next_one_app
             queued: 0,
             capabilities: BTreeMap::new(),
             delegation: None,
+            placement: None,
         };
         s.write_all(&control_frame(FRAME_ATTACH_ACK, &ack.encode()))
             .await
@@ -718,6 +720,7 @@ async fn trn_10_unrecognised_capability_id_is_tolerated_in_both_roles() {
         queued: 0,
         capabilities: unknown.clone(),
         delegation: None,
+        placement: None,
     })
     .await;
     assert!(s.conn.close_reason().is_none());
@@ -735,6 +738,7 @@ async fn trn_11_empty_capabilities_and_no_grease_still_attach_in_both_roles() {
         queued: 0,
         capabilities: BTreeMap::new(),
         delegation: None,
+        placement: None,
     })
     .await;
     assert!(s.conn.close_reason().is_none());

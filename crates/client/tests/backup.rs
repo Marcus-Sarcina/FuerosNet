@@ -465,11 +465,12 @@ fn a_store_written_before_locators_were_kept_still_opens() {
     );
     st.held_for.insert([4u8; 32], vec![0x83, 0x40, 0x40, 0x40]);
     st.default_alias = Some("Dana".into());
+    st.placements.insert([5u8; 32], vec![0xa0]);
     let seven = st.encode();
     let back = ClientStore::decode(&seven).expect("the current shape opens");
     assert_eq!(
         back, st,
-        "and round-trips, contacts, direct hints, held blobs and the default alias included"
+        "and round-trips, contacts, direct hints, held blobs, the default alias and the placements included"
     );
 
     // the same store as the earlier shapes wrote it: the first six
@@ -477,7 +478,17 @@ fn a_store_written_before_locators_were_kept_still_opens() {
     // kept (2026-10-15); the first nine, before the direct hints and the
     // blobs held for peers (2026-10-24)
     let items = rhtn_codec::cbor::array_item_ranges(&seven, 0).unwrap();
-    assert_eq!(items.len(), 12);
+    assert_eq!(items.len(), 13);
+    // the twelve-shape, before the placements (2026-11-20): opens with
+    // none, its name kept
+    let mut twelve_shape = Vec::new();
+    rhtn_codec::encode::emit_array_head(&mut twelve_shape, 12);
+    for r in &items[..12] {
+        twelve_shape.extend_from_slice(&seven[r.clone()]);
+    }
+    let opened = ClientStore::decode(&twelve_shape).expect("the twelve-shape opens");
+    assert_eq!(opened.default_alias, st.default_alias, "with its name");
+    assert!(opened.placements.is_empty(), "and no placements");
     // the eleven-shape, before the default alias (2026-10-29): opens with
     // no name
     let mut eleven_shape = Vec::new();

@@ -1309,6 +1309,13 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   invited is shown that label in the brief it accepts or refuses, from the
   claim the invitation carried until the signed profile replaces it
   (`wire-format.md` §7.11), and a regular meeting shows none.
+- **Say who you have met is in that subnet** [author, 2026-11-20]. A subnet
+  is named by its id (design §13.8), which a lookalike cannot copy as it can a
+  name and a picture, and there is no registry to check one against. Where
+  the invitation names the subnet by its id, the brief names the contacts
+  whose locators place them in it, or says that none does. It corroborates
+  and proves nothing: a real subnet nobody you met is in reads the same, and
+  a contact's locator is as fresh as the last one handed to you.
 - **Ask which scope to submit as, before you are adopted** [author,
   2026-10-15]. A party rooting a scope may bring it under the patron, every
   position in it coming to show the patron's subnet, or join as an

@@ -2888,6 +2888,13 @@ f_ack_nosib = frame(2, e_map([(e_uint(1), e_uint(0)),
                               (e_uint(3), e_uint(300)),
                               (e_uint(4), e_uint(0)),
                               (e_uint(5), caps_server)]))
+# field 7: bob answers alice's attach with the adoption that placed her under
+# him, the envelope inline as field 6 carries a delegation (s8.2) [2026-11-20]
+f_ack_placed = frame(2, e_map([(e_uint(1), e_uint(0)),
+                               (e_uint(3), e_uint(300)),
+                               (e_uint(4), e_uint(0)),
+                               (e_uint(5), caps_server),
+                               (e_uint(7), adopt_env)]))
 f_push_deleg = frame(5, e_map([(e_uint(1), e_uint(2)), (e_uint(2), e_bstr(deleg_bob))]))
 f_push_ack = frame(5, e_map([(e_uint(1), e_uint(3)), (e_uint(2), e_bstr(ack))]))
 
@@ -2923,6 +2930,8 @@ _msg_pairs = [
     ('TopologyPush — kind 3, carrying the subtree acknowledgement byte-for-byte: the grandpatron\'s node pushes it as it issues it (§10.1, §7.5)', f_push_ack),
     # appended 2026-10-02
     ('AttachAck (NO SIBLINGS): field 2 absent, the single-child topology; absence means none, and an empty list is unencodable (§8.2, §1)', f_ack_nosib),
+    # appended 2026-11-20
+    ('AttachAck — field 7, the adoption that placed alice under bob, answering her attach: what a device restored from the phrase takes its place from (§8.2)', f_ack_placed),
 ]
 CONTROL_NAMES = ('Attach', 'Heartbeat', 'SiblingUpdate', 'TopologyPush', 'TopologyMemo', 'Delegation')
 # Profiles (§7.11) [2026-10-15]: alice's own in the vectors' subnet, with a

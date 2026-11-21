@@ -1218,6 +1218,34 @@ class MeetRowsTest {
         assertTrue("and calls it a claim", text.contains("claim until their signed profile"))
     }
 
+    /**
+     * **The brief says who you have met is in the subnet** [author,
+     * 2026-11-20], or that none is, where the claim names one by its id.
+     */
+    // functional: UX-034
+    // acceptance: CER-74
+    @Test
+    fun the_brief_says_who_of_the_people_met_is_in_the_subnet_being_joined() {
+        val m = meet(Meet.Adopt.NONE, role = Meet.Role.RESPONDER)
+        m.counterparty("bb")
+        m.theirAdopt(Meet.Adopt.THEM_UNDER_ME)
+        m.invitedBy(Meet.Claim("cd".repeat(32), "Dana", "Bowling League"))
+        assertTrue("nothing until asked", !rows(m.brief()).contains("UX-034"))
+        m.corroboratedBy(emptyList())
+        var text = m.brief().joinToString(" ") { it.text }
+        assertTrue("none: $text", text.contains("None of the people you have met is in this subnet."))
+        m.corroboratedBy(listOf("Alice"))
+        text = m.brief().joinToString(" ") { it.text }
+        assertTrue("one: $text", text.contains("Of the people you have met, Alice is in this subnet."))
+        m.corroboratedBy(listOf("Alice", "Bob", "Dana"))
+        text = m.brief().joinToString(" ") { it.text }
+        assertTrue("several: $text", text.contains("Alice, Bob and Dana are in this subnet."))
+        assertEquals("A, B, C, D and 2 others", listed(listOf("A", "B", "C", "D", "E", "F")))
+        // and a claim with no id says nothing of the kind: there is nothing to check
+        m.invitedBy(Meet.Claim(null, "Dana", null))
+        assertTrue(!rows(m.brief()).contains("UX-034"))
+    }
+
     // functional: UX-016
     @Test
     fun an_invitation_that_named_no_subnet_is_said_to_have_named_none() {

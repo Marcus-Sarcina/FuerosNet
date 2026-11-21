@@ -1046,8 +1046,19 @@ impl Net {
             // the address the session landed on is the one the client
             // certainly holds for this node (`wire-format.md` §7.7.1)
             let landed = session.conn.remote_address().to_string();
+            // **and where the node asked for placed this identity**
+            // (`wire-format.md` §8.2 field 7): a sibling answering in
+            // failover is not its patron, and its silence says nothing
+            let placement = (serving_node == node).then(|| session.ack.placement.clone());
             handle_for_task
-                .with(move |c| c.attached_through(serving_node, vec![landed]))
+                .with(move |c| {
+                    c.attached_through(serving_node, vec![landed]);
+                    if let Some(p) = placement
+                        && let Err(why) = c.placed_by(serving_node, p)
+                    {
+                        tracing::info!(target: "attach", node = %rhtn_client::diag::id8(&serving_node), why = %why, "attach.placement_refused");
+                    }
+                })
                 .await;
             let (mode, queued) = (session.ack.mode, session.ack.queued);
             let session = Arc::new(session);

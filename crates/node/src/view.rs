@@ -378,6 +378,15 @@ impl NodeView {
             .map(|(k, _)| *k)
     }
 
+    /// **What an attach by `occupant` is answered with** (`wire-format.md`
+    /// §8.2 field 7): the newest adoption that placed it under this node,
+    /// while it holds a slot here. A departure empties the slot, and a
+    /// party that left is not told it is still here.
+    pub fn placement_of(&self, occupant: &Keyhash) -> Option<Vec<u8>> {
+        self.slot_of(occupant)?;
+        self.store.placement_of(&self.me(), occupant)
+    }
+
     /// The child index an adoption under this node assigns: the last nibble
     /// of the subordinate's locator path, under this node's own path
     /// (`wire-format.md` §2.1, §10.2).

@@ -3579,6 +3579,30 @@ impl Participant {
         })
     }
 
+    /// **The names of this client's contacts in the subnet `subnet`
+    /// names**, hex as an invitation's claim carries it [author,
+    /// 2026-11-20]: each contact's alias, else the first eight hex
+    /// characters of its keyhash, sorted. Empty where none is, or where
+    /// `subnet` does not read as one.
+    #[must_use]
+    pub fn contacts_in(&self, subnet: String) -> Vec<String> {
+        self.call_plain("contacts_in", || {
+            let Some(id) =
+                rhtn_client::utility::unhex(&subnet).and_then(|b| <[u8; 32]>::try_from(b).ok())
+            else {
+                return Vec::new();
+            };
+            let mut names: Vec<String> = self
+                .handle
+                .with_blocking(move |c| c.contacts_in(&id))
+                .into_iter()
+                .map(|(k, alias)| alias.unwrap_or_else(|| hex(&k[..4])))
+                .collect();
+            names.sort();
+            names
+        })
+    }
+
     /// The subnet this client acts in when nothing names one: the first
     /// it was adopted into, else the one under its own key, else none.
     #[must_use]

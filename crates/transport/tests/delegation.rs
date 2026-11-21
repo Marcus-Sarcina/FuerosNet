@@ -138,6 +138,7 @@ fn ack_with(delegation: Option<Vec<u8>>) -> Vec<u8> {
         queued: 0,
         capabilities: BTreeMap::new(),
         delegation,
+        placement: None,
     }
     .encode()
 }

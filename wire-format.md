@@ -4351,6 +4351,11 @@ AttachAck = {
                        ;   credential rather than its operator's seed (design
                        ;   §23.3), so the key it presents is not the one a
                        ;   client pinned, and this is what binds the two
+  7: ? Envelope        ; the adoption (§4.1) that placed the identity
+                       ;   `Attach` field 1 names under this node, the newest
+                       ;   in that relationship. PRESENT where this node is
+                       ;   that identity's patron and the slot is still its
+                       ;   own [author, 2026-11-20]
 }
 
 device = bstr .size 32 ; the raw public key a device presents in a handshake
@@ -4394,6 +4399,17 @@ the device (§8.2's `device`), whether the delegated key or the seed-holding
 device's own; a node serving a subject holds one session per device, and one
 queue and one series of node keys for the subject, whose mail any of those
 sessions collects (§7.10, design §14.1.6).
+
+**An attach is answered with the record that placed its identity** [author,
+2026-11-20]. Field 7 is what a device restored from the phrase takes its place
+from (design §23.3): an adoption both parties signed, so the device verifies
+both signatures, that field 1 is its own identity and field 2 the node it
+attached to, and holds field 3 as its position under that node, believing the
+node about nothing the identity did not sign. A device whose own archive
+records that relationship reads the archive first. A node that is not the
+identity's patron, a sibling answering in failover among them, sends none, and
+that silence says nothing; the patron's silence says the identity no longer
+holds its slot there.
 
 **A receiver checks field 1 against the key the handshake actually presented and
 refuses the session if they differ.** That check is the whole of what makes a

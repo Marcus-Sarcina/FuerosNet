@@ -57,7 +57,10 @@ class ShellActivity : Activity() {
     private lateinit var footBar: LinearLayout
     private lateinit var rail: ScrollView
 
-    private var place: Chrome.Place = Chrome.Place.Home
+    /** Where the person is, and where back goes from there ([History]). */
+    private val history = History<Chrome.Place>(Chrome.Place.Home)
+
+    private val place: Chrome.Place get() = history.here
 
     /** The subnets as the rail last read them, for a place that names one. */
     // **every held identity's subnets, each saying whose it is** [author,
@@ -212,11 +215,19 @@ class ShellActivity : Activity() {
         }, "fueros-foot").start()
     }
 
-    /** Go to `where`, and show or hide the chrome as [Chrome] says. */
+    /**
+     * Go to `where`, as a visit the history records ([History.go]); going
+     * to the place already shown redraws it and records nothing.
+     */
     private fun go(where: Chrome.Place) {
-        place = where
+        history.go(where)
+        show(history.here)
+    }
+
+    /** Show `where`, and show or hide the chrome as [Chrome] says. */
+    private fun show(where: Chrome.Place) {
         val on = Chrome.chrome(where)
-        holdBack(!on)
+        holdBack(history.holding)
         rail.visibility = if (on) View.VISIBLE else View.GONE
         footBar.visibility = if (on) View.VISIBLE else View.GONE
         connection = null
@@ -225,27 +236,25 @@ class ShellActivity : Activity() {
     }
 
     /**
-     * **Back is out of a chromeless place and no further.** From Home it
-     * is the system's, which leaves the app; from a subnet's options it
-     * is that subnet; from anywhere else chromeless it is Home, the way
-     * the rail would have been. This is the chromeless half; the system's
-     * half is left to the system.
+     * **Back is the history's while it holds anything** ([History.back]):
+     * the previous place, else Home. False is back left to the system,
+     * which from Home with nothing behind it leaves the app.
      */
-    private fun back(here: Chrome.Place) {
-        when (here) {
-            is Chrome.Place.SubnetOptions -> go(Chrome.Place.Subnet(here.id))
-            else -> go(Chrome.Place.Home)
-        }
+    private fun back(): Boolean {
+        val to = history.back() ?: return false
+        show(to)
+        return true
     }
 
     /**
      * **API 33 and up: back reaches the shell by a callback**, held only
-     * while the place is chromeless, so that in a place with the chrome
-     * the system's own back, which leaves the app, is untouched. An app
+     * while the history has somewhere to go ([History.holding]), so that
+     * from Home with nothing behind it the system's own back, which leaves
+     * the app with its predictive animation, is untouched. An app
      * targeting API 36 is not sent [onBackPressed] on an API 36 device
-     * at all, so without this the back from a chromeless place left the
-     * app there. Typed loosely so that no API 33 class is named in a
-     * field an API 31 device loads.
+     * at all, so without this back left the app from anywhere. Typed
+     * loosely so that no API 33 class is named in a field an API 31
+     * device loads.
      */
     private var backCallback: Any? = null
 
@@ -253,7 +262,7 @@ class ShellActivity : Activity() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
         val held = backCallback as android.window.OnBackInvokedCallback?
         if (on && held == null) {
-            val callback = android.window.OnBackInvokedCallback { back(place) }
+            val callback = android.window.OnBackInvokedCallback { back() }
             onBackInvokedDispatcher.registerOnBackInvokedCallback(
                 android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,
                 callback,
@@ -276,12 +285,9 @@ class ShellActivity : Activity() {
     @Deprecated("the platform's own, which this overrides deliberately")
     @SuppressLint("GestureBackNavigation")
     override fun onBackPressed() {
-        val here = place
-        if (Chrome.chrome(here)) {
+        if (!back()) {
             @Suppress("DEPRECATION")
             super.onBackPressed()
-        } else {
-            back(here)
         }
     }
 
@@ -850,6 +856,10 @@ class ShellActivity : Activity() {
      * A place's title, with a back control where the chrome is hidden
      * ([Chrome.back]) and nothing where it is not; `go` is what tapping
      * the title does, where it does anything.
+     *
+     * **The `‹` is back** [author, 2026-11-20]: it steps the history as the
+     * platform's back does, and `back` is where it goes only if the
+     * history has nowhere to go, which a place with no chrome never is.
      */
     private fun bar(title: String, back: Chrome.Place?, go: (() -> Unit)? = null): View {
         val c = Palette.now
@@ -866,7 +876,9 @@ class ShellActivity : Activity() {
                         setPadding(dp(8), 0, dp(14), dp(2))
                         contentDescription = "Back"
                         isClickable = true
-                        setOnClickListener { this@ShellActivity.go(back) }
+                        setOnClickListener {
+                            if (!this@ShellActivity.back()) this@ShellActivity.go(back)
+                        }
                     },
                 )
             } else {

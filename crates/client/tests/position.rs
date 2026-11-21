@@ -598,3 +598,84 @@ fn an_endpoint_record_is_signed_on_the_line_of_the_subnet_it_serves() {
     );
     assert_eq!(rec.seqno.counter, 3);
 }
+
+// acceptance: TOP-56
+#[test]
+fn a_restored_device_takes_its_place_from_the_adoption_its_node_hands_back() {
+    use common::harness::device;
+    use rhtn_client::ceremony::{Client, Config};
+    use rhtn_client::store::ClientStore;
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    let mut s = setup(&PARTIES);
+    let placed = s.adopted("bob", "alice", "w1", 1);
+    let other = s.adopted("carol", "alice", "w2", 1);
+    let subnet = subnet_under(&mut s, "alice");
+    let held = s
+        .client("bob")
+        .position_in(&subnet)
+        .expect("the phone knows where it was put");
+    let adoption = s.client("bob").archive.get(&placed).unwrap().bytes.clone();
+    let carols = s.client("carol").archive.get(&other).unwrap().bytes.clone();
+
+    // **restored from the phrase**: the identity and nothing else, so no
+    // archive and no position
+    let clock = Rc::new(Cell::new(1_790_000_000_000u64));
+    let mut desk = Client::new(id("bob"), ids(), Config::default(), device(clock, 77, 0).0);
+    assert!(desk.subnets().is_empty(), "nothing until a node says");
+    assert_eq!(desk.position_in(&subnet), None);
+
+    // a record the identity did not sign, or one naming another node, is
+    // refused and changes nothing
+    assert!(desk.placed_by(kh("alice"), Some(carols)).is_err());
+    assert!(desk.placed_by(kh("w1"), Some(adoption.clone())).is_err());
+    let mut forged = adoption.clone();
+    let n = forged.len();
+    forged[n - 1] ^= 1;
+    assert!(desk.placed_by(kh("alice"), Some(forged)).is_err());
+    assert!(desk.subnets().is_empty(), "nothing refused was kept");
+
+    // **the adoption both signed puts it where the phone is**
+    desk.placed_by(kh("alice"), Some(adoption.clone()))
+        .expect("an adoption of this identity by this node, both signatures good");
+    assert_eq!(desk.position_in(&subnet), Some(held.clone()));
+    assert_eq!(desk.subnets(), vec![subnet]);
+
+    // kept with the store, so a restart and a backup carry it
+    let back = ClientStore::decode(&desk.store.encode()).expect("the store round-trips");
+    assert_eq!(back.placements, desk.store.placements);
+
+    // **the patron's silence drops it**: a party that left is not there
+    desk.placed_by(kh("alice"), None).unwrap();
+    assert_eq!(desk.position_in(&subnet), None);
+
+    // and a device whose own archive records the relationship reads that
+    // first: the phone's position is unmoved by being handed the record
+    s.client("bob")
+        .placed_by(kh("alice"), Some(adoption))
+        .unwrap();
+    assert_eq!(s.client("bob").position_in(&subnet), Some(held));
+}
+
+// acceptance: CER-74
+#[test]
+fn the_contacts_a_subnet_holds_are_read_off_the_locators_they_handed() {
+    let mut s = setup(&PARTIES);
+    s.adopted("bob", "alice", "w1", 1);
+    s.adopted("carol", "alice", "w2", 1);
+    let subnet = subnet_under(&mut s, "alice");
+    // carol holds alice's locator, which places alice in that subnet by
+    // its id (design §13.8): what an invitation into it is checked against
+    let in_it: Vec<_> = s
+        .client("carol")
+        .contacts_in(&subnet)
+        .into_iter()
+        .map(|(k, _)| k)
+        .collect();
+    assert_eq!(in_it, vec![kh("alice")]);
+    // a lookalike's id is another id, and nobody carol met is in it
+    assert!(s.client("carol").contacts_in(&[0x5a; 32]).is_empty());
+    // and a contact whose locator was never handed places nobody
+    assert!(s.client("alice").contacts_in(&subnet).is_empty());
+}

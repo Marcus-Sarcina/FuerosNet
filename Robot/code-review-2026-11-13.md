@@ -77,21 +77,21 @@ Recommendation: one link, mechanical — either acceptance entries carry the fam
 
 | State | Holder | Where / shape | Sealed | Retention rule | Scope |
 |---|---|---|---|---|---|
-| Archive records, store, payload (keys, sessions, ratchets, addresses), horizon, credential | kernel | one CBOR array of 7 parts, `files/kernel/<scope>/client`, **985 KB–2.6 MB rewritten after every arrival** (8 writes in 16 min on GXV) | yes, kernel key in the Keystore | none (§7.5.1) — correct | per identity |
-| Sealed captures | kernel | inside the blob | yes | the only window (§7.5.1), enforced by the subject declining the key (`subject.rs`) | per identity |
+| Archive records, store, payload (keys, sessions, ratchets, addresses), horizon, credential | kernel | one CBOR array of 7 parts, `files/kernel/<scope>/client`, **985 KB–2.6 MB rewritten after every arrival** (8 writes in 16 min on GXV) | yes, kernel key in the Keystore | none (design §7.5.1) — correct | per identity |
+| Sealed captures | kernel | inside the blob | yes | the only window (design §7.5.1), enforced by the subject declining the key (`subject.rs`) | per identity |
 | Sibling list | kernel | `siblings` | yes | until replaced | per identity |
 | Serving record (tabs) | shell | `serving`, JSON | no | until the person changes it | per identity |
 | Conversations | shell | `threads`, JSON, **plaintext** (new this week) | no | none | per identity |
 | Identity index, seeds, custody key | shell | Keystore-wrapped | yes | — | device |
 | Colours, provision, active identity | shell | plain / wrapped | mixed | — | device |
 | Diagnostics | shell | `files/diag/*.jsonl`, 15 MB on GXV | no | newest 3 runs (`DiagFile.prune`) | device; field-test build only |
-| Node store | daemon | one file per object under `tx/ own/ ep/ deleg/ ack/ seen/ derived/ proved/ conflicts/` | no | none; queue bounded by `queue-cap` (infra §2) | per node |
+| Node store | daemon | one file per object under `tx/ own/ ep/ deleg/ ack/ seen/ derived/ proved/ conflicts/` | no | none; queue bounded by `queue-cap` (`infra-client-requirements.md` §2) | per node |
 
 Findings:
 
 - **The client blob**: positional CBOR arrays versioned by their length (the payload state went 7 → 10 fields this week; the decoder tries both), "whole or nothing" on read, written in full on every change. At 2.6 MB per write and ~30 writes an hour it is already the phone's busiest file, and a crash between the write and the rename of a 2.6 MB file is the one way a client loses everything at once. There is no schema document for it; `durable.rs` (76 lines) is the only description. The remedy is not a database: split by concern (archive, store, payload, horizon, captures) into files written when their own part changes, each with a version word, and say so in one place.
-- **The shell's state is outside the sealed model.** Conversations are now kept in plaintext in the app's private directory while the kernel's state beside them is sealed under a Keystore key. The documents say nothing about the shell's own files; `light-client-requirements.md` §9 says the kernel seals what it persists and the shell keeps the key. Either the thread store goes through the kernel's seam (sealed with the rest) or §9 states what the shell may keep in the clear. This is an author's decision.
-- **Rules exist where the design has them** — §7.5.1 (captures only), §13.7.1/§23.3 (device vs backup), infra §2 (queue) — and are implemented. What is missing is the inventory above *as a document*, so that a new holder (this week: `serving`, `threads`, `identity.colours`) has a rule to meet before it is written. Three of this week's holders were added by me with no rule stated.
+- **The shell's state is outside the sealed model.** Conversations are now kept in plaintext in the app's private directory while the kernel's state beside them is sealed under a Keystore key. The documents say nothing about the shell's own files; `light-client-requirements.md` §9 says the kernel seals what it persists and the shell keeps the key. Either the thread store goes through the kernel's seam (sealed with the rest) or `light-client-requirements.md` §9 states what the shell may keep in the clear. This is an author's decision.
+- **Rules exist where the design has them** — design §7.5.1 (captures only), design §13.7.1 and design §23.3 (device vs backup), `infra-client-requirements.md` §2 (queue) — and are implemented. What is missing is the inventory above *as a document*, so that a new holder (this week: `serving`, `threads`, `identity.colours`) has a rule to meet before it is written. Three of this week's holders were added by me with no rule stated.
 - Visibility across identities on one device is enforced by scope directories (`files/kernel/<scope>/`), which is sound; the device-level files (`provision`, colours, the index) are the device's by design.
 
 ## 5. The debt, ranked
@@ -172,7 +172,7 @@ Party(identity, other)                      -- what one identity knows of anothe
 Thread(identity, other)                     -- one per identity, in parallel across identities
 Message(thread, seq, mine, text, delivery)
 Record(identity, txid, bytes)               -- the archive, by the identity that holds it
-Capture(identity, other, ceremony)          -- sealed; the one window (§7.5.1)
+Capture(identity, other, ceremony)          -- sealed; the one window (design §7.5.1)
 LastFrom(identity, other) -> subnet         -- the routing fact, written at every arrival, on every path
 ```
 

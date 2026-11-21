@@ -4635,6 +4635,7 @@ impl Client {
         out.other += insert_absent(&mut self.store.profiles, theirs.profiles);
         out.other += insert_absent(&mut self.store.subnet_profiles, theirs.subnet_profiles);
         out.other += insert_absent(&mut self.store.direct_hints, theirs.direct_hints);
+        out.other += insert_absent(&mut self.store.placements, theirs.placements);
         // **the sealed captures, as the ciphertext they are, and the blobs
         // held for peers** (design §23.3): a peer's blob carries neither
         // (`store_for_peer`), another device of this identity's dataset
@@ -5205,6 +5206,24 @@ impl Client {
         (self.root_subnet == Some(*subnet) && !self.root_carried).then(|| self.own_position())
     }
 
+    /// **Which of this client's contacts are in `subnet`** [author,
+    /// 2026-11-20], by the locator each handed it, with the name each goes
+    /// by where one is held: what an invitation's brief says, so that a
+    /// lookalike subnet, which can copy a name and a picture but not an id
+    /// (design §13.8), is joined knowing whether anyone met is in it. It
+    /// corroborates and proves nothing, and a locator is as fresh as the
+    /// last one handed (`light-client-requirements.md` §7).
+    #[must_use]
+    pub fn contacts_in(&self, subnet: &Txid) -> Vec<(Keyhash, Option<String>)> {
+        let me = self.keyhash();
+        self.store
+            .contacts
+            .iter()
+            .filter(|(k, c)| **k != me && c.subnet() == Some(*subnet))
+            .map(|(k, c)| (*k, c.alias.clone()))
+            .collect()
+    }
+
     /// This client's position under its own key.
     ///
     /// **A party with no ancestor names itself** (`wire-format.md` §2.1):
@@ -5453,6 +5472,31 @@ impl Client {
                     last.insert(patron, (at.0, at.1, said));
                 }
             }
+        }
+        // **then what the nodes attached to placed it by** (§8.2 field 7),
+        // for a relationship the archive says nothing of: a device restored
+        // from the phrase holds no archive, and where it does, the
+        // archive's own word on that patron stands
+        for (patron, bytes) in &self.store.placements {
+            if last.contains_key(patron) {
+                continue;
+            }
+            let Ok(rec) = Record::parse(bytes) else {
+                continue;
+            };
+            let (Some(l), Some(seq)) = (rec.locator(), rec.seqno()) else {
+                continue;
+            };
+            if let Some(s) = rec.carried_scope() {
+                carried.insert(*patron, s);
+            }
+            let subnet = l.subnet.unwrap_or(rec.txid);
+            subnet_under.insert(*patron, subnet);
+            let at = Locator {
+                subnet: Some(subnet),
+                ..l
+            };
+            last.insert(*patron, (seq.series, seq.counter, Some(at)));
         }
         self.root_subnet = first.get(&None).map(|(_, t)| *t);
         self.scopes = first
@@ -6471,6 +6515,36 @@ impl Client {
     /// held (`wire-format.md` §7.7.1).
     pub fn attached_through(&mut self, node: Keyhash, addresses: Vec<String>) {
         self.attached_through.insert(node, addresses);
+    }
+
+    /// **What `node` said placed this identity under it**, at attach
+    /// (`wire-format.md` §8.2 field 7, design §23.3): the adoption both
+    /// signed, or nothing. Kept where it is an adoption of this identity
+    /// by that node and its signatures verify, so the node is believed
+    /// about nothing its signers did not sign; nothing said drops what
+    /// was held from it, a party that left being no longer there. Either
+    /// way the positions are folded again. Err names why a placement was
+    /// not kept, and what was held stays.
+    pub fn placed_by(&mut self, node: Keyhash, placement: Option<Vec<u8>>) -> Result<(), String> {
+        let Some(bytes) = placement else {
+            if self.store.placements.remove(&node).is_some() {
+                self.adopt_own_positions();
+            }
+            return Ok(());
+        };
+        let rec = Record::parse(&bytes).map_err(|e| e.to_string())?;
+        if rec.tx_type != TYPE_ADOPTION
+            || rec.field_hash(1) != Some(self.keyhash())
+            || rec.field_hash(2) != Some(node)
+        {
+            return Err("not an adoption of this identity by that node".into());
+        }
+        verify::envelope(&self.known, &bytes).map_err(|e| e.to_string())?;
+        if self.store.placements.get(&node) != Some(&bytes) {
+            self.store.placements.insert(node, bytes);
+            self.adopt_own_positions();
+        }
+        Ok(())
     }
 
     /// **A node agreed to**: an invitation taken, an instance enrolled or

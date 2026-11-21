@@ -639,10 +639,11 @@ check(len(blocks) == len(control) + len(requests) + len(relayed_blocks) + len(re
       'messages: every fixture block belongs to a named section')
 
 # control frames first, as messages.md sections them; the no-siblings
-# AttachAck is the last control frame [2026-10-02]
+# AttachAck is the last control frame but one [2026-10-02], the AttachAck
+# carrying field 7 the last [2026-11-20]
 # request types 9 and 10 are retired (§9.2): their places in the list went to
 # two Attach frames, with and without field 5 [2026-11-20]
-EXPECT_FRAMES = [1, 2, 3, 4, 4, 5, 6, 6, 1, 1, 1, 2, 7, 5, 5, 2,
+EXPECT_FRAMES = [1, 2, 3, 4, 4, 5, 6, 6, 1, 1, 1, 2, 7, 5, 5, 2, 2,
                  1, 2, 3, 3, 4, 5, 6, 7, 8, 11, 12, 12, 13, 14]
 framed = control + requests
 check(len(framed) == len(EXPECT_FRAMES),
@@ -725,6 +726,14 @@ push_body = frame_objs[EXPECT_FRAMES.index(5)][1]
 adopt_env_hex = re.search(r'#### Envelope bytes — final, all four signatures real.*?```\n([0-9a-f\n]+?)```', tx, re.S)
 check(push_body[2] == adopt_env_hex.group(1).replace('\n', ''),
       'TopologyPush carries the first adoption envelope byte-for-byte')
+# AttachAck field 7 (s8.2) [2026-11-20]: the last control frame answers
+# alice's attach with that same adoption, inline as field 6 carries a
+# delegation, and it names alice adopted by bob
+_placed = frame_objs[len(control) - 1][1]
+_placed_raw = bytes.fromhex(control[-1].replace('\n', ''))
+check(EXPECT_FRAMES[len(control) - 1] == 2 and 7 in _placed and 2 not in _placed
+      and bytes.fromhex(adopt_env_hex.group(1).replace('\n', '')) in _placed_raw,
+      'AttachAck field 7 carries the adoption envelope byte-for-byte, inline')
 # the push of a delegation (kind 2, §10.1): the control frames are listed
 # first, so the second frame of type 5 is it, and it carries frame 7's body
 push_deleg = frame_objs[[i for i, f in enumerate(EXPECT_FRAMES) if f == 5][1]][1]
