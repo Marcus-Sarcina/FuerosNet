@@ -8,7 +8,7 @@ set -u
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 export JAVA_HOME="${JAVA_HOME:-$HOME/opt/android-studio/jbr}"
 export PATH="$JAVA_HOME/bin:$HOME/opt/kotlinc/bin:$PATH"
-JNA="${RHTN_JNA_JAR:-$HOME/opt/downloads/jna-5.17.0.jar}"
+JNA="${RHTN_JNA_JAR:-$HOME/opt/downloads/jna-5.19.1.jar}"
 for tool in java kotlinc; do
   command -v "$tool" > /dev/null 2>&1 || { echo "  $tool absent: Kotlin round trip skipped"; exit 3; }
 done

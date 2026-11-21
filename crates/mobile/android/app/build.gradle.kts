@@ -27,7 +27,7 @@ val specPins: String = providers.fileContents(
 
 android {
     namespace = "com.comptus.fueros"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.comptus.fueros"
@@ -37,7 +37,7 @@ android {
         // and would have to explain. The floor was first set here for UWB;
         // ranging is gone [author, 2026-10-24] and the bearer keeps it.
         minSdk = 31
-        targetSdk = 36
+        targetSdk = 37
         // **the instrumentation run** (PRD-12, RSC-58): frame isolation
         // wants a real `WebView` and a hostile page, which no JVM test
         // reaches. Not part of the gate, which has no device: run it with
@@ -132,12 +132,12 @@ configurations.all {
 dependencies {
     // The generated binding speaks JNA and nothing else; the @aar carries
     // libjnidispatch.so for each ABI.
-    implementation("net.java.dev.jna:jna:5.17.0@aar")
+    implementation("net.java.dev.jna:jna:5.19.1@aar")
     // The QR symbol for the optical channel (`wire-format.md` §14.3.1).
     // Pure Java and Apache-2.0, so the whole bytes-to-symbol-and-back path
     // runs in the unit tests below; what needs a camera does not.
-    implementation("com.google.zxing:core:3.5.3")
-    testImplementation("com.google.zxing:core:3.5.3")
+    implementation("com.google.zxing:core:3.5.4")
+    testImplementation("com.google.zxing:core:3.5.4")
     // The shell's log lines (Apache-2.0). `FuerosApp` plants a tree only in
     // the fieldtest flavour; with none planted every call is a no-op.
     implementation("com.jakewharton.timber:timber:5.0.1")
@@ -147,7 +147,7 @@ dependencies {
     // The instrumentation run, which needs a device: the frame isolation
     // PRD-12 and RSC-58 rest on is a real `WebView`'s behaviour and not
     // the shell's logic. Apache-2.0, like everything else here.
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
-    androidTestImplementation("androidx.test:runner:1.6.2")
-    androidTestImplementation("androidx.test:rules:1.6.1")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.test:rules:1.7.0")
 }
