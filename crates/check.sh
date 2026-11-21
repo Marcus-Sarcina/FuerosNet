@@ -284,16 +284,25 @@ echo "=== 3e. Static analysis (Opengrep, non-halting) ==="
 # Containerfile: the second names the two files and runs the Dockerfile
 # rules over them.  opengrep.ignore replaces the tool's built-in list of
 # what to skip, which would otherwise skip every tests/ directory.
+#
+# **The count is the same however loaded the machine is** [author,
+# 2026-11-21]. The tool's defaults stop a rule on a file after 5 s and
+# skip the whole file once three rules have, which a loaded machine could
+# turn into a finding missing from the count. A rule has 300 s per file
+# and no number of slow rules skips one, and whatever still times out is
+# named on the summary line, since a count short by a timeout is not the
+# count.
+OG_LIMITS=(--timeout 300 --timeout-threshold 0)
 OPENGREP="${OPENGREP:-$HOME/opt/opengrep/v2.0.0/opengrep_linux_x86}"
 OPENGREP_RULES="${OPENGREP_RULES:-$HOME/opt/opengrep/rules-f1d2b56}"
 if [ -x "$OPENGREP" ] && [ -d "$OPENGREP_RULES/rust" ]; then
   ogdir="$(mktemp -d)"
-  (cd "$HERE/.." && nice -n 19 "$OPENGREP" scan --quiet -j 8 \
+  (cd "$HERE/.." && nice -n 19 "$OPENGREP" scan --quiet -j 8 "${OG_LIMITS[@]}" \
       --semgrepignore-filename="$HERE/opengrep.ignore" \
       --config "$OPENGREP_RULES/rust" --config "$OPENGREP_RULES/kotlin" \
       --config "$OPENGREP_RULES/python" --config "$OPENGREP_RULES/bash" \
       --json-output="$ogdir/tree.json" . > "$ogdir/tree.log" 2>&1)
-  (cd "$HERE/.." && nice -n 19 "$OPENGREP" scan --quiet -j 8 --scan-unknown-extensions \
+  (cd "$HERE/.." && nice -n 19 "$OPENGREP" scan --quiet -j 8 "${OG_LIMITS[@]}" --scan-unknown-extensions \
       --config "$OPENGREP_RULES/dockerfile" \
       --json-output="$ogdir/containers.json" \
       crates/packaging/Containerfile crates/packaging/Containerfile.testapp \
@@ -301,6 +310,7 @@ if [ -x "$OPENGREP" ] && [ -d "$OPENGREP_RULES/rust" ]; then
   python3 - "$ogdir/tree.json" "$ogdir/containers.json" <<'PY'
 import json, sys
 found = unparsed = 0
+timed = []
 for path in sys.argv[1:]:
     try:
         d = json.load(open(path, encoding="utf-8"))
@@ -309,8 +319,13 @@ for path in sys.argv[1:]:
         continue
     found += len(d.get("results", []))
     unparsed += len(d.get("errors", []))
+    timed += [e.get("path", "?") for e in d.get("errors", [])
+              if "timeout" in str(e.get("type", "")).lower()]
 print(f"  opengrep: {found} findings, {unparsed} files not wholly parsed; "
       "triage in Robot/static-analysis-triage.md (non-halting until reviewed)")
+if timed:
+    print(f"  opengrep: {len(timed)} timed out, so the count is short: "
+          + ", ".join(sorted(set(timed))))
 PY
   rm -rf "$ogdir"
 else

@@ -119,6 +119,33 @@ commands are what the parser gives up on: 116 of
 `package-runner.sh`'s 430 lines go unread, and that is the script a
 node's runner key is bound to.
 
+## Since the first run [2026-11-21]
+
+**123 findings now, against 130, and 9 files not wholly parsed, the same
+nine.** Every difference is a change to the code, none a new kind of
+finding, and none is a defect:
+
+| Change | Rule | Where | Verdict |
+|---|---|---|---|
+| −8 | `rust.lang.security.temp-dir` | `crates/node/tests/prekeys.rs`, rows 109 to 116 | gone with the file: the split seal deleted it (`5c91ac52`) |
+| −1 | `rust.lang.security.temp-dir` | `crates/conformance/tests/september15.rs`, row 73 | gone: the same commit took the temp-dir fixture out of the test |
+| +1 | `rust.lang.security.temp-dir` | `crates/node/tests/node_keys.rs:23` | **noise/false positive**: an integration-test fixture directory, as rows 109 to 116 were |
+| +1 | `rust.lang.security.temp-dir` | `crates/node/tests/profiles.rs:147` | **noise/false positive**: a second fixture directory beside row 117's |
+| 0 | `dockerfile.audit.dockerfile-source-not-pinned` | rows 1 and 2, now `Containerfile:24` and `Containerfile.testapp:28` | **now noise/false positive**: both bases are pinned by digest since 2026-11-20, inside `ARG RUST`, which the rule cannot see through, as it cannot for rows 13 and 14 |
+
+Four more appeared in passing and were fixed rather than triaged: two
+`open()` calls without an encoding in `crates/brand/icon.py`, and the
+gate's own `$OG_LIMITS` expanded unquoted, now an array.
+
+**The count does not depend on the machine's load.** Two runs of the
+gate's own command gave the same 116 and 8 over the tree and the gate
+the same 7 and 1 over the Containerfiles; the earlier differences
+between gate runs (123, 125, 127) were each a commit's worth of code. The
+gate nonetheless gives a rule 300 s per file and skips no file for slow
+rules (`--timeout 300 --timeout-threshold 0`), and names any timeout on
+its summary line [author, 2026-11-21], so that a loaded machine cannot
+make one silently.
+
 ## Every finding
 
 Line numbers are as of the commit that added this file.
