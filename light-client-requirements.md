@@ -1309,6 +1309,14 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   invited is shown that label in the brief it accepts or refuses, from the
   claim the invitation carried until the signed profile replaces it
   (`wire-format.md` §7.11), and a regular meeting shows none.
+- **Offer an unassigned node to the subnet an adoption creates** [author,
+  2026-11-21]. A node launched before its operator held any subnet serves none
+  (`infra-client-requirements.md` §4.4). Where the would-be patron chooses a
+  new subnet under its own key and holds such a node, ask whether the new
+  subnet is served from it, as the choice between an existing subnet and a new
+  one is asked, and choose nothing for them; the brief states the answer, and
+  once the adoption is recorded the node's records are signed on the new
+  subnet's line. A patron holding no unassigned node is asked nothing more.
 - **Say who you have met is in that subnet** [author, 2026-11-20]. A subnet
   is named by its id (design §13.8), which a lookalike cannot copy as it can a
   name and a picture, and there is no registry to check one against. Where
@@ -1742,8 +1750,9 @@ one that is true.
   says, by concentration inside this operator's own horizon. **And record
   where the machine was put** [author, 2026-11-06]: the provider's ASN and
   that provider's own zone label ride in the endpoint record and the anchor
-  entry this client signs at enrolment (`wire-format.md` §4.4, design
-  §3.4), because the ordering above is only as good as what records carry
+  entry this client signs at enrolment, or at assignment for a node launched
+  unassigned (`infra-client-requirements.md` §4.4; `wire-format.md` §4.4,
+  design §3.4), because the ordering above is only as good as what records carry
   — an operator ordering by concentration is reading what other operators'
   launches wrote down. A machine enrolled by hand is in a place only its
   operator can state, so the pair is theirs to give or to omit, and a zone

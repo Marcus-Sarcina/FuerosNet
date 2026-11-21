@@ -146,6 +146,7 @@ pub fn variant(a: &crate::ceremony::Abort) -> &'static str {
     use crate::ceremony::Abort::*;
     match a {
         Declined => "Declined",
+        Unassigned => "Unassigned",
         NotActive => "NotActive",
         NoCeremonyId => "NoCeremonyId",
         Unsealable => "Unsealable",

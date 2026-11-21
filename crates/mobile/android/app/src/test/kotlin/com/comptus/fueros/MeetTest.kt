@@ -1322,6 +1322,68 @@ class MeetRowsTest {
         assertNull(plain.pendingChoice(listOf(a), listOf(b)))
     }
 
+    /**
+     * **A node serving no subnet is offered to the new one, and never
+     * assigned unasked** [author, 2026-11-21]: the question follows a
+     * choice of a new subnet under this key where such a node is held,
+     * with "from no node yet" always an answer, and the brief says which
+     * node where one was chosen.
+     */
+    // functional: OPS-032
+    @Test
+    fun an_unassigned_node_is_offered_to_a_new_subnet_and_chosen_only_by_the_patron() {
+        val a = Meet.Scope("ab".repeat(32), "Bowling League", null)
+        val node = "203.0.113.7:7449"
+        fun said(m: Meet) = m.brief().joinToString(" ") { it.text }
+        // a patron in no subnet roots a new one unasked, and is then asked
+        // about the node, even with only one: nothing is chosen for it
+        val lone = Meet("the identity under test", "aa", "carol", Meet.Kind(Meet.Adopt.THEM_UNDER_ME), Meet.Role.INITIATOR)
+        assertEquals(Meet.Choice.SERVE_FROM, lone.pendingChoice(emptyList(), emptyList(), listOf(node)))
+        assertEquals(Meet.Scope.OWN, lone.scope())
+        assertNull("nothing chosen by default", lone.serving())
+        assertFalse(said(lone).contains("served from"))
+        lone.chooseServing(Meet.Serving(node))
+        assertNull(lone.pendingChoice(emptyList(), emptyList(), listOf(node)))
+        assertTrue(said(lone), said(lone).contains("served from your node at 203.0.113.7:7431"))
+        assertEquals(1, lone.brief().count { it.row == "OPS-032" })
+        // from no node yet is an answer too, and the brief says nothing of one
+        val none = Meet("the identity under test", "aa", "carol", Meet.Kind(Meet.Adopt.THEM_UNDER_ME), Meet.Role.INITIATOR)
+        assertEquals(Meet.Choice.SERVE_FROM, none.pendingChoice(emptyList(), emptyList(), listOf(node)))
+        none.chooseServing(Meet.Serving.NONE)
+        assertNull(none.pendingChoice(emptyList(), emptyList(), listOf(node)))
+        assertNull(none.serving()?.at)
+        assertEquals(0, none.brief().count { it.row == "OPS-032" })
+        // a patron choosing among its subnets is asked about the node only
+        // where it chose the new one
+        val held = Meet("the identity under test", "aa", "carol", Meet.Kind(Meet.Adopt.THEM_UNDER_ME), Meet.Role.INITIATOR)
+        assertEquals(Meet.Choice.ADOPT_INTO, held.pendingChoice(listOf(a), emptyList(), listOf(node)))
+        held.chooseScope(a)
+        assertNull("an existing subnet is not served from it", held.pendingChoice(listOf(a), emptyList(), listOf(node)))
+        val fresh = Meet("the identity under test", "aa", "carol", Meet.Kind(Meet.Adopt.THEM_UNDER_ME), Meet.Role.INITIATOR)
+        fresh.pendingChoice(listOf(a), emptyList(), listOf(node))
+        fresh.chooseScope(Meet.Scope.OWN)
+        assertEquals(Meet.Choice.SERVE_FROM, fresh.pendingChoice(listOf(a), emptyList(), listOf(node)))
+        // and a node chosen does not follow the patron to another scope
+        fresh.chooseServing(Meet.Serving(node))
+        fresh.chooseScope(a)
+        assertNull(fresh.serving())
+        assertFalse(said(fresh).contains("served from"))
+        // a patron holding no unassigned node sees no new question
+        val plain = Meet("the identity under test", "aa", "carol", Meet.Kind(Meet.Adopt.THEM_UNDER_ME), Meet.Role.INITIATOR)
+        assertNull(plain.pendingChoice(emptyList(), emptyList(), emptyList()))
+        // nor does the party being adopted, or a regular meeting
+        val sub = meet(Meet.Adopt.NONE, role = Meet.Role.RESPONDER)
+        sub.counterparty("bb")
+        sub.theirAdopt(Meet.Adopt.THEM_UNDER_ME)
+        assertNull(sub.pendingChoice(emptyList(), emptyList(), listOf(node)))
+        assertNull(meet(Meet.Adopt.NONE).pendingChoice(emptyList(), emptyList(), listOf(node)))
+        // the responder as patron is asked at its brief, as for its scope
+        val responder = meet(Meet.Adopt.NONE, role = Meet.Role.RESPONDER)
+        responder.counterparty("bb")
+        responder.theirAdopt(Meet.Adopt.ME_UNDER_THEM)
+        assertEquals(Meet.Choice.SERVE_FROM, responder.pendingChoice(emptyList(), emptyList(), listOf(node)))
+    }
+
     /** The frame's label is in the other side's frame [bench, 2026-10-15]. */
     @Test
     fun the_label_sent_to_the_counterparty_names_this_device_and_not_you() {

@@ -268,6 +268,31 @@ class Meet(
     enum class Choice {
         ADOPT_INTO,
         SUBMIT_AS,
+        /**
+         * **Which node serves the new subnet** [author, 2026-11-21]: *"There
+         * should probably be an option when an unassigned [node] is held to
+         * connect it to the new subnet, just as there is an option to adopt
+         * into an existing subnet or create a new one."* Asked of a patron
+         * who chose [Scope.OWN] and holds a node serving no subnet, and of
+         * nobody else.
+         */
+        SERVE_FROM,
+    }
+
+    /**
+     * **The answer to [Choice.SERVE_FROM]**: the administration address of
+     * the unassigned instance that is to serve the new subnet, or null for
+     * none yet ([NONE]). Nothing is answered for the patron.
+     */
+    data class Serving(val at: String?) {
+        companion object {
+            /** From no node yet: the node stays unassigned. */
+            val NONE = Serving(null)
+
+            /** **Where members dial the node at `at`**, which is what the
+             *  patron is shown: its host, on the port the node serves on. */
+            fun dialled(at: String): String = "${Relocate.host(at)}:${Launch.QUIC_PORT}"
+        }
     }
 
     /**
@@ -504,6 +529,8 @@ class Meet(
      *  by name; null until asked. */
     private var corroborating: List<String>? = null
     private var carrying: Scope? = null
+    /** Which node serves the new subnet, once answered; null until then. */
+    private var serving: Serving? = null
     /** What the counterparty's code asked for, once one has been read. */
     private var theirAdopt: Adopt? = null
     private var theirPeering = false
@@ -898,6 +925,15 @@ class Meet(
                             (if (s == Scope.OWN) "a new subnet under your own key" else s.label()) + "."
                     } ?: "Which of your subnets $counterpartyName joins is asked before you accept.",
                 )
+                // OPS-032: the node the new subnet is served from, where
+                // one was chosen [author, 2026-11-21]
+                serving?.at?.takeIf { scope == Scope.OWN }?.let { at ->
+                    out += Item(
+                        "OPS-032",
+                        "The new subnet is served from your node at ${Serving.dialled(at)}, " +
+                            "which serves no subnet now: its records are signed for it once the adoption is recorded.",
+                    )
+                }
                 out += Item(
                     "PRD-02",
                     "You become $counterpartyName's patron. Your outage cascades to " +
@@ -1490,6 +1526,20 @@ class Meet(
     fun chooseScope(s: Scope) {
         synchronized(lock) {
             scope = s
+            // a node serves the new subnet only, so another scope drops it
+            if (s != Scope.OWN) serving = null
+            changed()
+        }
+    }
+
+    /** Which node serves the new subnet, once answered. */
+    fun serving(): Serving? = synchronized(lock) { serving }
+
+    /** As the patron of a new subnet: which unassigned node serves it,
+     *  or [Serving.NONE]. */
+    fun chooseServing(s: Serving) {
+        synchronized(lock) {
+            serving = s
             changed()
         }
     }
@@ -1512,17 +1562,23 @@ class Meet(
      * could adopt into), or null where none is owed. A device with
      * nothing to choose is answered for it here, so the screen never
      * asks a question with one answer.
+     *
+     * `unassigned` are the administration addresses of the nodes this
+     * device runs that serve no subnet, held while its key roots none
+     * [author, 2026-11-21]: a patron choosing [Scope.OWN] with one is
+     * asked [Choice.SERVE_FROM] next, and **that question is never
+     * answered for it**, even with one node, since "from no node yet" is
+     * always the other answer.
      */
-    fun pendingChoice(held: List<Scope>, rooted: List<Scope>): Choice? = synchronized(lock) {
+    fun pendingChoice(held: List<Scope>, rooted: List<Scope>, unassigned: List<String> = emptyList()): Choice? = synchronized(lock) {
         val side = settled() ?: return null
         when (side) {
             Adopt.THEM_UNDER_ME -> {
-                if (scope != null) return null
-                if (held.isEmpty()) {
+                if (scope == null) {
+                    if (held.isNotEmpty()) return Choice.ADOPT_INTO
                     scope = Scope.OWN
-                    return null
                 }
-                Choice.ADOPT_INTO
+                if (scope == Scope.OWN && serving == null && unassigned.isNotEmpty()) Choice.SERVE_FROM else null
             }
             Adopt.ME_UNDER_THEM -> {
                 if (carrying != null) return null

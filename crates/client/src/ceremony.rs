@@ -114,6 +114,11 @@ impl Default for Config {
 pub enum Abort {
     /// The person declined to start.
     Declined,
+    /// **A node is in no subnet until its operator chooses one**
+    /// [author, 2026-11-21]: there is no subnet under this key yet, so a
+    /// record placing an instance on its line would make the instance the
+    /// node of whatever subnet the next adoption creates, unasked.
+    Unassigned,
     /// No ceremony is under way with this counterparty.
     NotActive,
     /// A ceremony is under way but its id is not fixed yet: the
@@ -7032,10 +7037,14 @@ impl Client {
     /// client's own key.
     ///
     /// Refused where this client holds no position there: an operator
-    /// cannot claim an address in a subnet it is not in.
+    /// cannot claim an address in a subnet it is not in. **And refused for
+    /// the line under its own key while that key roots no subnet**
+    /// ([`Abort::Unassigned`]): an instance launched then is unassigned,
+    /// and its records wait for the subnet its operator chooses.
     pub fn line_in(&self, subnet: Option<Txid>) -> Result<u32, Abort> {
         let pos = match subnet {
             Some(s) => self.position_in(&s).ok_or(Abort::NoRelationship(s))?,
+            None if self.root_subnet.is_none() => return Err(Abort::Unassigned),
             None => self.own_position(),
         };
         Ok(pos.seqno.series)

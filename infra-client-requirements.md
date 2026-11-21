@@ -259,6 +259,18 @@ at enrolment is nothing. The size is a fact about the node, not a choice its
 operator is asked to make, so the client states it and re-signs the entry as
 the subtree grows.
 
+**Except for a node that serves no subnet yet** [author, 2026-11-21]. Both
+records are signed on the line of the subnet the instance serves
+(`wire-format.md` §7.6), and an operator launching one before it holds any
+subnet has no line to name: the line under its own key becomes the subnet its
+first adoption creates, and signing on it then would make the instance that
+subnet's node unasked. **Such an instance is unassigned**: it runs, its
+operator attaches to it, and neither record is signed until its operator
+chooses the subnet it serves, which the adoption that creates a subnet offers
+(`light-client-requirements.md` §7). A user may belong to several subnets, and
+which one a node serves is chosen, never inferred from where its operator
+happens to be. Until then it is in no subnet, and nobody is invited to it.
+
 **So the instance states the count and its client signs it** [author,
 2026-10-26]. **Count what you hold of your own subtree** — the nodes at or below
 you over open bindings, the clients attached to you, and the occupants your memo

@@ -56,6 +56,45 @@ class OperatorStoreTest {
         assertEquals(null, OperatorStore.runnerSaid("rhtn-package-runner: no such verb: runner-refresh"))
     }
 
+    /**
+     * **An instance serving no subnet is recorded so, and nobody is
+     * invited to it** [author, 2026-11-21]: the record keeps the state and
+     * what its records will name once it is assigned, and reads back as
+     * written.
+     */
+    // functional: OPS-032
+    @Test
+    fun an_unassigned_instance_is_recorded_so_and_invited_to_by_nobody() {
+        val none = OperatorStore.Instance(
+            "203.0.113.7:7449", null, "an instance serving no subnet", "digitalocean", "42", 3,
+            unassigned = true, endpoint = "203.0.113.7:7431", asn = 14061, zone = "nyc3",
+        )
+        assertEquals(none, OperatorStore.parse(OperatorStore.line(none)))
+        assertEquals(3, OperatorStore.runnerIn(OperatorStore.line(none)))
+        // the subnet under this key and a named one are each other states
+        val own = OperatorStore.Instance("10.0.0.1:7449", null, "enrolled")
+        assertEquals(own, OperatorStore.parse(OperatorStore.line(own)))
+        assertFalse(OperatorStore.parse(OperatorStore.line(own)).unassigned)
+        val named = none.copy(subnet = a, unassigned = false, label = "subnet aaaaaaaa…")
+        assertEquals(named, OperatorStore.parse(OperatorStore.line(named)))
+        assertFalse(OperatorStore.parse(OperatorStore.line(named)).unassigned)
+        // a record of six fields reads as serving the subnet it names
+        val six = OperatorStore.parse("1.2.3.4:7432\t$a\tMirror\tdigitalocean\t42\t3")
+        assertFalse(six.unassigned)
+        assertEquals(a, six.subnet)
+        // **and nothing re-signs its line or invites anybody to it**
+        val screen = File("src/main/kotlin/com/comptus/fueros/OperatorActivity.kt").readText()
+        assertTrue(screen.contains("for (inst in instances()) {\n            // **nobody is invited"))
+        assertTrue(screen.contains("if (inst.unassigned) continue"))
+        assertTrue(screen.contains("if (i.unassigned) return"))
+        assertTrue(screen.contains("Gateway.renew(by, i.at, token, 45, i.subnet, i.unassigned)"))
+        assertEquals(
+            "an enrolment's record is unassigned exactly where enrolment said so",
+            2,
+            Regex("""val none = said\.contains\(Gateway\.SERVES_NONE\)""").findAll(screen).count(),
+        )
+    }
+
     @Test
     fun a_machine_is_destroyed_only_after_the_operator_confirms() {
         // **asked once before it goes** [author, 2026-11-17]

@@ -23,6 +23,108 @@ object OperatorStore {
     /** The one file every identity's records were kept in before. */
     const val LEGACY: String = "operator"
 
+    /**
+     * **One instance this operator administers**, as its record keeps
+     * it: where it is, and the subnet it serves by the label it was
+     * enrolled under (`light-client-requirements.md` §10). The list is
+     * the shell's own state — an operator in several subnets runs one
+     * instance in each, and nothing here infers an instance from a
+     * position.
+     */
+    data class Instance(
+        val at: String,
+        /** The subnet it serves, hex, or null for the one under this
+         *  operator's own key. Null too where it is [unassigned]. */
+        val subnet: String?,
+        val label: String,
+        /** The provider it was launched at and its id there, where this
+         *  client launched it (H1); blank where it was enrolled by hand. */
+        val provider: String = "",
+        val remoteId: String = "",
+        /** The runner version this machine was given, where this client
+         *  knows it: from its launch here, or from a refresh since; 1 for a
+         *  machine launched here before the version was recorded, 0 where
+         *  nothing says. */
+        val runner: Int = 0,
+        /**
+         * **Serving no subnet** [author, 2026-11-21]: enrolled while its
+         * operator rooted none and named none, so neither of its records
+         * is signed. It stays so until the adoption that creates a subnet
+         * under this key is answered with this node
+         * (`infra-client-requirements.md` §4.4); nothing assigns it by
+         * where its operator happens to be.
+         */
+        val unassigned: Boolean = false,
+        /** **What its records will name**, as its enrolment was told: the
+         *  address published (blank where none was, and the anchor entry
+         *  names [at]), and the provider's ASN and zone where the launch
+         *  knew them. Kept so that the records an assignment signs later
+         *  say what enrolment's would have [author, 2026-11-06]. */
+        val endpoint: String = "",
+        val asn: Long? = null,
+        val zone: String = "",
+    )
+
+    /** The record's marker, in its seventh field, for an [Instance.unassigned]. */
+    private const val SERVES_NONE = "none"
+
+    /**
+     * **An instance's record, read**: tab-separated, in the order
+     * [Instance] declares its fields. Pure, for a JVM test.
+     */
+    fun parse(line: String): Instance {
+        val parts = line.split('\t')
+        return Instance(
+            parts[0],
+            parts.getOrNull(1)?.ifEmpty { null },
+            parts.getOrElse(2) { parts[0] },
+            parts.getOrElse(3) { "" },
+            parts.getOrElse(4) { "" },
+            runnerIn(line),
+            parts.getOrNull(6) == SERVES_NONE,
+            parts.getOrElse(7) { "" },
+            parts.getOrNull(8)?.toLongOrNull(),
+            parts.getOrElse(9) { "" },
+        )
+    }
+
+    /** **An instance's record, written**: what [parse] reads back. */
+    fun line(i: Instance): String = listOf(
+        i.at,
+        i.subnet ?: "",
+        i.label,
+        i.provider,
+        i.remoteId,
+        if (i.runner > 0) i.runner.toString() else "",
+        if (i.unassigned) SERVES_NONE else "",
+        i.endpoint,
+        i.asn?.toString() ?: "",
+        i.zone,
+    ).joinToString("\t")
+
+    /** The instances this identity administers. */
+    fun instances(context: Context, by: String): List<Instance> =
+        prefs(context, by).getString("instances", "").orEmpty()
+            .lines()
+            .filter { it.isNotBlank() }
+            .map { parse(it) }
+
+    /** Keep `i`, in place of any record at the same address. */
+    fun remember(context: Context, by: String, i: Instance) {
+        val kept = instances(context, by).filter { it.at != i.at } + i
+        prefs(context, by).edit()
+            .putString("instances", kept.joinToString("\n") { line(it) })
+            .apply()
+    }
+
+    /** Drop the record at `at`. */
+    fun forget(context: Context, by: String, at: String) {
+        val kept = instances(context, by).filter { it.at != at }
+        prefs(context, by).edit()
+            .putString("instances", kept.joinToString("\n") { line(it) })
+            .apply()
+    }
+
     /** This identity's records, with any old ones that are its adopted. */
     fun prefs(context: Context, by: String): SharedPreferences {
         val mine = context.getSharedPreferences("operator-$by", Context.MODE_PRIVATE)

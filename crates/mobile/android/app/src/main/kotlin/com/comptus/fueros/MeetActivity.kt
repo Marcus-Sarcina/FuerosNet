@@ -275,13 +275,14 @@ class MeetActivity : Activity() {
         // **the scope question comes first** [author, 2026-10-15]: for the
         // initiator between the choice of transaction and the invitation,
         // for the party that read it between the scan and the acceptance
+        val unassigned = if (m.settled() == Meet.Adopt.THEM_UNDER_ME) unassignedHeld() else emptyList()
         val choice = if (m.step() == Meet.Step.INTENT || m.step() == Meet.Step.BRIEF) {
-            m.pendingChoice(Gateway.subnets(by).map(Meet.Scope::of), Gateway.subnetsRooted(by).map(Meet.Scope::of))
+            m.pendingChoice(Gateway.subnets(by).map(Meet.Scope::of), Gateway.subnetsRooted(by).map(Meet.Scope::of), unassigned)
         } else {
             null
         }
         when {
-            choice != null -> choice(m, choice)
+            choice != null -> choice(m, choice, unassigned)
             else -> when (m.step()) {
                 Meet.Step.INTENT -> intent(m)
                 Meet.Step.BRIEF -> brief(m)
@@ -743,7 +744,7 @@ class MeetActivity : Activity() {
      * acceptance for the party that read it; a device with nothing to
      * choose never sees it.
      */
-    private fun choice(m: Meet, c: Meet.Choice) {
+    private fun choice(m: Meet, c: Meet.Choice, unassigned: List<String>) {
         when (c) {
             Meet.Choice.ADOPT_INTO -> {
                 heading("Adopt into which scope?") // AUTHOR COPY [author, 2026-10-15]
@@ -760,8 +761,34 @@ class MeetActivity : Activity() {
                 }
                 button("Join as an individual") { m.chooseCarrying(Meet.Scope.INDIVIDUAL) }
             }
+            // **a node is assigned by choice, never by where its operator
+            // is** [author, 2026-11-21]: one button per node serving no
+            // subnet, and the answer that leaves them all as they are
+            Meet.Choice.SERVE_FROM -> {
+                heading("Serve the new subnet from a node?")
+                para(
+                    "You run ${if (unassigned.size == 1) "a node that serves" else "nodes that serve"} no subnet yet. " +
+                        "The subnet this adoption creates can be served from one, or from none for now.",
+                )
+                unassigned.forEach { at ->
+                    button("Serve it from ${Meet.Serving.dialled(at)}") { m.chooseServing(Meet.Serving(at)) }
+                }
+                button("From no node yet") { m.chooseServing(Meet.Serving.NONE) }
+            }
         }
         changeMind()
+    }
+
+    /**
+     * **The nodes this identity runs that serve no subnet**, by their
+     * administration address, while its key roots none: what a new subnet
+     * under it can be served from [author, 2026-11-21]. Empty once the key
+     * roots a subnet, whose adoption was the moment to ask.
+     */
+    private fun unassignedHeld(): List<String> {
+        val held = OperatorStore.instances(this, by).filter { it.unassigned && it.at.isNotEmpty() }
+        if (held.isEmpty() || !Gateway.unassigned(by)) return emptyList()
+        return held.map { it.at }
     }
 
     // ---- D1.5 the brief: everything front-loaded -----------------------
@@ -1204,7 +1231,10 @@ class MeetActivity : Activity() {
                 } else {
                     para("The adoption is recorded: $t")
                     para("Where you sit now: ${a.position()}")
-                    if (a.patron && m.scope() == Meet.Scope.OWN) nameSubnet(t)
+                    if (a.patron && m.scope() == Meet.Scope.OWN) {
+                        nameSubnet(t)
+                        m.serving()?.at?.let { serveFrom(t, it) }
+                    }
                 }
             }
             Adoption.Step.REFUSED ->
@@ -1265,6 +1295,65 @@ class MeetActivity : Activity() {
                 }
             }, "fueros-subnet-name").start()
         }
+    }
+
+    /** What came of assigning the node, across a redraw of the Done screen. */
+    private var serveStarted = false
+    private var serveSaid: String? = null
+
+    /**
+     * **The node the patron chose serves the subnet the adoption created**
+     * [author, 2026-11-21], once that adoption is recorded and not before:
+     * its endpoint record and anchor entry are signed on the new subnet's
+     * line, `txid` being its id (design §13.8), and handed to it as an
+     * enrolment hands them ([Gateway.assign]); the record kept of it then
+     * names the subnet, and the Operator screen owes its members their
+     * invitations as for any node. **Anything short of the node taking
+     * both leaves it unassigned**, and says why.
+     */
+    private fun serveFrom(txid: String, at: String) {
+        val dialled = Meet.Serving.dialled(at)
+        heading("Your node at $dialled")
+        serveSaid?.let {
+            para(it)
+            return
+        }
+        para("Signing its records for the new subnet…")
+        if (serveStarted) return
+        serveStarted = true
+        Diag.event("meet.serve", "state" to "assigning", "txid" to txid.take(8))
+        Thread({
+            val i = OperatorStore.instances(this, by).firstOrNull { it.at == at }
+            val token = OperatorStore.prefs(this, by).getString("token:$at", null)
+            val said = when {
+                // a screen recreated after the assignment went asks again
+                i != null && !i.unassigned && i.subnet == txid -> "It serves the new subnet."
+                i == null || !i.unassigned -> "This phone no longer holds it as serving no subnet, so nothing was signed."
+                token == null -> "This phone holds no token for it, so nothing was signed: it serves no subnet yet."
+                else -> {
+                    val placed = Gateway.assign(by, at, token, txid, i.endpoint.ifEmpty { null }, i.asn, i.zone.ifEmpty { null })
+                    if (placed.taken) {
+                        OperatorStore.remember(
+                            this,
+                            by,
+                            i.copy(subnet = txid, unassigned = false, label = Meet.Scope(txid, null, null).label()),
+                        )
+                    }
+                    val state = if (placed.taken) "assigned" else "refused"
+                    Diag.event("meet.serve", "state" to state, "txid" to txid.take(8))
+                    if (placed.taken) {
+                        "It serves the new subnet: " + placed.said.joinToString("; ")
+                    } else {
+                        "It was not assigned, and serves no subnet yet: " + placed.said.joinToString("; ")
+                    }
+                }
+            }
+            runOnUiThread {
+                if (isFinishing) return@runOnUiThread
+                serveSaid = said
+                redraw()
+            }
+        }, "fueros-serve-subnet").start()
     }
 
     private fun stopped(m: Meet) {

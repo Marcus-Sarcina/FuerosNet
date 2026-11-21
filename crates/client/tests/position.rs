@@ -679,3 +679,41 @@ fn the_contacts_a_subnet_holds_are_read_off_the_locators_they_handed() {
     // and a contact whose locator was never handed places nobody
     assert!(s.client("alice").contacts_in(&subnet).is_empty());
 }
+
+// acceptance: TOP-57
+#[test]
+fn a_node_launched_before_its_operator_roots_a_subnet_is_placed_on_no_line() {
+    use rhtn_client::ceremony::Abort;
+    let mut s = setup(&PARTIES);
+    let point = {
+        let mut b = Vec::new();
+        rhtn_transport::session::NetworkPoint::new([203, 0, 113, 7], Some(7431)).encode(&mut b);
+        b
+    };
+    // **unassigned** [author, 2026-11-21]: alice roots nothing yet, so a
+    // record on the line under her key would make the instance the node of
+    // whatever subnet her first adoption creates, unasked
+    assert!(matches!(
+        s.client("alice").line_in(None),
+        Err(Abort::Unassigned)
+    ));
+    assert!(matches!(
+        s.client("alice")
+            .endpoint_record_in(None, std::slice::from_ref(&point), 1),
+        Err(Abort::Unassigned)
+    ));
+    assert!(
+        s.client("alice")
+            .anchor_entry_in(None, std::slice::from_ref(&point), 1, 1)
+            .is_err()
+    );
+    // once she roots one, the line under her key is that subnet's, and
+    // signing on it is the choice the adoption asked her to make
+    s.adopted("bob", "alice", "w1", 1);
+    assert_eq!(s.client("alice").line_in(None).expect("her own"), 1);
+    assert!(
+        s.client("alice")
+            .endpoint_record_in(None, &[point], 1)
+            .is_ok()
+    );
+}

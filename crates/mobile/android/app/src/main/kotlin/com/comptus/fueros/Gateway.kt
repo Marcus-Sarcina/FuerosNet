@@ -85,6 +85,11 @@ object Gateway {
      * **A step that fails stops the rest** — a half-enrolled instance is
      * one nobody asked for, and the lines say how far it got.
      *
+     * **An instance enrolled before this key roots a subnet is
+     * unassigned** [author, 2026-11-21]: everything else happens, the
+     * proof and the run, and the two records wait for the subnet its
+     * operator chooses ([assign]).
+     *
      * @param at `host:port` of the instance's surface
      * @param tokenHex the enrolment token its configuration carries
      * @param credentials how many 48-hour delegations the run carries
@@ -100,7 +105,8 @@ object Gateway {
         endpoint: String?,
         /** The subnet the instance serves, hex, or null for the one under
          *  this device's own key: the records are signed on that line's
-         *  series (`wire-format.md` §7.6). */
+         *  series (`wire-format.md` §7.6). Null where this key roots no
+         *  subnet yet signs neither, and the lines say [SERVES_NONE]. */
         subnet: String? = null,
         /** **Where the machine is, as the launch chose it** [author,
          *  2026-11-06]: the ASN and the provider's own zone label, which
@@ -135,28 +141,18 @@ object Gateway {
         said += "it is ${got.phase}, holding ${got.credentials} credential(s)"
 
         // §4.4's two records, each signed here because the instance holds
-        // no seed to sign its own
-        if (endpoint != null) {
-            val point = point(endpoint, asn, zone) ?: return said + "`$endpoint` is not host:port"
-            val line = subnet?.takeIf { it.length == 64 }?.let { unhex(it) }
-            val record = call("endpointRecord", { null }) { p.endpointRecord(line, listOf(point), 1u) }
-                ?: return said + "the endpoint record was not signed"
-            said += "endpoint record naming $endpoint: " +
-                Provision.put(at, "/node/endpoint-record", record).fold({ it }, { "${it.message}" })
+        // no seed to sign its own; **or neither, for an instance that
+        // serves no subnet yet** [author, 2026-11-21]: with no subnet named
+        // and none rooted under this key, the line under it is the subnet
+        // the next adoption creates, and the kernel refuses to place the
+        // instance there unasked
+        if (subnet == null && unassigned(by)) {
+            said += SERVES_NONE
+        } else {
+            val placed = place(by, at, endpoint, subnet, asn, zone)
+            said += placed.said
+            if (!placed.signed) return said
         }
-        // **the anchor entry is always signed at enrolment** [author,
-        // 2026-10-25]: its size is the kernel's to state (nothing beneath a
-        // fresh instance), not the operator's to type
-        run {
-            val point = point(endpoint ?: at, asn, zone) ?: return said + "`$at` is not host:port"
-            val line2 = subnet?.takeIf { it.length == 64 }?.let { unhex(it) }
-            val entry = call("anchorEntryFresh", { null }) {
-                p.anchorEntryFresh(line2, listOf(point), 1u)
-            } ?: return said + "the anchor entry was not signed"
-            said += "anchor entry, nothing beneath it yet: " +
-                Provision.put(at, "/node/anchor-entry", entry).fold({ it }, { "${it.message}" })
-        }
-
         val run = call("delegate", { null }) {
             p.delegate(got.transportKey, now(), credentials.toUInt())
         } ?: return said + "the run was not signed"
@@ -166,6 +162,111 @@ object Gateway {
         }
         said += "its administration page is at http://$at/"
         return said
+    }
+
+    /**
+     * **What an enrolment says of an instance that serves no subnet**,
+     * and what a caller reads off its lines to record it so, as it reads
+     * a taken run off the `credential` lines.
+     */
+    const val SERVES_NONE: String =
+        "it serves no subnet until you choose one, so neither its endpoint record nor its " +
+            "anchor entry is signed: the meeting that creates your first subnet asks whether " +
+            "this node serves it"
+
+    /**
+     * **Whether this identity's key roots no subnet**, by the kernel's
+     * own refusal (`Abort::Unassigned`) [author, 2026-11-21]: a record on
+     * the line under its own key is refused until its first adoption as
+     * patron creates one. Nothing is kept: the record asked for here is
+     * over no points and is dropped, and any other answer, signed or
+     * refused for another reason, is not this one.
+     */
+    fun unassigned(by: String): Boolean {
+        val p = loaded[by] ?: return false
+        return call("endpointRecord", { it.reason.contains("Unassigned") }) {
+            p.endpointRecord(null, emptyList(), 1u)
+            false
+        }
+    }
+
+    /** What [place] came to: its lines; whether both records were signed;
+     *  whether the instance took both. */
+    data class Placed(val said: List<String>, val signed: Boolean, val taken: Boolean)
+
+    /**
+     * **Place an instance on a subnet's line** (`infra-client-requirements.md`
+     * §4.4; `wire-format.md` §7.6): sign the endpoint record, where there
+     * is an address to publish, and the anchor entry with nothing beneath
+     * it, on the line `subnet` names (null: the one under this key), and
+     * hand both to the instance at `at`. What an enrolment signs, and what
+     * an assignment signs later for an instance enrolled unassigned.
+     */
+    internal fun place(
+        by: String,
+        at: String,
+        endpoint: String?,
+        subnet: String?,
+        asn: Long?,
+        zone: String?,
+    ): Placed {
+        val p = loaded[by] ?: return Placed(listOf("the kernel is not running"), false, false)
+        val said = mutableListOf<String>()
+        var taken = true
+        if (endpoint != null) {
+            val point = point(endpoint, asn, zone)
+                ?: return Placed(said + "`$endpoint` is not host:port", false, false)
+            val line = subnet?.takeIf { it.length == 64 }?.let { unhex(it) }
+            val record = call("endpointRecord", { null }) { p.endpointRecord(line, listOf(point), 1u) }
+                ?: return Placed(said + "the endpoint record was not signed", false, false)
+            val put = Provision.put(at, "/node/endpoint-record", record)
+            taken = put.isSuccess
+            said += "endpoint record naming $endpoint: " + put.fold({ it }, { "${it.message}" })
+        }
+        // **the anchor entry is always signed at enrolment** [author,
+        // 2026-10-25]: its size is the kernel's to state (nothing beneath a
+        // fresh instance), not the operator's to type
+        val point = point(endpoint ?: at, asn, zone)
+            ?: return Placed(said + "`$at` is not host:port", false, false)
+        val line2 = subnet?.takeIf { it.length == 64 }?.let { unhex(it) }
+        val entry = call("anchorEntryFresh", { null }) {
+            p.anchorEntryFresh(line2, listOf(point), 1u)
+        } ?: return Placed(said + "the anchor entry was not signed", false, false)
+        val put = Provision.put(at, "/node/anchor-entry", entry)
+        said += "anchor entry, nothing beneath it yet: " + put.fold({ it }, { "${it.message}" })
+        return Placed(said, true, taken && put.isSuccess)
+    }
+
+    /**
+     * **Assign an unassigned instance to the subnet `subnet` names** [author,
+     * 2026-11-21]: what the adoption that created that subnet was answered
+     * with. The proof is checked first, as at enrolment, and then [place]
+     * signs both records on the subnet's line, over what the enrolment was
+     * told of where the instance is. No run is signed: it holds its own.
+     */
+    fun assign(
+        by: String,
+        at: String,
+        tokenHex: String,
+        subnet: String,
+        endpoint: String?,
+        asn: Long?,
+        zone: String?,
+    ): Placed {
+        val token = runCatching { Provision.unhex(tokenHex.trim()) }.getOrNull()
+            ?.takeIf { it.size == 32 } ?: return Placed(listOf("the token is 64 lower-case hex digits"), false, false)
+        val got = Provision.fetch(at).getOrElse { return Placed(listOf("${it.message}"), false, false) }
+        val checks = call("enrolmentProofChecks", { false }) {
+            uniffi.rhtn_ffi.enrolmentProofChecks(token, got.nonce, got.transportKey, got.proof)
+        }
+        if (!checks) {
+            return Placed(
+                listOf("the proof did not check: whatever answered at $at does not hold this instance's token. Nothing was signed."),
+                false,
+                false,
+            )
+        }
+        return place(by, at, endpoint, subnet, asn, zone)
     }
 
     /**
@@ -229,6 +330,9 @@ object Gateway {
          *  entry must carry the same series as the standing one or it
          *  supersedes nothing (`wire-format.md` §2.3). */
         subnet: String? = null,
+        /** **Serving no subnet** [author, 2026-11-21]: it holds no anchor
+         *  entry and none is signed for it, renewal or not. */
+        unassigned: Boolean = false,
     ): List<String> {
         val p = loaded[by] ?: return listOf("the kernel is not running")
         val token = runCatching { Provision.unhex(tokenHex.trim()) }.getOrElse {
@@ -268,7 +372,9 @@ object Gateway {
         // claims and re-signs at the next counter over the same points
         val claims = got.anchorClaims
         val seqno = got.anchorSeqno
-        if (claims == null || seqno == null) {
+        if (unassigned) {
+            said += "it serves no subnet yet, so it holds no anchor entry to re-sign"
+        } else if (claims == null || seqno == null) {
             said += "no anchor entry is signed there: enrolling signs the first"
         } else if (claims == got.subtree) {
             said += "anchor entry: it claims a subtree of $claims and counts ${got.subtree}, so it stands"

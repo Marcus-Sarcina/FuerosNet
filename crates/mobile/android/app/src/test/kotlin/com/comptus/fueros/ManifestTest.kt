@@ -227,6 +227,22 @@ class ManifestTest {
             "the anchor entry is not signed on the chosen subnet's line",
             kernel.contains("p.anchorEntryFresh(line2, listOf(point), 1u)"),
         )
+        // **both live in the one placement**, which enrolment and the
+        // assignment of an unassigned node reach with the subnet they were
+        // given [author, 2026-11-21]; enrolment with none named and none
+        // rooted signs neither
+        assertTrue(
+            "enrolment does not sign its records on the chosen subnet's line",
+            kernel.contains("val placed = place(by, at, endpoint, subnet, asn, zone)"),
+        )
+        assertTrue(
+            "an assignment does not sign on the subnet it was given",
+            kernel.contains("return place(by, at, endpoint, subnet, asn, zone)"),
+        )
+        assertTrue(
+            "enrolment places an instance with no subnet chosen while this key roots none",
+            kernel.contains("if (subnet == null && unassigned(by)) {\n            said += SERVES_NONE"),
+        )
     }
 
     /**

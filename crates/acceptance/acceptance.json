@@ -17816,6 +17816,32 @@
   ]
  },
  {
+  "id": "TOP-57",
+  "area": "topology",
+  "gap": "topology",
+  "title": "A node launched before its operator roots a subnet is placed on no line until its operator chooses one",
+  "milestone": 3,
+  "kind": "negative",
+  "spec": [
+   "infra-client-requirements.md §4.4",
+   "wire-format.md §7.6"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §4.4",
+    "text": "**Such an instance is unassigned**: it runs, its\noperator attaches to it, and neither record is signed until its operator\nchooses the subnet it serves, which the adoption that creates a subnet offers\n(`light-client-requirements.md` §7)."
+   }
+  ],
+  "given": "An operator identity holding no position in any subnet and rooting none.",
+  "when": "Its client signs an endpoint record and an anchor entry for an instance on the line under its own key; then the operator adopts a subordinate into a new subnet under its own key and signs the endpoint record again.",
+  "then": "Both first signatures are refused as unassigned, so nothing places the instance in the subnet the adoption later creates; after the adoption the line under its key is that subnet's and the record is signed on it.",
+  "oracle": "behaviour",
+  "interpretation": "The refusal is the kernel's guard; the question that assigns the node at the adoption is the shell's (OPS-032).",
+  "families": [
+   "OPS-032"
+  ]
+ },
+ {
   "id": "DMN-42",
   "area": "daemon",
   "gap": "daemon",

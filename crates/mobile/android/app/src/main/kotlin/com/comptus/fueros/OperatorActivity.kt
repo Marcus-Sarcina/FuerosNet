@@ -10,6 +10,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import com.comptus.fueros.OperatorStore.Instance
 
 /**
  * **H3: the provisioning pages** (`Robot/light-client-screens.md`,
@@ -42,29 +43,6 @@ class OperatorActivity : Activity() {
     private lateinit var roll: LinearLayout
     private var pageAt: String? = null
     private var chosen: Meet.Scope? = null
-
-    /**
-     * **One instance this operator administers**, as this screen keeps
-     * it: where it is, and the subnet it serves by the label it was
-     * enrolled under (`light-client-requirements.md` §10). The list is
-     * the shell's own state — an operator in several subnets runs one
-     * instance in each, and nothing here infers an instance from a
-     * position.
-     */
-    data class Instance(
-        val at: String,
-        val subnet: String?,
-        val label: String,
-        /** The provider it was launched at and its id there, where this
-         *  client launched it (H1); blank where it was enrolled by hand. */
-        val provider: String = "",
-        val remoteId: String = "",
-        /** The runner version this machine was given, where this client
-         *  knows it: from its launch here, or from a refresh since; 1 for a
-         *  machine launched here before the version was recorded, 0 where
-         *  nothing says. */
-        val runner: Int = 0,
-    )
 
     /**
      * **The token this screen was given for an instance**, kept so a
@@ -100,43 +78,18 @@ class OperatorActivity : Activity() {
             .putString("token:$at", token).apply()
     }
 
-    private fun instances(): List<Instance> =
-        OperatorStore.prefs(this, by)
-            .getString("instances", "")!!
-            .lines()
-            .filter { it.isNotBlank() }
-            .map { line ->
-                val parts = line.split('\t')
-                Instance(
-                    parts[0],
-                    parts.getOrNull(1)?.ifEmpty { null },
-                    parts.getOrElse(2) { parts[0] },
-                    parts.getOrElse(3) { "" },
-                    parts.getOrElse(4) { "" },
-                    OperatorStore.runnerIn(line),
-                )
-            }
+    private fun instances(): List<Instance> = OperatorStore.instances(this, by)
 
-    private fun line(it: Instance) =
-        "${it.at}\t${it.subnet ?: ""}\t${it.label}\t${it.provider}\t${it.remoteId}\t${if (it.runner > 0) it.runner else ""}"
+    private fun remember(i: Instance) = OperatorStore.remember(this, by, i)
 
-    private fun remember(i: Instance) {
-        val kept = instances().filter { it.at != i.at } + i
-        OperatorStore.prefs(this, by).edit()
-            .putString("instances", kept.joinToString("\n") { line(it) })
-            .apply()
-    }
-
-    private fun forget(at: String) {
-        val kept = instances().filter { it.at != at }
-        OperatorStore.prefs(this, by).edit()
-            .putString("instances", kept.joinToString("\n") { line(it) })
-            .apply()
-    }
+    private fun forget(at: String) = OperatorStore.forget(this, by, at)
 
     private companion object {
         /** The one request code this screen opens another app under. */
         const val COMPOSE_REQUEST = 7447
+
+        /** What an instance serving no subnet is listed as. */
+        const val NO_SUBNET = "an instance serving no subnet"
     }
 
     /**
@@ -166,6 +119,9 @@ class OperatorActivity : Activity() {
     private fun sendInvitations() {
         if (composing) return
         for (inst in instances()) {
+            // **nobody is invited to a node that serves no subnet**
+            // [author, 2026-11-21]: there is no subnet to invite them into
+            if (inst.unassigned) continue
             // **at the address members dial, not the one this screen
             // administers** [2026-11-16], and **keyed to the subnet the
             // instance serves** [author, 2026-11-16], so a member's
@@ -233,6 +189,7 @@ class OperatorActivity : Activity() {
         // a node that moved, or whose provider changed its address, holds
         // records naming the old one until this device signs new ones
         for (i in held) {
+            if (i.unassigned) continue
             val t = tokenFor(i.at) ?: continue
             Thread { readdressIfMoved(i, t) }.start()
         }
@@ -270,6 +227,15 @@ class OperatorActivity : Activity() {
                     text = i.at
                 },
             )
+            if (i.unassigned) {
+                roll.addView(
+                    TextView(this).apply {
+                        textSize = 13f
+                        setTextColor(Palette.now.sub)
+                        text = "serves no subnet yet: the meeting that creates your first subnet asks whether it serves that one"
+                    },
+                )
+            }
             roll.addView(
                 Button(this).apply {
                     text = "Open its administration page"
@@ -297,7 +263,7 @@ class OperatorActivity : Activity() {
                             isEnabled = true
                         } else {
                             Thread {
-                                val said = Gateway.renew(by, i.at, token, 45, i.subnet)
+                                val said = Gateway.renew(by, i.at, token, 45, i.subnet, i.unassigned)
                                 runOnUiThread {
                                     narration.text = said.joinToString("\n")
                                     isEnabled = true
@@ -545,7 +511,16 @@ class OperatorActivity : Activity() {
                         // operator administers from now, under its subnet
                         if (pageAt != null) {
                             val s = chosen
-                            remember(Instance(ask.at, s?.id, s?.label() ?: "an instance (subnet not named)"))
+                            val none = said.contains(Gateway.SERVES_NONE)
+                            remember(
+                                Instance(
+                                    ask.at,
+                                    s?.id,
+                                    if (none) NO_SUBNET else s?.label() ?: "an instance (subnet not named)",
+                                    unassigned = none,
+                                    endpoint = ask.endpoint.orEmpty(),
+                                ),
+                            )
                             rememberToken(ask.at, ask.token)
                             drawInstances()
                             // **and it is told who is in the horizon it
@@ -1034,7 +1009,17 @@ class OperatorActivity : Activity() {
                         narration.text = said.joinToString("\n")
                         isEnabled = true
                         if (took) {
-                            remember(Instance(surface, subnet, label, provider.name.lowercase(), id, Launch.RUNNER_VERSION))
+                            val none = said.contains(Gateway.SERVES_NONE)
+                            remember(
+                                Instance(
+                                    surface, subnet, if (none) NO_SUBNET else label, provider.name.lowercase(), id,
+                                    Launch.RUNNER_VERSION,
+                                    unassigned = none,
+                                    endpoint = "$ip:${Launch.QUIC_PORT}",
+                                    asn = provider.asn,
+                                    zone = region.slug,
+                                ),
+                            )
                             rememberToken(surface, minted)
                             // **the launch enrols too, and this is the path
                             // a new machine actually takes** [2026-11-04]:
@@ -1187,12 +1172,27 @@ class OperatorActivity : Activity() {
             }
             said += "it answers at $ip; signing its records for the new address"; show()
             val point = Gateway.point("$ip:${Launch.QUIC_PORT}", provider.asn, plan.region)
-            said += if (point == null) {
+            said += if (i.unassigned) {
+                // **a node that serves no subnet has no records to move**
+                // [author, 2026-11-21]: its assignment signs them where it
+                // is then
+                listOf("it serves no subnet yet, so it has no records to sign for the new address")
+            } else if (point == null) {
                 listOf("$ip is not an address a record can name")
             } else {
                 Gateway.readdress(by, surface, oldToken, listOf(point), i.subnet)
             }
-            remember(Instance(surface, i.subnet, i.label, provider.name.lowercase(), id, Launch.RUNNER_VERSION))
+            remember(
+                i.copy(
+                    at = surface,
+                    provider = provider.name.lowercase(),
+                    remoteId = id,
+                    runner = Launch.RUNNER_VERSION,
+                    endpoint = "$ip:${Launch.QUIC_PORT}",
+                    asn = provider.asn,
+                    zone = plan.region,
+                ),
+            )
             rememberToken(surface, oldToken)
             forget(i.at)
             Gateway.keyhash(by)?.let { me -> Attachments.serveFrom(by, this@OperatorActivity, me, "$ip:${Launch.QUIC_PORT}") }
@@ -1212,6 +1212,7 @@ class OperatorActivity : Activity() {
      * with but the address. Quiet where they agree.
      */
     private fun readdressIfMoved(i: Instance, token: String) {
+        if (i.unassigned) return
         val got = Provision.fetch(i.at).getOrNull() ?: return
         val here = Relocate.host(i.at)
         val named = got.anchorPoints.mapNotNull { Provision.pointIp(it) }
