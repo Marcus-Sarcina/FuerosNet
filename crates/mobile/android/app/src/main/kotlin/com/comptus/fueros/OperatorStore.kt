@@ -49,10 +49,11 @@ object OperatorStore {
         /**
          * **Serving no subnet** [author, 2026-11-21]: enrolled while its
          * operator rooted none and named none, so neither of its records
-         * is signed. It stays so until the adoption that creates a subnet
-         * under this key is answered with this node
-         * (`infra-client-requirements.md` §4.4); nothing assigns it by
-         * where its operator happens to be.
+         * is signed. It stays so until its operator assigns it to a
+         * subnet, from the Operator screen or as the answer to the
+         * question every adoption it makes as patron asks while it holds
+         * one [author, 2026-11-21] (`infra-client-requirements.md` §4.4);
+         * nothing assigns it by where its operator happens to be.
          */
         val unassigned: Boolean = false,
         /** **What its records will name**, as its enrolment was told: the
@@ -123,6 +124,45 @@ object OperatorStore {
         prefs(context, by).edit()
             .putString("instances", kept.joinToString("\n") { line(it) })
             .apply()
+    }
+
+    /**
+     * **The instances an assignment is offered for** [author, 2026-11-21]:
+     * every one serving no subnet, by the record's own flag, with an
+     * address to reach it at. What the Operator screen offers to assign
+     * and what an adoption as patron asks about, until none is left.
+     * Pure, for a JVM test.
+     */
+    fun unassigned(instances: List<Instance>): List<Instance> =
+        instances.filter { it.unassigned && it.at.isNotEmpty() }
+
+    /**
+     * **The subnets an unassigned instance can be assigned to**: each one
+     * this key holds a position in, the kernel signing on any such line,
+     * once apiece. Neither [Meet.Scope.OWN] nor [Meet.Scope.INDIVIDUAL] is
+     * a subnet with an id, so neither is offered; empty where none is
+     * held, and a subnet then comes from an adoption. Pure, for a JVM test.
+     */
+    fun assignable(held: List<Meet.Scope>): List<Meet.Scope> =
+        held.filter { it.id.length == 64 }.distinctBy { it.id }
+
+    /** **`i`'s record once it serves `to`**: the subnet named, labelled
+     *  as the chooser labels it, and no longer unassigned. */
+    fun assigned(i: Instance, to: Meet.Scope): Instance =
+        i.copy(subnet = to.id, unassigned = false, label = to.label())
+
+    /**
+     * **Assign the unassigned instance `i` to the subnet `to`** [author,
+     * 2026-11-21], wherever the operator chose it: [Gateway.assign] signs
+     * both records on that subnet's line and hands them over, and only
+     * where the instance took both is its record rewritten as [assigned].
+     * Anything short of that leaves it unassigned. Off the main thread:
+     * it is several round trips.
+     */
+    fun assign(context: Context, by: String, i: Instance, token: String, to: Meet.Scope): Gateway.Placed {
+        val placed = Gateway.assign(by, i.at, token, to.id, i.endpoint.ifEmpty { null }, i.asn, i.zone.ifEmpty { null })
+        if (placed.taken) remember(context, by, assigned(i, to))
+        return placed
     }
 
     /** This identity's records, with any old ones that are its adopted. */

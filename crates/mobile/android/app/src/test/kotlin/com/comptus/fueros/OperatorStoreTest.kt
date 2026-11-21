@@ -95,6 +95,56 @@ class OperatorStoreTest {
         )
     }
 
+    /**
+     * **An unassigned instance is offered every subnet this key holds, and
+     * its record, once assigned, serves the one chosen** [author,
+     * 2026-11-21: "Both A and B until all nodes are assigned"]: the
+     * Operator screen offers only instances flagged as serving none, one
+     * button per held subnet, and the rewritten record round-trips as
+     * assigned to it, keeping what its records name.
+     */
+    // functional: OPS-032
+    @Test
+    fun an_unassigned_instance_assigned_to_a_held_subnet_is_recorded_as_serving_it() {
+        val none = OperatorStore.Instance(
+            "203.0.113.7:7449", null, "an instance serving no subnet", "digitalocean", "42", 3,
+            unassigned = true, endpoint = "203.0.113.7:7431", asn = 14061, zone = "nyc3",
+        )
+        val served = OperatorStore.Instance("10.0.0.1:7449", a, "Mirror")
+        // only the instance serving no subnet is offered, and none without
+        // an address to reach it at
+        assertEquals(listOf(none), OperatorStore.unassigned(listOf(none, served, none.copy(at = ""))))
+        assertEquals(emptyList<OperatorStore.Instance>(), OperatorStore.unassigned(listOf(served)))
+        // every subnet held, once apiece; never a new subnet or no scope
+        val league = Meet.Scope(a, "Bowling League", null)
+        val bare = Meet.Scope(b, null, null)
+        assertEquals(
+            listOf(league, bare),
+            OperatorStore.assignable(listOf(league, bare, league, Meet.Scope.OWN, Meet.Scope.INDIVIDUAL)),
+        )
+        assertEquals("holding none, nothing is offered", emptyList<Meet.Scope>(), OperatorStore.assignable(emptyList()))
+        // the record rewritten: the subnet named, labelled as the chooser
+        // labels it, no longer unassigned, and the rest as it was
+        val to = OperatorStore.assigned(none, league)
+        assertEquals(a, to.subnet)
+        assertEquals("Bowling League", to.label)
+        assertFalse(to.unassigned)
+        assertEquals(none.copy(subnet = a, label = "Bowling League", unassigned = false), to)
+        val back = OperatorStore.parse(OperatorStore.line(to))
+        assertEquals(to, back)
+        assertFalse(back.unassigned)
+        assertEquals(listOf<OperatorStore.Instance>(), OperatorStore.unassigned(listOf(back)))
+        assertEquals("subnet bbbbbbbb…", OperatorStore.assigned(none, bare).label)
+        // **and both paths assign through the one function**: the Operator
+        // screen and the adoption's answer
+        val screen = File("src/main/kotlin/com/comptus/fueros/OperatorActivity.kt").readText()
+        val meet = File("src/main/kotlin/com/comptus/fueros/MeetActivity.kt").readText()
+        assertTrue(screen.contains("OperatorStore.assign(this@OperatorActivity, by, now, token, s)"))
+        assertTrue(meet.contains("OperatorStore.assign(this, by, i, token, into)"))
+        assertTrue(screen.contains("OperatorStore.assignable(Gateway.subnets(by).map(Meet.Scope::of))"))
+        assertFalse("the adoption's question is gated on the record's flag alone", meet.contains("Gateway.unassigned(by)"))
+    }
+
     @Test
     fun a_machine_is_destroyed_only_after_the_operator_confirms() {
         // **asked once before it goes** [author, 2026-11-17]

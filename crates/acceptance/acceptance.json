@@ -17829,7 +17829,7 @@
   "rule": [
    {
     "where": "infra-client-requirements.md §4.4",
-    "text": "**Such an instance is unassigned**: it runs, its\noperator attaches to it, and neither record is signed until its operator\nchooses the subnet it serves, which the adoption that creates a subnet offers\n(`light-client-requirements.md` §7)."
+    "text": "neither record is signed until its operator\nchooses the subnet it serves, which every adoption its operator makes as\npatron offers while the instance is unassigned"
    }
   ],
   "given": "An operator identity holding no position in any subnet and rooting none.",

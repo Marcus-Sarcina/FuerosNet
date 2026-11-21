@@ -269,20 +269,23 @@ class Meet(
         ADOPT_INTO,
         SUBMIT_AS,
         /**
-         * **Which node serves the new subnet** [author, 2026-11-21]: *"There
-         * should probably be an option when an unassigned [node] is held to
-         * connect it to the new subnet, just as there is an option to adopt
-         * into an existing subnet or create a new one."* Asked of a patron
-         * who chose [Scope.OWN] and holds a node serving no subnet, and of
-         * nobody else.
+         * **Which node serves the subnet the adoption is into** [author,
+         * 2026-11-21]: *"There should probably be an option when an
+         * unassigned [node] is held to connect it to the new subnet, just as
+         * there is an option to adopt into an existing subnet or create a
+         * new one."* **Asked at every adoption this device makes as patron,
+         * into a new subnet or one it holds, while it holds a node serving
+         * no subnet** [author, 2026-11-21: "Both A and B until all nodes are
+         * assigned"], and of nobody else.
          */
         SERVE_FROM,
     }
 
     /**
      * **The answer to [Choice.SERVE_FROM]**: the administration address of
-     * the unassigned instance that is to serve the new subnet, or null for
-     * none yet ([NONE]). Nothing is answered for the patron.
+     * the unassigned instance that is to serve the subnet the adoption is
+     * into, or null for none yet ([NONE]). Nothing is answered for the
+     * patron.
      */
     data class Serving(val at: String?) {
         companion object {
@@ -529,7 +532,8 @@ class Meet(
      *  by name; null until asked. */
     private var corroborating: List<String>? = null
     private var carrying: Scope? = null
-    /** Which node serves the new subnet, once answered; null until then. */
+    /** Which node serves the subnet the adoption is into, once answered;
+     *  null until then. */
     private var serving: Serving? = null
     /** What the counterparty's code asked for, once one has been read. */
     private var theirAdopt: Adopt? = null
@@ -925,12 +929,16 @@ class Meet(
                             (if (s == Scope.OWN) "a new subnet under your own key" else s.label()) + "."
                     } ?: "Which of your subnets $counterpartyName joins is asked before you accept.",
                 )
-                // OPS-032: the node the new subnet is served from, where
-                // one was chosen [author, 2026-11-21]
-                serving?.at?.takeIf { scope == Scope.OWN }?.let { at ->
+                // OPS-032: the node the subnet the adoption is into is
+                // served from, where one was chosen, a new subnet or one
+                // held [author, 2026-11-21]
+                val into = scope
+                val at = serving?.at
+                if (into != null && at != null) {
+                    val subnet = if (into == Scope.OWN) "The new subnet" else into.label().replaceFirstChar { it.uppercase() }
                     out += Item(
                         "OPS-032",
-                        "The new subnet is served from your node at ${Serving.dialled(at)}, " +
+                        "$subnet is served from your node at ${Serving.dialled(at)}, " +
                             "which serves no subnet now: its records are signed for it once the adoption is recorded.",
                     )
                 }
@@ -1525,18 +1533,19 @@ class Meet(
      *  the initiator at D1a (`light-client-requirements.md` §7). */
     fun chooseScope(s: Scope) {
         synchronized(lock) {
+            // a node is chosen for the one subnet the adoption is into, so
+            // another subnet chosen asks again
+            if (s != scope) serving = null
             scope = s
-            // a node serves the new subnet only, so another scope drops it
-            if (s != Scope.OWN) serving = null
             changed()
         }
     }
 
-    /** Which node serves the new subnet, once answered. */
+    /** Which node serves the subnet the adoption is into, once answered. */
     fun serving(): Serving? = synchronized(lock) { serving }
 
-    /** As the patron of a new subnet: which unassigned node serves it,
-     *  or [Serving.NONE]. */
+    /** As the patron: which unassigned node serves the subnet the
+     *  adoption is into, or [Serving.NONE]. */
     fun chooseServing(s: Serving) {
         synchronized(lock) {
             serving = s
@@ -1564,11 +1573,12 @@ class Meet(
      * asks a question with one answer.
      *
      * `unassigned` are the administration addresses of the nodes this
-     * device runs that serve no subnet, held while its key roots none
-     * [author, 2026-11-21]: a patron choosing [Scope.OWN] with one is
-     * asked [Choice.SERVE_FROM] next, and **that question is never
-     * answered for it**, even with one node, since "from no node yet" is
-     * always the other answer.
+     * device runs that serve no subnet [author, 2026-11-21]: a patron
+     * holding one is asked [Choice.SERVE_FROM] once its scope is settled,
+     * whether that is [Scope.OWN] or a subnet it holds, at every adoption
+     * until none is held. **That question is never answered for it**,
+     * even with one node, since "from no node yet" is always the other
+     * answer.
      */
     fun pendingChoice(held: List<Scope>, rooted: List<Scope>, unassigned: List<String> = emptyList()): Choice? = synchronized(lock) {
         val side = settled() ?: return null
@@ -1578,7 +1588,7 @@ class Meet(
                     if (held.isNotEmpty()) return Choice.ADOPT_INTO
                     scope = Scope.OWN
                 }
-                if (scope == Scope.OWN && serving == null && unassigned.isNotEmpty()) Choice.SERVE_FROM else null
+                if (serving == null && unassigned.isNotEmpty()) Choice.SERVE_FROM else null
             }
             Adopt.ME_UNDER_THEM -> {
                 if (carrying != null) return null

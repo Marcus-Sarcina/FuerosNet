@@ -171,8 +171,8 @@ object Gateway {
      */
     const val SERVES_NONE: String =
         "it serves no subnet until you choose one, so neither its endpoint record nor its " +
-            "anchor entry is signed: the meeting that creates your first subnet asks whether " +
-            "this node serves it"
+            "anchor entry is signed: the Operator screen offers it every subnet you come to hold, " +
+            "and every adoption you make as patron asks whether this node serves that subnet"
 
     /**
      * **Whether this identity's key roots no subnet**, by the kernel's
@@ -239,10 +239,12 @@ object Gateway {
 
     /**
      * **Assign an unassigned instance to the subnet `subnet` names** [author,
-     * 2026-11-21]: what the adoption that created that subnet was answered
-     * with. The proof is checked first, as at enrolment, and then [place]
-     * signs both records on the subnet's line, over what the enrolment was
-     * told of where the instance is. No run is signed: it holds its own.
+     * 2026-11-21]: any subnet this key holds a position in, chosen on the
+     * Operator screen or as the answer to the question an adoption as
+     * patron asks, into a new subnet or one held. The proof is checked
+     * first, as at enrolment, and then [place] signs both records on the
+     * subnet's line, over what the enrolment was told of where the
+     * instance is. No run is signed: it holds its own.
      */
     fun assign(
         by: String,

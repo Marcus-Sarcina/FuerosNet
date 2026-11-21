@@ -1353,21 +1353,19 @@ class MeetRowsTest {
         assertNull(none.pendingChoice(emptyList(), emptyList(), listOf(node)))
         assertNull(none.serving()?.at)
         assertEquals(0, none.brief().count { it.row == "OPS-032" })
-        // a patron choosing among its subnets is asked about the node only
-        // where it chose the new one
-        val held = Meet("the identity under test", "aa", "carol", Meet.Kind(Meet.Adopt.THEM_UNDER_ME), Meet.Role.INITIATOR)
-        assertEquals(Meet.Choice.ADOPT_INTO, held.pendingChoice(listOf(a), emptyList(), listOf(node)))
-        held.chooseScope(a)
-        assertNull("an existing subnet is not served from it", held.pendingChoice(listOf(a), emptyList(), listOf(node)))
+        // a patron choosing among its subnets is asked about the node once
+        // it has chosen, the new one among them
         val fresh = Meet("the identity under test", "aa", "carol", Meet.Kind(Meet.Adopt.THEM_UNDER_ME), Meet.Role.INITIATOR)
         fresh.pendingChoice(listOf(a), emptyList(), listOf(node))
         fresh.chooseScope(Meet.Scope.OWN)
         assertEquals(Meet.Choice.SERVE_FROM, fresh.pendingChoice(listOf(a), emptyList(), listOf(node)))
-        // and a node chosen does not follow the patron to another scope
+        // and a node chosen does not follow the patron to another scope,
+        // which asks again
         fresh.chooseServing(Meet.Serving(node))
         fresh.chooseScope(a)
         assertNull(fresh.serving())
         assertFalse(said(fresh).contains("served from"))
+        assertEquals(Meet.Choice.SERVE_FROM, fresh.pendingChoice(listOf(a), emptyList(), listOf(node)))
         // a patron holding no unassigned node sees no new question
         val plain = Meet("the identity under test", "aa", "carol", Meet.Kind(Meet.Adopt.THEM_UNDER_ME), Meet.Role.INITIATOR)
         assertNull(plain.pendingChoice(emptyList(), emptyList(), emptyList()))
@@ -1382,6 +1380,75 @@ class MeetRowsTest {
         responder.counterparty("bb")
         responder.theirAdopt(Meet.Adopt.ME_UNDER_THEM)
         assertEquals(Meet.Choice.SERVE_FROM, responder.pendingChoice(emptyList(), emptyList(), listOf(node)))
+    }
+
+    /**
+     * **Every adoption as patron asks, until every node is assigned**
+     * [author, 2026-11-21: "Both A and B until all nodes are assigned"]:
+     * an adoption into a subnet this device holds asks which node serves
+     * it as an adoption into a new one does, the brief names that subnet,
+     * and a device holding no unassigned node is asked nothing more.
+     */
+    // functional: OPS-032
+    @Test
+    fun an_adoption_into_a_held_subnet_asks_which_unassigned_node_serves_it() {
+        val a = Meet.Scope("ab".repeat(32), "Bowling League", null)
+        val b = Meet.Scope("cd".repeat(32), null, null)
+        val node = "203.0.113.7:7449"
+        fun said(m: Meet) = m.brief().joinToString(" ") { it.text }
+        fun patron() = Meet("the identity under test", "aa", "carol", Meet.Kind(Meet.Adopt.THEM_UNDER_ME), Meet.Role.INITIATOR)
+        // the scope first, then the node, and nothing answered for it
+        val held = patron()
+        assertEquals(Meet.Choice.ADOPT_INTO, held.pendingChoice(listOf(a), emptyList(), listOf(node)))
+        held.chooseScope(a)
+        assertEquals(Meet.Choice.SERVE_FROM, held.pendingChoice(listOf(a), emptyList(), listOf(node)))
+        assertNull("nothing chosen by default", held.serving())
+        assertEquals(0, held.brief().count { it.row == "OPS-032" })
+        held.chooseServing(Meet.Serving(node))
+        assertNull(held.pendingChoice(listOf(a), emptyList(), listOf(node)))
+        assertEquals(node, held.serving()?.at)
+        // the brief names the subnet the adoption is into, not a new one
+        assertTrue(said(held), said(held).contains("Bowling League is served from your node at 203.0.113.7:7431"))
+        assertFalse(said(held).contains("The new subnet is served"))
+        assertEquals(1, held.brief().count { it.row == "OPS-032" })
+        // a subnet held under no alias is named as the chooser names it
+        val bare = patron()
+        bare.pendingChoice(listOf(a, b), emptyList(), listOf(node))
+        bare.chooseScope(b)
+        bare.chooseServing(Meet.Serving(node))
+        assertTrue(said(bare), said(bare).contains("Subnet cdcdcdcd… is served from your node"))
+        // from no node yet stays an answer, and leaves the brief silent
+        val none = patron()
+        none.pendingChoice(listOf(a), emptyList(), listOf(node))
+        none.chooseScope(a)
+        none.chooseServing(Meet.Serving.NONE)
+        assertNull(none.pendingChoice(listOf(a), emptyList(), listOf(node)))
+        assertEquals(0, none.brief().count { it.row == "OPS-032" })
+        // choosing the same subnet again keeps the answer; another drops it
+        held.chooseScope(a)
+        assertEquals(node, held.serving()?.at)
+        held.chooseScope(b)
+        assertNull(held.serving())
+        assertEquals(Meet.Choice.SERVE_FROM, held.pendingChoice(listOf(a, b), emptyList(), listOf(node)))
+        // **with every node assigned, the question is gone**: into a held
+        // subnet or a new one, the scope is all that is asked
+        val done = patron()
+        assertEquals(Meet.Choice.ADOPT_INTO, done.pendingChoice(listOf(a), emptyList(), emptyList()))
+        done.chooseScope(a)
+        assertNull(done.pendingChoice(listOf(a), emptyList(), emptyList()))
+        assertNull(done.serving())
+        val doneOwn = patron()
+        doneOwn.pendingChoice(listOf(a), emptyList(), emptyList())
+        doneOwn.chooseScope(Meet.Scope.OWN)
+        assertNull(doneOwn.pendingChoice(listOf(a), emptyList(), emptyList()))
+        // the responder as patron is asked once its scope is chosen, at
+        // its brief
+        val responder = meet(Meet.Adopt.NONE, role = Meet.Role.RESPONDER)
+        responder.counterparty("bb")
+        responder.theirAdopt(Meet.Adopt.ME_UNDER_THEM)
+        assertEquals(Meet.Choice.ADOPT_INTO, responder.pendingChoice(listOf(a), emptyList(), listOf(node)))
+        responder.chooseScope(a)
+        assertEquals(Meet.Choice.SERVE_FROM, responder.pendingChoice(listOf(a), emptyList(), listOf(node)))
     }
 
     /** The frame's label is in the other side's frame [bench, 2026-10-15]. */

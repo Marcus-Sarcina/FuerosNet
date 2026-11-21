@@ -763,12 +763,16 @@ class MeetActivity : Activity() {
             }
             // **a node is assigned by choice, never by where its operator
             // is** [author, 2026-11-21]: one button per node serving no
-            // subnet, and the answer that leaves them all as they are
+            // subnet, and the answer that leaves them all as they are; **at
+            // every adoption as patron, into a new subnet or one held, until
+            // none is left** [author, 2026-11-21]
             Meet.Choice.SERVE_FROM -> {
-                heading("Serve the new subnet from a node?")
+                val held = m.scope()?.takeIf { it != Meet.Scope.OWN }
+                heading("Serve ${held?.label() ?: "the new subnet"} from a node?")
                 para(
                     "You run ${if (unassigned.size == 1) "a node that serves" else "nodes that serve"} no subnet yet. " +
-                        "The subnet this adoption creates can be served from one, or from none for now.",
+                        (if (held == null) "The subnet this adoption creates" else "${held.label().replaceFirstChar { it.uppercase() }}, the subnet this adoption is into,") +
+                        " can be served from one, or from none for now.",
                 )
                 unassigned.forEach { at ->
                     button("Serve it from ${Meet.Serving.dialled(at)}") { m.chooseServing(Meet.Serving(at)) }
@@ -781,15 +785,13 @@ class MeetActivity : Activity() {
 
     /**
      * **The nodes this identity runs that serve no subnet**, by their
-     * administration address, while its key roots none: what a new subnet
-     * under it can be served from [author, 2026-11-21]. Empty once the key
-     * roots a subnet, whose adoption was the moment to ask.
+     * administration address: what the subnet an adoption as patron is
+     * into can be served from [author, 2026-11-21], at every such
+     * adoption. Each record's own flag says so, and the list is empty once
+     * every node is assigned.
      */
-    private fun unassignedHeld(): List<String> {
-        val held = OperatorStore.instances(this, by).filter { it.unassigned && it.at.isNotEmpty() }
-        if (held.isEmpty() || !Gateway.unassigned(by)) return emptyList()
-        return held.map { it.at }
-    }
+    private fun unassignedHeld(): List<String> =
+        OperatorStore.unassigned(OperatorStore.instances(this, by)).map { it.at }
 
     // ---- D1.5 the brief: everything front-loaded -----------------------
 
@@ -1231,9 +1233,14 @@ class MeetActivity : Activity() {
                 } else {
                     para("The adoption is recorded: $t")
                     para("Where you sit now: ${a.position()}")
-                    if (a.patron && m.scope() == Meet.Scope.OWN) {
-                        nameSubnet(t)
-                        m.serving()?.at?.let { serveFrom(t, it) }
+                    if (a.patron) {
+                        val s = m.scope()
+                        if (s == Meet.Scope.OWN) nameSubnet(t)
+                        // the subnet the adoption is into: a new one is
+                        // named by this txid (design §13.8)
+                        val into = if (s == Meet.Scope.OWN) Meet.Scope(t, null, null) else s
+                        val at = m.serving()?.at
+                        if (into != null && at != null) serveFrom(into, s == Meet.Scope.OWN, at)
                     }
                 }
             }
@@ -1302,47 +1309,42 @@ class MeetActivity : Activity() {
     private var serveSaid: String? = null
 
     /**
-     * **The node the patron chose serves the subnet the adoption created**
+     * **The node the patron chose serves the subnet the adoption is into**
      * [author, 2026-11-21], once that adoption is recorded and not before:
-     * its endpoint record and anchor entry are signed on the new subnet's
-     * line, `txid` being its id (design §13.8), and handed to it as an
-     * enrolment hands them ([Gateway.assign]); the record kept of it then
-     * names the subnet, and the Operator screen owes its members their
-     * invitations as for any node. **Anything short of the node taking
-     * both leaves it unassigned**, and says why.
+     * a new subnet, whose id is the adoption's txid (design §13.8), or one
+     * this key held already, `fresh` saying which. Its endpoint record and
+     * anchor entry are signed on that subnet's line and handed to it as an
+     * enrolment hands them ([OperatorStore.assign]); the record kept of it
+     * then names the subnet, and the Operator screen owes its members
+     * their invitations as for any node. **Anything short of the node
+     * taking both leaves it unassigned**, and says why.
      */
-    private fun serveFrom(txid: String, at: String) {
+    private fun serveFrom(into: Meet.Scope, fresh: Boolean, at: String) {
         val dialled = Meet.Serving.dialled(at)
+        val name = if (fresh) "the new subnet" else into.label()
         heading("Your node at $dialled")
         serveSaid?.let {
             para(it)
             return
         }
-        para("Signing its records for the new subnet…")
+        para("Signing its records for $name…")
         if (serveStarted) return
         serveStarted = true
-        Diag.event("meet.serve", "state" to "assigning", "txid" to txid.take(8))
+        Diag.event("meet.serve", "state" to "assigning", "subnet" to into.id.take(8))
         Thread({
             val i = OperatorStore.instances(this, by).firstOrNull { it.at == at }
             val token = OperatorStore.prefs(this, by).getString("token:$at", null)
             val said = when {
                 // a screen recreated after the assignment went asks again
-                i != null && !i.unassigned && i.subnet == txid -> "It serves the new subnet."
+                i != null && !i.unassigned && i.subnet == into.id -> "It serves $name."
                 i == null || !i.unassigned -> "This phone no longer holds it as serving no subnet, so nothing was signed."
                 token == null -> "This phone holds no token for it, so nothing was signed: it serves no subnet yet."
                 else -> {
-                    val placed = Gateway.assign(by, at, token, txid, i.endpoint.ifEmpty { null }, i.asn, i.zone.ifEmpty { null })
-                    if (placed.taken) {
-                        OperatorStore.remember(
-                            this,
-                            by,
-                            i.copy(subnet = txid, unassigned = false, label = Meet.Scope(txid, null, null).label()),
-                        )
-                    }
+                    val placed = OperatorStore.assign(this, by, i, token, into)
                     val state = if (placed.taken) "assigned" else "refused"
-                    Diag.event("meet.serve", "state" to state, "txid" to txid.take(8))
+                    Diag.event("meet.serve", "state" to state, "subnet" to into.id.take(8))
                     if (placed.taken) {
-                        "It serves the new subnet: " + placed.said.joinToString("; ")
+                        "It serves $name: " + placed.said.joinToString("; ")
                     } else {
                         "It was not assigned, and serves no subnet yet: " + placed.said.joinToString("; ")
                     }

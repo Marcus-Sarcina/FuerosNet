@@ -266,7 +266,9 @@ subnet has no line to name: the line under its own key becomes the subnet its
 first adoption creates, and signing on it then would make the instance that
 subnet's node unasked. **Such an instance is unassigned**: it runs, its
 operator attaches to it, and neither record is signed until its operator
-chooses the subnet it serves, which the adoption that creates a subnet offers
+chooses the subnet it serves, which every adoption its operator makes as
+patron offers while the instance is unassigned, and the operator's client
+offers at any time for any subnet the operator holds
 (`light-client-requirements.md` §7). A user may belong to several subnets, and
 which one a node serves is chosen, never inferred from where its operator
 happens to be. Until then it is in no subnet, and nobody is invited to it.

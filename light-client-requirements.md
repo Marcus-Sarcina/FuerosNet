@@ -1309,14 +1309,17 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   invited is shown that label in the brief it accepts or refuses, from the
   claim the invitation carried until the signed profile replaces it
   (`wire-format.md` §7.11), and a regular meeting shows none.
-- **Offer an unassigned node to the subnet an adoption creates** [author,
+- **Offer an unassigned node to the subnet an adoption is into** [author,
   2026-11-21]. A node launched before its operator held any subnet serves none
-  (`infra-client-requirements.md` §4.4). Where the would-be patron chooses a
-  new subnet under its own key and holds such a node, ask whether the new
-  subnet is served from it, as the choice between an existing subnet and a new
-  one is asked, and choose nothing for them; the brief states the answer, and
-  once the adoption is recorded the node's records are signed on the new
-  subnet's line. A patron holding no unassigned node is asked nothing more.
+  (`infra-client-requirements.md` §4.4). Wherever the would-be patron holds
+  such a node, whether it adopts into a subnet it holds or into a new one
+  under its own key, ask whether that subnet is served from it, as the choice
+  between an existing subnet and a new one is asked, and choose nothing for
+  them; the brief states the answer, and once the adoption is recorded the
+  node's records are signed on that subnet's line. The question is asked at
+  every such adoption until no node is unassigned, and the operator's screen
+  offers the same assignment, to any subnet the operator holds, at any time.
+  A patron holding no unassigned node is asked nothing more.
 - **Say who you have met is in that subnet** [author, 2026-11-20]. A subnet
   is named by its id (design §13.8), which a lookalike cannot copy as it can a
   name and a picture, and there is no registry to check one against. Where

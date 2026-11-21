@@ -211,6 +211,13 @@ class OperatorActivity : Activity() {
             )
             return
         }
+        // what an instance serving no subnet can be assigned to, asked of
+        // the kernel once for the whole list
+        val assignable = if (OperatorStore.unassigned(held).isEmpty()) {
+            emptyList()
+        } else {
+            OperatorStore.assignable(Gateway.subnets(by).map(Meet.Scope::of))
+        }
         held.forEach { i ->
             roll.addView(
                 TextView(this).apply {
@@ -227,15 +234,7 @@ class OperatorActivity : Activity() {
                     text = i.at
                 },
             )
-            if (i.unassigned) {
-                roll.addView(
-                    TextView(this).apply {
-                        textSize = 13f
-                        setTextColor(Palette.now.sub)
-                        text = "serves no subnet yet: the meeting that creates your first subnet asks whether it serves that one"
-                    },
-                )
-            }
+            if (i.unassigned) assignControl(i, assignable)
             roll.addView(
                 Button(this).apply {
                     text = "Open its administration page"
@@ -297,6 +296,69 @@ class OperatorActivity : Activity() {
                     },
                 )
             }
+        }
+    }
+
+    /**
+     * **Assign an instance serving no subnet, here** [author, 2026-11-21:
+     * "Both A and B until all nodes are assigned"]: one button per subnet
+     * this key holds a position in, labelled as the scope chooser labels
+     * it, beside the question every adoption as patron asks. Holding none,
+     * it says so and offers nothing: a subnet comes from an adoption.
+     * Choosing one signs both records on that subnet's line
+     * ([OperatorStore.assign]), and the list is drawn again from what the
+     * record says then.
+     */
+    private fun assignControl(i: Instance, to: List<Meet.Scope>) {
+        roll.addView(
+            TextView(this).apply {
+                textSize = 13f
+                setTextColor(Palette.now.sub)
+                text = if (to.isEmpty()) {
+                    "serves no subnet yet: you hold a position in none, and a subnet comes from an adoption, " +
+                        "which asks whether this node serves it"
+                } else {
+                    "serves no subnet yet: choose one of yours here, or answer an adoption's question as its patron"
+                }
+            },
+        )
+        to.forEach { s ->
+            roll.addView(
+                Button(this).apply {
+                    text = "Serve ${s.label()}"
+                    setOnClickListener {
+                        isEnabled = false
+                        val token = tokenFor(i.at)
+                        if (token == null) {
+                            narration.text = "this screen holds no token for ${i.at}, so nothing was signed; " +
+                                "paste it above and enrol again"
+                            isEnabled = true
+                            return@setOnClickListener
+                        }
+                        narration.text = "signing its records for ${s.label()}…"
+                        Thread {
+                            // the record as it stands, so a second press
+                            // after the first went signs nothing again
+                            val now = instances().firstOrNull { it.at == i.at }?.takeIf { it.unassigned }
+                            val said = if (now == null) {
+                                "${i.at} no longer serves no subnet here, so nothing was signed"
+                            } else {
+                                val placed = OperatorStore.assign(this@OperatorActivity, by, now, token, s)
+                                val state = if (placed.taken) "assigned" else "refused"
+                                Diag.event("operator.assign", "state" to state, "subnet" to s.id.take(8))
+                                (if (placed.taken) "it serves ${s.label()}: " else "it was not assigned, and serves no subnet yet: ") +
+                                    placed.said.joinToString("; ")
+                            }
+                            runOnUiThread {
+                                if (isFinishing) return@runOnUiThread
+                                narration.text = said
+                                isEnabled = true
+                                drawInstances()
+                            }
+                        }.start()
+                    }
+                },
+            )
         }
     }
 
