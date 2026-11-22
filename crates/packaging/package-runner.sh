@@ -100,7 +100,7 @@ set -eu
 
 # **which runner this is**: a client compares it with the one it carries
 # and tells its operator when a newer one is available
-RUNNER_VERSION=3
+RUNNER_VERSION=4
 RUNNER_SELF="${RHTN_RUNNER_SELF:-/usr/local/bin/rhtn-package-runner}"
 AUTHORIZED="${RHTN_AUTHORIZED_KEYS:-/root/.ssh/authorized_keys}"
 NAMESPACE=rhtn-runner@1
@@ -131,8 +131,11 @@ esac
 set -f
 # shellcheck disable=SC2086
 set -- $request
+# **a request of blanks splits to nothing**, and `$1` under `set -u` would
+# end the shell with its own words rather than this program's
+[ $# -gt 0 ] || refuse "no request; this key runs this program and nothing else"
 verb="$1"
-shift || true
+shift
 
 # a name is this runner's to shape: lower case, bounded, and prefixed here
 # so no request can name the node's own container or anything else on the
@@ -328,9 +331,10 @@ case "$verb" in
     printf 'runner %s %s\n' "$new" "$(sha256sum "$RUNNER_SELF" | cut -c1-64)"
     ;;
   node-send)
-    to="${1:-}"
-    shift || true
-    [ $# -eq 0 ] || refuse "node-send takes one address; the runner key and the receiver's host key come on standard input"
+    # counted before anything is shifted: a `shift` with nothing to shift
+    # ends a POSIX shell outright, and `|| true` does not catch it
+    [ $# -eq 1 ] || refuse "node-send takes one address; the runner key and the receiver's host key come on standard input"
+    to="$1"
     case "$to" in ''|*[!0-9.]*) refuse "node-send takes an IPv4 address" ;; esac
     case "$BLOCKS" in *[!A-Za-z0-9/._-]*) refuse "RHTN_BLOCKS carries unexpected characters" ;; esac
     command -v ssh > /dev/null 2>&1 || refuse "ssh is wanted to send the node and this host has none; nothing changed"

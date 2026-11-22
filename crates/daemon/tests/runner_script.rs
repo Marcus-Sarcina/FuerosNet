@@ -99,6 +99,24 @@ impl Drop for Host {
     }
 }
 
+// functional: OPS-024
+/// **A request with no verb is refused in the runner's own words**, blank
+/// as well as empty: a request of spaces splits to nothing, and reading a
+/// verb from it used to end the shell under `set -u` with the shell's
+/// message rather than this one.
+#[test]
+fn a_request_with_no_verb_is_refused_by_the_runner_and_not_by_its_shell() {
+    let h = Host::new("no-verb");
+    for request in ["", "   "] {
+        let (code, out, err) = h.ask(request);
+        assert_eq!(code, 2, "{request:?}: {out}{err}");
+        assert!(
+            err.starts_with("rhtn-package-runner: no request"),
+            "{request:?}: {err}"
+        );
+    }
+}
+
 // functional: PKG-020
 #[test]
 fn a_block_is_asked_for_after_the_image_and_said_rather_than_failed_where_the_host_cannot_keep_one()
@@ -345,6 +363,13 @@ fn a_node_is_sent_only_to_the_receiver_pinned_and_stops_here_once_it_lands() {
     ] {
         let (code, _, err) = h.ask(bad, format!("{RUNNER_KEY}{RECEIVER}\n").as_bytes());
         assert_eq!(code, 2, "{bad}: {err}");
+        // refused in the runner's words: a bare `node-send` used to end
+        // the shell at a `shift` with nothing to shift, exit 2 and a
+        // shell's message in place of this one
+        assert!(
+            err.starts_with("rhtn-package-runner: node-send"),
+            "{bad}: {err}"
+        );
     }
     assert!(h.engine().is_empty());
 
