@@ -705,7 +705,8 @@ impl Bench {
     }
 
     /// Attach as a device of `name`, naming `cursor` where it holds one,
-    /// and take what is delivered within `ms`.
+    /// and take what is delivered: every message the attach acknowledged
+    /// as queued, then whatever more arrives within `ms` of the last.
     pub async fn collect(&self, name: &str, cursor: Option<u64>, ms: u64) -> (u64, Vec<Vec<u8>>) {
         use rhtn_transport::session::*;
         let cfg = ClientConfig {
@@ -732,7 +733,20 @@ impl Bench {
         else {
             panic!("{name} attaches")
         };
+        // **what the attach said is queued arrives, however loaded the
+        // machine**: a gap between two deliveries is scheduling, not the
+        // end of the queue, so the count the node acknowledged is waited
+        // for under a generous bound and only what follows it is judged
+        // by `ms` [2026-11-22: one of three under the full gate's load]
         let mut got = Vec::new();
+        while (got.len() as u64) < s.ack.queued {
+            match tokio::time::timeout(std::time::Duration::from_secs(20), s.deliveries.recv())
+                .await
+            {
+                Ok(Some(b)) => got.push(b),
+                _ => break,
+            }
+        }
         while let Ok(Some(b)) =
             tokio::time::timeout(std::time::Duration::from_millis(ms), s.deliveries.recv()).await
         {
