@@ -1167,3 +1167,87 @@ async fn a_siblings_member_relayed_by_the_patron_is_pinned_and_a_stranger_introd
     assert!(pins.classical_key(&kh("carol")).is_some(), "and pinned");
     let _ = std::fs::remove_dir_all(&l.dir);
 }
+
+/// **A doorbell registered before a restart is rung after it**
+/// (`infra-client-requirements.md` §6.1): the daemon keeps the register
+/// beside its node keys, written as each registration is taken, so the
+/// stop needs no write-back to keep it; and a withdrawal stays withdrawn.
+// functional: MAIL-020
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_wake_registration_is_rung_after_a_restart_and_a_withdrawal_stays_gone() {
+    use rhtn_archive::submission::{
+        SUBMISSION_ACCEPTED, SubmissionReply, WakeEndpoint, WakeRegistration,
+    };
+    use rhtn_daemon::config::Config;
+    use rhtn_daemon::service::Service;
+    let l = layout("wake");
+    let cfg = Config::read(&l.config).unwrap();
+    let device = [9u8; 32];
+    let register = |view: &mut rhtn_node::view::NodeView, who: &str, nonce: u8, at| {
+        let body = WakeRegistration::of([nonce; 16], at).encode();
+        let reply = rhtn_node::submissions::wake(view, &kh(who), &device, &body)
+            .expect("a registration is answered");
+        assert_eq!(
+            SubmissionReply::decode(&reply).unwrap().code,
+            SUBMISSION_ACCEPTED
+        );
+    };
+    {
+        let s = Service::start(&cfg, &l.peers).await.expect("starts");
+        let mut view = s.node.view.lock().unwrap();
+        register(
+            &mut view,
+            "alice",
+            1,
+            Some(WakeEndpoint {
+                url: "https://push.example/rhtn/a3f9".into(),
+                key: vec![7; 65],
+                signing_key: [3; 32],
+                lapses_at: Some(1_900_000_000),
+            }),
+        );
+        register(
+            &mut view,
+            "carol",
+            2,
+            Some(WakeEndpoint {
+                url: "https://push.example/rhtn/c0c0".into(),
+                key: vec![8; 65],
+                signing_key: [4; 32],
+                lapses_at: None,
+            }),
+        );
+        register(&mut view, "carol", 3, None);
+        // stopped with nothing written back
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = cfg.keys.join("wake");
+        let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode(&dir), 0o700, "the directory is the owner's alone");
+        let files = walk(&dir);
+        assert_eq!(files.len(), 1, "alice's endpoint, and carol's is gone");
+        assert_eq!(mode(&files[0]), 0o600, "and so is the file");
+    }
+    let s = Service::start(&cfg, &l.peers).await.expect("starts again");
+    let view = s.node.view.lock().unwrap();
+    assert!(
+        view.ring_for(&kh("alice"), &device, true),
+        "the doorbell registered before the restart is owed after it"
+    );
+    let rung = view.take_rings();
+    assert_eq!(rung.len(), 1);
+    assert_eq!(rung[0].url, "https://push.example/rhtn/a3f9");
+    assert_eq!(rung[0].key, vec![7; 65]);
+    assert_eq!(
+        rung[0].signing_key, [3; 32],
+        "with the key the post is signed with, or it could not be rung"
+    );
+    assert!(
+        !view.ring_for(&kh("carol"), &device, true),
+        "a withdrawal before the restart stays withdrawn after it"
+    );
+    drop(view);
+    let _ = std::fs::remove_dir_all(&l.dir);
+}

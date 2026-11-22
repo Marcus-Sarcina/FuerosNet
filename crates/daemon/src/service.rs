@@ -515,6 +515,12 @@ impl Service {
         // as they are taken (`wire-format.md` §7.11)
         let profiles = rhtn_node::profiles::ProfileStore::at(&cfg.keys)
             .map_err(|e| Startup::State(format!("{}: {e}", cfg.keys.display())))?;
+        // and the wake endpoints beside both, with the keys the clients
+        // lent for them: written as they are registered and unlinked as
+        // they are withdrawn, so a restart still rings a client who is
+        // away (`infra-client-requirements.md` §6.1)
+        let mut wake = rhtn_node::wake::WakeRegister::new();
+        wake.at(&cfg.keys);
         let store = match TopologyStore::load(&cfg.topology) {
             Ok(s) => s,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => TopologyStore::new(),
@@ -559,6 +565,7 @@ impl Service {
         }
         view.node_keys = node_keys;
         view.profiles = profiles;
+        view.wake = wake;
         // this key's own signed history, kept apart from the seen-set: the
         // horizon bounds one and nothing bounds the other [author,
         // 2026-09-13]

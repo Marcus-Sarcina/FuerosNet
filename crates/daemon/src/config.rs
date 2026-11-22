@@ -120,9 +120,10 @@ pub struct Config {
     /// How many requests one peer may make in a window, and how long the
     /// window is in seconds.  The values are the operator's.
     pub request_allowance: (u32, u64),
-    /// Where the node keys and the profiles are kept: a node key's private
-    /// half is held while a message sealed to it is queued, so a restart
-    /// must not lose it (`wire-format.md` §7.8).
+    /// Where the node keys, the profiles and the wake endpoints are kept: a
+    /// node key's private half is held while a message sealed to it is
+    /// queued, so a restart must not lose it (`wire-format.md` §7.8), and
+    /// nor may it lose a doorbell (`infra-client-requirements.md` §6.1).
     pub keys: PathBuf,
     /// Where the topology store is kept: it is this node's seen-set, and a
     /// node that forgets it replays a forwarding wave
