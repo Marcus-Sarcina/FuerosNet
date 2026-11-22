@@ -47,13 +47,15 @@ fn the_address_state_round_trips() {
     p.last_from.insert(kh("bob"), kh("a1"));
     p.agreed
         .insert(kh("n1"), vec!["192.168.0.8:7431".to_string()]);
+    p.carried.insert(kh("n1"), b"material".to_vec());
     let bytes = p.encode();
     let back = PayloadState::decode(&bytes).expect("reads");
     assert_eq!(back.attachments, p.attachments);
     assert_eq!(back.serving_at, p.serving_at);
     assert_eq!(back.last_from, p.last_from);
     assert_eq!(back.agreed, p.agreed, "the agreement and its addresses");
-    assert_eq!(bytes[0], 0x8b, "eleven fields");
+    assert_eq!(back.carried, p.carried, "the material a meeting carried");
+    assert_eq!(bytes[0], 0x8c, "twelve fields");
 }
 
 // functional: SES-017

@@ -737,6 +737,62 @@ fn a_patron_without_a_node_carries_its_patrons_with_its_adoption() {
         "the patron holds no invitation of its own"
     );
 }
+// functional: NET-036
+/// **The material a meeting carried outlives a restart** [author,
+/// 2026-11-22: kept with the held invitation]. Carol is no contact of
+/// alice's, so nothing else teaches a restarted client her key: it is
+/// held with the invitation, then with the agreement the invitation
+/// becomes, and goes with the agreement.
+#[test]
+fn a_carried_operators_material_is_kept_with_the_invitation_and_the_agreement() {
+    use rhtn_client::relocation::Found;
+    let mut s = setup(&["alice", "bob", "carol", "witness"]);
+    s.stranger("alice", "carol");
+    s.adopted("bob", "carol", "witness", 1);
+    s.client("bob")
+        .declare_node(Some((POINT.to_vec(), kh("carol"))))
+        .unwrap();
+    s.client("alice").declare_node(None).unwrap();
+    opened(&mut s, "alice", "bob");
+    let pop = s.met("alice", "bob", "witness");
+    s.h.adopt(kh("alice"), kh("bob"), pop, 1)
+        .expect("bob adopts alice");
+    let clock = s.clock.clone();
+    let restarted = |a: &mut Client| {
+        let parts: Vec<(String, Vec<u8>)> = a
+            .durable_parts()
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v))
+            .collect();
+        let (device, _) = device(clock.clone(), 11, 0);
+        let mut again = Client::new(
+            id("alice"),
+            vec![id("alice").public],
+            Default::default(),
+            device,
+        );
+        again.restore_parts(&parts).expect("the relations open");
+        again
+    };
+    let knows_carol = |a: &Client| a.known.iter().any(|k| k.keyhash == kh("carol"));
+
+    // held, unanswered, across a restart: still provable
+    let mut a = restarted(s.client("alice"));
+    assert!(a.relocation(&kh("carol")).is_some(), "the invitation held");
+    assert!(knows_carol(&a), "and the material that proves it");
+
+    // agreed: every later attach binds by the same key
+    let to = a.relocation(&kh("carol")).unwrap().to;
+    a.relocation_proved(&kh("carol"), &to, Found::Proved);
+    assert_eq!(a.accept_relocation(&kh("carol")), Some(to));
+    let mut a = restarted(&mut a);
+    assert!(knows_carol(&a), "kept with the agreement");
+
+    // the agreement withdrawn: nothing is left that needs it
+    a.disagree(&kh("carol"));
+    let a = restarted(&mut a);
+    assert!(!knows_carol(&a), "gone with the last of the two");
+}
 
 // functional: NET-036
 /// **A patron's node whose adoption does not prove it leaves nothing**

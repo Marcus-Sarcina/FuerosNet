@@ -404,7 +404,11 @@ job.
     material, and nothing else**: not its contacts and not its history,
     which only the party being adopted shares. The record proves the chain
     and the material is what it and the node are checked under; a member
-    verifies both before it holds the invitation.
+    verifies both before it holds the invitation, and **keeps the material
+    with the invitation, then with the agreement the invitation becomes,
+    across a restart**, letting it go with the last of the two [author,
+    2026-11-22]: that patron is no contact of the member's, and the
+    material is what every later dial of its node binds by.
     Once the adoption placing it under the sender is recorded, the member
     holds it as an invitation on that subnet, asked as §4 asks any
     invitation; from a party that is not its patron afterwards it is

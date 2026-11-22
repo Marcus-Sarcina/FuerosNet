@@ -230,6 +230,7 @@ impl Client {
             .is_some_and(|h| h.standing == Standing::Failed)
         {
             self.payload.relocations.remove(node);
+            self.forget_carried(node);
             return true;
         }
         false

@@ -1706,17 +1706,27 @@ impl Client {
     }
 
     /// Every contact's identity among what this client verifies by: what
-    /// a ceremony taught is what a restarted client still knows.
+    /// a ceremony taught is what a restarted client still knows. With them
+    /// the operators a meeting carried ([`PayloadState::carried`]), which
+    /// are not contacts.
     fn sync_known_from_contacts(&mut self) {
         let have: std::collections::BTreeSet<Keyhash> =
             self.known.iter().map(|k| k.keyhash).collect();
-        let learned: Vec<Identity> = self
+        let mut learned: Vec<Identity> = self
             .store
             .contacts
             .iter()
             .filter(|(k, _)| !have.contains(*k))
             .filter_map(|(_, c)| Identity::from_key_material(&c.material))
             .collect();
+        for m in self.payload.carried.values() {
+            if let Some(id) = Identity::from_key_material(m)
+                && !have.contains(&id.keyhash)
+                && !learned.iter().any(|l| l.keyhash == id.keyhash)
+            {
+                learned.push(id);
+            }
+        }
         let who: Vec<Keyhash> = learned.iter().map(|i| i.keyhash).collect();
         self.known.extend(learned);
         for k in who {
@@ -4041,8 +4051,10 @@ impl Client {
     /// patron's under the material carried — and places the sender in the
     /// subnet this adoption placed me in
     /// ([`Client::patrons_adoption_carried`]). **The material is then
-    /// pinned**, so the invitation can be proved, and nothing else of the
-    /// record is kept: it is not filed in this archive. Not placed by
+    /// pinned**, so the invitation can be proved, and kept with it
+    /// ([`PayloadState::carried`]) so a restart before the person answers
+    /// does not leave it unprovable [author, 2026-11-22]; nothing else of
+    /// the record is kept: it is not filed in this archive. Not placed by
     /// [`Client::place_invitation`], which refuses a node that is not a
     /// patron's or already agreed to: **a link cannot introduce a node and
     /// the in-person adoption does**. Proving binds the key that answers
@@ -4083,10 +4095,11 @@ impl Client {
             dropped("no address");
             return;
         };
-        if let Some(id) = above
-            && !self.known.iter().any(|k| k.keyhash == id.keyhash)
-        {
-            self.known.push(id);
+        if let Some(id) = above {
+            self.payload.carried.insert(node, id.key_material());
+            if !self.known.iter().any(|k| k.keyhash == id.keyhash) {
+                self.known.push(id);
+            }
         }
         if self.offer_relocation(node, at, Some(subnet), None) {
             self.adoption_invited = Some(node);
@@ -6799,6 +6812,15 @@ impl Client {
     /// An agreement withdrawn: the node is not attached to at the next start.
     pub fn disagree(&mut self, node: &Keyhash) {
         self.payload.agreed.remove(node);
+        self.forget_carried(node);
+    }
+
+    /// **The material a meeting carried for `node` goes with the last of
+    /// the invitation and the agreement** ([`PayloadState::carried`]).
+    pub(crate) fn forget_carried(&mut self, node: &Keyhash) {
+        if !self.payload.agreed.contains_key(node) && !self.payload.relocations.contains_key(node) {
+            self.payload.carried.remove(node);
+        }
     }
 
     /// Every node agreed to, with its addresses, in key order.

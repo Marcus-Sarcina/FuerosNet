@@ -335,6 +335,13 @@ pub struct PayloadState {
     /// **A move said of a node agreed to, while it stands**
     /// ([`crate::relocation`]): one per node, the newest invitation's.
     pub relocations: BTreeMap<Keyhash, crate::relocation::Held>,
+    /// **The operator's key material for a node an adoption's meeting
+    /// carried from above its patron** [author, 2026-11-22], kept with the
+    /// invitation it came with and with the agreement that invitation
+    /// becomes: the operator is not a contact, so nothing else would teach
+    /// a restarted client the key that proves the node and binds its dial.
+    /// Gone with the last of the two.
+    pub carried: BTreeMap<Keyhash, Vec<u8>>,
     /// **The identity's encryption secrets on this device**: derived from
     /// the root where the seed is held, handed over in a pairing where it
     /// is not (`wire-format.md` §14.3.3). Written only on a device that
@@ -426,7 +433,7 @@ impl PayloadState {
     /// handed over.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
-        emit_array_head(&mut out, 11);
+        emit_array_head(&mut out, 12);
         emit_uint(&mut out, 2);
         emit_array_head(&mut out, self.attachments.len());
         for n in &self.attachments {
@@ -513,13 +520,19 @@ impl PayloadState {
             emit_bstr(&mut out, node);
             emit_uint(&mut out, *c);
         }
+        emit_array_head(&mut out, self.carried.len());
+        for (node, material) in &self.carried {
+            emit_array_head(&mut out, 2);
+            emit_bstr(&mut out, node);
+            emit_bstr(&mut out, material);
+        }
         out
     }
 
     /// The state back, whole or not at all.
     pub fn decode(b: &[u8]) -> Option<PayloadState> {
         use crate::durable::*;
-        let (_, f) = parse_array(b, 11)?;
+        let (_, f) = parse_array(b, 12)?;
         if uint(&f[0])? != 2 {
             return None;
         }
@@ -633,12 +646,22 @@ impl PayloadState {
                 Some((fixed::<32>(b, node)?, uint(c)?))
             })
             .collect::<Option<_>>()?;
+        let carried = array(&f[11])?
+            .iter()
+            .map(|p| {
+                let [node, material] = array(p)?.as_slice() else {
+                    return None;
+                };
+                Some((fixed::<32>(b, node)?, bytes(b, material)?))
+            })
+            .collect::<Option<_>>()?;
         Some(PayloadState {
             attachments: keyhashes(&f[1])?.into_iter().collect(),
             serving_at: pairs(&f[2])?.into_iter().collect(),
             last_from: pairs(&f[3])?.into_iter().collect(),
             agreed,
             relocations,
+            carried,
             secret_handed: secret.is_some(),
             secret,
             card: None,
