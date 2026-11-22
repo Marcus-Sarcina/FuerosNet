@@ -232,18 +232,65 @@ pub struct IntentExchange {
     pub number: Option<String>,
     /// **The node serving the subnet this meeting's adoption is into**
     /// [author, 2026-11-21]: *"auto-invite via the bluetooth channel during
-    /// an adoption into a subnet where a node already exists"* — where it
-    /// answers, an encoded `NetworkPoint` without a zone (§4.4) as an
-    /// unsigned carriage holds one, and **whose it is**, the keyhash it
-    /// answers as [author, 2026-11-22]: the sender's own, or that of the
-    /// node further up its chain that it is itself served from, which the
-    /// receiver's archive does not hold.
+    /// an adoption into a subnet where a node already exists"* — the
+    /// sender's own, or its patron's with what proves the patronage
+    /// ([`CarriedNode`]).
     ///
     /// **What it becomes is an invitation like any other**: held once the
     /// adoption placing the receiver under the sender is, and agreed to
     /// with the member's one tap. A member without a number learns of the
     /// node this way and no other.
-    pub node: Option<(Vec<u8>, Keyhash)>,
+    pub node: Option<CarriedNode>,
+}
+
+/// **The node an intent carries at its eleventh field** (§14.3.2): where
+/// it answers, an encoded `NetworkPoint` without a zone (§4.4) as an
+/// unsigned carriage holds one, and whose node it is.
+///
+/// **The sender's own, or its patron's, and never further up** [author,
+/// 2026-11-22]: *"The node operator can never be further upstream than the
+/// grandpatron according to our topological rules."* Where it is the
+/// patron's, the sender carries the one relationship that proves it —
+/// its own adoption by that patron — and the patron's material to verify
+/// it under, the member holding nothing of anybody above its patron:
+/// *"that should only require the patron's adoption by the node operator,
+/// not every contact or transaction."*
+#[derive(Clone, PartialEq, Eq)]
+pub enum CarriedNode {
+    /// The sender's own node, answering as the sender: `[point]`.
+    Own(Vec<u8>),
+    /// The node of the sender's patron, answering as that patron:
+    /// `[point, adoption, material]`.
+    Patrons {
+        /// Where it answers, an encoded `NetworkPoint` without a zone.
+        point: Vec<u8>,
+        /// The adoption placing the sender under that patron in the
+        /// subnet, an envelope as it lies.
+        adoption: Vec<u8>,
+        /// That patron's `KeyMaterial` (§2.2).
+        material: Vec<u8>,
+    },
+}
+
+impl CarriedNode {
+    /// Where the node answers, an encoded `NetworkPoint` without a zone.
+    #[must_use]
+    pub fn point(&self) -> &[u8] {
+        match self {
+            CarriedNode::Own(p) | CarriedNode::Patrons { point: p, .. } => p,
+        }
+    }
+}
+
+impl std::fmt::Debug for CarriedNode {
+    /// Which of the two, and nothing of the bytes: an address and a
+    /// relationship are the sender's, and a log is not where they belong.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            CarriedNode::Own(_) => "Own",
+            CarriedNode::Patrons { .. } => "Patrons",
+        })
+    }
 }
 
 impl std::fmt::Debug for IntentExchange {
@@ -299,10 +346,22 @@ impl IntentExchange {
             (None, Some(_)) => emit_null(&mut out),
             (None, None) => {}
         }
-        if let Some((p, k)) = &self.node {
-            emit_array_head(&mut out, 2);
-            out.extend_from_slice(p);
-            emit_bstr(&mut out, k);
+        match &self.node {
+            Some(CarriedNode::Own(p)) => {
+                emit_array_head(&mut out, 1);
+                out.extend_from_slice(p);
+            }
+            Some(CarriedNode::Patrons {
+                point,
+                adoption,
+                material,
+            }) => {
+                emit_array_head(&mut out, 3);
+                out.extend_from_slice(point);
+                out.extend_from_slice(adoption);
+                out.extend_from_slice(material);
+            }
+            None => {}
         }
         out
     }
@@ -325,7 +384,7 @@ impl IntentExchange {
                 _ => None,
             },
             node: if a.len() == 11 {
-                Some(node_field(b, &a[10])?)
+                Some(node_field(b)?)
             } else {
                 None
             },
@@ -842,23 +901,25 @@ fn raw_field(b: &[u8], field: usize) -> Result<Vec<u8>, String> {
     Ok(b[r.clone()].to_vec())
 }
 
-/// An intent's eleventh field, which the schema has checked: the point's
-/// own bytes, and the keyhash after it.
-fn node_field(b: &[u8], it: &Item) -> Result<(Vec<u8>, Keyhash), String> {
+/// An intent's eleventh field, which the schema has checked: each part's
+/// own bytes, as they lie.
+fn node_field(b: &[u8]) -> Result<CarriedNode, String> {
     let top = array_item_ranges(b, 0).ok_or("not an array")?;
     let at = top.get(10).ok_or("no such field")?.start;
-    let point = array_item_ranges(b, at)
-        .and_then(|p| p.into_iter().next())
-        .ok_or("node not an array")?;
-    let Item::Array(pair) = it else {
-        return Err("node not an array".into());
-    };
-    let k = pair
-        .get(1)
-        .and_then(|k| bs(b, k))
-        .and_then(|k| Keyhash::try_from(k.as_slice()).ok())
-        .ok_or("the node's keyhash is 32 bytes")?;
-    Ok((b[point].to_vec(), k))
+    let parts: Vec<Vec<u8>> = array_item_ranges(b, at)
+        .ok_or("node not an array")?
+        .into_iter()
+        .map(|r| b[r].to_vec())
+        .collect();
+    match <[Vec<u8>; 3]>::try_from(parts) {
+        Ok([point, adoption, material]) => Ok(CarriedNode::Patrons {
+            point,
+            adoption,
+            material,
+        }),
+        Err(mut one) if one.len() == 1 => Ok(CarriedNode::Own(one.remove(0))),
+        Err(_) => Err("a node is one part or three".into()),
+    }
 }
 
 fn entries(b: &[u8], field: usize) -> Result<Vec<Vec<u8>>, String> {

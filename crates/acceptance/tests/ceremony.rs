@@ -42,9 +42,9 @@ fn cer_55_two_shells_cross_the_optical_channel_only_if_the() {
 ///
 /// Rule (light-client-requirements.md §1.5): "Once the adoption placing it under the sender is recorded, the member holds it as an invitation on that subnet, asked as §4 asks any invitation"
 ///
-/// Given: A patron served in a subnet from a node, its own or the one above it, declares where that node answers and who it answers as; the member holds no number for anybody.
+/// Given: A patron served in a subnet from a node declares where it answers: its own node alone, or its patron's with its own adoption by that patron and the patron's key material. The member holds nothing of the patron's patron beforehand, and no number for anybody.
 /// When: The two meet over the bearer and the patron adopts the member into that subnet; separately, the same point is declared by the member, and in a regular meeting.
-/// Then: After the adoption the member holds one unproved invitation to that node, under the keyhash carried, on the adoption's subnet and has agreed to nothing; the patron holds nothing; the same field from the member's side or from a meeting adopting nobody leaves nothing on either party.
+/// Then: After the adoption the member holds one unproved invitation to that node on the adoption's subnet, and for a node above its patron the material it is checked under, having agreed to nothing; the patron holds nothing; a record that is not the sender's adoption by the holder of the material in that subnet, and the same field from the member's side or from a meeting adopting nobody, leave nothing.
 ///
 /// Interpretation: Whether the shell declares the node is OperatorStore.meetingNode's (OperatorStoreTest); the tap that accepts it is the invitation's own (SES-021).
 #[test]

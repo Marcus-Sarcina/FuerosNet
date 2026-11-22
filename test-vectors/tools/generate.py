@@ -4107,13 +4107,23 @@ intent_r = e_arr([e_uint(1), e_bstr(pc_b),
 
 # **the node serving the subnet, beside the intent** [author, 2026-11-21]:
 # where bob adopts alice into a subnet his own instance serves, his intent's
-# eleventh field is where it answers, a bare point (no zone: an unsigned
-# carriage, s4.4), and whose node it is, the keyhash it answers as [author,
-# 2026-11-22] -- bob's own here; a patron with no node of its own names the
-# one it is served from. With no number the tenth is null, the array being
-# positional, and with one it is the number
+# eleventh field is where it answers, a bare point alone in its array (no
+# zone: an unsigned carriage, s4.4), the node answering as bob. With no
+# number the tenth is null, the array being positional, and with one it is
+# the number
 intent_node_point = network_point([10, 0, 0, 4], port=7432)
-intent_node = e_arr([intent_node_point, e_bstr(bob.keyhash)])
+intent_node = e_arr([intent_node_point])
+# **a patron with no node of its own carries its patron's, and what proves
+# it** [author, 2026-11-22]: the point, its own adoption by that patron and
+# that patron's KeyMaterial, and nothing else of the patron's -- never a node
+# further up. Here alice, adopted by bob (P-adopt-min), adopts a member of
+# her own into bob's subnet and carries bob's node
+intent_node_above = e_arr([intent_node_point, adopt_env, bob.key_material])
+intent_x_node_above = e_arr([e_uint(1), e_bstr(pc_a),
+                             e_arr([intro_c1]),
+                             e_uint(TS_REC), e_uint(2), b'\xf5', e_uint(0),
+                             signed_locator, encryption_key(alice), NULL,
+                             intent_node_above])
 intent_r_node = e_arr([e_uint(1), e_bstr(pc_b),
                        e_arr([]),
                        e_uint(TS_REC), e_uint(3), b'\xf4', e_uint(0),
@@ -4222,8 +4232,8 @@ The two flags differ; a device refuses an intent carrying its own value:
 **IntentExchange — bob's again, as the patron of an adoption into a subnet
 his own node serves [author, 2026-11-21]: the same nine fields, null where
 the number would stand, and at field 11 the node: the bare point where it
-answers, 10.0.0.4:7432, no provider and no zone, then the keyhash it
-answers as, bob's own [author, 2026-11-22]**
+answers, 10.0.0.4:7432, no provider and no zone, alone in its array, the
+node answering as bob**
 ({len(intent_r_node)} bytes):
 
 ```
@@ -4235,6 +4245,18 @@ answers as, bob's own [author, 2026-11-22]**
 
 ```
 {hexblock(intent_r_number_node)}
+```
+
+**IntentExchange — alice's, as the patron of an adoption into bob's subnet,
+where she runs no node and bob's serves [author, 2026-11-22]: her nine
+fields, null where the number would stand, and at field 11 the point where
+bob's node answers, her adoption by bob (`P-adopt-min`, as it lies) and
+bob's `KeyMaterial` — what the member verifies that adoption under, and
+nothing else of bob's**
+({len(intent_x_node_above)} bytes):
+
+```
+{hexblock(intent_x_node_above)}
 ```
 
 **BundleContinuation — the first continuation of a larger bundle, one
@@ -4371,8 +4393,9 @@ for fid, by, kind, note in [
     ('P-card', vs_card, 'Card', "the code handed over at a meeting (§2.4): c1's introduction, the anchor its locator names, and that anchor's endpoint record"),
     ('P-intent-exchange', intent_x, 'IntentExchange', 'echoes the optical contribution; one introduction in the bundle; the sender\'s own signed locator last'),
     ('P-intent-exchange-responder', intent_r, 'IntentExchange', "the responder's: echoes bob's contribution, an empty bundle, initiator false; the flags of the pair differ"),
-    ('P-intent-exchange-node', intent_r_node, 'IntentExchange', "the patron's own node at field 11, a bare point and the keyhash it answers as; no number, so null at field 10 (2026-11-21, 2026-11-22)"),
-    ('P-intent-exchange-number-node', intent_r_number_node, 'IntentExchange', 'the number at field 10 and the node, point and keyhash, at field 11 (2026-11-21, 2026-11-22)'),
+    ('P-intent-exchange-node', intent_r_node, 'IntentExchange', "the patron's own node at field 11, a bare point alone in its array; no number, so null at field 10 (2026-11-21, 2026-11-22)"),
+    ('P-intent-exchange-number-node', intent_r_number_node, 'IntentExchange', 'the number at field 10 and the own node, the point alone, at field 11 (2026-11-21, 2026-11-22)'),
+    ('P-intent-exchange-node-above', intent_x_node_above, 'IntentExchange', "the node of the sender's patron at field 11: the point, the sender's adoption by that patron (P-adopt-min) and the patron's KeyMaterial (2026-11-22)"),
     ('P-bundle-continuation', cont_x, 'BundleContinuation', 'the bundle past its first carriage, anchored and numbered from one'),
     ('P-candidates-bare', cands_bare, 'Candidates', 'the payload path form; both address families'),
     ('P-candidate-handover', cand_handover, 'CandidateHandover', 'the same candidates, anchored'),
@@ -4533,13 +4556,24 @@ reg('N-intent-node-zone', 'bytes',
     REJ('IntentExchange', 'schema', 'the node rides an unsigned carriage, where the zone at key 4 is not a key (s4.4; 2026-11-21)'),
     e_arr([e_uint(1), e_bstr(pc_b), e_arr([]),
            e_uint(TS_REC), e_uint(3), b'\xf4', e_uint(0), sl_bob, encryption_key(bob), NULL,
-           e_arr([network_point([10, 0, 0, 4], asn=64511, port=7432, zone='nyc1'),
-                  e_bstr(bob.keyhash)])]))
-reg('N-intent-node-keyhash-width', 'bytes',
-    REJ('IntentExchange', 'schema', "the node's keyhash is 32 bytes (s2.2; 2026-11-22)"),
-    e_arr([e_uint(1), e_bstr(pc_b), e_arr([]),
-           e_uint(TS_REC), e_uint(3), b'\xf4', e_uint(0), sl_bob, encryption_key(bob), NULL,
-           e_arr([intent_node_point, e_bstr(bob.keyhash[:31])])]))
+           e_arr([network_point([10, 0, 0, 4], asn=64511, port=7432, zone='nyc1')])]))
+# the node's array is one part or three (2026-11-22): the adoption without
+# the material to verify it under, and anything after the material
+_intent_x_head = [e_uint(1), e_bstr(pc_a), e_arr([intro_c1]),
+                  e_uint(TS_REC), e_uint(2), b'\xf5', e_uint(0), signed_locator,
+                  encryption_key(alice), NULL]
+reg('N-intent-node-arity-2', 'bytes',
+    REJ('IntentExchange', 'schema', "a patron's node comes with its adoption and its material, both (2026-11-22)"),
+    e_arr(_intent_x_head + [e_arr([intent_node_point, adopt_env])]))
+reg('N-intent-node-arity-4', 'bytes',
+    REJ('IntentExchange', 'schema', 'nothing rides after the patron\'s material (2026-11-22)'),
+    e_arr(_intent_x_head + [e_arr([intent_node_point, adopt_env, bob.key_material, NULL])]))
+reg('N-intent-node-material', 'bytes',
+    REJ('IntentExchange', 'schema', "the patron's material is KeyMaterial, not its keyhash (s2.2; 2026-11-22)"),
+    e_arr(_intent_x_head + [e_arr([intent_node_point, adopt_env, e_bstr(bob.keyhash)])]))
+reg('N-intent-node-not-adoption', 'bytes',
+    REJ('IntentExchange', 'schema', "the record beside the node is the sender's adoption, not another record (2026-11-22)"),
+    e_arr(_intent_x_head + [e_arr([intent_node_point, ab_form_env, bob.key_material])]))
 reg('N-intent-bundle-record', 'bytes',
     REJ('IntentExchange', 'schema', 'a bundle entry is an introduction, not a record'),
     e_arr([e_uint(1), e_bstr(pc_a), e_arr([pc1_env]),

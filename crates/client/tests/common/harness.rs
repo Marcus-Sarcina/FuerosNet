@@ -338,6 +338,18 @@ impl Setup {
             .expect("the patron adopts")
     }
 
+    /// **`who` holds nothing of `whom`**: every client starts knowing every
+    /// test identity, and this takes `whom`'s off what `who` verifies by,
+    /// so a test proves the material it ends with is what arrived.
+    pub fn stranger(&mut self, who: &str, whom: &str) {
+        let c = self.client(who);
+        c.known.retain(|k| k.keyhash != kh(whom));
+        assert!(
+            c.contacts_held().iter().all(|r| r.keyhash != kh(whom)),
+            "{who} holds {whom} as a contact"
+        );
+    }
+
     pub fn notices(&self, n: &str) -> Vec<(u64, Notice)> {
         self.handles[n].hook.notices.borrow().clone()
     }

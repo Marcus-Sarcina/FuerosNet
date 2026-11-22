@@ -1634,9 +1634,10 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             // counterparty keeps it with the rest of what it holds of
             // that party and it goes in no transaction and to no witness
             // or verifier.
-            // **eleven where the sender's own node rides with it**
-            // [author, 2026-11-21]: an adoption into a subnet that node
-            // serves, which is how a member without a number learns of it
+            // **eleven where the node serving the adoption's subnet rides
+            // with it** [author, 2026-11-21]: an adoption into a subnet a
+            // node serves, which is how a member without a number learns
+            // of it
             if !(9..=11).contains(&a.len()) {
                 return Err(Error("nine fields, ten with a number, eleven with a node"));
             }
@@ -1689,20 +1690,31 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
                 Some(_) => return Err(Error("a number is 1 to 32 characters of text")),
             }
             // **the node serving the subnet this meeting's adoption is
-            // into** [author, 2026-11-21], **and whose it is** [author,
-            // 2026-11-22]: where it answers, a bare point as an unsigned
-            // carriage holds one, so the zone at key 4 is an unknown key
-            // and refused (§4.4); then the keyhash it answers as, which
-            // the receiver has no other way to learn where the node is
-            // further up the sender's chain than the sender
+            // into** [author, 2026-11-21]: where it answers, a bare point
+            // as an unsigned carriage holds one, so the zone at key 4 is
+            // an unknown key and refused (§4.4). **Alone, the sender's own
+            // node; with the sender's adoption by its patron and that
+            // patron's material, the patron's** [author, 2026-11-22] —
+            // never further up, the node serving a member being at most
+            // its patron's patron's, and nothing else of the patron's
+            // relationships rides with it
             if a.len() == 11 {
                 let r = top.get(10).ok_or(Error("node"))?;
-                let pair = array_item_ranges(b, r.start)
-                    .filter(|p| p.len() == 2)
-                    .ok_or(Error("a node is a point and a keyhash"))?;
-                network_point_at(b, pair[0].start, false)?;
-                check_type(b, pair[1].start, T::Keyhash)
-                    .map_err(|_| Error("the node's keyhash is 32 bytes"))?;
+                let parts = array_item_ranges(b, r.start)
+                    .filter(|p| p.len() == 1 || p.len() == 3)
+                    .ok_or(Error(
+                        "a node is a point, or a point, an adoption and its patron's material",
+                    ))?;
+                network_point_at(b, parts[0].start, false)?;
+                if parts.len() == 3 {
+                    let env = crate::envelope::parse(&b[parts[1].clone()])
+                        .map_err(|_| Error("the patron's adoption is an envelope"))?;
+                    if env.tx_type != 1 {
+                        return Err(Error("the record beside the node is an adoption"));
+                    }
+                    check_type(b, parts[2].start, T::KeyMaterial)
+                        .map_err(|_| Error("the patron's material is KeyMaterial"))?;
+                }
             }
             Ok(())
         }

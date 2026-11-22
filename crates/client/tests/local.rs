@@ -459,18 +459,16 @@ fn an_intent_carries_a_number_or_does_not() {
 const POINT: [u8; 11] = [0xa2, 0x01, 0x44, 10, 0, 0, 4, 0x03, 0x19, 0x1d, 0x08];
 
 // functional: NET-036
-/// **An intent carries the node at its eleventh field, where it answers and
-/// whose it is, and the tenth is null where no number comes before it**
-/// (`wire-format.md` §14.3.2) [author, 2026-11-21; author, 2026-11-22]:
-/// the array is positional, so a node without a number needs the number's
-/// place held, and null there with no node after it is a second spelling
-/// of nine fields and refused. The eleventh is the bare point and the
-/// 32-byte keyhash the node answers as, and nothing else.
+/// **An intent carries the node at its eleventh field, and the tenth is
+/// null where no number comes before it** (`wire-format.md` §14.3.2)
+/// [author, 2026-11-21; author, 2026-11-22]: the array is positional, so a
+/// node without a number needs the number's place held, and null there
+/// with no node after it is a second spelling of nine fields and refused.
+/// The eleventh is the bare point alone, the sender's own node, or the
+/// point, the sender's adoption by its patron and that patron's
+/// `KeyMaterial`, the patron's node — and nothing else.
 #[test]
 fn an_intent_carries_a_node_after_a_number_or_a_null_in_its_place() {
-    // the keyhash the node answers as: the sender's, or one further up
-    // its chain
-    const NODE: [u8; 32] = [7; 32];
     let plain = |number: Option<String>, point: Option<Vec<u8>>| IntentExchange {
         contribution: [1u8; 16],
         bundle: vec![],
@@ -481,11 +479,11 @@ fn an_intent_carries_a_node_after_a_number_or_a_null_in_its_place() {
         locator: fixture("P-signedlocator"),
         encryption_key: fixture("P-encryption-key"),
         number,
-        node: point.map(|p| (p, NODE)),
+        node: point.map(CarriedNode::Own),
     };
-    // the eleventh field as it is written: a two-array, the point, then a
-    // 32-byte string
-    let carried = |p: &[u8]| [&[0x82][..], p, &[0x58, 0x20][..], &NODE[..]].concat();
+    // the eleventh field as it is written for the sender's own node: a
+    // one-array, the point
+    let carried = |p: &[u8]| [&[0x81][..], p].concat();
     let neither = plain(None, None).encode();
     let number = plain(Some("+15550001111".into()), None).encode();
     let node = plain(None, Some(POINT.to_vec())).encode();
@@ -496,7 +494,7 @@ fn an_intent_carries_a_node_after_a_number_or_a_null_in_its_place() {
     assert_eq!(both[0], 0x8b, "and eleven with both");
     assert!(
         node.ends_with(&[&[0xf6][..], &carried(&POINT)].concat()),
-        "null, then the point and whose it is"
+        "null, then the point alone"
     );
     assert!(
         both.ends_with(&carried(&POINT))
@@ -511,10 +509,7 @@ fn an_intent_carries_a_node_after_a_number_or_a_null_in_its_place() {
     ] {
         let read = IntentExchange::decode(bytes).expect("reads");
         assert_eq!(read.number.as_deref(), num);
-        assert_eq!(
-            read.node.as_ref().map(|(p, k)| (p.as_slice(), *k)),
-            pt.map(|p| (p, NODE))
-        );
+        assert_eq!(read.node, pt.map(|p| CarriedNode::Own(p.to_vec())));
         assert_eq!(&read.encode(), bytes, "one spelling each");
     }
 
@@ -535,7 +530,7 @@ fn an_intent_carries_a_node_after_a_number_or_a_null_in_its_place() {
         b"nyc1",
     ]
     .concat();
-    let with_zone = plain(None, Some(zoned)).encode();
+    let with_zone = plain(None, Some(zoned.clone())).encode();
     assert!(
         IntentExchange::decode(&with_zone).is_err(),
         "a zone at eleven"
@@ -547,8 +542,32 @@ fn an_intent_carries_a_node_after_a_number_or_a_null_in_its_place() {
         assert!(IntentExchange::decode(&bad).is_err(), "port {port:02x?}");
     }
 
-    // **the eleventh is the pair and only the pair**: a bare point, a
-    // keyhash of another width, or a third entry is refused
+    // **the patron's node, with what proves it** [author, 2026-11-22]:
+    // the corpus's, alice carrying bob's with her adoption by him
+    let above = fixture("P-intent-exchange-node-above");
+    let read = IntentExchange::decode(&above).expect("the patron's node reads");
+    let Some(CarriedNode::Patrons {
+        point,
+        adoption,
+        material,
+    }) = read.node.clone()
+    else {
+        panic!("three parts read as the patron's node");
+    };
+    assert_eq!(read.encode(), above, "byte-for-byte the corpus's");
+    assert_eq!(adoption, fixture("P-adopt-min"), "the adoption as it lies");
+    assert!(
+        rhtn_crypto::Identity::from_key_material(&material).is_some(),
+        "and the patron's material"
+    );
+    for id in ["P-intent-exchange-node", "P-intent-exchange-number-node"] {
+        let f = fixture(id);
+        let read = IntentExchange::decode(&f).expect(id);
+        assert!(matches!(read.node, Some(CarriedNode::Own(_))), "{id}");
+        assert_eq!(read.encode(), f, "{id} byte-for-byte");
+    }
+
+    // **the eleventh is one part or three and nothing else**
     let at_eleven = |field: Vec<u8>| {
         let mut b = neither.clone();
         b[0] = 0x8b;
@@ -558,29 +577,56 @@ fn an_intent_carries_a_node_after_a_number_or_a_null_in_its_place() {
     };
     assert!(
         IntentExchange::decode(&at_eleven(carried(&POINT))).is_ok(),
-        "the pair reads"
+        "the point alone reads"
     );
+    let three = |p: &[u8], a: &[u8], m: &[u8]| [&[0x83][..], p, a, m].concat();
+    assert!(
+        IntentExchange::decode(&at_eleven(three(&point, &adoption, &material))).is_ok(),
+        "and the three"
+    );
+    let mut keyhash = vec![0x58, 0x20];
+    keyhash.extend_from_slice(&[7; 32]);
     for (field, why) in [
-        (POINT.to_vec(), "a point with no keyhash"),
+        (POINT.to_vec(), "a point not in an array"),
+        (vec![0x80], "an empty array"),
         (
-            [&[0x82][..], &POINT[..], &[0x58, 0x1f][..], &NODE[..31]].concat(),
-            "a 31-byte keyhash",
+            [&[0x82][..], &POINT[..], &keyhash[..]].concat(),
+            "a point and a keyhash, the form that is gone",
         ),
         (
-            [&[0x82][..], &POINT[..], &[0x58, 0x21][..], &NODE[..], &[0]].concat(),
-            "a 33-byte keyhash",
+            [&[0x82][..], &POINT[..], &adoption[..]].concat(),
+            "the adoption without its material",
         ),
         (
-            [&[0x82][..], &POINT[..], &[0x78, 0x20][..], &NODE[..]].concat(),
-            "a keyhash as text",
+            [
+                &[0x84][..],
+                &POINT[..],
+                &adoption[..],
+                &material[..],
+                &[0xf6],
+            ]
+            .concat(),
+            "a fourth part",
         ),
         (
-            [&[0x81][..], &POINT[..]].concat(),
-            "a point alone in the array",
+            three(&POINT, &adoption, &keyhash),
+            "a keyhash where the material goes",
         ),
         (
-            [&[0x83][..], &carried(&POINT)[1..], &[0xf6]].concat(),
-            "a third entry",
+            three(&POINT, &[0xa0], &material),
+            "an empty map where the adoption goes",
+        ),
+        (
+            three(&POINT, &keyhash, &material),
+            "a keyhash where the adoption goes",
+        ),
+        (
+            three(&POINT, &fixture("P-formation"), &material),
+            "a record that is not an adoption",
+        ),
+        (
+            three(&zoned, &adoption, &material),
+            "a zoned point beside the adoption",
         ),
     ] {
         assert!(IntentExchange::decode(&at_eleven(field)).is_err(), "{why}");

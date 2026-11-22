@@ -5533,7 +5533,7 @@ design already depends on.
 
 | What | Between | Where it is stated | Encoding |
 |---|---|---|---|
-| The ceremony's intent exchange — the contribution, the bundle of introductions, the sender's locator, the timing, who initiated, where the platform gave one, the number the sender's device reports for itself [author, 2026-11-10], and, where the sender adopts the other into a subnet it is served from a node in, where that node answers and who it answers as [author, 2026-11-21, 2026-11-22]; the nominees no longer ride it [author, 2026-10-19], each side's set crossing by locator at the prune (§7.10.1 kind 22) | Two participants' devices | design §7.1, §7.5.2, §8.1.2 | `IntentExchange` (§14.3.2), carried by the shell's chosen bearer (§14.3.1) and bound to the pre-commitment. The CBOR is specified; two vendors' clients compute the same pre-commitment, the ceremony-id (design §7.5.2.6), either way |
+| The ceremony's intent exchange — the contribution, the bundle of introductions, the sender's locator, the timing, who initiated, where the platform gave one, the number the sender's device reports for itself [author, 2026-11-10], and, where the sender adopts the other into a subnet it is served from a node in, where that node answers and, for its patron's node, its own adoption by that patron and the patron's key material [author, 2026-11-21, 2026-11-22]; the nominees no longer ride it [author, 2026-10-19], each side's set crossing by locator at the prune (§7.10.1 kind 22) | Two participants' devices | design §7.1, §7.5.2, §8.1.2 | `IntentExchange` (§14.3.2), carried by the shell's chosen bearer (§14.3.1) and bound to the pre-commitment. The CBOR is specified; two vendors' clients compute the same pre-commitment, the ceremony-id (design §7.5.2.6), either way |
 | The optical transcript — each device's key material and contribution, then the derived ceremony-id, screen to camera | Two participants' devices | design §7.1 item 3, design §7.5.2, design §12.3 | `OpticalContribution` then `TranscriptConfirm` (§14.3.2): the key material is pinned at this first contact, the contribution is the key-exchange input, the ceremony-id is the transcript hash both display and check |
 | Traversal candidates | Two participants' devices | design §12.6.3 [author, 2026-09-25] | `CandidateHandover` (§14.3.2), carrying the `Candidate` structure this document now defines; the same candidates travel the end-to-end payload path when a direct connection is set up remotely (design §12.6.3, §14.1.1) |
 | The capture-key handover — the key each participant derived for the captures the other holds of them, handed across at capture time | Two participants' devices | design §7.5.2, design §7.5.2.6 | `CaptureKeyHandover` (§14.3.2): the 32-byte key design §7.5.2.6 derives, anchored to the ceremony-id like the proximity outcomes and the candidates [author, 2026-10-02] |
@@ -5784,17 +5784,25 @@ IntentExchange = [             ; carried by the bearer (§14.3.1), not optical
                                ;   no transaction body, reaches no witness or
                                ;   verifier, and is not in the card that
                                ;   introduces that party (§2.4)
-  ? [ NetworkPoint, keyhash ], ; the node serving the subnet the meeting's
-                               ;   adoption is into [author, 2026-11-21]:
-                               ;   where it answers and who it answers as,
-                               ;   so a member whose number nobody holds is
-                               ;   invited at the adoption itself. The
-                               ;   sender's own node, under its own keyhash,
-                               ;   or where it has none, the node it is
-                               ;   itself served from in that subnet, under
-                               ;   that node's [author, 2026-11-22]: a member
-                               ;   holds no record of anybody above its
-                               ;   patron, so the keyhash rides here. The
+  ? ( [ NetworkPoint ] //       ; the node serving the subnet the meeting's
+      [ NetworkPoint, Envelope, ;   adoption is into [author, 2026-11-21], so
+        KeyMaterial ] ),       ;   a member whose number nobody holds is
+                               ;   invited at the adoption itself. One
+                               ;   element: the sender's own node, answering
+                               ;   as the sender. Three: where the sender
+                               ;   runs none there, the node of its own
+                               ;   patron, which is as far up as a serving
+                               ;   node can be (design §3.3), with the
+                               ;   adoption placing the sender under that
+                               ;   patron in that subnet and the patron's
+                               ;   key material (§1.1), and nothing else
+                               ;   [author, 2026-11-22]: the record proves
+                               ;   the chain and names the operator, and the
+                               ;   material is what its signature and the
+                               ;   node's are checked under, a member
+                               ;   holding nothing of anybody above its
+                               ;   patron. Any other arity, and an envelope
+                               ;   that is not an adoption, are MALFORMED. The
                                ;   point is §4.4's encoding WITHOUT the zone,
                                ;   as every unsigned carriage writes it; a
                                ;   point carrying one is MALFORMED. Absent
@@ -5804,7 +5812,11 @@ IntentExchange = [             ; carried by the bearer (§14.3.1), not optical
                                ;   only once the adoption placing it under
                                ;   the sender is recorded, as an invitation
                                ;   (`light-client-requirements.md` §1.5);
-                               ;   from anyone else it is dropped
+                               ;   from anyone else it is dropped, and so is
+                               ;   a three-element field whose record is not
+                               ;   the sender's adoption by the holder of
+                               ;   that material in that subnet, or does not
+                               ;   verify
 ]
 
 BundleContinuation = [         ; the bundle past its first carriage

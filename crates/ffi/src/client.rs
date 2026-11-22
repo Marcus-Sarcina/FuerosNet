@@ -3720,10 +3720,13 @@ impl Participant {
     /// into** [author, 2026-11-21]: where it answers, an encoded
     /// `NetworkPoint` without a zone ([`network_point`] with neither
     /// provider nor zone), and `node`, the keyhash it answers as [author,
-    /// 2026-11-22] — this identity's own for its own instance, else the
-    /// node it is itself served from there. Carried beside the intent;
-    /// both `None` clear it, and one without the other is refused with
-    /// nothing declared. The shell declares it where this device adopts
+    /// 2026-11-22] — this identity's own for its own instance, else its
+    /// patron's there, which the kernel carries with its adoption by that
+    /// patron and the patron's material. Carried beside the intent; both
+    /// `None` clear it, and one without the other, a node that is neither
+    /// this identity's nor a patron's, or a patron's whose adoption or
+    /// material is not held is refused with nothing declared. The shell
+    /// declares it where this device adopts
     /// the other into a subnet a node serves, and clears it otherwise, so
     /// nothing reaches a later meeting. Held in memory for this process
     /// alone.
@@ -4060,6 +4063,11 @@ impl Participant {
                     .map(|t| t.to_vec())
                     .map_err(|e| Refused::new(format!("{e:?}")))
             })?;
+            // **the node above a patron, where the adoption's meeting
+            // carried one, is proved by the material that came with it**
+            // [author, 2026-11-22]: the kernel knows it now and the
+            // transport binds the dial by it
+            self.pin_known();
             self.net.carry_outbox(&self.handle)?;
             self.save()?;
             Ok(t)

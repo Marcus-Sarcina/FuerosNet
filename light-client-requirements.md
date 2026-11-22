@@ -398,15 +398,21 @@ job.
     serving it there answers and who it answers as, so a member whose
     number nobody holds is invited at the meeting and needs no message:
     the patron's own node, already running or chosen at that meeting (§7),
-    or, where it runs none there, the node it is itself served from in
-    that subnet, the nearest on the patron chain (§4) [author, 2026-11-22].
+    or, where it runs none there, its own patron's, which is as far up as
+    a serving node can be (design §3.3) [author, 2026-11-22]. **For its patron's node it
+    hands over its own adoption by that patron and that patron's key
+    material, and nothing else**: not its contacts and not its history,
+    which only the party being adopted shares. The record proves the chain
+    and the material is what it and the node are checked under; a member
+    verifies both before it holds the invitation.
     Once the adoption placing it under the sender is recorded, the member
     holds it as an invitation on that subnet, asked as §4 asks any
     invitation; from a party that is not its patron afterwards it is
     dropped. **The adoption is what introduces that node**, the patron
     being present, where a link names only a node the member already
     knows. A meeting that adopts nobody carries none, and a patron served
-    from no node in that subnet carries none.
+    from no node in that subnet, or holding no record of its own adoption
+    there, carries none.
   - **Nullable, and that is the ordinary case.** A number is
     carrier-provisioned rather than device-known, so a handset without a
     subscription, a carrier that never provisioned one, or a platform that

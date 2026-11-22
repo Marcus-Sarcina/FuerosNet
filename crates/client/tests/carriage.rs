@@ -601,36 +601,105 @@ fn a_patrons_node_rides_the_adoption_meeting_and_is_held_as_an_invitation() {
     );
 }
 
-// functional: NET-036
-/// **A patron with no node of its own carries the one it is served from**
-/// [author, 2026-11-22]: a member's serving node is the nearest
-/// infrastructure node on its patron chain (`light-client-requirements.md`
-/// §4), so where carol roots the subnet and runs its node and bob, under
-/// her, has none, bob adopting alice carries carol's node by its keyhash,
-/// and alice holds it as a first invitation on that subnet — although
-/// carol is no patron of hers and nothing was agreed with her. The
-/// in-person adoption is what introduces it, as no link could.
-#[test]
-fn a_patron_without_a_node_carries_the_one_it_is_served_from() {
-    use rhtn_model::Standing;
-    let mut s = setup(&["alice", "bob", "carol", "witness"]);
-    s.adopted("bob", "carol", "witness", 1);
-    let subnet = s
-        .client("bob")
+/// **The opening as [`opened`]'s, with `b`'s intent reaching `a` as `node`
+/// rewrote its eleventh field**: a sender whose field is not what its own
+/// kernel would carry, as another build could send it. The intent crosses
+/// as the struct the bearer's bytes decode to.
+fn opened_carrying(
+    s: &mut Setup,
+    a: &str,
+    b: &str,
+    node: impl FnOnce(
+        Option<rhtn_client::local::CarriedNode>,
+    ) -> Option<rhtn_client::local::CarriedNode>,
+) {
+    s.face_off(a, b);
+    s.client(a)
+        .begin(Some(kh(b)), vec![], true)
+        .expect("begins");
+    s.client(b)
+        .begin(Some(kh(a)), vec![], false)
+        .expect("begins");
+    let oa = s.client(a).optical_contribution().unwrap();
+    let ob = s.client(b).optical_contribution().unwrap();
+    s.client(a).take_optical(&carry(&ob)).unwrap();
+    s.client(b).take_optical(&carry(&oa)).unwrap();
+    let ta = s.client(a).transcript_confirm().unwrap();
+    let tb = s.client(b).transcript_confirm().unwrap();
+    s.client(a).take_transcript(&carry(&tb)).unwrap();
+    s.client(b).take_transcript(&carry(&ta)).unwrap();
+    let ia = s.client(a).intent_carriage().unwrap();
+    let mut ib = s.client(b).intent().unwrap();
+    ib.node = node(ib.node.take());
+    let carried: Vec<Vec<u8>> = ia.iter().map(|m| carry(m)).collect();
+    s.client(b).take_intent_carriage(kh(a), &carried).unwrap();
+    s.client(a).take_intent(kh(b), &ib).unwrap();
+}
+
+/// `who`'s adoption by `by`, as `who`'s archive holds it.
+fn adoption_of(s: &mut Setup, who: &str, by: &str) -> Vec<u8> {
+    s.client(who)
+        .archive
+        .records()
+        .find(|r| {
+            r.tx_type == rhtn_archive::tx::TYPE_ADOPTION
+                && r.field_hash(1) == Some(kh(who))
+                && r.field_hash(2) == Some(kh(by))
+        })
+        .map(|r| r.bytes.clone())
+        .expect("the adoption is held")
+}
+
+/// The subnet `who` holds a position in under `patron`.
+fn subnet_under(s: &mut Setup, who: &str, patron: &str) -> rhtn_client::Txid {
+    s.client(who)
         .subnets_held()
         .into_iter()
-        .find(|r| r.patron == Some(kh("carol")))
-        .expect("carol's subnet, bob under her")
-        .id;
+        .find(|r| r.patron == Some(kh(patron)))
+        .expect("a position under that patron")
+        .id
+}
+
+// functional: NET-036
+/// **A patron with no node of its own carries its patron's, with what
+/// proves it** [author, 2026-11-22]: *"If it's necessary to prove the
+/// patronage chain to the node operator, that should only require the
+/// patron's adoption by the node operator, not every contact or
+/// transaction."* Carol roots the subnet and runs its node; bob, under
+/// her, has none, and adopting alice carries carol's node with his
+/// adoption by carol and carol's material. Alice, **who holds nothing of
+/// carol beforehand**, verifies that adoption, pins carol's material and
+/// holds the node as a first invitation on that subnet — carol being no
+/// patron of hers and nothing agreed with her. She files nothing of bob's
+/// relationship and makes carol no contact.
+#[test]
+fn a_patron_without_a_node_carries_its_patrons_with_its_adoption() {
+    use rhtn_model::Standing;
+    let mut s = setup(&["alice", "bob", "carol", "witness"]);
+    s.stranger("alice", "carol");
+    s.adopted("bob", "carol", "witness", 1);
+    let subnet = subnet_under(&mut s, "bob", "carol");
     s.client("bob")
         .declare_node(Some((POINT.to_vec(), kh("carol"))))
-        .unwrap();
+        .expect("carol is bob's patron, and he holds both");
     s.client("alice").declare_node(None).unwrap();
     opened(&mut s, "alice", "bob");
+    let knows_carol = |s: &mut Setup| {
+        s.client("alice")
+            .known
+            .iter()
+            .any(|k| k.keyhash == kh("carol"))
+    };
+    assert!(
+        !knows_carol(&mut s),
+        "nothing of carol before the adoption says whose member alice is"
+    );
     let pop = s.met("alice", "bob", "witness");
     s.h.adopt(kh("alice"), kh("bob"), pop, 1)
         .expect("bob adopts alice");
 
+    assert!(knows_carol(&mut s), "carol's material, from the meeting");
+    let carols = adoption_of(&mut s, "bob", "carol");
     let a = s.client("alice");
     let row = a
         .subnets_held()
@@ -654,6 +723,14 @@ fn a_patron_without_a_node_carries_the_one_it_is_served_from() {
         a.agreed().is_empty(),
         "nothing agreed before the person answers"
     );
+    assert!(
+        a.contacts_held().iter().all(|c| c.keyhash != kh("carol")),
+        "carol is no contact of alice's"
+    );
+    assert!(
+        a.archive.records().all(|r| r.bytes != carols),
+        "bob's adoption by carol is not filed in alice's archive"
+    );
     assert_eq!(a.take_adoption_invited(), Some(kh("carol")), "told once");
     assert!(
         s.client("bob").relocations().is_empty(),
@@ -662,14 +739,145 @@ fn a_patron_without_a_node_carries_the_one_it_is_served_from() {
 }
 
 // functional: NET-036
-/// **A point from anybody who is not this identity's patron after the
+/// **A patron's node whose adoption does not prove it leaves nothing**
+/// [author, 2026-11-22]: material not that of the patron the adoption
+/// names, an adoption of somebody else, one into another subnet than the
+/// member's, or one whose signature fails. Each member keeps no invitation
+/// and pins nothing; the genuine carriage, in the same arrangement, is
+/// held, so each refusal is of what the forgery changed.
+#[test]
+fn a_patrons_node_on_an_adoption_that_does_not_prove_it_leaves_nothing() {
+    use rhtn_client::local::CarriedNode;
+    let members = ["alice", "c3", "c4", "c5", "alice2"];
+    let mut s = setup(&[
+        "alice", "alice2", "bob", "carol", "c1", "c2", "c3", "c4", "c5", "witness",
+    ]);
+    for m in members {
+        for whom in ["carol", "c1", "c2"] {
+            s.stranger(m, whom);
+        }
+    }
+    // carol roots one subnet, with bob and c2 under her; c1 roots
+    // another, with bob under it too
+    s.adopted("bob", "carol", "witness", 1);
+    s.adopted("c2", "carol", "witness", 1);
+    s.adopted("bob", "c1", "witness", 2);
+    // the subnet bob adopts into is the one he acts in; the other patron's
+    // adoption of him is the one from another subnet
+    let acting = s.client("bob").acting_position();
+    let in_carols = s
+        .client("bob")
+        .subnets_held()
+        .into_iter()
+        .find(|r| r.patron == Some(kh("carol")))
+        .and_then(|r| r.position)
+        .is_some_and(|p| p.anchor == acting.anchor && p.path == acting.path);
+    let (here, elsewhere) = if in_carols {
+        ("carol", "c1")
+    } else {
+        ("c1", "carol")
+    };
+    let material = |who: &str| id(who).public.key_material();
+    let genuine = adoption_of(&mut s, "bob", here);
+    let mut broken = genuine.clone();
+    *broken.last_mut().unwrap() ^= 1;
+    let carried = [
+        (genuine.clone(), material(here), "genuine"),
+        (genuine, material("witness"), "material not the patron's"),
+        (
+            adoption_of(&mut s, "c2", "carol"),
+            material("carol"),
+            "an adoption of somebody else",
+        ),
+        (
+            adoption_of(&mut s, "bob", elsewhere),
+            material(elsewhere),
+            "an adoption into another subnet",
+        ),
+        (broken, material(here), "a signature that fails"),
+    ];
+    for (member, (adoption, material, why)) in members.into_iter().zip(carried) {
+        opened_carrying(&mut s, member, "bob", |_| {
+            Some(CarriedNode::Patrons {
+                point: POINT.to_vec(),
+                adoption,
+                material,
+            })
+        });
+        let pop = s.met(member, "bob", "witness");
+        s.h.adopt(kh(member), kh("bob"), pop, 1)
+            .expect("bob adopts the member");
+        let m = s.client(member);
+        let pinned: Vec<&str> = ["carol", "c1", "c2", "witness"]
+            .into_iter()
+            .filter(|w| m.known.iter().any(|k| k.keyhash == kh(w)))
+            .collect();
+        if why == "genuine" {
+            assert!(m.relocation(&kh(here)).is_some(), "{why}: held");
+            assert_eq!(pinned, [here, "witness"], "{why}: the patron's pinned");
+            assert_eq!(m.take_adoption_invited(), Some(kh(here)), "{why}");
+            continue;
+        }
+        assert!(m.relocations().is_empty(), "{why}: no invitation");
+        assert_eq!(m.take_adoption_invited(), None, "{why}");
+        assert_eq!(pinned, ["witness"], "{why}: nothing pinned");
+    }
+}
+
+// functional: NET-036
+/// **The sender carries only its own node or a patron's, and a patron's
+/// only with what proves it** [author, 2026-11-22]: declaring a node that
+/// is neither is refused, as is a patron's whose material is not held,
+/// and the refusal clears what was declared before it, so the meeting
+/// carries nothing.
+#[test]
+fn a_node_declared_is_own_or_a_patrons_with_what_proves_it() {
+    let mut s = setup(&["alice", "bob", "carol", "witness"]);
+    assert!(
+        s.client("bob")
+            .declare_node(Some((POINT.to_vec(), kh("carol"))))
+            .is_err(),
+        "carol is no patron of bob's yet"
+    );
+    s.adopted("bob", "carol", "witness", 1);
+    assert!(
+        s.client("bob")
+            .declare_node(Some((POINT.to_vec(), kh("witness"))))
+            .is_err(),
+        "a party met is not a patron"
+    );
+    s.client("bob")
+        .declare_node(Some((POINT.to_vec(), kh("bob"))))
+        .expect("his own");
+    // the material off what bob verifies by, as a client that never held
+    // it would stand
+    s.client("bob").known.retain(|k| k.keyhash != kh("carol"));
+    assert!(
+        s.client("bob")
+            .declare_node(Some((POINT.to_vec(), kh("carol"))))
+            .is_err(),
+        "a patron whose material is not held"
+    );
+    // and nothing is left of the own node declared before the refusal
+    opened(&mut s, "alice", "bob");
+    let pop = s.met("alice", "bob", "witness");
+    s.h.adopt(kh("alice"), kh("bob"), pop, 1)
+        .expect("bob adopts alice");
+    assert!(s.client("alice").relocations().is_empty());
+    assert_eq!(s.client("alice").take_adoption_invited(), None);
+}
+
+// functional: NET-036
+/// **A node from anybody who is not this identity's patron after the
 /// ceremony is dropped with nothing kept**: one carried at a meeting with
-/// no adoption, naming the sender's node or another's, which a later
-/// adoption at another meeting does not revive, and one the member's own
-/// side declared.
+/// no adoption, the sender's own or its patron's with what proves it,
+/// which a later adoption at another meeting does not revive, and one the
+/// member's own side declared.
 #[test]
 fn a_node_from_anybody_but_the_adopting_patron_leaves_nothing() {
     let mut s = setup(&["alice", "bob", "carol", "witness"]);
+    s.stranger("alice", "carol");
+    s.adopted("bob", "carol", "witness", 1);
     // a regular meeting: bob carries a node, nobody is adopted
     s.client("bob")
         .declare_node(Some((POINT.to_vec(), kh("bob"))))
@@ -678,8 +886,8 @@ fn a_node_from_anybody_but_the_adopting_patron_leaves_nothing() {
     s.met("alice", "bob", "witness");
     assert!(s.client("alice").relocations().is_empty());
     assert_eq!(s.client("alice").take_adoption_invited(), None);
-    // and one naming a node further up a chain, from a peer who is
-    // nobody's patron here: the meeting introduces nobody
+    // and his patron's, with what proves it, at a meeting adopting
+    // nobody: it introduces nobody, and nothing of carol is pinned
     s.client("bob")
         .declare_node(Some((POINT.to_vec(), kh("carol"))))
         .unwrap();
@@ -687,9 +895,16 @@ fn a_node_from_anybody_but_the_adopting_patron_leaves_nothing() {
     s.met("alice", "bob", "witness");
     assert!(s.client("alice").relocations().is_empty());
     assert_eq!(s.client("alice").take_adoption_invited(), None);
+    assert!(
+        s.client("alice")
+            .known
+            .iter()
+            .all(|k| k.keyhash != kh("carol")),
+        "carol's material is not kept from a meeting adopting nobody"
+    );
 
     // the adoption that follows rests on a meeting of its own, which
-    // carried none, so the first meeting's point is gone with it
+    // carried none, so the first meeting's node is gone with it
     s.client("bob").declare_node(None).unwrap();
     // and the member declaring one is not the patron offering it
     s.client("alice")

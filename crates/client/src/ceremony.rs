@@ -451,11 +451,11 @@ pub struct Intent {
     /// The number this device reports for itself, where the shell read one
     /// ([`Client::declare_number`]).
     pub number: Option<String>,
-    /// The node serving the subnet the meeting's adoption is into — where
-    /// it answers, an encoded `NetworkPoint` without a zone, and the
-    /// keyhash it answers as — where the shell declared one
+    /// The node serving the subnet the meeting's adoption is into, this
+    /// identity's own or its patron's with that patron's adoption of it
+    /// and material, where the shell declared one
     /// ([`Client::declare_node`]).
-    pub node: Option<(Vec<u8>, Keyhash)>,
+    pub node: Option<crate::local::CarriedNode>,
 }
 
 impl std::fmt::Debug for Intent {
@@ -566,9 +566,9 @@ pub(crate) struct Active {
     pub(crate) their_nominees: Vec<Keyhash>,
     their_bundle: Vec<Vec<u8>>,
     their_retention: u64,
-    /// The node the counterparty's intent carried, point and keyhash,
-    /// where it carried one: kept with the finished meeting's result.
-    their_node: Option<(Vec<u8>, Keyhash)>,
+    /// The node the counterparty's intent carried, where it carried one:
+    /// kept with the finished meeting's result.
+    their_node: Option<crate::local::CarriedNode>,
     sealed: Option<SealedCapture>,
     /// The hold the capture runs as, from [`Client::capture_begin`] until
     /// [`Client::capture_seal`] takes it (design §7.1 item 5).
@@ -687,20 +687,20 @@ pub struct Client {
     /// SIM that changed, or a platform that stops answering, changes what
     /// goes out without anything having to be forgotten.
     number: Option<String>,
-    /// **The node serving the subnet the meeting's adoption is into**,
-    /// where it answers and whose it is, as the shell declared it before
-    /// the meeting [author, 2026-11-21; author, 2026-11-22]: carried beside
-    /// the intent as the number is, and in this process's memory alone by
-    /// the same reasoning. **The kernel carries what it was given** and
-    /// decides nothing about who adopts whom: the shell, which knows the
-    /// choices made, declares it and clears it.
-    node: Option<(Vec<u8>, Keyhash)>,
-    /// **The node the last meeting's counterparty carried**, point and
-    /// keyhash, and who carried it: kept from the record's finalization to
-    /// the adoption that follows it, and replaced by the next meeting.
-    /// Memory alone, and nothing until an adoption places this identity
-    /// under the party that sent it.
-    met_node: Option<(Keyhash, (Vec<u8>, Keyhash))>,
+    /// **The node serving the subnet the meeting's adoption is into**, as
+    /// the shell declared it before the meeting and as it is carried
+    /// [author, 2026-11-21; author, 2026-11-22]: beside the intent as the
+    /// number is, and in this process's memory alone by the same
+    /// reasoning. **The kernel carries what it was given** and decides
+    /// nothing about who adopts whom: the shell, which knows the choices
+    /// made, declares it and clears it.
+    node: Option<crate::local::CarriedNode>,
+    /// **The node the last meeting's counterparty carried**, and who
+    /// carried it: kept from the record's finalization to the adoption
+    /// that follows it, and replaced by the next meeting. Memory alone,
+    /// and nothing until an adoption places this identity under the party
+    /// that sent it.
+    met_node: Option<(Keyhash, crate::local::CarriedNode)>,
     /// The node the last adoption's meeting invited this identity to
     /// serve from, held as an invitation, until the shell asks
     /// ([`Client::take_adoption_invited`]).
@@ -1261,22 +1261,69 @@ impl Client {
     /// into, as the shell chose it** [author, 2026-11-21]: where it
     /// answers, an encoded `NetworkPoint` without a zone (`wire-format.md`
     /// §4.4), and the keyhash it answers as [author, 2026-11-22] — this
-    /// identity's own for its own node, else that of the node it is itself
-    /// served from there — carried as the intent's eleventh field, or
-    /// nothing to clear it. Set before a meeting and never persisted, like
-    /// the number.
+    /// identity's own for its own node, else its patron's there — carried
+    /// as the intent's eleventh field, or nothing to clear it. Set before a
+    /// meeting and never persisted, like the number.
     ///
-    /// Refused where the bytes are not one bare point, and nothing is then
-    /// declared: a point the counterparty's decoder would refuse would end
-    /// the meeting rather than the invitation.
+    /// **A patron's node goes with what proves it** [author, 2026-11-22]:
+    /// this identity's own adoption by that patron, from its archive, and
+    /// the patron's material, from what it verifies by — *"only the
+    /// patron's adoption by the node operator, not every contact or
+    /// transaction"*. **Never a node further up** (*"The node operator can
+    /// never be further upstream than the grandpatron"*): a keyhash that is
+    /// neither this identity's nor a patron's is refused.
+    ///
+    /// Refused, with nothing declared, where the bytes are not one bare
+    /// point — a point the counterparty's decoder would refuse would end
+    /// the meeting rather than the invitation — and where the adoption or
+    /// the material is not held.
     pub fn declare_node(&mut self, node: Option<(Vec<u8>, Keyhash)>) -> Result<(), String> {
-        if let Some((p, _)) = &node
-            && let Err(e) = rhtn_codec::schema::unsigned_network_point(p)
-        {
-            self.node = None;
-            return Err(format!("not a network point: {}", e.0));
+        use crate::local::CarriedNode;
+        self.node = None;
+        let Some((point, whose)) = node else {
+            return Ok(());
+        };
+        rhtn_codec::schema::unsigned_network_point(&point)
+            .map_err(|e| format!("not a network point: {}", e.0))?;
+        if whose == self.keyhash() {
+            self.node = Some(CarriedNode::Own(point));
+            return Ok(());
         }
-        self.node = node;
+        let Some(subnet) = self
+            .subnets()
+            .into_iter()
+            .find(|s| self.patron_in(s) == Some(whose))
+        else {
+            return Err(format!(
+                "{} is neither this identity nor a patron of it",
+                id8(&whose)
+            ));
+        };
+        let me = self.keyhash();
+        let adoption = self
+            .archive
+            .records()
+            .filter(|r| {
+                r.tx_type == TYPE_ADOPTION
+                    && r.field_hash(1) == Some(me)
+                    && r.field_hash(2) == Some(whose)
+                    && r.locator()
+                        .is_some_and(|l| l.subnet.unwrap_or(r.txid) == subnet)
+            })
+            .max_by_key(|r| (r.time, r.txid))
+            .map(|r| r.bytes.clone())
+            .ok_or_else(|| format!("no adoption by {} is held", id8(&whose)))?;
+        let material = self
+            .known
+            .iter()
+            .find(|k| k.keyhash == whose)
+            .map(Identity::key_material)
+            .ok_or_else(|| format!("no material is held for {}", id8(&whose)))?;
+        self.node = Some(CarriedNode::Patrons {
+            point,
+            adoption,
+            material,
+        });
         Ok(())
     }
 
@@ -3351,7 +3398,7 @@ impl Client {
             let peer = a.peer()?;
             // the meeting's point goes with its result, the next meeting
             // replacing it whether or not that one carried any
-            self.met_node = a.their_node.take().map(|p| (peer, p));
+            self.met_node = a.their_node.take().map(|n| (peer, n));
             if let Some(sealed) = a.sealed.take() {
                 self.store.sealed.insert(txid, sealed);
             }
@@ -3984,34 +4031,106 @@ impl Client {
     /// nothing kept: a peer met at a regular meeting, or a patron's own
     /// side of the same adoption, holds no invitation of mine.
     ///
-    /// **The node may be the patron's or one further up its chain**
-    /// [author, 2026-11-22]: a member is served from the nearest
-    /// infrastructure node on its patron chain (`light-client-
-    /// requirements.md` §4), so a patron with no node of its own carries
-    /// the one it is served from. Not placed by
+    /// **The node may be the patron's own or its patron's** [author,
+    /// 2026-11-22]: a member is served from the nearest infrastructure
+    /// node on its patron chain (`light-client-requirements.md` §4), and
+    /// that is never further up than the grandpatron. A patron's node
+    /// comes with the patron's adoption of the sender and the patron's
+    /// material, and is held only once that adoption verifies — the
+    /// sender's signature under the key pinned at this meeting, the
+    /// patron's under the material carried — and places the sender in the
+    /// subnet this adoption placed me in
+    /// ([`Client::patrons_adoption_carried`]). **The material is then
+    /// pinned**, so the invitation can be proved, and nothing else of the
+    /// record is kept: it is not filed in this archive. Not placed by
     /// [`Client::place_invitation`], which refuses a node that is not a
     /// patron's or already agreed to: **a link cannot introduce a node and
     /// the in-person adoption does**. Proving binds the key that answers
-    /// to the keyhash carried, as it does a link's.
+    /// to the keyhash, as it does a link's.
     fn invite_from_meeting(&mut self, under: Option<(Keyhash, Txid)>) {
-        let Some((sender, (point, node))) = self.met_node.take() else {
+        use crate::local::CarriedNode;
+        let Some((sender, carried)) = self.met_node.take() else {
             return;
+        };
+        let dropped = |why: &str| {
+            tracing::info!(target: "cer", from = %id8(&sender), why, "cer.node.dropped");
         };
         let Some((_, subnet)) = under.filter(|(p, _)| *p == sender) else {
-            tracing::info!(target: "cer", from = %id8(&sender), "cer.node.dropped");
+            dropped("not this identity's patron");
             return;
         };
+        let (point, above) = match carried {
+            CarriedNode::Own(point) => (point, None),
+            CarriedNode::Patrons {
+                point,
+                adoption,
+                material,
+            } => match self.patrons_adoption_carried(&sender, &subnet, &adoption, &material) {
+                Ok(id) => (point, Some(id)),
+                Err(why) => {
+                    dropped(&why);
+                    return;
+                }
+            },
+        };
+        let node = above.as_ref().map_or(sender, |id| id.keyhash);
         // an identity is not invited to serve from itself
         if node == self.keyhash() {
-            tracing::info!(target: "cer", from = %id8(&sender), "cer.node.dropped");
+            dropped("this identity's own");
             return;
         }
         let Some(at) = point_address(&point) else {
+            dropped("no address");
             return;
         };
+        if let Some(id) = above
+            && !self.known.iter().any(|k| k.keyhash == id.keyhash)
+        {
+            self.known.push(id);
+        }
         if self.offer_relocation(node, at, Some(subnet), None) {
             self.adoption_invited = Some(node);
         }
+    }
+
+    /// **The patron's adoption of `sender`, as `sender` carried it beside
+    /// its patron's node** [author, 2026-11-22], checked against what this
+    /// member holds and nothing it does not: an adoption whose adopted
+    /// party is `sender` and whose patron is the identity `material` names,
+    /// placing `sender` in `subnet`, and signed by both — `sender` under
+    /// the key this member pinned at the meeting, the patron under the
+    /// material. The patron's identity where all of that holds, why not
+    /// otherwise.
+    fn patrons_adoption_carried(
+        &self,
+        sender: &Keyhash,
+        subnet: &Txid,
+        adoption: &[u8],
+        material: &[u8],
+    ) -> Result<Identity, String> {
+        let patron = Identity::from_key_material(material).ok_or("not key material")?;
+        let rec = Record::parse(adoption)?;
+        if rec.tx_type != TYPE_ADOPTION {
+            return Err("not an adoption".into());
+        }
+        if rec.field_hash(1) != Some(*sender) {
+            return Err("an adoption of somebody else".into());
+        }
+        if rec.field_hash(2) != Some(patron.keyhash) {
+            return Err("an adoption by somebody other than the material's".into());
+        }
+        let at = rec.locator().ok_or("an adoption giving no position")?;
+        if at.subnet.unwrap_or(rec.txid) != *subnet {
+            return Err("an adoption into another subnet".into());
+        }
+        let pinned = self
+            .known
+            .iter()
+            .find(|k| k.keyhash == *sender)
+            .ok_or("the sender is not pinned")?
+            .clone();
+        verify::envelope(&[pinned, patron.clone()][..], adoption).map_err(|e| e.to_string())?;
+        Ok(patron)
     }
 
     /// **As either party: the peering body between this client and
