@@ -4105,21 +4105,24 @@ intent_r = e_arr([e_uint(1), e_bstr(pc_b),
                   e_uint(TS_REC), e_uint(3), b'\xf4', e_uint(0),
                   sl_bob, encryption_key(bob)])
 
-# **the patron's own node beside the intent** [author, 2026-11-21]: where
-# bob adopts alice into a subnet his own instance serves, his intent's
+# **the node serving the subnet, beside the intent** [author, 2026-11-21]:
+# where bob adopts alice into a subnet his own instance serves, his intent's
 # eleventh field is where it answers, a bare point (no zone: an unsigned
-# carriage, s4.4); with no number the tenth is null, the array being
+# carriage, s4.4), and whose node it is, the keyhash it answers as [author,
+# 2026-11-22] -- bob's own here; a patron with no node of its own names the
+# one it is served from. With no number the tenth is null, the array being
 # positional, and with one it is the number
 intent_node_point = network_point([10, 0, 0, 4], port=7432)
+intent_node = e_arr([intent_node_point, e_bstr(bob.keyhash)])
 intent_r_node = e_arr([e_uint(1), e_bstr(pc_b),
                        e_arr([]),
                        e_uint(TS_REC), e_uint(3), b'\xf4', e_uint(0),
-                       sl_bob, encryption_key(bob), NULL, intent_node_point])
+                       sl_bob, encryption_key(bob), NULL, intent_node])
 intent_r_number_node = e_arr([e_uint(1), e_bstr(pc_b),
                               e_arr([]),
                               e_uint(TS_REC), e_uint(3), b'\xf4', e_uint(0),
                               sl_bob, encryption_key(bob), e_tstr('+15550001111'),
-                              intent_node_point])
+                              intent_node])
 
 # a bundle past its first carriage: the first continuation, one entry,
 # anchored to the ceremony-id both screens fixed (§14.3.2; the bundle has no
@@ -4218,8 +4221,9 @@ The two flags differ; a device refuses an intent carrying its own value:
 
 **IntentExchange — bob's again, as the patron of an adoption into a subnet
 his own node serves [author, 2026-11-21]: the same nine fields, null where
-the number would stand, and at field 11 the bare point where his node
-answers, 10.0.0.4:7432, no provider and no zone**
+the number would stand, and at field 11 the node: the bare point where it
+answers, 10.0.0.4:7432, no provider and no zone, then the keyhash it
+answers as, bob's own [author, 2026-11-22]**
 ({len(intent_r_node)} bytes):
 
 ```
@@ -4367,8 +4371,8 @@ for fid, by, kind, note in [
     ('P-card', vs_card, 'Card', "the code handed over at a meeting (§2.4): c1's introduction, the anchor its locator names, and that anchor's endpoint record"),
     ('P-intent-exchange', intent_x, 'IntentExchange', 'echoes the optical contribution; one introduction in the bundle; the sender\'s own signed locator last'),
     ('P-intent-exchange-responder', intent_r, 'IntentExchange', "the responder's: echoes bob's contribution, an empty bundle, initiator false; the flags of the pair differ"),
-    ('P-intent-exchange-node', intent_r_node, 'IntentExchange', "the patron's own node at field 11, a bare point; no number, so null at field 10 (2026-11-21)"),
-    ('P-intent-exchange-number-node', intent_r_number_node, 'IntentExchange', 'the number at field 10 and the node at field 11 (2026-11-21)'),
+    ('P-intent-exchange-node', intent_r_node, 'IntentExchange', "the patron's own node at field 11, a bare point and the keyhash it answers as; no number, so null at field 10 (2026-11-21, 2026-11-22)"),
+    ('P-intent-exchange-number-node', intent_r_number_node, 'IntentExchange', 'the number at field 10 and the node, point and keyhash, at field 11 (2026-11-21, 2026-11-22)'),
     ('P-bundle-continuation', cont_x, 'BundleContinuation', 'the bundle past its first carriage, anchored and numbered from one'),
     ('P-candidates-bare', cands_bare, 'Candidates', 'the payload path form; both address families'),
     ('P-candidate-handover', cand_handover, 'CandidateHandover', 'the same candidates, anchored'),
@@ -4529,7 +4533,13 @@ reg('N-intent-node-zone', 'bytes',
     REJ('IntentExchange', 'schema', 'the node rides an unsigned carriage, where the zone at key 4 is not a key (s4.4; 2026-11-21)'),
     e_arr([e_uint(1), e_bstr(pc_b), e_arr([]),
            e_uint(TS_REC), e_uint(3), b'\xf4', e_uint(0), sl_bob, encryption_key(bob), NULL,
-           network_point([10, 0, 0, 4], asn=64511, port=7432, zone='nyc1')]))
+           e_arr([network_point([10, 0, 0, 4], asn=64511, port=7432, zone='nyc1'),
+                  e_bstr(bob.keyhash)])]))
+reg('N-intent-node-keyhash-width', 'bytes',
+    REJ('IntentExchange', 'schema', "the node's keyhash is 32 bytes (s2.2; 2026-11-22)"),
+    e_arr([e_uint(1), e_bstr(pc_b), e_arr([]),
+           e_uint(TS_REC), e_uint(3), b'\xf4', e_uint(0), sl_bob, encryption_key(bob), NULL,
+           e_arr([intent_node_point, e_bstr(bob.keyhash[:31])])]))
 reg('N-intent-bundle-record', 'bytes',
     REJ('IntentExchange', 'schema', 'a bundle entry is an introduction, not a record'),
     e_arr([e_uint(1), e_bstr(pc_a), e_arr([pc1_env]),

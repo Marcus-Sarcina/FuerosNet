@@ -18263,7 +18263,7 @@
   "id": "CER-75",
   "area": "ceremony",
   "gap": "ceremony",
-  "title": "An adoption carries the patron's node to the member, held as an invitation and attached to by nobody",
+  "title": "An adoption carries the serving node to the member, held as an invitation and attached to by nobody",
   "milestone": 3,
   "kind": "positive",
   "spec": [
@@ -18273,12 +18273,12 @@
   "rule": [
    {
     "where": "light-client-requirements.md §1.5",
-    "text": "Once the adoption placing\n    it under the sender is recorded, the member holds it as the invitation\n    the patron's handset would have composed, on that subnet"
+    "text": "Once the adoption placing it under the sender is recorded, the member\n    holds it as an invitation on that subnet, asked as §4 asks any\n    invitation"
    }
   ],
-  "given": "A patron that serves a subnet from a node of its own declares where it answers; the member holds no number for anybody.",
+  "given": "A patron served in a subnet from a node, its own or the one above it, declares where that node answers and who it answers as; the member holds no number for anybody.",
   "when": "The two meet over the bearer and the patron adopts the member into that subnet; separately, the same point is declared by the member, and in a regular meeting.",
-  "then": "After the adoption the member holds one unproved invitation to the patron's node on the adoption's subnet and has agreed to nothing; the patron holds nothing; a point from the member's side or from a meeting adopting nobody leaves nothing on either party.",
+  "then": "After the adoption the member holds one unproved invitation to that node, under the keyhash carried, on the adoption's subnet and has agreed to nothing; the patron holds nothing; the same field from the member's side or from a meeting adopting nobody leaves nothing on either party.",
   "oracle": "behaviour",
   "interpretation": "Whether the shell declares the node is OperatorStore.meetingNode's (OperatorStoreTest); the tap that accepts it is the invitation's own (SES-021).",
   "families": [

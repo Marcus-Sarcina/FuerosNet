@@ -746,13 +746,17 @@ object Ceremony {
         }.start()
     }
 
-    /** Where this device's own node answers for this meeting's adoption,
-     *  where it adopts the other into a subnet one serves
-     *  ([OperatorStore.meetingNode]); null for every other meeting. */
-    private fun meetingNode(m: Meet): String? {
+    /** The node this meeting's adoption carries, where this device adopts
+     *  the other into a subnet a node serves — its own, else the one it is
+     *  served from there ([OperatorStore.meetingNode]); null for every
+     *  other meeting. */
+    private fun meetingNode(m: Meet): OperatorStore.Carried? {
         val app = Gateway.appContext ?: return null
+        val me = Gateway.keyhash(m.by) ?: return null
         val root = Gateway.subnetsRooted(m.by).firstOrNull()?.let { Meet.Scope.of(it).id }
-        return OperatorStore.meetingNode(m.settled(), m.scope(), m.serving(), OperatorStore.instances(app, m.by), root)
+        val scope = m.scope()
+        val served = scope?.id?.takeIf { it.length == 64 }?.let { Gateway.servingIn(m.by, it) }
+        return OperatorStore.meetingNode(m.settled(), scope, m.serving(), OperatorStore.instances(app, m.by), me, root, served)
     }
 
     /**

@@ -3716,18 +3716,58 @@ impl Participant {
         });
     }
 
-    /// **Where this device's own node answers, for the meeting about to
-    /// begin** [author, 2026-11-21]: an encoded `NetworkPoint` without a
-    /// zone ([`network_point`] with neither provider nor zone), carried
-    /// beside the intent, or `None` to clear it. The shell declares it
-    /// where this device adopts the other into a subnet its own instance
-    /// serves, and clears it otherwise, so nothing reaches a later
-    /// meeting. Held in memory for this process alone.
-    pub fn declare_node(&self, point: Option<Vec<u8>>) -> Result<(), Refused> {
+    /// **The node serving the subnet the meeting about to begin adopts
+    /// into** [author, 2026-11-21]: where it answers, an encoded
+    /// `NetworkPoint` without a zone ([`network_point`] with neither
+    /// provider nor zone), and `node`, the keyhash it answers as [author,
+    /// 2026-11-22] — this identity's own for its own instance, else the
+    /// node it is itself served from there. Carried beside the intent;
+    /// both `None` clear it, and one without the other is refused with
+    /// nothing declared. The shell declares it where this device adopts
+    /// the other into a subnet a node serves, and clears it otherwise, so
+    /// nothing reaches a later meeting. Held in memory for this process
+    /// alone.
+    pub fn declare_node(&self, point: Option<Vec<u8>>, node: Option<Id>) -> Result<(), Refused> {
         self.call("declare_node", || {
+            let declared = match (point.clone(), node.as_deref()) {
+                (Some(p), Some(n)) => {
+                    let n = keyhash(n).ok_or_else(|| Refused::new("a node is 32 bytes"))?;
+                    Some((p, n))
+                }
+                (None, None) => None,
+                _ => {
+                    self.handle
+                        .with_blocking(|c| c.declare_node(None))
+                        .map_err(Refused::new)?;
+                    return Err(Refused::new(
+                        "a node is a point and whose it is, or neither",
+                    ));
+                }
+            };
             self.handle
-                .with_blocking(move |c| c.declare_node(point.clone()))
+                .with_blocking(move |c| c.declare_node(declared.clone()))
                 .map_err(Refused::new)
+        })
+    }
+
+    /// **The node serving this identity in `subnet`, and where it agreed
+    /// to dial it**: what a patron with no node of its own carries to the
+    /// member it adopts there [author, 2026-11-22], a member being served
+    /// from the nearest infrastructure node on its patron chain
+    /// (`light-client-requirements.md` §4). `None` where nothing serves it
+    /// there or no address was agreed for the node that does.
+    #[must_use]
+    pub fn serving_in(&self, subnet: Id) -> Option<Agreed> {
+        self.call_plain("serving_in", || {
+            let s = keyhash(&subnet)?;
+            self.handle.with_blocking(move |c| {
+                let node = c.serving_in(&s)?;
+                let addresses = c.payload.agreed.get(&node)?.clone();
+                (!addresses.is_empty()).then(|| Agreed {
+                    serving: id_of(&node),
+                    addresses,
+                })
+            })
         })
     }
 

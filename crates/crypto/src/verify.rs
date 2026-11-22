@@ -64,8 +64,9 @@ pub trait Lookup {
     fn identity(&self, keyhash: &[u8]) -> Option<&Identity>;
     /// The transport key a delegation this holder keeps names for
     /// `keyhash` (`wire-format.md` §8.2, §10.1): what a subtree
-    /// acknowledgement or an attestation without a stapled delegation is
-    /// verified under.  None where nothing is held, which is the default.
+    /// acknowledgement, an attestation without a stapled delegation, or a
+    /// node key is verified under.  None where nothing is held, which is
+    /// the default.
     fn delegated_key(&self, _keyhash: &[u8]) -> Option<[u8; 32]> {
         None
     }
@@ -559,11 +560,12 @@ pub fn record<L: Lookup + ?Sized>(ids: &L, kind: &str, raw: &[u8]) -> Result<(),
     if id.verify_ed(&sig, &tbs) {
         return Ok(());
     }
-    // a subtree acknowledgement or an attestation is signed under the key
-    // the issuer's node delegated, normally (§7.5, §7.1); a holder keeping
-    // no delegation for that keyhash cannot tell a delegated signature
-    // from a wrong one, and defers (§10.1.1)
-    if matches!(kind, "SubtreeAck" | "CurrencyAttestation") {
+    // a subtree acknowledgement, an attestation or a node key is signed
+    // under the key the issuer's node delegated, normally (§7.5, §7.1,
+    // §7.8): an instance holds no identity key to sign with. A holder
+    // keeping no delegation for that keyhash cannot tell a delegated
+    // signature from a wrong one, and defers (§10.1.1)
+    if matches!(kind, "SubtreeAck" | "CurrencyAttestation" | "NodeKey") {
         return match ids.delegated_key(&signer) {
             Some(k) if verify_ed_raw(&k, &sig, &tbs) => Ok(()),
             Some(_) => Err("the standalone signature verifies under neither the key the object names nor the key it delegated".into()),

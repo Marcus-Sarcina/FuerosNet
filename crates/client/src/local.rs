@@ -196,8 +196,8 @@ impl TranscriptConfirm {
 /// contribution, the first carriage of its bundle of introductions, its
 /// clock, the retention it commits to, who initiated, how many
 /// `BundleContinuation` messages follow, the sender's own
-/// `SignedLocator` and its `EncryptionKey`; then its number and its own
-/// node where it sends them.  The nominees no longer ride it [author, 2026-10-19]:
+/// `SignedLocator` and its `EncryptionKey`; then its number, and the node
+/// serving the adoption's subnet, where it sends them.  The nominees no longer ride it [author, 2026-10-19]:
 /// the sets travel by locator once the id has fixed (§7.10.2, kind 22).
 #[derive(Clone, PartialEq, Eq)]
 pub struct IntentExchange {
@@ -230,17 +230,20 @@ pub struct IntentExchange {
     /// refuses it all come to the same thing: none sent, nobody prompted
     /// (`light-client-requirements.md` §1.5).
     pub number: Option<String>,
-    /// **Where the sender's own node answers**, for the subnet this
-    /// meeting's adoption is into [author, 2026-11-21]: *"auto-invite via
-    /// the bluetooth channel during an adoption into a subnet where a node
-    /// already exists"*. An encoded `NetworkPoint` without a zone (§4.4),
-    /// as an unsigned carriage holds one.
+    /// **The node serving the subnet this meeting's adoption is into**
+    /// [author, 2026-11-21]: *"auto-invite via the bluetooth channel during
+    /// an adoption into a subnet where a node already exists"* — where it
+    /// answers, an encoded `NetworkPoint` without a zone (§4.4) as an
+    /// unsigned carriage holds one, and **whose it is**, the keyhash it
+    /// answers as [author, 2026-11-22]: the sender's own, or that of the
+    /// node further up its chain that it is itself served from, which the
+    /// receiver's archive does not hold.
     ///
     /// **What it becomes is an invitation like any other**: held once the
     /// adoption placing the receiver under the sender is, and agreed to
     /// with the member's one tap. A member without a number learns of the
     /// node this way and no other.
-    pub node: Option<Vec<u8>>,
+    pub node: Option<(Vec<u8>, Keyhash)>,
 }
 
 impl std::fmt::Debug for IntentExchange {
@@ -296,8 +299,10 @@ impl IntentExchange {
             (None, Some(_)) => emit_null(&mut out),
             (None, None) => {}
         }
-        if let Some(p) = &self.node {
+        if let Some((p, k)) = &self.node {
+            emit_array_head(&mut out, 2);
             out.extend_from_slice(p);
+            emit_bstr(&mut out, k);
         }
         out
     }
@@ -320,7 +325,7 @@ impl IntentExchange {
                 _ => None,
             },
             node: if a.len() == 11 {
-                Some(raw_field(b, 10)?)
+                Some(node_field(b, &a[10])?)
             } else {
                 None
             },
@@ -835,6 +840,25 @@ fn raw_field(b: &[u8], field: usize) -> Result<Vec<u8>, String> {
     let top = array_item_ranges(b, 0).ok_or("not an array")?;
     let r = top.get(field).ok_or("no such field")?;
     Ok(b[r.clone()].to_vec())
+}
+
+/// An intent's eleventh field, which the schema has checked: the point's
+/// own bytes, and the keyhash after it.
+fn node_field(b: &[u8], it: &Item) -> Result<(Vec<u8>, Keyhash), String> {
+    let top = array_item_ranges(b, 0).ok_or("not an array")?;
+    let at = top.get(10).ok_or("no such field")?.start;
+    let point = array_item_ranges(b, at)
+        .and_then(|p| p.into_iter().next())
+        .ok_or("node not an array")?;
+    let Item::Array(pair) = it else {
+        return Err("node not an array".into());
+    };
+    let k = pair
+        .get(1)
+        .and_then(|k| bs(b, k))
+        .and_then(|k| Keyhash::try_from(k.as_slice()).ok())
+        .ok_or("the node's keyhash is 32 bytes")?;
+    Ok((b[point].to_vec(), k))
 }
 
 fn entries(b: &[u8], field: usize) -> Result<Vec<Vec<u8>>, String> {

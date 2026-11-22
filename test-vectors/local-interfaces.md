@@ -1,6 +1,6 @@
 # Local device-to-device interfaces (`wire-format.md` §14.3)
 
-Generated against `wire-format.md` `8edd3ef1344d1696…`, `network-design.md` `be16786c75d2397f…` and `light-client-requirements.md` `c71f572ce1aeb561…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `c2fba3848576fb7e…`, `network-design.md` `be16786c75d2397f…` and `light-client-requirements.md` `6a946a0a7c59dadc…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Canonical. Spec-derived, reproduced by the independent harness.** The encodings
 of `wire-format.md` §14.3, as one coherent exchange: **alice initiates with
@@ -716,9 +716,10 @@ cc4a71f689e2b9187a4e4351e9d5232947a4acadf30205213b7eaaedff023137
 
 **IntentExchange — bob's again, as the patron of an adoption into a subnet
 his own node serves [author, 2026-11-21]: the same nine fields, null where
-the number would stand, and at field 11 the bare point where his node
-answers, 10.0.0.4:7432, no provider and no zone**
-(4920 bytes):
+the number would stand, and at field 11 the node: the bare point where it
+answers, 10.0.0.4:7432, no provider and no zone, then the keyhash it
+answers as, bob's own [author, 2026-11-22]**
+(4955 bytes):
 
 ```
 8b0150d43a0b07379cf934c8b7e4b54629f95c801a6a43151003f400a3015820
@@ -874,11 +875,12 @@ facb8f05e32a54e16994cb4a565172d87a8b2fd8358596676dc4e26575ae1382
 a3f1ba59b571e683d8dc89218f410424bc31e682c067ced83e4508dbb5e17b6c
 cc4a71f689e2b9187a4e4351e9d5232947a4acadf30205213b7eaaedff023137
 6a7f8498b5bfcbe43b4760686e888cadb7eb0f2332c61e334561f4fe00000000
-000000000000060e1923272df6a201440a00000403191d08
+000000000000060e1923272df682a201440a00000403191d0858206bcf8a3e88
+99fc206bc603744414d58b01db857986d82f611b0794ac9c32c375
 ```
 
 **IntentExchange — the same with his number at field 10**
-(4932 bytes):
+(4967 bytes):
 
 ```
 8b0150d43a0b07379cf934c8b7e4b54629f95c801a6a43151003f400a3015820
@@ -1034,8 +1036,9 @@ facb8f05e32a54e16994cb4a565172d87a8b2fd8358596676dc4e26575ae1382
 a3f1ba59b571e683d8dc89218f410424bc31e682c067ced83e4508dbb5e17b6c
 cc4a71f689e2b9187a4e4351e9d5232947a4acadf30205213b7eaaedff023137
 6a7f8498b5bfcbe43b4760686e888cadb7eb0f2332c61e334561f4fe00000000
-000000000000060e1923272d6c2b3135353530303031313131a201440a000004
-03191d08
+000000000000060e1923272d6c2b313535353030303131313182a201440a0000
+0403191d0858206bcf8a3e8899fc206bc603744414d58b01db857986d82f611b
+0794ac9c32c375
 ```
 
 **BundleContinuation — the first continuation of a larger bundle, one

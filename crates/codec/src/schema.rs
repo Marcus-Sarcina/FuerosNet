@@ -1688,13 +1688,21 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
                 Some(Item::Null) => return Err(Error("a null number stands only before a node")),
                 Some(_) => return Err(Error("a number is 1 to 32 characters of text")),
             }
-            // **the node the sender's own instance answers at**, for the
-            // subnet this meeting's adoption is into [author, 2026-11-21]:
-            // a bare point, as an unsigned carriage holds one, so the zone
-            // at key 4 is an unknown key and refused (§4.4)
+            // **the node serving the subnet this meeting's adoption is
+            // into** [author, 2026-11-21], **and whose it is** [author,
+            // 2026-11-22]: where it answers, a bare point as an unsigned
+            // carriage holds one, so the zone at key 4 is an unknown key
+            // and refused (§4.4); then the keyhash it answers as, which
+            // the receiver has no other way to learn where the node is
+            // further up the sender's chain than the sender
             if a.len() == 11 {
                 let r = top.get(10).ok_or(Error("node"))?;
-                network_point_at(b, r.start, false)?;
+                let pair = array_item_ranges(b, r.start)
+                    .filter(|p| p.len() == 2)
+                    .ok_or(Error("a node is a point and a keyhash"))?;
+                network_point_at(b, pair[0].start, false)?;
+                check_type(b, pair[1].start, T::Keyhash)
+                    .map_err(|_| Error("the node's keyhash is 32 bytes"))?;
             }
             Ok(())
         }

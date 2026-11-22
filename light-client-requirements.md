@@ -392,17 +392,21 @@ job.
     invitation to a node stood up after the adoption, and a move by a patron
     who is a root, whose members have no sibling or node above to fail over
     to; any other member learns of a move on the failover session (§4).
-  - **The patron's node crosses at the adoption, beside the intent**
-    [author, 2026-11-21]. A patron adopting the other party into a subnet it
-    serves from a node of its own, already running or chosen at that
-    meeting (§7), carries where that node answers in the same intent
-    (`wire-format.md` §14.3.2), so a member whose number nobody holds is
-    invited at the meeting and needs no message. Once the adoption placing
-    it under the sender is recorded, the member holds it as the invitation
-    the patron's handset would have composed, on that subnet, asked as §4
-    asks any invitation; from a party that is not its patron afterwards it
-    is dropped. A meeting that adopts nobody carries none, and a patron
-    serving the subnet from no node of its own carries none.
+  - **The serving node crosses at the adoption, beside the intent**
+    [author, 2026-11-21]. A patron adopting the other party into a subnet
+    carries, in the same intent (`wire-format.md` §14.3.2), where the node
+    serving it there answers and who it answers as, so a member whose
+    number nobody holds is invited at the meeting and needs no message:
+    the patron's own node, already running or chosen at that meeting (§7),
+    or, where it runs none there, the node it is itself served from in
+    that subnet, the nearest on the patron chain (§4) [author, 2026-11-22].
+    Once the adoption placing it under the sender is recorded, the member
+    holds it as an invitation on that subnet, asked as §4 asks any
+    invitation; from a party that is not its patron afterwards it is
+    dropped. **The adoption is what introduces that node**, the patron
+    being present, where a link names only a node the member already
+    knows. A meeting that adopts nobody carries none, and a patron served
+    from no node in that subnet carries none.
   - **Nullable, and that is the ordinary case.** A number is
     carrier-provisioned rather than device-known, so a handset without a
     subscription, a carrier that never provisioned one, or a platform that

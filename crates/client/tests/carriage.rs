@@ -559,7 +559,9 @@ fn a_patrons_node_rides_the_adoption_meeting_and_is_held_as_an_invitation() {
     let mut s = setup(&["alice", "bob", "witness"]);
     // bob adopts alice; bob's own node serves the subnet, and alice has
     // no number to be sent a link at
-    s.client("bob").declare_node(Some(POINT.to_vec())).unwrap();
+    s.client("bob")
+        .declare_node(Some((POINT.to_vec(), kh("bob"))))
+        .unwrap();
     s.client("alice").declare_node(None).unwrap();
     opened(&mut s, "alice", "bob");
     assert!(
@@ -600,15 +602,87 @@ fn a_patrons_node_rides_the_adoption_meeting_and_is_held_as_an_invitation() {
 }
 
 // functional: NET-036
+/// **A patron with no node of its own carries the one it is served from**
+/// [author, 2026-11-22]: a member's serving node is the nearest
+/// infrastructure node on its patron chain (`light-client-requirements.md`
+/// §4), so where carol roots the subnet and runs its node and bob, under
+/// her, has none, bob adopting alice carries carol's node by its keyhash,
+/// and alice holds it as a first invitation on that subnet — although
+/// carol is no patron of hers and nothing was agreed with her. The
+/// in-person adoption is what introduces it, as no link could.
+#[test]
+fn a_patron_without_a_node_carries_the_one_it_is_served_from() {
+    use rhtn_model::Standing;
+    let mut s = setup(&["alice", "bob", "carol", "witness"]);
+    s.adopted("bob", "carol", "witness", 1);
+    let subnet = s
+        .client("bob")
+        .subnets_held()
+        .into_iter()
+        .find(|r| r.patron == Some(kh("carol")))
+        .expect("carol's subnet, bob under her")
+        .id;
+    s.client("bob")
+        .declare_node(Some((POINT.to_vec(), kh("carol"))))
+        .unwrap();
+    s.client("alice").declare_node(None).unwrap();
+    opened(&mut s, "alice", "bob");
+    let pop = s.met("alice", "bob", "witness");
+    s.h.adopt(kh("alice"), kh("bob"), pop, 1)
+        .expect("bob adopts alice");
+
+    let a = s.client("alice");
+    let row = a
+        .subnets_held()
+        .into_iter()
+        .find(|r| r.patron == Some(kh("bob")))
+        .expect("the subnet bob placed alice in");
+    assert_eq!(row.id, subnet, "carol's, through bob");
+    let r = a.relocation(&kh("carol")).expect("held for carol's node");
+    assert_eq!(
+        (r.standing, r.from.is_empty(), r.to.as_str()),
+        (Standing::Unproved, true, "10.0.0.4:7432"),
+        "a first invitation, unproved"
+    );
+    assert_eq!(
+        row.relocation.map(|r| r.node),
+        Some(kh("carol")),
+        "on the subnet the adoption placed her in"
+    );
+    assert!(a.relocation(&kh("bob")).is_none(), "nothing for bob's");
+    assert!(
+        a.agreed().is_empty(),
+        "nothing agreed before the person answers"
+    );
+    assert_eq!(a.take_adoption_invited(), Some(kh("carol")), "told once");
+    assert!(
+        s.client("bob").relocations().is_empty(),
+        "the patron holds no invitation of its own"
+    );
+}
+
+// functional: NET-036
 /// **A point from anybody who is not this identity's patron after the
 /// ceremony is dropped with nothing kept**: one carried at a meeting with
-/// no adoption, which a later adoption at another meeting does not revive,
-/// and one the member's own side declared.
+/// no adoption, naming the sender's node or another's, which a later
+/// adoption at another meeting does not revive, and one the member's own
+/// side declared.
 #[test]
 fn a_node_from_anybody_but_the_adopting_patron_leaves_nothing() {
-    let mut s = setup(&["alice", "bob", "witness"]);
+    let mut s = setup(&["alice", "bob", "carol", "witness"]);
     // a regular meeting: bob carries a node, nobody is adopted
-    s.client("bob").declare_node(Some(POINT.to_vec())).unwrap();
+    s.client("bob")
+        .declare_node(Some((POINT.to_vec(), kh("bob"))))
+        .unwrap();
+    opened(&mut s, "alice", "bob");
+    s.met("alice", "bob", "witness");
+    assert!(s.client("alice").relocations().is_empty());
+    assert_eq!(s.client("alice").take_adoption_invited(), None);
+    // and one naming a node further up a chain, from a peer who is
+    // nobody's patron here: the meeting introduces nobody
+    s.client("bob")
+        .declare_node(Some((POINT.to_vec(), kh("carol"))))
+        .unwrap();
     opened(&mut s, "alice", "bob");
     s.met("alice", "bob", "witness");
     assert!(s.client("alice").relocations().is_empty());
@@ -619,7 +693,7 @@ fn a_node_from_anybody_but_the_adopting_patron_leaves_nothing() {
     s.client("bob").declare_node(None).unwrap();
     // and the member declaring one is not the patron offering it
     s.client("alice")
-        .declare_node(Some(POINT.to_vec()))
+        .declare_node(Some((POINT.to_vec(), kh("alice"))))
         .unwrap();
     opened(&mut s, "alice", "bob");
     let pop = s.met("alice", "bob", "witness");
@@ -648,16 +722,20 @@ fn a_node_declared_is_a_bare_point_or_nothing() {
         b"nyc1",
     ]
     .concat();
+    let me = kh("alice");
     assert!(
-        a.declare_node(Some(zoned)).is_err(),
+        a.declare_node(Some((zoned, me))).is_err(),
         "a zone rides signed records only"
     );
-    assert!(a.declare_node(Some(vec![0xa0])).is_err(), "an empty map");
     assert!(
-        a.declare_node(Some([&POINT[..], &[0x00]].concat()))
+        a.declare_node(Some((vec![0xa0], me))).is_err(),
+        "an empty map"
+    );
+    assert!(
+        a.declare_node(Some(([&POINT[..], &[0x00]].concat(), me)))
             .is_err(),
         "trailing bytes"
     );
-    assert!(a.declare_node(Some(POINT.to_vec())).is_ok());
+    assert!(a.declare_node(Some((POINT.to_vec(), me))).is_ok());
     assert!(a.declare_node(None).is_ok(), "and cleared");
 }

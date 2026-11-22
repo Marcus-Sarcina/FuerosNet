@@ -277,6 +277,38 @@ fn top_41_an_instance_signs_its_acknowledgement_under_its_delegated_key() {
     );
 }
 
+/// **A launched instance signs its node keys under its delegated key**
+/// (`wire-format.md` §7.8), holding no identity key: a holder verifies one
+/// against the delegation it keeps, and defers without it, as for an
+/// acknowledgement. Every node key a launched node served was refused by
+/// its clients while `NodeKey` verified under identity keys alone
+/// [bench, 2026-11-22].
+// functional: PAY-024
+#[test]
+fn an_instances_node_key_verifies_under_its_delegated_key() {
+    let t = 1_800_000_000;
+    let (clock, _) = movable(t);
+    let g = instance("alice", 4, t, clock);
+    let d = g.current().unwrap().raw;
+    let mut keys =
+        rhtn_node::node_keys::NodeKeyService::new(rhtn_node::node_keys::NodeKeyConfig::default());
+    let record = keys.newest(&g.signer(), &kh("bob"), t + 1);
+    assert!(matches!(
+        verify::record(&ids(), "NodeKey", &record),
+        Err(Failure::MissingDelegation(k)) if k == kh("alice").to_vec()
+    ));
+    let mut store = TopologyStore::new();
+    assert_eq!(
+        store.accept(KIND_DELEGATION, &d, &kh("alice"), &ids(), &Everywhere),
+        Decision::Stored
+    );
+    let known = Known {
+        ids: &ids(),
+        store: &store,
+    };
+    assert_eq!(verify::record(&known, "NodeKey", &record), Ok(()));
+}
+
 // acceptance: TOP-42
 #[test]
 fn top_42_an_acknowledgement_waits_for_the_delegation_it_was_signed_under() {

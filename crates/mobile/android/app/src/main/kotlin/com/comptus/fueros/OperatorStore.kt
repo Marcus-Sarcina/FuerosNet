@@ -137,40 +137,58 @@ object OperatorStore {
         instances.filter { it.unassigned && it.at.isNotEmpty() }
 
     /**
-     * **Where this patron's own node answers for the adoption about to be
-     * made**, as members dial it, or null for none [author, 2026-11-21]:
-     * *"auto-invite via the bluetooth channel during an adoption into a
-     * subnet where a node already exists."* The kernel carries it beside
-     * the intent and the member holds it as an invitation once the
-     * adoption is recorded.
+     * **A node as an adoption carries it**: where members dial it, and the
+     * keyhash it answers as, hex [author, 2026-11-22] — the member has no
+     * other way to learn whose it is where it is further up the chain than
+     * the patron.
+     */
+    data class Carried(val at: String, val node: String)
+
+    /**
+     * **The node an adoption about to be made carries to the member**, as
+     * members dial it and whose it is, or null for none [author,
+     * 2026-11-21]: *"auto-invite via the bluetooth channel during an
+     * adoption into a subnet where a node already exists."* The kernel
+     * carries it beside the intent and the member holds it as an
+     * invitation once the adoption is recorded.
      *
-     * **Only as patron, and only a node of its own**: the instance chosen
-     * at [Meet.Choice.SERVE_FROM], else the newest record serving the
-     * subnet the adoption is into — [Meet.Scope.OWN]'s being the one under
-     * this operator's own key, and a record naming no subnet serving the
-     * one that key roots (`root`), that line being its. A patron served
-     * from somebody else's node
-     * has none here to carry, and an instance serving no subnet is
-     * nobody's to be invited to. Pure, for a JVM test.
+     * **Only as patron, and its own node first**, answering as this
+     * identity (`me`): the instance chosen at [Meet.Choice.SERVE_FROM],
+     * else the newest record serving the subnet the adoption is into —
+     * [Meet.Scope.OWN]'s being the one under this operator's own key, and
+     * a record naming no subnet serving the one that key roots (`root`),
+     * that line being its. An instance serving no subnet is nobody's to be
+     * invited to.
+     *
+     * **Else the node this identity is itself served from there**
+     * (`served`) [author, 2026-11-22]: a member is served from the nearest
+     * infrastructure node on its patron chain (`light-client-requirements.md`
+     * §4), so a patron with none of its own carries the one above it. Only
+     * into a subnet already held: a new one has no node above it. Pure,
+     * for a JVM test.
      */
     fun meetingNode(
         adopt: Meet.Adopt,
         scope: Meet.Scope?,
         serving: Meet.Serving?,
         instances: List<Instance>,
+        me: String,
         root: String? = null,
-    ): String? {
+        served: Carried? = null,
+    ): Carried? {
         if (adopt != Meet.Adopt.THEM_UNDER_ME || scope == null) return null
-        serving?.at?.let { return Meet.Serving.dialled(it) }
+        serving?.at?.let { return Carried(Meet.Serving.dialled(it), me) }
         val subnet = scope.id.takeIf { it.length == 64 }?.lowercase()
         if (subnet == null && scope != Meet.Scope.OWN) return null
         val rooted = root?.lowercase()
-        return instances
+        instances
             .lastOrNull {
                 val serves = it.subnet?.lowercase()
                 !it.unassigned && it.at.isNotEmpty() && (serves == subnet || (serves == null && subnet != null && subnet == rooted))
             }
-            ?.let { Meet.Serving.dialled(it.at) }
+            ?.let { return Carried(Meet.Serving.dialled(it.at), me) }
+        if (subnet == null) return null
+        return served?.takeIf { it.at.isNotEmpty() && it.node.length == 64 }
     }
 
     /**

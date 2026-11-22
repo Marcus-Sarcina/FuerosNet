@@ -972,18 +972,33 @@ object Gateway {
     }
 
     /**
-     * **Where this device's own node answers, carried beside the intent
-     * of the meeting about to cross** [author, 2026-11-21], as
+     * **The node serving the subnet the meeting about to cross adopts
+     * into, carried beside its intent** [author, 2026-11-21], where it
+     * answers and whose it is [author, 2026-11-22], as
      * [OperatorStore.meetingNode] chose it, or null to clear it — which
-     * every meeting that is not this patron's adoption into a subnet its
-     * own node serves does, so nothing reaches a later one. The point
-     * names no provider and no zone: it rides an unsigned carriage
+     * every meeting that is not this patron's adoption into a subnet a
+     * node serves does, so nothing reaches a later one. The point names no
+     * provider and no zone: it rides an unsigned carriage
      * (`wire-format.md` §4.4).
      */
-    fun declareNode(by: String, hostPort: String?) {
+    fun declareNode(by: String, carried: OperatorStore.Carried?) {
         val p = loaded[by] ?: return
-        val point = hostPort?.let { point(it) }
-        call("declareNode", { }) { p.declareNode(point) }
+        val point = carried?.let { point(it.at) }
+        val node = carried?.node?.takeIf { point != null }?.let { unhex(it) }
+        call("declareNode", { }) { p.declareNode(point, node) }
+    }
+
+    /**
+     * **The node this identity is served from in `subnet`**, hex, at the
+     * first address it agreed for it, or null where nothing serves it
+     * there: what it carries to a member it adopts there with no node of
+     * its own [author, 2026-11-22].
+     */
+    fun servingIn(by: String, subnet: String): OperatorStore.Carried? {
+        val p = loaded[by] ?: return null
+        val a = call("servingIn", { null }) { p.servingIn(unhex(subnet)) } ?: return null
+        val at = a.addresses.firstOrNull() ?: return null
+        return OperatorStore.Carried(at, hex(a.serving))
     }
 
     /** The number held for a party, where their device reported one. */
