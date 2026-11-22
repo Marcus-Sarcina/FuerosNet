@@ -121,6 +121,17 @@ pub enum Brings {
     /// that the node could not make, since the key that signs it is never
     /// handed to an instance.
     SignedRunner,
+    /// **The restricted key, and the package's own key where the person
+    /// ticked `sealed`** [author, 2026-11-22]: derived from the operator's
+    /// signing seed and the `resource` parameter
+    /// (`rhtn_crypto::package_seal`), sent as `seal`, so the storage is
+    /// sealed against an image of the machine (`infra-client-requirements.md`
+    /// §9.4).
+    HostKeySealing,
+    /// **The package's own key for the `resource` parameter**, sent as
+    /// `seal`: what reopens a sealed package after its machine restarted,
+    /// which the client makes unasked whenever it reaches this node.
+    PackageKey,
 }
 
 impl Brings {
@@ -130,6 +141,8 @@ impl Brings {
             Brings::Nothing => "nothing",
             Brings::HostKey => "host-key",
             Brings::SignedRunner => "signed-runner",
+            Brings::HostKeySealing => "host-key-sealing",
+            Brings::PackageKey => "package-key",
         }
     }
 }
@@ -229,7 +242,7 @@ pub fn node_acts(acknowledging: bool) -> Vec<Act> {
              leaves nothing running. Nobody may reach the package until a role is granted on \
              it.",
             About::Node,
-            Brings::HostKey,
+            Brings::HostKeySealing,
             vec![
                 p("resource", "the resource it is hosted as", Kind::Keyhash),
                 p("owner", "whose horizon reaches it", Kind::Keyhash),
@@ -258,7 +271,31 @@ pub fn node_acts(acknowledging: bool) -> Vec<Act> {
                         max: rhtn_node::resources::MAX_TEXT,
                     },
                 ),
+                p(
+                    "sealed",
+                    "seal its storage against an image of this machine",
+                    Kind::Flag,
+                ),
             ],
+        ),
+        act(
+            "sealed",
+            "Which packages are sealed",
+            "Each package whose storage was sealed at installation, and whether its key is in \
+             this machine's kernel: a closed one waits for a device of yours.",
+            About::Node,
+            Brings::Nothing,
+            Vec::new(),
+        ),
+        act(
+            "reopen",
+            "Reopen a sealed package",
+            "Gives this machine's kernel the package's key, derived on your device, so a \
+             package closed by the machine's restart serves again. A key that is not its own \
+             changes nothing. Your device does this by itself whenever it reaches this node.",
+            About::Node,
+            Brings::PackageKey,
+            vec![p("resource", "the resource it is hosted as", Kind::Keyhash)],
         ),
         act(
             "running",
@@ -572,7 +609,9 @@ mod tests {
         // does not
         let acts = node_acts(false);
         let brings = |n: &str| acts.iter().find(|a| a.operation.name == n).expect(n).brings;
-        assert_eq!(brings("install"), Brings::HostKey);
+        assert_eq!(brings("install"), Brings::HostKeySealing);
+        assert_eq!(brings("reopen"), Brings::PackageKey);
+        assert_eq!(brings("sealed"), Brings::Nothing);
         assert_eq!(brings("upgrade"), Brings::HostKey);
         assert_eq!(brings("runner-refresh"), Brings::SignedRunner);
         assert_eq!(brings("move"), Brings::HostKey);

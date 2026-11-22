@@ -3769,6 +3769,7 @@ name = "rhtn-daemon"
 version = "0.1.0"
 dependencies = [
  "aws-lc-rs",
+ "libc",
  "log",
  "rhtn-adaptors",
  "rhtn-archive",

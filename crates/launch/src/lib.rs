@@ -138,6 +138,16 @@ pub const ENABLE_SECURITY_UPDATES: &str = "echo unattended-upgrades \
      unattended-upgrades/enable_auto_updates boolean true | debconf-set-selections \
      && dpkg-reconfigure -f noninteractive unattended-upgrades || true";
 
+/// **The machine's filesystem allows a package's storage to be sealed**
+/// [author, 2026-11-22] (`infra-client-requirements.md` §9.4): ext4's
+/// `encrypt` feature on the filesystem the node's state is on, which the
+/// kernel lets the node use for a directory of its own and nothing else.
+/// Set while mounted, it changes nothing until a directory is sealed, and
+/// a failure here stops nothing after it: a node on a filesystem that
+/// cannot seal says so at installation.
+pub const ENABLE_SEALING: &str =
+    "tune2fs -O encrypt \"$(findmnt -no SOURCE -T /var/lib/rhtn)\" || true";
+
 /// **The runner, as the repository holds it** (`packaging/package-runner.sh`):
 /// carried into the machine by the script it runs once, so the vocabulary
 /// an instance may ask for is one file, versioned with this crate and
@@ -419,6 +429,7 @@ pub fn user_data(
          \x20 - chmod 0700 /var/lib/rhtn\n\
          \x20 - chmod 0700 /root/.ssh\n\
          \x20 - {ENABLE_SECURITY_UPDATES}\n\
+         \x20 - {ENABLE_SEALING}\n\
          \x20 - systemctl enable --now podman-restart.service\n\
          \x20 - podman run -d --name rhtnd --restart=always --network=host -v /var/lib/rhtn:/var/lib/rhtn {}\n",
         image.reference()
@@ -1352,6 +1363,22 @@ mod tests {
                 .contains("unattended-upgrades/enable_auto_updates boolean true")
         );
         assert!(ENABLE_SECURITY_UPDATES.contains("dpkg-reconfigure -f noninteractive"));
+        // functional: OPS-033 -- the filesystem allows sealing, before the
+        // node is started and without stopping anything where it cannot
+        for s in [&script, &keyed, &both] {
+            let runcmd = s.find("runcmd:\n").expect("a runcmd block");
+            let sealing = s[runcmd..]
+                .find(&format!("  - {ENABLE_SEALING}\n"))
+                .expect("sealing is enabled");
+            assert!(
+                sealing < s[runcmd..].find("podman run").expect("the node"),
+                "{s}"
+            );
+        }
+        assert!(
+            ENABLE_SEALING.starts_with("tune2fs -O encrypt ")
+                && ENABLE_SEALING.ends_with("|| true")
+        );
         assert!(script.contains("-v /var/lib/rhtn:/var/lib/rhtn reg.example/x/rhtnd:abc123\n"));
         assert!(!script.contains("seed"));
     }

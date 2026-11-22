@@ -1159,27 +1159,34 @@ backup, that package is unavailable until a device of its operator's
 reaches you**, and you and every other package you host serve as before.
 
 - **What is sealed is everything you keep for that package alone**: its
-  block of either kind (§9.3), its log, its jobs, the envelopes you hold for
-  it (§9.3, `resource-requirements.md` §3.3) and its instance secret, in one
-  directory per package under your host's filesystem encryption. What says
-  who may reach it — its entry and its grants — is not, since you answer
-  for a closed package too.
+  block, its log, its jobs and the envelopes you hold for it (§9.3,
+  `resource-requirements.md` §3.3), in one directory per package under your
+  host's filesystem encryption. What says who may reach it and which
+  instance is calling — its entry, its grants and its instance secret — is
+  not, since you answer for a closed package too. **Its block is on your
+  surface and never mounted**: a mounted block is your host's filesystem
+  and not yours to seal, so a sealed install asking for one is refused as a
+  contradiction; and what a package on a socket of its own keeps inside its
+  own container is its own and not storage you keep.
 - **The key is your operator's, and it is never on the disk.** Their client
-  derives it for that one package and hands it over with the act, as it
-  hands the host key; your host holds it in its kernel for as long as the
-  machine runs. So **your own restart leaves it open, and the machine's
-  closes it**, which is the line between the two that an image draws.
+  derives it for that one package and hands it over with the act; you give
+  it to your host's kernel for that directory, which an ordinary user may
+  do on a filesystem set up to allow it, and keep it nowhere else. The
+  kernel holds it for as long as the machine runs, so **your own restart
+  leaves it open, and the machine's closes it**, which is the line between
+  the two that an image draws.
 - **While it is closed, it is unavailable and nothing of it runs.** Answer a
   request for it as for a package that is not running; refuse an envelope
   for it, which its sender keeps as it keeps any its far side has not
   taken; run none of its jobs; start nothing of it. Show it on your surface
   as sealed and waiting for its operator.
-- **Reopening is an act of the same kind as installing**: it brings the host
-  key and the package's key, and your host checks that the key opens that
-  package's directory before it starts anything, so a wrong key is refused
-  and changes nothing. Your operator's client makes it unasked whenever it
-  reaches you (`light-client-requirements.md` §10), so the act is not a
-  control on your page.
+- **Reopening is an act on your surface bringing that package's key and
+  nothing else**: your host's kernel refuses a key that is not that
+  directory's, so a wrong key changes nothing, and a right one has you serve
+  the package as you did before the machine restarted. Your operator's
+  client makes it unasked whenever it reaches you
+  (`light-client-requirements.md` §10), so the act is not a control on your
+  page.
 - **The choice is made when the storage is provisioned and lasts as long as
   it does.** A removal and an install of the same package — an upgrade —
   keeps it sealed under the same key; storage destroyed by your operator's
@@ -1187,9 +1194,15 @@ reaches you**, and you and every other package you host serve as before.
 - **A host whose filesystem cannot seal a directory installs no sealed
   package**, and says why at installation: that is ordinary capacity (§9),
   and an install that quietly went ahead unsealed would be the worse answer.
+  A machine your operator's client launches has its filesystem set up to
+  allow it.
 - **Moving to another machine carries a sealed package open**, over the
-  stream pinned to the receiving machine (below), and the receiving machine
-  seals it again under the key the act brings before starting it.
+  stream pinned to the receiving machine (below), so a closed one is
+  reopened before it can go. On the receiving machine it is closed until
+  your operator's client reaches you there, which it does as the move
+  completes, and that reopening seals it again. What landed on that disk
+  before is not erased by the seal, which is the price of a move against
+  one of a fresh launch.
 
 #### The door onto your host, and why it is not a standing one
 

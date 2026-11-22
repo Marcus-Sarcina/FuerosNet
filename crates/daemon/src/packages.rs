@@ -66,6 +66,10 @@ pub struct Package {
     /// runner's `block` line on the start, kept so the node tells the
     /// instance that path as `rhtn-block` in place of its surface.
     pub block: Option<String>,
+    /// **Its storage sealed against an image of the machine**
+    /// (`infra-client-requirements.md` §9.4) [author, 2026-11-22]: chosen
+    /// when its storage was provisioned and kept as long as that is.
+    pub sealed: bool,
 }
 
 impl Package {
@@ -134,6 +138,8 @@ struct Entry {
     port: u16,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     block: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    sealed: bool,
 }
 
 /// **Read what this node installed**, or nothing where it has installed
@@ -159,6 +165,7 @@ pub fn read(hosting: &Path) -> Result<Vec<Package>, String> {
             image: e.image.clone(),
             port: e.port,
             block: e.block.clone(),
+            sealed: e.sealed,
         });
     }
     Ok(out)
@@ -186,6 +193,7 @@ pub fn write(hosting: &Path, packages: &[Package]) -> Result<(), String> {
                 image: p.image.clone(),
                 port: p.port,
                 block: p.block.clone(),
+                sealed: p.sealed,
             })
             .collect(),
     };
@@ -234,6 +242,9 @@ fn entry(hosting: &Path, p: &Package) -> String {
     );
     if let Some(b) = &p.block {
         out.push_str(&format!("block = \"{b}\"\n"));
+    }
+    if p.sealed {
+        out.push_str("sealed = true\n");
     }
     out
 }
@@ -400,6 +411,7 @@ mod tests {
             image: "ggcr.io/mzuech/fuerosnet/rhtn-testapp:abc12345".into(),
             port,
             block: None,
+            sealed: false,
         }
     }
 

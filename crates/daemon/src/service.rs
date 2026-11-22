@@ -427,6 +427,7 @@ impl Service {
                             grants: cfg.grants.clone(),
                             horizon: cfg.horizon.clone(),
                             state: cfg.state.clone(),
+                            federation: cfg.federation.as_ref().and_then(|f| f.store.clone()),
                             hosting: cfg.resources.clone().map(|p| {
                                 let (memory, fuel) = cfg
                                     .resource_limits
@@ -688,12 +689,13 @@ impl Service {
                     fuel,
                     ..Limits::default()
                 };
-                let mut applied = crate::hosting::apply(
+                let mut applied = crate::hosting::apply_in(
                     &mut view.resources,
                     path,
                     limits,
                     cfg.grants.as_deref(),
                     cfg.state.as_deref(),
+                    cfg.federation.as_ref().and_then(|f| f.store.as_deref()),
                 )
                 .map_err(|e| Startup::Hosting(format!("{}: {e}", path.display())))?;
                 // where each instance reaches its block and its log, and
@@ -717,6 +719,9 @@ impl Service {
                 // file, so each hosted resource has its plane
                 for (res, r) in crate::hosting::relationships(path)
                     .map_err(|e| Startup::Hosting(format!("{}: {e}", path.display())))?
+                    .into_iter()
+                    // a closed sealed resource has no plane (§9.4)
+                    .filter(|(res, _)| !applied.closed.contains(res))
                 {
                     view.federation
                         .configure(res, r)

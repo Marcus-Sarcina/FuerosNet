@@ -62,6 +62,10 @@ serde_json = { workspace = true }
 # Apache-2.0 OR MIT; the restricted ssh key an install carries is held no
 # longer than the act (`runner`, `administration::runner_key`)
 zeroize = { workspace = true }
+# MIT OR Apache-2.0; already in the graph, for the three filesystem
+# encryption requests a sealed package's storage is set up and reopened by
+# (`sealing`)
+libc = "0.2"
 
 [dev-dependencies]
 rhtn-sim = { path = "../sim" }

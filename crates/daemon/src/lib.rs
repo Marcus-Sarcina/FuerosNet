@@ -56,6 +56,10 @@ pub mod packages;
 /// **The one program an instance may run on its host**: how a node asks
 /// its own host's shell to pull and start a package it was told to host.
 pub mod runner;
+/// **A package's storage sealed against an image of its machine**: one
+/// directory per sealed package under the host's filesystem encryption,
+/// its key in the host's kernel and never on the disk.
+pub mod sealing;
 pub mod service;
 
 /// A line to the operator on stderr.  **A closed pipe is not the daemon's

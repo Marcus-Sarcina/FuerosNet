@@ -267,6 +267,9 @@ pub struct Surface {
     /// (`infra-client-requirements.md` §9.3), for a reload to provision
     /// against.
     pub state: Option<PathBuf>,
+    /// Where the node keeps federation custody, so an open sealed
+    /// resource's plane is linked into its sealed directory (§9.4).
+    pub federation: Option<PathBuf>,
     /// **Where this instance's own host answers a shell**, where its
     /// operator gave it one: what an install asks to pull and start a
     /// package ([`crate::runner`]).  Absent, this node installs nothing
@@ -544,7 +547,7 @@ impl Surface {
             hosts_resources,
             status.patron.is_some(),
         );
-        let resources = resource_views(&node);
+        let resources = resource_views(&node, self.state.as_deref());
         let showing = query
             .and_then(|q| q.split('&').find_map(|kv| kv.strip_prefix("resource=")))
             .and_then(unhex)
@@ -772,13 +775,14 @@ impl Surface {
             .map(|ps| ps.iter().map(|p| p.resource).collect())
             .unwrap_or_default();
         let acknowledging = node.view.lock().unwrap().ack_policy.is_some();
-        let views: Vec<(crate::operator::ResourceView, bool)> = resource_views(&node)
-            .into_iter()
-            .map(|v| {
-                let mine = installed.contains(&v.resource);
-                (v, mine)
-            })
-            .collect();
+        let views: Vec<(crate::operator::ResourceView, bool)> =
+            resource_views(&node, self.state.as_deref())
+                .into_iter()
+                .map(|v| {
+                    let mine = installed.contains(&v.resource);
+                    (v, mine)
+                })
+                .collect();
         (
             200,
             format!("{}\n", crate::acts::declaration(acknowledging, &views)),
@@ -815,6 +819,8 @@ impl Surface {
             "upgrade" => self.node_upgrade(body),
             "runner-refresh" => self.runner_refresh(body),
             "move" => self.node_move(body),
+            "sealed" => self.package_sealed(),
+            "reopen" => self.package_reopen(body),
             other => (
                 404,
                 format!(
@@ -824,6 +830,79 @@ impl Surface {
                 ),
             ),
         }
+    }
+
+    /// **Which packages' storage was sealed at installation, and which are
+    /// open** (`infra-client-requirements.md` §9.4): one line each, the
+    /// resource and `open` or `closed`, which is what a client reaching
+    /// this node reads to reopen what the machine's restart closed.
+    fn package_sealed(&self) -> (u16, String) {
+        let Some(root) = self.state.as_deref() else {
+            return (200, String::new());
+        };
+        let Some((hosting, _)) = self.hosting.clone() else {
+            return (200, String::new());
+        };
+        let was = match crate::packages::read(&hosting) {
+            Ok(w) => w,
+            Err(why) => return (500, format!("{why}\n")),
+        };
+        let mut out = String::new();
+        for p in was.iter().filter(|p| p.sealed) {
+            let state = if crate::sealing::is_open(root, &p.resource) {
+                "open"
+            } else {
+                "closed"
+            };
+            out.push_str(&format!("{} {state}\n", hex(&p.resource)));
+        }
+        (200, out)
+    }
+
+    /// **Reopen a sealed package with the key its operator's client
+    /// brought** (`infra-client-requirements.md` §9.4) [author,
+    /// 2026-11-22]: given to the host's kernel and taken back where it is
+    /// not that directory's, so a wrong key changes nothing; then the
+    /// hosting file is re-read, so the package serves as it did before the
+    /// machine restarted.
+    fn package_reopen(&self, body: &[u8]) -> (u16, String) {
+        if self.acting().is_err() {
+            return (409, "this node is not serving yet\n".into());
+        }
+        let Some(root) = self.state.clone() else {
+            return (
+                409,
+                "this node keeps no state directory, so nothing here is sealed\n".into(),
+            );
+        };
+        let f = form(body);
+        let Some(resource) = key32(field(&f, "resource")) else {
+            return (400, "`resource` is 64 lower-case hex digits\n".into());
+        };
+        let Some(key) = crate::sealing::key_from_hex(field(&f, "seal")) else {
+            return (400, "`seal` is the package's key, 128 hex digits\n".into());
+        };
+        if crate::sealing::is_open(&root, &resource) {
+            return (200, format!("{} is open\n", hex(&resource)));
+        }
+        if let Err(why) = crate::sealing::open(&root, &resource, &key) {
+            return (400, format!("{why}\nnothing changed\n"));
+        }
+        tracing::info!(
+            target: "daemon",
+            step = "surface_act",
+            act = "reopen",
+            resource = %hex(&resource),
+            "daemon.lifecycle"
+        );
+        let (code, said) = self.reload();
+        if code != 200 {
+            return (
+                500,
+                format!("its key is in the kernel and the node did not take it: {said}"),
+            );
+        }
+        (200, format!("{} is open\n{said}", hex(&resource)))
     }
 
     /// **The host's shell, where this instance's operator gave it one.**
@@ -905,10 +984,46 @@ impl Surface {
             Ok(k) => k,
             Err(e) => return e,
         };
-        let want = match asked(&f) {
+        let mut want = match asked(&f) {
             Ok(w) => w,
             Err(why) => return (400, format!("{why}\n")),
         };
+        // **sealed against an image where the act brings the package's
+        // key** (`infra-client-requirements.md` §9.4) [author,
+        // 2026-11-22]: chosen when its storage is provisioned, and kept by
+        // an install of the same resource that brings none
+        let seal = match field(&f, "seal") {
+            // ticked and not brought: an install that went ahead unsealed
+            // would be the worse answer
+            "" if field(&f, "sealed") == "on" => {
+                return (
+                    400,
+                    "`sealed` is on and the act brings no `seal`: the package's key is \
+                     derived by your client\n"
+                        .into(),
+                );
+            }
+            "" => None,
+            s => match crate::sealing::key_from_hex(s) {
+                Some(k) => Some(k),
+                None => {
+                    return (400, "`seal` is the package's key, 128 hex digits\n".into());
+                }
+            },
+        };
+        let was_sealed = self
+            .state
+            .as_deref()
+            .is_some_and(|root| crate::sealing::is_sealed(root, &want.resource));
+        want.sealed = seal.is_some() || was_sealed;
+        if seal.is_some() && self.state.is_none() {
+            return (
+                400,
+                "this node keeps no state directory (`state` in the configuration), so it can \
+                 seal nothing\n"
+                    .into(),
+            );
+        }
         let manifest = field(&f, "manifest");
         if manifest.trim().is_empty() {
             return (
@@ -958,6 +1073,22 @@ impl Surface {
             Err(why) => return (502, format!("the image was not pulled: {why}\n")),
         };
 
+        // **the storage sealed before anything names it**: a key that
+        // does not seal or reopen it changes nothing
+        let mut sealed_here = false;
+        if let (Some(key), Some(root)) = (&seal, self.state.as_deref()) {
+            let done = if !was_sealed {
+                sealed_here = true;
+                crate::sealing::seal(root, &want.resource, key)
+            } else if crate::sealing::is_open(root, &want.resource) {
+                Ok(())
+            } else {
+                crate::sealing::open(root, &want.resource, key)
+            };
+            if let Err(why) = done {
+                return (400, format!("{why}\nnothing changed\n"));
+            }
+        }
         let manifest_at = crate::packages::manifest_at(&hosting, &want.resource);
         let held_manifest = std::fs::read(&manifest_at).ok();
         let mut now: Vec<crate::packages::Package> = was
@@ -980,6 +1111,10 @@ impl Surface {
             }
             let _ = crate::packages::write(&hosting, &was);
             let _ = self.reload();
+            // a directory this act sealed holds nothing yet but its mark
+            if sealed_here && let Some(root) = self.state.as_deref() {
+                let _ = std::fs::remove_dir_all(crate::sealing::dir(root, &want.resource));
+            }
         };
 
         if let Some(dir) = manifest_at.parent()
@@ -1024,6 +1159,10 @@ impl Surface {
                             .unwrap_or(crate::hosting::DEFAULT_BLOCK_BYTES)
                     })
                 });
+        // **a sealed package's block is on the surface and never mounted**
+        // (§9.4): a mounted block is the host's filesystem, not this
+        // node's to seal
+        let block_bytes = block_bytes.filter(|_| !want.sealed);
         if let Some(b) = block_bytes {
             request.push(format!("block={b}"));
         }
@@ -1843,12 +1982,13 @@ impl Surface {
             return (409, "the configuration names no `resources` file\n".into());
         };
         let mut view = node.view.lock().unwrap();
-        match crate::hosting::apply(
+        match crate::hosting::apply_in(
             &mut view.resources,
             &path,
             limits,
             self.grants.as_deref(),
             self.state.as_deref(),
+            self.federation.as_deref(),
         ) {
             Ok(mut applied) => {
                 let n = applied.bound;
@@ -1862,7 +2002,9 @@ impl Surface {
                 // and the instances' relationships, from the same file
                 match crate::hosting::relationships(&path) {
                     Ok(rs) => {
-                        for (res, r) in rs {
+                        // a closed sealed resource has no plane (§9.4)
+                        for (res, r) in rs.into_iter().filter(|(r, _)| !applied.closed.contains(r))
+                        {
                             if let Err(e) = view.federation.configure(res, r) {
                                 return (400, format!("{}: {e}\n", path.display()));
                             }
@@ -2374,7 +2516,10 @@ fn seen(said: String) -> (u16, String) {
 /// (`infra-client-requirements.md` §10.6, §10.7): the binding, who holds a
 /// row, and how many sessions are open. One lock, so the counts describe
 /// one instant.
-fn resource_views(node: &LiveNode) -> Vec<crate::operator::ResourceView> {
+fn resource_views(
+    node: &LiveNode,
+    state: Option<&std::path::Path>,
+) -> Vec<crate::operator::ResourceView> {
     let view = node.view.lock().unwrap();
     let g = &view.resources;
     // **a template's population, as of this instant** (§10.4): the
@@ -2431,6 +2576,9 @@ fn resource_views(node: &LiveNode) -> Vec<crate::operator::ResourceView> {
                 sessions: g.hosted_sessions(),
                 throttled: g.throttled(&resource),
                 admin: b.declared.admin.clone(),
+                sealed: state
+                    .filter(|root| crate::sealing::is_sealed(root, &resource))
+                    .map(|root| crate::sealing::is_open(root, &resource)),
                 federation: view.federation.plane(&resource).map(|p| {
                     crate::operator::FederationView {
                         patron: p.relationships.patron,
@@ -2521,6 +2669,7 @@ fn asked(f: &[(String, String)]) -> Result<crate::packages::Package, String> {
         image: crate::packages::image(field(f, "image"))?,
         port,
         block: None,
+        sealed: false,
     })
 }
 

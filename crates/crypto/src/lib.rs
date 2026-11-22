@@ -29,6 +29,11 @@ pub mod kdf;
 /// A serving node's key for one recipient (`wire-format.md` §7.8): what
 /// the node signs and publishes, and the private half it opens with.
 pub mod node_key;
+/// **The key a package's storage is sealed under** on a node this identity
+/// operates (`infra-client-requirements.md` §9.4): derived from the signing
+/// seed and the resource, so the phrase that restores the identity reopens
+/// what it sealed.
+pub mod package_seal;
 /// The split seal (design §14.2.4): the identity's encryption key, the
 /// message key, the AEAD and the sender's tag.
 pub mod seal;

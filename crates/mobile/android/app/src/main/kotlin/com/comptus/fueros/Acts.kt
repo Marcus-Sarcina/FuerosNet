@@ -61,6 +61,15 @@ object Acts {
          *  forge (`infra-client-requirements.md` §9.4). */
         SIGNED_RUNNER,
 
+        /** **That key, and the package's own where the person ticked
+         *  `sealed`**, derived for its `resource`
+         *  (`infra-client-requirements.md` §9.4). */
+        HOST_KEY_SEALING,
+
+        /** **The package's own key for its `resource`**: what reopens a
+         *  sealed package, which this app makes unasked ([Sealed]). */
+        PACKAGE_KEY,
+
         /** **Something this client does not know how to bring**, which is
          *  a refusal and not a field left empty: an act is not sent
          *  without what it says it needs. */
@@ -130,6 +139,8 @@ object Acts {
                 "nothing" -> Brings.NOTHING
                 "host-key" -> Brings.HOST_KEY
                 "signed-runner" -> Brings.SIGNED_RUNNER
+                "host-key-sealing" -> Brings.HOST_KEY_SEALING
+                "package-key" -> Brings.PACKAGE_KEY
                 else -> Brings.UNKNOWN
             },
             parameters = Json.list(o["parameters"]).map { parameter(it) },

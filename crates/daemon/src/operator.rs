@@ -898,6 +898,10 @@ pub struct ResourceView {
     /// What its package declared it can be asked to do
     /// (`rhtn_node::resources::Operation`).
     pub admin: Vec<rhtn_node::resources::Operation>,
+    /// **Whether its storage was sealed at installation, and whether it is
+    /// open** (`infra-client-requirements.md` §9.4): absent for one that
+    /// was not, and a closed one shown as waiting for its operator.
+    pub sealed: Option<bool>,
     /// Its side of the directive plane, where the node has one for it
     /// ([`FederationView`]).
     pub federation: Option<FederationView>,
@@ -1016,7 +1020,7 @@ impl ResourceView {
         let mut out = String::new();
         let _ = write!(
             out,
-            "<h2>{}</h2>\n<pre>resource  {}\nowner     {}\nhosting   {}\nsessions  {}\nthrottled {}\nroles     {}</pre>\n",
+            "<h2>{}</h2>\n<pre>resource  {}\nowner     {}\nhosting   {}\nsessions  {}\nthrottled {}\nroles     {}{}</pre>\n",
             escape(&self.authority),
             hex(&self.resource),
             hex(&self.owner),
@@ -1038,7 +1042,12 @@ impl ResourceView {
                     })
                     .collect::<Vec<String>>()
                     .join(", ")
-            )
+            ),
+            match self.sealed {
+                None => "",
+                Some(true) => "\nsealed    open",
+                Some(false) => "\nsealed    closed: waiting for its operator's device",
+            }
         );
         out.push_str("<h2>Who may reach it</h2>\n");
         if self.grants.is_empty() {

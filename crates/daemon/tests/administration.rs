@@ -2044,8 +2044,12 @@ fn an_instance_declares_what_it_can_be_asked_for_and_one_route_invokes_it() {
     // **the act that reaches the machine says the client brings the key**,
     // which is the whole reason the acts left the page: the frame is
     // isolated from the seed it is derived from
-    assert_eq!(find("install")["brings"], "host-key");
+    assert_eq!(find("install")["brings"], "host-key-sealing");
     assert_eq!(find("running")["brings"], "host-key");
+    // and the package's own key where it is sealed, which the client
+    // derives and the person never types (§9.4)
+    assert_eq!(find("reopen")["brings"], "package-key");
+    assert_eq!(find("sealed")["brings"], "nothing");
     // and the key is never a field a person is asked for
     for a in acts {
         let names: Vec<&str> = a["parameters"]
@@ -2055,6 +2059,7 @@ fn an_instance_declares_what_it_can_be_asked_for_and_one_route_invokes_it() {
             .map(|p| p["name"].as_str().unwrap())
             .collect();
         assert!(!names.contains(&"key"), "{} declares key", a["name"]);
+        assert!(!names.contains(&"seal"), "{} declares seal", a["name"]);
     }
     // the install's fields are the ones the route reads, so nothing is
     // translated between a declaration and the act it describes
@@ -2073,7 +2078,8 @@ fn an_instance_declares_what_it_can_be_asked_for_and_one_route_invokes_it() {
             "authority",
             "image",
             "port",
-            "manifest"
+            "manifest",
+            "sealed"
         ]
     );
 

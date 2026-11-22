@@ -86,7 +86,9 @@ use rhtn_archive::Keyhash;
 use rhtn_node::federation::{Location, Relationships};
 use rhtn_node::grant::{Clause, Grant, Template};
 use rhtn_node::relay::Relay;
-use rhtn_node::resources::{Binding, Gateway, Kind, Manifest, Operation, Parameter, instantiate};
+use rhtn_node::resources::{
+    Backend, Binding, Gateway, Kind, Manifest, Operation, Parameter, instantiate,
+};
 use rhtn_resources::{Hosted, Limits, Sandbox};
 use std::collections::BTreeSet;
 use std::fmt::Write;
@@ -168,6 +170,12 @@ struct HostEntry {
     /// [author, 2026-11-15]: told to the instance as `rhtn-block` in
     /// place of the surface, and nothing provisioned here for it.
     block: Option<String>,
+    /// **Its storage sealed against an image of the machine**
+    /// (`infra-client-requirements.md` §9.4) [author, 2026-11-22]: kept in
+    /// one directory under the host's filesystem encryption, and served
+    /// only while its key is in the host's kernel.
+    #[serde(default)]
+    sealed: bool,
     /// **Where grants used to be written**, kept only to say where they
     /// went: this file is the operator's and the node never rewrites it,
     /// and a grant is a table update an act on the operator's surface
@@ -443,6 +451,26 @@ pub struct Applied {
         Option<Arc<rhtn_resources::LogFile>>,
         [u8; 32],
     )>,
+    /// **The sealed resources whose key is not in the kernel**
+    /// (`infra-client-requirements.md` §9.4): bound so they answer as a
+    /// package that is not running, with nothing of them provisioned and
+    /// no federation plane, so an envelope for one is refused and its
+    /// sender keeps it.
+    pub closed: Vec<Keyhash>,
+}
+
+/// **A sealed package whose key is not in the host's kernel**
+/// (`infra-client-requirements.md` §9.4): it answers as a package that is
+/// not running, and runs no jobs.
+struct Closed;
+
+impl Backend for Closed {
+    fn handle(&self, _: &[u8]) -> Result<Vec<u8>, String> {
+        Err("sealed and waiting for its operator".into())
+    }
+    fn running(&self) -> bool {
+        false
+    }
 }
 
 impl Applied {
@@ -500,6 +528,20 @@ pub fn apply(
     grants_dir: Option<&Path>,
     state: Option<&Path>,
 ) -> Result<Applied, Refused> {
+    apply_in(gateway, path, limits, grants_dir, state, None)
+}
+
+/// [`apply`], with the directory the node keeps federation custody in, so
+/// an open sealed resource's plane is linked into its sealed directory
+/// beside its block, its log and its jobs (§9.4).
+pub fn apply_in(
+    gateway: &mut Gateway,
+    path: &Path,
+    limits: Limits,
+    grants_dir: Option<&Path>,
+    state: Option<&Path>,
+    federation: Option<&Path>,
+) -> Result<Applied, Refused> {
     let text =
         std::fs::read_to_string(path).map_err(|e| at(0, format!("{}: {e}", path.display())))?;
     let file: File = toml::from_str(&text).map_err(|e| {
@@ -532,6 +574,7 @@ pub fn apply(
     // itself — §9's image, once it launches what it hosts — this is the
     // table it will assign into.
     let mut addresses: Vec<(std::net::SocketAddr, String)> = Vec::new();
+    let mut closed: Vec<Keyhash> = Vec::new();
 
     for h in &file.host {
         let named = |what: &str| format!("{}: {what}", h.manifest.display());
@@ -548,6 +591,51 @@ pub fn apply(
         }
         let (manifest, component) = read_manifest(&h.manifest).map_err(|e| at(0, named(&e)))?;
         instantiate(&manifest).map_err(|e| at(0, named(&e)))?;
+        // **sealed storage is served only while it is open** (§9.4): its
+        // directory sealed at installation, its key in the kernel since
+        // the machine started; open, what it keeps is linked into it
+        let shut = match (h.sealed, state) {
+            (false, _) => false,
+            (true, None) => {
+                return Err(at(
+                    0,
+                    format!(
+                        "`{}` is sealed, and a sealed package's storage is under the node's \
+                         state directory, which this node keeps none of",
+                        h.resource
+                    ),
+                ));
+            }
+            (true, Some(root)) => {
+                if h.block.is_some() {
+                    return Err(at(
+                        0,
+                        format!(
+                            "`{}` is sealed and names a mounted block: a mounted block is the \
+                             host's filesystem and not this node's to seal",
+                            h.resource
+                        ),
+                    ));
+                }
+                if !crate::sealing::is_sealed(root, &res) {
+                    return Err(at(
+                        0,
+                        format!(
+                            "`{}` is sealed and its storage was never sealed here",
+                            h.resource
+                        ),
+                    ));
+                }
+                let shut = !crate::sealing::is_open(root, &res);
+                if !shut {
+                    crate::sealing::link(root, federation, &res).map_err(|e| at(0, e))?;
+                }
+                shut
+            }
+        };
+        if shut {
+            closed.push(res);
+        }
         // **the host surface the package asked for, provisioned**
         // (`infra-client-requirements.md` §9.3): a block where it budgeted
         // or imports one, a log where it imports or budgets one, each
@@ -559,10 +647,12 @@ pub fn apply(
         // every hop to a socket of the instance's own, and takes it on the
         // instance's requests to its block and log
         let secret = instance_secret(state, &res);
-        let wants_block = manifest.budget.block_bytes.is_some()
-            || manifest.imports.iter().any(|i| i == "rhtn/1:block");
-        let wants_log = manifest.budget.log_bytes.is_some()
-            || manifest.imports.iter().any(|i| i == "rhtn/1:log");
+        let wants_block = !shut
+            && (manifest.budget.block_bytes.is_some()
+                || manifest.imports.iter().any(|i| i == "rhtn/1:block"));
+        let wants_log = !shut
+            && (manifest.budget.log_bytes.is_some()
+                || manifest.imports.iter().any(|i| i == "rhtn/1:log"));
         let env = match (state, wants_block || wants_log) {
             (None, true) => {
                 return Err(at(
@@ -632,7 +722,7 @@ pub fn apply(
         }
         // its jobs, kept on disk beside its block and bounded as it
         // declared (§9.3): a node with no state directory cannot keep them
-        if manifest.imports.iter().any(|i| i == "rhtn/1:jobs") {
+        if !shut && manifest.imports.iter().any(|i| i == "rhtn/1:jobs") {
             let Some(root) = state else {
                 return Err(at(
                     0,
@@ -745,6 +835,12 @@ pub fn apply(
             // traffic never passes through it (design §11.7, §10.6)
             (None, None) => None,
         };
+        // a brokered resource carries no traffic here and keeps nothing to
+        // seal, so only a backend is replaced
+        let backend = match backend {
+            Some(_) if shut => Some(Arc::new(Closed) as Arc<dyn Backend>),
+            other => other,
+        };
 
         if !h.grant.is_empty() {
             return Err(at(
@@ -798,6 +894,7 @@ pub fn apply(
         bound,
         facts,
         provisioned,
+        closed,
     })
 }
 

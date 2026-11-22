@@ -1356,3 +1356,140 @@ fn a_block_the_host_mounted_is_told_as_a_path_and_nothing_is_provisioned_for_it(
     let why = run(&d, &format!("{}block = \"/rhtn-block\"\n", host(&cm))).expect_err("refused");
     assert!(why.contains("sandbox"), "{why}");
 }
+
+/// A socket package with a block and a log, sealed, under `d`.
+fn sealed_entry(d: &Dir, extra: &str) -> PathBuf {
+    let m = d.put(
+        "sealed.manifest",
+        "roles = [\"reader\"]\n[budget]\nblock_bytes = 4096\nlog_bytes = 512\n",
+    );
+    d.put(
+        "hosting",
+        format!(
+            "[[host]]\nresource = \"{RES}\"\nowner = \"{WHO}\"\nauthority = \"shop.internal\"\n\
+             manifest = \"{}\"\naddress = \"127.0.0.1:9\"\nsealed = true\n{extra}",
+            m.display()
+        ),
+    )
+}
+
+fn apply_sealed(d: &Dir, f: &Path) -> (Gateway, Result<rhtn_daemon::hosting::Applied, String>) {
+    let mut g = Gateway::default();
+    let applied = rhtn_daemon::hosting::apply_in(
+        &mut g,
+        f,
+        Limits::default(),
+        Some(&d.0.join("grants")),
+        Some(&d.0.join("state")),
+        Some(&d.0.join("federation")),
+    )
+    .map_err(|e| e.to_string());
+    (g, applied)
+}
+
+fn refused(r: Result<rhtn_daemon::hosting::Applied, String>) -> String {
+    match r {
+        Ok(_) => panic!("bound, and it should have been refused"),
+        Err(why) => why,
+    }
+}
+
+fn res() -> [u8; 32] {
+    let v: Vec<u8> = (0..32)
+        .map(|i| u8::from_str_radix(&RES[i * 2..i * 2 + 2], 16).expect("hex"))
+        .collect();
+    v.try_into().expect("32 bytes")
+}
+
+// functional: OPS-033
+#[test]
+fn a_closed_sealed_package_is_bound_unavailable_with_nothing_provisioned() {
+    let d = Dir::new("sealed-closed");
+    // sealed at installation, and no key in the kernel since: no mark
+    std::fs::create_dir_all(d.0.join("state").join("sealed").join(RES)).expect("a directory");
+    let f = sealed_entry(&d, "");
+    let (g, applied) = apply_sealed(&d, &f);
+    let applied = applied.expect("bound");
+    assert_eq!(applied.bound, 1);
+    assert_eq!(applied.closed, vec![res()], "closed and said so");
+    let backend = g
+        .binding(&res())
+        .and_then(|b| b.backend.clone())
+        .expect("a backend, so the package answers as one not running");
+    assert!(!backend.running(), "a closed package is not running");
+    assert!(backend.handle(b"GET / HTTP/1.1\r\n\r\n").is_err());
+    for plain in [
+        d.0.join("state").join("blocks"),
+        d.0.join("state").join("logs"),
+        d.0.join("federation").join(RES),
+    ] {
+        assert!(
+            !plain.exists(),
+            "{} provisioned while closed",
+            plain.display()
+        );
+    }
+}
+
+// functional: OPS-033
+#[test]
+fn an_open_sealed_package_keeps_its_storage_through_links_into_its_directory() {
+    let d = Dir::new("sealed-open");
+    let sealed = d.0.join("state").join("sealed").join(RES);
+    std::fs::create_dir_all(&sealed).expect("a directory");
+    std::fs::write(sealed.join("open"), b"").expect("the mark");
+    let f = sealed_entry(&d, "");
+    let (_, applied) = apply_sealed(&d, &f);
+    let applied = applied.expect("bound");
+    assert!(applied.closed.is_empty());
+    for (path, target) in [
+        (
+            d.0.join("state").join("blocks").join(RES),
+            sealed.join("block"),
+        ),
+        (
+            d.0.join("state").join("logs").join(format!("{RES}.log")),
+            sealed.join("log"),
+        ),
+        (
+            d.0.join("state").join("jobs").join(RES),
+            sealed.join("jobs"),
+        ),
+        (d.0.join("federation").join(RES), sealed.join("federation")),
+    ] {
+        assert_eq!(
+            std::fs::read_link(&path).ok().as_deref(),
+            Some(target.as_path()),
+            "{} links into the sealed directory",
+            path.display()
+        );
+    }
+    assert!(
+        sealed.join("block").is_dir(),
+        "the block is provisioned inside it"
+    );
+    // a second reading finds the links it made and takes them
+    let (_, again) = apply_sealed(&d, &f);
+    assert!(again.expect("bound again").closed.is_empty());
+}
+
+// functional: OPS-033
+#[test]
+fn a_sealed_entry_is_refused_with_a_mounted_block_unsealed_storage_or_no_directory() {
+    let d = Dir::new("sealed-refused");
+    let f = sealed_entry(&d, "");
+    let (_, never) = apply_sealed(&d, &f);
+    assert!(refused(never).contains("never sealed here"));
+
+    let sealed = d.0.join("state").join("sealed").join(RES);
+    std::fs::create_dir_all(&sealed).expect("a directory");
+    std::fs::write(sealed.join("open"), b"").expect("the mark");
+    let f = sealed_entry(&d, "block = \"/rhtn-block\"\n");
+    let (_, mounted) = apply_sealed(&d, &f);
+    assert!(refused(mounted).contains("mounted block"));
+
+    std::fs::create_dir_all(d.0.join("state").join("blocks").join(RES)).expect("a plain block");
+    let f = sealed_entry(&d, "");
+    let (_, plain) = apply_sealed(&d, &f);
+    assert!(refused(plain).contains("unsealed storage"));
+}

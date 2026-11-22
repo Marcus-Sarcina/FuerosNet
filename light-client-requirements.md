@@ -1824,7 +1824,7 @@ one that is true.
   (`infra-client-requirements.md` §9.4). Derive the key from the signing
   seed under its own label and the resource's identity, so the phrase that
   restores the identity reopens what it sealed, and hand it over with the
-  act as the host key is; keep none of it. **Then, whenever you reach an
+  act; keep none of it. **Then, whenever you reach an
   instance you run and it has proved itself** (`infra-client-requirements.md`
   §8.2), read which of its packages are sealed and closed and make the act
   that reopens them, without asking: the operator chose this at
