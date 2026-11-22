@@ -137,6 +137,43 @@ object OperatorStore {
         instances.filter { it.unassigned && it.at.isNotEmpty() }
 
     /**
+     * **Where this patron's own node answers for the adoption about to be
+     * made**, as members dial it, or null for none [author, 2026-11-21]:
+     * *"auto-invite via the bluetooth channel during an adoption into a
+     * subnet where a node already exists."* The kernel carries it beside
+     * the intent and the member holds it as an invitation once the
+     * adoption is recorded.
+     *
+     * **Only as patron, and only a node of its own**: the instance chosen
+     * at [Meet.Choice.SERVE_FROM], else the newest record serving the
+     * subnet the adoption is into — [Meet.Scope.OWN]'s being the one under
+     * this operator's own key, and a record naming no subnet serving the
+     * one that key roots (`root`), that line being its. A patron served
+     * from somebody else's node
+     * has none here to carry, and an instance serving no subnet is
+     * nobody's to be invited to. Pure, for a JVM test.
+     */
+    fun meetingNode(
+        adopt: Meet.Adopt,
+        scope: Meet.Scope?,
+        serving: Meet.Serving?,
+        instances: List<Instance>,
+        root: String? = null,
+    ): String? {
+        if (adopt != Meet.Adopt.THEM_UNDER_ME || scope == null) return null
+        serving?.at?.let { return Meet.Serving.dialled(it) }
+        val subnet = scope.id.takeIf { it.length == 64 }?.lowercase()
+        if (subnet == null && scope != Meet.Scope.OWN) return null
+        val rooted = root?.lowercase()
+        return instances
+            .lastOrNull {
+                val serves = it.subnet?.lowercase()
+                !it.unassigned && it.at.isNotEmpty() && (serves == subnet || (serves == null && subnet != null && subnet == rooted))
+            }
+            ?.let { Meet.Serving.dialled(it.at) }
+    }
+
+    /**
      * **The subnets an unassigned instance can be assigned to**: each one
      * this key holds a position in, the kernel signing on any such line,
      * once apiece. Neither [Meet.Scope.OWN] nor [Meet.Scope.INDIVIDUAL] is

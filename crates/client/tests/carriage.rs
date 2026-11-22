@@ -297,7 +297,7 @@ fn an_anchor_asked_for_before_the_id_is_fixed_is_its_own_refusal() {
 /// field) [author, 2026-11-10].
 ///
 /// **One side declares one and the other does not**, which is the shape
-/// the bench has: a handset without a subscription sends eight fields, and
+/// the bench has: a handset without a subscription sends nine fields, and
 /// a meeting where only one number crosses is unremarkable in every other
 /// respect.
 #[test]
@@ -514,4 +514,150 @@ fn a_carriage_to_a_device_without_the_key_is_refused_without_saying_why() {
         .unwrap_err();
     assert_eq!(elsewhere, Abort::Unsealable);
     assert_eq!(format!("{elsewhere:?}"), "Unsealable");
+}
+
+/// A bare `NetworkPoint` for 10.0.0.4:7432 (`wire-format.md` §4.4).
+const POINT: [u8; 11] = [0xa2, 0x01, 0x44, 10, 0, 0, 4, 0x03, 0x19, 0x1d, 0x08];
+
+/// **The opening over the bearer, every message as bytes**: the screens,
+/// then both intents, between `a` who showed the invitation and `b` who
+/// read it; what each declared beforehand rides its own.
+fn opened(s: &mut Setup, a: &str, b: &str) {
+    s.face_off(a, b);
+    s.client(a)
+        .begin(Some(kh(b)), vec![], true)
+        .expect("begins");
+    s.client(b)
+        .begin(Some(kh(a)), vec![], false)
+        .expect("begins");
+    let oa = s.client(a).optical_contribution().unwrap();
+    let ob = s.client(b).optical_contribution().unwrap();
+    s.client(a).take_optical(&carry(&ob)).unwrap();
+    s.client(b).take_optical(&carry(&oa)).unwrap();
+    let ta = s.client(a).transcript_confirm().unwrap();
+    let tb = s.client(b).transcript_confirm().unwrap();
+    s.client(a).take_transcript(&carry(&tb)).unwrap();
+    s.client(b).take_transcript(&carry(&ta)).unwrap();
+    let ia = s.client(a).intent_carriage().unwrap();
+    let ib = s.client(b).intent_carriage().unwrap();
+    let carried: Vec<Vec<u8>> = ia.iter().map(|m| carry(m)).collect();
+    s.client(b).take_intent_carriage(kh(a), &carried).unwrap();
+    let carried: Vec<Vec<u8>> = ib.iter().map(|m| carry(m)).collect();
+    s.client(a).take_intent_carriage(kh(b), &carried).unwrap();
+}
+
+// functional: NET-036
+/// **The patron's node crosses beside its intent and is held by the member
+/// as an invitation once the adoption is** [author, 2026-11-21]: *"auto-
+/// invite via the bluetooth channel during an adoption into a subnet where
+/// a node already exists"* — held exactly as a link's is, unproved, for
+/// the patron's node on the subnet the adoption placed the member in, and
+/// still the member's one tap. Nothing is agreed and nothing attaches.
+#[test]
+fn a_patrons_node_rides_the_adoption_meeting_and_is_held_as_an_invitation() {
+    use rhtn_model::Standing;
+    let mut s = setup(&["alice", "bob", "witness"]);
+    // bob adopts alice; bob's own node serves the subnet, and alice has
+    // no number to be sent a link at
+    s.client("bob").declare_node(Some(POINT.to_vec())).unwrap();
+    s.client("alice").declare_node(None).unwrap();
+    opened(&mut s, "alice", "bob");
+    assert!(
+        s.client("alice").relocations().is_empty(),
+        "nothing is held before the adoption says whose member this is"
+    );
+    let pop = s.met("alice", "bob", "witness");
+    s.h.adopt(kh("alice"), kh("bob"), pop, 1)
+        .expect("bob adopts alice");
+
+    let a = s.client("alice");
+    let r = a.relocation(&kh("bob")).expect("held for bob's node");
+    assert_eq!(
+        (r.standing, r.from.is_empty(), r.to.as_str()),
+        (Standing::Unproved, true, "10.0.0.4:7432"),
+        "a first invitation, as a link lands one"
+    );
+    assert!(
+        a.agreed().is_empty(),
+        "nothing agreed before the person answers"
+    );
+    let row = a
+        .subnets_held()
+        .into_iter()
+        .find(|r| r.patron == Some(kh("bob")))
+        .expect("the subnet bob placed alice in");
+    assert_eq!(
+        row.relocation.map(|r| r.node),
+        Some(kh("bob")),
+        "on the subnet the adoption placed her in"
+    );
+    assert_eq!(a.take_adoption_invited(), Some(kh("bob")), "told once");
+    assert_eq!(a.take_adoption_invited(), None);
+    assert!(
+        s.client("bob").relocations().is_empty(),
+        "the patron holds no invitation of its own"
+    );
+}
+
+// functional: NET-036
+/// **A point from anybody who is not this identity's patron after the
+/// ceremony is dropped with nothing kept**: one carried at a meeting with
+/// no adoption, which a later adoption at another meeting does not revive,
+/// and one the member's own side declared.
+#[test]
+fn a_node_from_anybody_but_the_adopting_patron_leaves_nothing() {
+    let mut s = setup(&["alice", "bob", "witness"]);
+    // a regular meeting: bob carries a node, nobody is adopted
+    s.client("bob").declare_node(Some(POINT.to_vec())).unwrap();
+    opened(&mut s, "alice", "bob");
+    s.met("alice", "bob", "witness");
+    assert!(s.client("alice").relocations().is_empty());
+    assert_eq!(s.client("alice").take_adoption_invited(), None);
+
+    // the adoption that follows rests on a meeting of its own, which
+    // carried none, so the first meeting's point is gone with it
+    s.client("bob").declare_node(None).unwrap();
+    // and the member declaring one is not the patron offering it
+    s.client("alice")
+        .declare_node(Some(POINT.to_vec()))
+        .unwrap();
+    opened(&mut s, "alice", "bob");
+    let pop = s.met("alice", "bob", "witness");
+    s.h.adopt(kh("alice"), kh("bob"), pop, 1)
+        .expect("bob adopts alice");
+    for who in ["alice", "bob"] {
+        assert!(
+            s.client(who).relocations().is_empty(),
+            "{who} holds nothing"
+        );
+        assert_eq!(s.client(who).take_adoption_invited(), None, "{who}");
+    }
+}
+
+// functional: NET-036
+/// **What is declared is one bare point**: one with a zone, or bytes that
+/// are not a point, is refused and nothing is declared.
+#[test]
+fn a_node_declared_is_a_bare_point_or_nothing() {
+    let mut s = setup(&["alice"]);
+    let a = s.client("alice");
+    let zoned: Vec<u8> = [
+        &[
+            0xa3, 0x01, 0x44, 10, 0, 0, 4, 0x02, 0x19, 0xfb, 0xff, 0x04, 0x64,
+        ][..],
+        b"nyc1",
+    ]
+    .concat();
+    assert!(
+        a.declare_node(Some(zoned)).is_err(),
+        "a zone rides signed records only"
+    );
+    assert!(a.declare_node(Some(vec![0xa0])).is_err(), "an empty map");
+    assert!(
+        a.declare_node(Some([&POINT[..], &[0x00]].concat()))
+            .is_err(),
+        "trailing bytes"
+    );
+    assert!(a.declare_node(Some(POINT.to_vec())).is_ok());
+    assert!(a.declare_node(None).is_ok(), "and cleared");
 }

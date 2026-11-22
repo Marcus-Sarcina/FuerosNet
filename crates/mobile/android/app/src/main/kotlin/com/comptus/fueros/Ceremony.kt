@@ -369,9 +369,29 @@ object Ceremony {
 
         override fun take(envelope: ByteArray): Adoption.Result<String> =
             result("takeAdoption") { Gateway.hex(p.takeAdoption(envelope)) }
+                .also { if (it is Adoption.Result.Ok) provedInvitation(p) }
 
         override fun positionIn(anchor: String): String? =
             Gateway.call("positionIn", { null }) { p.positionIn(Gateway.unhex(anchor)) }?.let { Gateway.hex(it) }
+    }
+
+    /**
+     * **The patron's node, carried beside its intent, held as an
+     * invitation** [author, 2026-11-21]: the kernel placed it as a link's
+     * is when the adoption landed, so what is left is what [InviteActivity]
+     * does with a link — proved at once, off this thread since it dials,
+     * and put to the person at the subnet's badge with one tap. Nothing
+     * attaches here. One cut short is proved at the next start
+     * ([Attachments.proveMoves]).
+     */
+    private fun provedInvitation(p: Participant) {
+        val node = Gateway.call("adoptionInvited", { null }) { p.adoptionInvited() } ?: return
+        val nodeHex = Gateway.hex(node)
+        Thread({
+            val r = Gateway.call("proveRelocation", { e -> Diag.warn("relocation", "why" to e.reason); null }) { p.proveRelocation(node) }
+            Diag.event("invitation.taken", "node" to nodeHex.take(8), "held" to true, "standing" to r?.standing, "via" to "meeting")
+            Model.refreshAll()
+        }, "fueros-meeting-invite").start()
     }
 
     /**
@@ -696,6 +716,10 @@ object Ceremony {
             // ready; a link that does not is a stopped meeting with a
             // reason, never an intent that silently did not cross.
             if (!awaitLink(radio, m, "intent")) return@Thread
+            // **the patron's own node rides beside the intent** [author,
+            // 2026-11-21], declared here, with every choice of the brief
+            // answered, and cleared for every other meeting
+            Gateway.declareNode(m.by, meetingNode(m))
             val mine = Gateway.call("intentCarriage", { e ->
                 m.stop("the intent could not be built: ${e.reason}")
                 null
@@ -720,6 +744,15 @@ object Ceremony {
                 m.stop("the radio would not take the intent; nothing crossed")
             }
         }.start()
+    }
+
+    /** Where this device's own node answers for this meeting's adoption,
+     *  where it adopts the other into a subnet one serves
+     *  ([OperatorStore.meetingNode]); null for every other meeting. */
+    private fun meetingNode(m: Meet): String? {
+        val app = Gateway.appContext ?: return null
+        val root = Gateway.subnetsRooted(m.by).firstOrNull()?.let { Meet.Scope.of(it).id }
+        return OperatorStore.meetingNode(m.settled(), m.scope(), m.serving(), OperatorStore.instances(app, m.by), root)
     }
 
     /**

@@ -296,6 +296,7 @@ fn a_sealed_carriage_opens_only_under_its_own_key_and_ceremony() {
         locator: fixture("P-signedlocator"),
         encryption_key: fixture("P-encryption-key"),
         number: None,
+        node: None,
     }
     .encode();
 
@@ -422,6 +423,7 @@ fn an_intent_carries_a_number_or_does_not() {
         locator: fixture("P-signedlocator"),
         encryption_key: fixture("P-encryption-key"),
         number,
+        node: None,
     };
     let with = plain(Some("+15550001111".into())).encode();
     let without = plain(None).encode();
@@ -450,4 +452,94 @@ fn an_intent_carries_a_number_or_does_not() {
         IntentExchange::decode(&over).is_err(),
         "33 characters is refused rather than truncated"
     );
+}
+
+/// A bare `NetworkPoint` for 10.0.0.4:7432 (`wire-format.md` §4.4): the
+/// address at key 1 and the port at key 3, no provider and no zone.
+const POINT: [u8; 11] = [0xa2, 0x01, 0x44, 10, 0, 0, 4, 0x03, 0x19, 0x1d, 0x08];
+
+// functional: NET-036
+/// **An intent carries the sender's node at its eleventh field, and the
+/// tenth is null where no number comes before it** (`wire-format.md`
+/// §14.3.2) [author, 2026-11-21]: the array is positional, so a node
+/// without a number needs the number's place held, and null there with no
+/// node after it is a second spelling of nine fields and refused.
+#[test]
+fn an_intent_carries_a_node_after_a_number_or_a_null_in_its_place() {
+    let plain = |number: Option<String>, node: Option<Vec<u8>>| IntentExchange {
+        contribution: [1u8; 16],
+        bundle: vec![],
+        started_at: 5,
+        retention_years: 2,
+        initiator: true,
+        continuations: 0,
+        locator: fixture("P-signedlocator"),
+        encryption_key: fixture("P-encryption-key"),
+        number,
+        node,
+    };
+    let neither = plain(None, None).encode();
+    let number = plain(Some("+15550001111".into()), None).encode();
+    let node = plain(None, Some(POINT.to_vec())).encode();
+    let both = plain(Some("+15550001111".into()), Some(POINT.to_vec())).encode();
+    assert_eq!(neither[0], 0x89, "nine fields with neither, as before");
+    assert_eq!(number[0], 0x8a, "ten with a number alone, as before");
+    assert_eq!(node[0], 0x8b, "eleven with a node");
+    assert_eq!(both[0], 0x8b, "and eleven with both");
+    assert!(
+        node.ends_with(&[&[0xf6][..], &POINT[..]].concat()),
+        "null, then the point"
+    );
+    assert!(
+        both.ends_with(&POINT)
+            && !both
+                .windows(1 + POINT.len())
+                .any(|w| w[0] == 0xf6 && w[1..] == POINT),
+        "the number in its place, then the point"
+    );
+    for (bytes, num, pt) in [
+        (&neither, None, None),
+        (&number, Some("+15550001111"), None),
+        (&node, None, Some(&POINT[..])),
+        (&both, Some("+15550001111"), Some(&POINT[..])),
+    ] {
+        let read = IntentExchange::decode(bytes).expect("reads");
+        assert_eq!(read.number.as_deref(), num);
+        assert_eq!(read.node.as_deref(), pt);
+        assert_eq!(&read.encode(), bytes, "one spelling each");
+    }
+
+    // **null with nothing after it** is nine fields spelled twice
+    let mut null_alone = neither.clone();
+    null_alone[0] = 0x8a;
+    null_alone.push(0xf6);
+    assert!(
+        IntentExchange::decode(&null_alone).is_err(),
+        "null at ten alone"
+    );
+
+    // **the zone is not a key of an unsigned point** (§4.4)
+    let zoned: Vec<u8> = [
+        &[
+            0xa3, 0x01, 0x44, 10, 0, 0, 4, 0x02, 0x19, 0xfb, 0xff, 0x04, 0x64,
+        ][..],
+        b"nyc1",
+    ]
+    .concat();
+    let with_zone = plain(None, Some(zoned)).encode();
+    assert!(
+        IntentExchange::decode(&with_zone).is_err(),
+        "a zone at eleven"
+    );
+    // and the default port is not written out, nor port zero
+    for port in [&[0x19, 0x1d, 0x07][..], &[0x00][..]] {
+        let p = [&POINT[..8], port].concat();
+        let bad = plain(None, Some(p)).encode();
+        assert!(IntentExchange::decode(&bad).is_err(), "port {port:02x?}");
+    }
+    // a twelfth field is not one
+    let mut twelve = both.clone();
+    twelve[0] = 0x8c;
+    twelve.push(0xf6);
+    assert!(IntentExchange::decode(&twelve).is_err(), "twelve fields");
 }

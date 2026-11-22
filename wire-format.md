@@ -5528,7 +5528,7 @@ design already depends on.
 
 | What | Between | Where it is stated | Encoding |
 |---|---|---|---|
-| The ceremony's intent exchange — the contribution, the bundle of introductions, the sender's locator, the timing, who initiated and, where the platform gave one, the number the sender's device reports for itself [author, 2026-11-10]; the nominees no longer ride it [author, 2026-10-19], each side's set crossing by locator at the prune (§7.10.1 kind 22) | Two participants' devices | design §7.1, §7.5.2, §8.1.2 | `IntentExchange` (§14.3.2), carried by the shell's chosen bearer (§14.3.1) and bound to the pre-commitment. The CBOR is specified; two vendors' clients compute the same pre-commitment, the ceremony-id (design §7.5.2.6), either way |
+| The ceremony's intent exchange — the contribution, the bundle of introductions, the sender's locator, the timing, who initiated, where the platform gave one, the number the sender's device reports for itself [author, 2026-11-10], and, where the sender adopts the other into a subnet it serves from a node of its own, where that node answers [author, 2026-11-21]; the nominees no longer ride it [author, 2026-10-19], each side's set crossing by locator at the prune (§7.10.1 kind 22) | Two participants' devices | design §7.1, §7.5.2, §8.1.2 | `IntentExchange` (§14.3.2), carried by the shell's chosen bearer (§14.3.1) and bound to the pre-commitment. The CBOR is specified; two vendors' clients compute the same pre-commitment, the ceremony-id (design §7.5.2.6), either way |
 | The optical transcript — each device's key material and contribution, then the derived ceremony-id, screen to camera | Two participants' devices | design §7.1 item 3, design §7.5.2, design §12.3 | `OpticalContribution` then `TranscriptConfirm` (§14.3.2): the key material is pinned at this first contact, the contribution is the key-exchange input, the ceremony-id is the transcript hash both display and check |
 | Traversal candidates | Two participants' devices | design §12.6.3 [author, 2026-09-25] | `CandidateHandover` (§14.3.2), carrying the `Candidate` structure this document now defines; the same candidates travel the end-to-end payload path when a direct connection is set up remotely (design §12.6.3, §14.1.1) |
 | The capture-key handover — the key each participant derived for the captures the other holds of them, handed across at capture time | Two participants' devices | design §7.5.2, design §7.5.2.6 | `CaptureKeyHandover` (§14.3.2): the 32-byte key design §7.5.2.6 derives, anchored to the ceremony-id like the proximity outcomes and the candidates [author, 2026-10-02] |
@@ -5726,8 +5726,9 @@ IntentExchange = [             ; carried by the bearer (§14.3.1), not optical
                                ;   [author, 2026-10-19]: each side's set
                                ;   travels by locator once the id has
                                ;   fixed (§7.10.2, kind 22), and this
-                               ;   exchange is nine fields, or ten where
-                               ;   the sender's own number rides with it
+                               ;   exchange is nine fields, ten where the
+                               ;   sender's own number rides with it, and
+                               ;   eleven where the sender's node does
   [ * Introduction ],          ; the bundle's first carriage: the prior
                                ;   counterparties the sender names for
                                ;   verifier selection, each with the most
@@ -5762,19 +5763,38 @@ IntentExchange = [             ; carried by the bearer (§14.3.1), not optical
                                ;   with no fetch [author, 2026-11-19]; one
                                ;   that does not verify under the pinned key
                                ;   is refused as the locator is
-  ? tstr .size (1..32),        ; the number the sender's device reports for
-                               ;   itself [author, 2026-11-10], where the
+  ? (tstr .size (1..32) / null), ; the number the sender's device reports
+                               ;   for itself [author, 2026-11-10], where the
                                ;   platform gave one. ABSENT IS THE ORDINARY
                                ;   CASE: the number is carrier-provisioned
                                ;   rather than device-known, so a handset
                                ;   without a subscription sends nine fields
-                               ;   and ten is not required of anybody. The
-                               ;   receiver keeps it with the rest of what it
-                               ;   holds of that party (§2.3's contact), where
-                               ;   the peer backup carries it (design §6.3);
-                               ;   it enters no transaction body, reaches no
-                               ;   witness or verifier, and is not in the card
-                               ;   that introduces that party (§2.4)
+                               ;   and ten is not required of anybody. Null
+                               ;   only where field 11 follows, and a null
+                               ;   with nothing after it is MALFORMED, so
+                               ;   absence has one spelling. The receiver
+                               ;   keeps it with the rest of what it holds of
+                               ;   that party (§2.3's contact), where the peer
+                               ;   backup carries it (design §6.3); it enters
+                               ;   no transaction body, reaches no witness or
+                               ;   verifier, and is not in the card that
+                               ;   introduces that party (§2.4)
+  ? NetworkPoint,              ; where the sender's own node answers, the one
+                               ;   serving the subnet the meeting's adoption
+                               ;   is into [author, 2026-11-21], so a member
+                               ;   whose number nobody holds is invited at
+                               ;   the adoption itself. §4.4's encoding
+                               ;   WITHOUT the zone, as every unsigned
+                               ;   carriage writes it; a point carrying one
+                               ;   is MALFORMED. Absent where the sender
+                               ;   serves the subnet from no node of its own,
+                               ;   and in a meeting that adopts nobody. The
+                               ;   receiver acts on it only once the adoption
+                               ;   placing it under the sender is recorded,
+                               ;   as the invitation the sender's handset
+                               ;   would have composed
+                               ;   (`light-client-requirements.md` §1.5);
+                               ;   from anyone else it is dropped
 ]
 
 BundleContinuation = [         ; the bundle past its first carriage

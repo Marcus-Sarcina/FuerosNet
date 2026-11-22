@@ -580,6 +580,18 @@ fn network_point_at(b: &[u8], at: usize, signed: bool) -> Result<(), Error> {
     Ok(())
 }
 
+/// **One `NetworkPoint` on its own, as an unsigned carriage holds it**
+/// (§4.4): the bytes are the one map and nothing after it, and the zone at
+/// key 4 is not a key here. What a client checks a point against before it
+/// carries one beside its intent (§14.3.2).
+pub fn unsigned_network_point(b: &[u8]) -> Result<(), Error> {
+    let (_, end) = (Parser { b }).item(0)?;
+    if end != b.len() {
+        return Err(Error("trailing bytes after the point"));
+    }
+    network_point_at(b, 0, false)
+}
+
 /// The packed-path invariant (§2.1): at most 24 nibbles, exactly
 /// `ceil(nibbles / 2)` bytes, every nibble 0-9, and on an odd count the
 /// unused low nibble of the last byte zero.  One logical path has one
@@ -1622,8 +1634,11 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             // counterparty keeps it with the rest of what it holds of
             // that party and it goes in no transaction and to no witness
             // or verifier.
-            if a.len() != 9 && a.len() != 10 {
-                return Err(Error("nine fields, or ten with a number"));
+            // **eleven where the sender's own node rides with it**
+            // [author, 2026-11-21]: an adoption into a subnet that node
+            // serves, which is how a member without a number learns of it
+            if !(9..=11).contains(&a.len()) {
+                return Err(Error("nine fields, ten with a number, eleven with a node"));
             }
             if as_uint(&a[0]) != Some(1) {
                 return Err(Error("version 1"));
@@ -1662,12 +1677,24 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             check_kind(ek, "EncryptionKey", &parse_all(ek)?)
                 .map_err(|_| Error("the sender's encryption key is an EncryptionKey"))?;
             // **bounded, and text**: a number is what a handset reports
-            // and nothing reads it as anything else
-            if let Some(it) = a.get(9) {
-                match it {
-                    Item::Text(t) if !t.is_empty() && t.len() <= NUMBER_CHARS => {}
-                    _ => return Err(Error("a number is 1 to 32 characters of text")),
-                }
+            // and nothing reads it as anything else. **Null where a node
+            // follows and no number does** [author, 2026-11-21]: the array
+            // is positional, so the eleventh field needs a tenth, and null
+            // there with nothing after it is a second spelling of nine
+            match a.get(9) {
+                None => {}
+                Some(Item::Text(t)) if !t.is_empty() && t.len() <= NUMBER_CHARS => {}
+                Some(Item::Null) if a.len() == 11 => {}
+                Some(Item::Null) => return Err(Error("a null number stands only before a node")),
+                Some(_) => return Err(Error("a number is 1 to 32 characters of text")),
+            }
+            // **the node the sender's own instance answers at**, for the
+            // subnet this meeting's adoption is into [author, 2026-11-21]:
+            // a bare point, as an unsigned carriage holds one, so the zone
+            // at key 4 is an unknown key and refused (§4.4)
+            if a.len() == 11 {
+                let r = top.get(10).ok_or(Error("node"))?;
+                network_point_at(b, r.start, false)?;
             }
             Ok(())
         }

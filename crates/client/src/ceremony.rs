@@ -451,6 +451,10 @@ pub struct Intent {
     /// The number this device reports for itself, where the shell read one
     /// ([`Client::declare_number`]).
     pub number: Option<String>,
+    /// Where this device's own node answers for the subnet the meeting's
+    /// adoption is into, an encoded `NetworkPoint` without a zone, where
+    /// the shell declared one ([`Client::declare_node`]).
+    pub node: Option<Vec<u8>>,
 }
 
 impl std::fmt::Debug for Intent {
@@ -467,6 +471,7 @@ impl std::fmt::Debug for Intent {
             // the counterparty's number is not a log's business, and
             // neither is this device's
             .field("number", &self.number.is_some())
+            .field("node", &self.node.is_some())
             .finish()
     }
 }
@@ -560,6 +565,9 @@ pub(crate) struct Active {
     pub(crate) their_nominees: Vec<Keyhash>,
     their_bundle: Vec<Vec<u8>>,
     their_retention: u64,
+    /// The point the counterparty's intent carried for its own node, where
+    /// it carried one: kept with the finished meeting's result.
+    their_node: Option<Vec<u8>>,
     sealed: Option<SealedCapture>,
     /// The hold the capture runs as, from [`Client::capture_begin`] until
     /// [`Client::capture_seal`] takes it (design §7.1 item 5).
@@ -678,6 +686,24 @@ pub struct Client {
     /// SIM that changed, or a platform that stops answering, changes what
     /// goes out without anything having to be forgotten.
     number: Option<String>,
+    /// **Where this device's own node answers**, for the subnet the
+    /// meeting's adoption is into, as the shell declared it before the
+    /// meeting [author, 2026-11-21]: carried beside the intent as the
+    /// number is, and in this process's memory alone by the same reasoning.
+    /// **The kernel carries what it was given** and decides nothing about
+    /// who adopts whom: the shell, which knows the choices made, declares
+    /// it and clears it.
+    node: Option<Vec<u8>>,
+    /// **The point the last meeting's counterparty carried** for its own
+    /// node, and who carried it: kept from the record's finalization to
+    /// the adoption that follows it, and replaced by the next meeting.
+    /// Memory alone, and nothing until an adoption places this identity
+    /// under the party that sent it.
+    met_node: Option<(Keyhash, Vec<u8>)>,
+    /// The node the last adoption's meeting invited this identity to
+    /// serve from, held as an invitation, until the shell asks
+    /// ([`Client::take_adoption_invited`]).
+    adoption_invited: Option<Keyhash>,
     /// Rounds a peer has been greeted without a word back, and the count
     /// at which the session with it is opened anew: `light-client-
     /// requirements.md` §3's rule for a verifier that lost its sessions,
@@ -1024,6 +1050,9 @@ impl Client {
             signer,
             provider_credential: None,
             number: None,
+            node: None,
+            met_node: None,
+            adoption_invited: None,
             known,
             archive: Archive::new(kh),
             store: ClientStore::default(),
@@ -1178,6 +1207,7 @@ impl Client {
             their_nominees: vec![],
             their_bundle: vec![],
             their_retention: 0,
+            their_node: None,
             sealed: None,
             hold: None,
             hold_done: false,
@@ -1212,6 +1242,7 @@ impl Client {
             locator: self.own_locator()?,
             encryption_key: self.own_encryption_key()?,
             number: self.number.clone(),
+            node: self.node.clone(),
         })
     }
 
@@ -1223,6 +1254,33 @@ impl Client {
         self.number = number
             .map(|n| n.trim().to_string())
             .filter(|n| !n.is_empty() && n.chars().count() <= rhtn_codec::bounds::NUMBER_CHARS);
+    }
+
+    /// **Where this device's own node answers, as the shell chose it for
+    /// the meeting about to begin** [author, 2026-11-21]: an encoded
+    /// `NetworkPoint` without a zone (`wire-format.md` §4.4), carried as
+    /// the intent's eleventh field, or nothing to clear it. Set before a
+    /// meeting and never persisted, like the number.
+    ///
+    /// Refused where the bytes are not one bare point, and nothing is then
+    /// declared: a point the counterparty's decoder would refuse would end
+    /// the meeting rather than the invitation.
+    pub fn declare_node(&mut self, point: Option<Vec<u8>>) -> Result<(), String> {
+        if let Some(p) = &point
+            && let Err(e) = rhtn_codec::schema::unsigned_network_point(p)
+        {
+            self.node = None;
+            return Err(format!("not a network point: {}", e.0));
+        }
+        self.node = point;
+        Ok(())
+    }
+
+    /// **The node the last adoption's meeting invited this identity to**,
+    /// held as an invitation (`crate::invitation`), once: the shell asks
+    /// after taking the adoption, to prove it as it proves a link's.
+    pub fn take_adoption_invited(&mut self) -> Option<Keyhash> {
+        self.adoption_invited.take()
     }
 
     /// **Take an introduction** (`wire-format.md` §2.3): a party's key
@@ -1838,6 +1896,7 @@ impl Client {
                 locator: intent.locator,
                 encryption_key: intent.encryption_key,
                 number: intent.number,
+                node: intent.node,
             },
             &cid,
         );
@@ -1891,6 +1950,7 @@ impl Client {
                 locator: read.locator,
                 encryption_key: read.encryption_key,
                 number: read.number,
+                node: read.node,
             },
         )?;
         Ok(taken)
@@ -2103,6 +2163,10 @@ impl Client {
         // the counterparty's survivors are what this side keeps of them
         a.their_bundle = intent.bundle.clone();
         a.their_retention = intent.retention_years;
+        // **their node, kept to the meeting and not to the contact**
+        // [author, 2026-11-21]: it means something only once an adoption
+        // places this identity under them, which is the record's to say
+        a.their_node = intent.node.clone();
         // the sender's own position, kept as the locator held for them:
         // its own statement replaces whatever a third party said of it
         self.hold_locator(&from, &intent.locator, true)?;
@@ -3281,6 +3345,9 @@ impl Client {
         }
         if let Some(mut a) = self.active.take_if(|_| mine) {
             let peer = a.peer()?;
+            // the meeting's point goes with its result, the next meeting
+            // replacing it whether or not that one carried any
+            self.met_node = a.their_node.take().map(|p| (peer, p));
             if let Some(sealed) = a.sealed.take() {
                 self.store.sealed.insert(txid, sealed);
             }
@@ -3882,9 +3949,15 @@ impl Client {
         let rec = Record::parse(envelope).map_err(Abort::Record)?;
         verify::envelope(&self.known, envelope).map_err(|e| Abort::Record(e.to_string()))?;
         let t = rec.txid;
+        // an adoption **of me**: under whom, and into which subnet — the
+        // root's first adoption naming its subnet by its own txid
+        let under = (rec.tx_type == TYPE_ADOPTION && rec.field_hash(1) == Some(self.keyhash()))
+            .then(|| Some((rec.field_hash(2)?, rec.locator()?.subnet.unwrap_or(t))))
+            .flatten();
         self.archive.append(rec).map_err(Abort::Record)?;
         self.store.records.insert(t, envelope.to_vec());
         self.adopt_own_positions();
+        self.invite_from_meeting(under);
         self.outbox.push(Msg::Record(envelope.to_vec()));
         // **a position just gained is a subnet the default name goes to
         // now**, not at the next attach: the counterparty of this very
@@ -3894,6 +3967,45 @@ impl Client {
             Err(e) => tracing::warn!(target: "cer", ?e, "the default alias could not be published"),
         }
         Ok(t)
+    }
+
+    /// **The node the meeting's patron carried, as an invitation**
+    /// [author, 2026-11-21]: *"auto-invite via the bluetooth channel during
+    /// an adoption into a subnet where a node already exists"*.
+    ///
+    /// Composed as the link a patron would send — this patron, the subnet
+    /// the adoption placed me in, me — and placed by the link's own path
+    /// ([`Client::place_invitation`]), so **what lands is what a link
+    /// lands**: held, proved, and agreed to with the member's one tap.
+    /// Nothing attaches here. A point from anybody but the party this
+    /// adoption placed me under is dropped with nothing kept: a peer
+    /// met at a regular meeting, or a patron's own side of the same
+    /// adoption, holds no invitation of mine.
+    fn invite_from_meeting(&mut self, under: Option<(Keyhash, Txid)>) {
+        let Some((sender, point)) = self.met_node.take() else {
+            return;
+        };
+        let Some((patron, subnet)) = under.filter(|(p, _)| *p == sender) else {
+            tracing::info!(target: "cer", from = %id8(&sender), "cer.node.dropped");
+            return;
+        };
+        let Some(at) = point_address(&point) else {
+            return;
+        };
+        let i = crate::invitation::Invitation {
+            at,
+            patron: Some(patron),
+            subnet: Some(subnet),
+            member: Some(self.keyhash()),
+            as_label: None,
+        };
+        let crate::invitation::Placed::Node(node) = self.place_invitation(&i) else {
+            tracing::info!(target: "cer", from = %id8(&sender), "cer.node.dropped");
+            return;
+        };
+        if self.offer_relocation(node, i.at, i.subnet, None) {
+            self.adoption_invited = Some(node);
+        }
     }
 
     /// **As either party: the peering body between this client and
@@ -7816,6 +7928,24 @@ fn point_bytes(address: &str) -> Option<Vec<u8>> {
         emit_uint(&mut out, port);
     }
     Some(out)
+}
+
+/// The `host:port` a bare `NetworkPoint` names, as an invitation's `at`
+/// carries it: the four octets and the port, the default where it names
+/// none (`wire-format.md` §4.4). `None` for bytes that are not one point.
+fn point_address(point: &[u8]) -> Option<String> {
+    use rhtn_codec::cbor::{Item, as_uint, map_get, parse_all};
+    rhtn_codec::schema::unsigned_network_point(point).ok()?;
+    let item = parse_all(point).ok()?;
+    let Item::Map(m) = &item else {
+        return None;
+    };
+    let Some(Item::Bytes(r)) = map_get(m, 1) else {
+        return None;
+    };
+    let ip: [u8; 4] = point[r.clone()].try_into().ok()?;
+    let port = map_get(m, 3).and_then(as_uint).unwrap_or(DEFAULT_QUIC_PORT);
+    Some(format!("{}:{port}", std::net::Ipv4Addr::from(ip)))
 }
 
 /// The names of the relations [`Client::durable_parts`] writes.

@@ -3716,6 +3716,33 @@ impl Participant {
         });
     }
 
+    /// **Where this device's own node answers, for the meeting about to
+    /// begin** [author, 2026-11-21]: an encoded `NetworkPoint` without a
+    /// zone ([`network_point`] with neither provider nor zone), carried
+    /// beside the intent, or `None` to clear it. The shell declares it
+    /// where this device adopts the other into a subnet its own instance
+    /// serves, and clears it otherwise, so nothing reaches a later
+    /// meeting. Held in memory for this process alone.
+    pub fn declare_node(&self, point: Option<Vec<u8>>) -> Result<(), Refused> {
+        self.call("declare_node", || {
+            self.handle
+                .with_blocking(move |c| c.declare_node(point.clone()))
+                .map_err(Refused::new)
+        })
+    }
+
+    /// **The node the adoption just taken invited this identity to**,
+    /// once; `None` where its meeting carried no node from this patron.
+    /// The invitation is already held as a link's is (`offer_relocation`):
+    /// what is left to the shell is proving it and the person's tap.
+    pub fn adoption_invited(&self) -> Option<Id> {
+        self.call_plain("adoption_invited", || {
+            self.handle
+                .with_blocking(|c| c.take_adoption_invited())
+                .map(|k| id_of(&k))
+        })
+    }
+
     /// **The number held for `who`**, where their device reported one at a
     /// meeting; `None` otherwise.
     pub fn number(&self, who: Id) -> Option<String> {

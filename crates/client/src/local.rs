@@ -196,7 +196,8 @@ impl TranscriptConfirm {
 /// contribution, the first carriage of its bundle of introductions, its
 /// clock, the retention it commits to, who initiated, how many
 /// `BundleContinuation` messages follow, the sender's own
-/// `SignedLocator` and its `EncryptionKey`.  The nominees no longer ride it [author, 2026-10-19]:
+/// `SignedLocator` and its `EncryptionKey`; then its number and its own
+/// node where it sends them.  The nominees no longer ride it [author, 2026-10-19]:
 /// the sets travel by locator once the id has fixed (§7.10.2, kind 22).
 #[derive(Clone, PartialEq, Eq)]
 pub struct IntentExchange {
@@ -229,6 +230,17 @@ pub struct IntentExchange {
     /// refuses it all come to the same thing: none sent, nobody prompted
     /// (`light-client-requirements.md` §1.5).
     pub number: Option<String>,
+    /// **Where the sender's own node answers**, for the subnet this
+    /// meeting's adoption is into [author, 2026-11-21]: *"auto-invite via
+    /// the bluetooth channel during an adoption into a subnet where a node
+    /// already exists"*. An encoded `NetworkPoint` without a zone (§4.4),
+    /// as an unsigned carriage holds one.
+    ///
+    /// **What it becomes is an invitation like any other**: held once the
+    /// adoption placing the receiver under the sender is, and agreed to
+    /// with the member's one tap. A member without a number learns of the
+    /// node this way and no other.
+    pub node: Option<Vec<u8>>,
 }
 
 impl std::fmt::Debug for IntentExchange {
@@ -247,6 +259,7 @@ impl std::fmt::Debug for IntentExchange {
             // **the number is not printed**: it is the counterparty's,
             // and a log is not where it belongs
             .field("number", &self.number.is_some())
+            .field("node", &self.node.is_some())
             .finish()
     }
 }
@@ -255,10 +268,17 @@ impl IntentExchange {
     /// The bytes of this `IntentExchange`, as §14.3.2 composes them.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
-        // **nine fields, or ten with a number**: a device with none
-        // sends what it always sent, so nothing has to be true of the
-        // counterparty's build for the exchange to work
-        emit_array_head(&mut out, if self.number.is_some() { 10 } else { 9 });
+        // **nine fields, ten with a number, eleven with a node**: a device
+        // with neither sends what it always sent, so nothing has to be
+        // true of the counterparty's build for the exchange to work; a
+        // node with no number writes null in the number's place, the
+        // array being positional
+        let len = match (&self.number, &self.node) {
+            (_, Some(_)) => 11,
+            (Some(_), None) => 10,
+            (None, None) => 9,
+        };
+        emit_array_head(&mut out, len);
         emit_uint(&mut out, 1);
         emit_bstr(&mut out, &self.contribution);
         emit_array_head(&mut out, self.bundle.len());
@@ -271,8 +291,13 @@ impl IntentExchange {
         emit_uint(&mut out, self.continuations);
         out.extend_from_slice(&self.locator);
         out.extend_from_slice(&self.encryption_key);
-        if let Some(n) = &self.number {
-            emit_tstr(&mut out, n);
+        match (&self.number, &self.node) {
+            (Some(n), _) => emit_tstr(&mut out, n),
+            (None, Some(_)) => emit_null(&mut out),
+            (None, None) => {}
+        }
+        if let Some(p) = &self.node {
+            out.extend_from_slice(p);
         }
         out
     }
@@ -293,6 +318,11 @@ impl IntentExchange {
             number: match a.get(9) {
                 Some(Item::Text(r)) => Some(String::from_utf8_lossy(&b[r.clone()]).into_owned()),
                 _ => None,
+            },
+            node: if a.len() == 11 {
+                Some(raw_field(b, 10)?)
+            } else {
+                None
             },
         })
     }
@@ -450,6 +480,7 @@ pub fn intent_carriage(intent: &IntentExchange, ceremony_id: &[u8; 32]) -> Vec<V
             locator: intent.locator.clone(),
             encryption_key: intent.encryption_key.clone(),
             number: intent.number.clone(),
+            node: intent.node.clone(),
             ..*intent
         }
         .encode(),

@@ -971,6 +971,21 @@ object Gateway {
         call("declareNumber", { }) { p.declareNumber(number) }
     }
 
+    /**
+     * **Where this device's own node answers, carried beside the intent
+     * of the meeting about to cross** [author, 2026-11-21], as
+     * [OperatorStore.meetingNode] chose it, or null to clear it — which
+     * every meeting that is not this patron's adoption into a subnet its
+     * own node serves does, so nothing reaches a later one. The point
+     * names no provider and no zone: it rides an unsigned carriage
+     * (`wire-format.md` §4.4).
+     */
+    fun declareNode(by: String, hostPort: String?) {
+        val p = loaded[by] ?: return
+        val point = hostPort?.let { point(it) }
+        call("declareNode", { }) { p.declareNode(point) }
+    }
+
     /** The number held for a party, where their device reported one. */
     fun numberHeld(by: String, who: String): String? {
         val p = loaded[by] ?: return null

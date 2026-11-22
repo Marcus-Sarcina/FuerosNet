@@ -34,3 +34,21 @@ fn cer_53_the_camera_holds_one_counterparty_present_across() {
 fn cer_55_two_shells_cross_the_optical_channel_only_if_the() {
     todo!("CER-55: Two shells cross the optical channel only if they share one framing (provisional)")
 }
+
+/// An adoption carries the patron's node to the member, held as an invitation and attached to by nobody
+///
+/// Spec: light-client-requirements.md §1.5; wire-format.md §14.3.2
+/// Milestone: 3.  Kind: positive.  Oracle: behaviour.
+///
+/// Rule (light-client-requirements.md §1.5): "Once the adoption placing it under the sender is recorded, the member holds it as the invitation the patron's handset would have composed, on that subnet"
+///
+/// Given: A patron that serves a subnet from a node of its own declares where it answers; the member holds no number for anybody.
+/// When: The two meet over the bearer and the patron adopts the member into that subnet; separately, the same point is declared by the member, and in a regular meeting.
+/// Then: After the adoption the member holds one unproved invitation to the patron's node on the adoption's subnet and has agreed to nothing; the patron holds nothing; a point from the member's side or from a meeting adopting nobody leaves nothing on either party.
+///
+/// Interpretation: Whether the shell declares the node is OperatorStore.meetingNode's (OperatorStoreTest); the tap that accepts it is the invitation's own (SES-021).
+#[test]
+#[ignore = "acceptance CER-75: owed at milestone 3"]
+fn cer_75_an_adoption_carries_the_patron_s_node_to_the_mem() {
+    todo!("CER-75: An adoption carries the patron's node to the member, held as an invitation and attached to by nobody")
+}

@@ -389,9 +389,20 @@ job.
     addressed to that number, and leave the sending to the person, the same
     on every platform. One per member per node address, the next offered when
     the person comes back from the last. It carries a member's **first**
-    invitation, and a move by a patron who is a root, whose members have no
-    sibling or node above to fail over to; any other member learns of a move
-    on the failover session (§4).
+    invitation to a node stood up after the adoption, and a move by a patron
+    who is a root, whose members have no sibling or node above to fail over
+    to; any other member learns of a move on the failover session (§4).
+  - **The patron's node crosses at the adoption, beside the intent**
+    [author, 2026-11-21]. A patron adopting the other party into a subnet it
+    serves from a node of its own, already running or chosen at that
+    meeting (§7), carries where that node answers in the same intent
+    (`wire-format.md` §14.3.2), so a member whose number nobody holds is
+    invited at the meeting and needs no message. Once the adoption placing
+    it under the sender is recorded, the member holds it as the invitation
+    the patron's handset would have composed, on that subnet, asked as §4
+    asks any invitation; from a party that is not its patron afterwards it
+    is dropped. A meeting that adopts nobody carries none, and a patron
+    serving the subnet from no node of its own carries none.
   - **Nullable, and that is the ordinary case.** A number is
     carrier-provisioned rather than device-known, so a handset without a
     subscription, a carrier that never provisioned one, or a platform that
@@ -1316,7 +1327,8 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   under its own key, ask whether that subnet is served from it, as the choice
   between an existing subnet and a new one is asked, and choose nothing for
   them; the brief states the answer, and once the adoption is recorded the
-  node's records are signed on that subnet's line. The question is asked at
+  node's records are signed on that subnet's line, and the intent carries
+  where it answers to the member (§1.5). The question is asked at
   every such adoption until no node is unassigned, and the operator's screen
   offers the same assignment, to any subnet the operator holds, at any time.
   A patron holding no unassigned node is asked nothing more.

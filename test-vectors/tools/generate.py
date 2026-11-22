@@ -4105,6 +4105,22 @@ intent_r = e_arr([e_uint(1), e_bstr(pc_b),
                   e_uint(TS_REC), e_uint(3), b'\xf4', e_uint(0),
                   sl_bob, encryption_key(bob)])
 
+# **the patron's own node beside the intent** [author, 2026-11-21]: where
+# bob adopts alice into a subnet his own instance serves, his intent's
+# eleventh field is where it answers, a bare point (no zone: an unsigned
+# carriage, s4.4); with no number the tenth is null, the array being
+# positional, and with one it is the number
+intent_node_point = network_point([10, 0, 0, 4], port=7432)
+intent_r_node = e_arr([e_uint(1), e_bstr(pc_b),
+                       e_arr([]),
+                       e_uint(TS_REC), e_uint(3), b'\xf4', e_uint(0),
+                       sl_bob, encryption_key(bob), NULL, intent_node_point])
+intent_r_number_node = e_arr([e_uint(1), e_bstr(pc_b),
+                              e_arr([]),
+                              e_uint(TS_REC), e_uint(3), b'\xf4', e_uint(0),
+                              sl_bob, encryption_key(bob), e_tstr('+15550001111'),
+                              intent_node_point])
+
 # a bundle past its first carriage: the first continuation, one entry,
 # anchored to the ceremony-id both screens fixed (§14.3.2; the bundle has no
 # ceiling, §5.4, and the carriage has)
@@ -4198,6 +4214,23 @@ The two flags differ; a device refuses an intent carrying its own value:
 
 ```
 {hexblock(intent_r)}
+```
+
+**IntentExchange — bob's again, as the patron of an adoption into a subnet
+his own node serves [author, 2026-11-21]: the same nine fields, null where
+the number would stand, and at field 11 the bare point where his node
+answers, 10.0.0.4:7432, no provider and no zone**
+({len(intent_r_node)} bytes):
+
+```
+{hexblock(intent_r_node)}
+```
+
+**IntentExchange — the same with his number at field 10**
+({len(intent_r_number_node)} bytes):
+
+```
+{hexblock(intent_r_number_node)}
 ```
 
 **BundleContinuation — the first continuation of a larger bundle, one
@@ -4334,6 +4367,8 @@ for fid, by, kind, note in [
     ('P-card', vs_card, 'Card', "the code handed over at a meeting (§2.4): c1's introduction, the anchor its locator names, and that anchor's endpoint record"),
     ('P-intent-exchange', intent_x, 'IntentExchange', 'echoes the optical contribution; one introduction in the bundle; the sender\'s own signed locator last'),
     ('P-intent-exchange-responder', intent_r, 'IntentExchange', "the responder's: echoes bob's contribution, an empty bundle, initiator false; the flags of the pair differ"),
+    ('P-intent-exchange-node', intent_r_node, 'IntentExchange', "the patron's own node at field 11, a bare point; no number, so null at field 10 (2026-11-21)"),
+    ('P-intent-exchange-number-node', intent_r_number_node, 'IntentExchange', 'the number at field 10 and the node at field 11 (2026-11-21)'),
     ('P-bundle-continuation', cont_x, 'BundleContinuation', 'the bundle past its first carriage, anchored and numbered from one'),
     ('P-candidates-bare', cands_bare, 'Candidates', 'the payload path form; both address families'),
     ('P-candidate-handover', cand_handover, 'CandidateHandover', 'the same candidates, anchored'),
@@ -4486,6 +4521,15 @@ reg('N-intent-encryption-key-missing', 'bytes',
     REJ('IntentExchange', 'schema', "an intent carries the sender's encryption key (§2.5)"),
     e_arr([e_uint(1), e_bstr(pc_a), e_arr([intro_c1]),
            e_uint(TS_REC), e_uint(2), b'\xf5', e_uint(0), signed_locator]))
+reg('N-intent-null-number-alone', 'bytes',
+    REJ('IntentExchange', 'schema', 'a null number stands only before a node: ten fields ending in null are nine spelled twice (2026-11-21)'),
+    e_arr([e_uint(1), e_bstr(pc_b), e_arr([]),
+           e_uint(TS_REC), e_uint(3), b'\xf4', e_uint(0), sl_bob, encryption_key(bob), NULL]))
+reg('N-intent-node-zone', 'bytes',
+    REJ('IntentExchange', 'schema', 'the node rides an unsigned carriage, where the zone at key 4 is not a key (s4.4; 2026-11-21)'),
+    e_arr([e_uint(1), e_bstr(pc_b), e_arr([]),
+           e_uint(TS_REC), e_uint(3), b'\xf4', e_uint(0), sl_bob, encryption_key(bob), NULL,
+           network_point([10, 0, 0, 4], asn=64511, port=7432, zone='nyc1')]))
 reg('N-intent-bundle-record', 'bytes',
     REJ('IntentExchange', 'schema', 'a bundle entry is an introduction, not a record'),
     e_arr([e_uint(1), e_bstr(pc_a), e_arr([pc1_env]),

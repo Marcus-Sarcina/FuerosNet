@@ -171,4 +171,60 @@ class OperatorStoreTest {
         assertTrue(screen.contains("prior != at && (prior == null || rooted)"))
         assertTrue(screen.contains("?.patron == null"))
     }
+
+    // functional: NET-036
+    /**
+     * **An adoption carries the patron's own node to the member** [author,
+     * 2026-11-21]: the instance chosen at SERVE_FROM, else the newest
+     * record serving the subnet the adoption is into, as members dial it;
+     * nothing as the party adopted, at a regular meeting, from an
+     * instance serving no subnet or another, or before a scope is chosen.
+     */
+    @Test
+    fun an_adoption_carries_the_patrons_own_node_and_nothing_else_does() {
+        val inA = OperatorStore.Instance("64.227.31.70:7449", a, "Mirror")
+        val newerInA = OperatorStore.Instance("167.99.153.102:7449", a.uppercase(), "Mirror two")
+        val inB = OperatorStore.Instance("10.0.0.9:7449", b, "Other")
+        val own = OperatorStore.Instance("10.0.0.5:7449", null, "Under my key")
+        val loose = OperatorStore.Instance("203.0.113.7:7449", null, "", unassigned = true)
+        val held = Meet.Scope(a, "Garden", null)
+        val them = Meet.Adopt.THEM_UNDER_ME
+        val all = listOf(inA, newerInA, inB, own, loose)
+        fun node(adopt: Meet.Adopt, scope: Meet.Scope?, serving: Meet.Serving?, xs: List<OperatorStore.Instance> = all) =
+            OperatorStore.meetingNode(adopt, scope, serving, xs)
+
+        assertEquals("the newest record serving it, where members dial it", "167.99.153.102:7431", node(them, held, null))
+        assertEquals("one record", "64.227.31.70:7431", node(them, held, null, listOf(inA, inB)))
+        assertEquals("the one chosen at SERVE_FROM before any", "203.0.113.7:7431", node(them, held, Meet.Serving(loose.at)))
+        assertEquals("none chosen: what already serves it", "167.99.153.102:7431", node(them, held, Meet.Serving.NONE))
+        assertEquals("a new subnet, served by the record under this key", "10.0.0.5:7431", node(them, Meet.Scope.OWN, null))
+        val rootB = Meet.Scope(b, "Mine", null)
+        assertEquals(
+            "the subnet this key roots, served by the record naming none",
+            "10.0.0.5:7431",
+            OperatorStore.meetingNode(them, rootB, null, listOf(own), b),
+        )
+        assertEquals(
+            "a held subnet this key does not root is not the record naming none's",
+            null,
+            OperatorStore.meetingNode(them, held, null, listOf(own), b),
+        )
+        assertEquals("a new subnet with no node and none chosen", null, node(them, Meet.Scope.OWN, Meet.Serving.NONE, listOf(inA, loose)))
+        assertEquals("a subnet no own instance serves", null, node(them, Meet.Scope(b.replace('b', 'c'), null, null), null))
+        assertEquals("an unassigned instance serves nobody", null, node(them, Meet.Scope.OWN, null, listOf(loose)))
+        for (side in listOf(Meet.Adopt.ME_UNDER_THEM, Meet.Adopt.NONE)) {
+            assertEquals("$side carries none", null, node(side, held, Meet.Serving(loose.at)))
+        }
+        assertEquals("before the scope is settled", null, node(them, null, null))
+        assertEquals("joining as an individual names no subnet", null, node(them, Meet.Scope.INDIVIDUAL, null))
+
+        // **declared with every choice answered, before the intent is
+        // built, and for every meeting**, so none leaks into the next
+        val ceremony = File("src/main/kotlin/com/comptus/fueros/Ceremony.kt").readText()
+        val declared = ceremony.indexOf("Gateway.declareNode(m.by, meetingNode(m))")
+        assertTrue(declared > 0)
+        assertTrue("before the carriage", declared < ceremony.indexOf("p.intentCarriage()"))
+        // and the member's side proves what the kernel held, as a link's
+        assertTrue(ceremony.contains(".also { if (it is Adoption.Result.Ok) provedInvitation(p) }"))
+    }
 }
