@@ -1816,6 +1816,19 @@ one that is true.
   grant as the next step (`infra-client-requirements.md` §7, §9.4): a
   package's roles start bound to nobody, and an operator who has just
   installed something will otherwise look for why it refuses them.
+- **Offer to seal a package's storage when it is installed, and reopen it
+  unasked** [author, 2026-11-22]. Offer the choice on the install screen
+  with what it costs: **that package — not the instance, and not its other
+  packages — is unavailable after the machine restarts or is restored from
+  a backup, until a device of this identity reaches the instance**
+  (`infra-client-requirements.md` §9.4). Derive the key from the signing
+  seed under its own label and the resource's identity, so the phrase that
+  restores the identity reopens what it sealed, and hand it over with the
+  act as the host key is; keep none of it. **Then, whenever you reach an
+  instance you run and it has proved itself** (`infra-client-requirements.md`
+  §8.2), read which of its packages are sealed and closed and make the act
+  that reopens them, without asking: the operator chose this at
+  installation. Name it to them only where it fails.
 - **Upgrade an instance in place, and give its machine a newer runner when
   you carry one** [author, 2026-11-04; 2026-11-16; 2026-11-17]. An operator does not own
   the address their instance answers at, so a new node image goes onto the

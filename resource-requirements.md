@@ -880,6 +880,14 @@ at installation with the reason; one that can tells your instance where its bloc
 and its log are on the relationships exchange (§3.3) — a filesystem of your own
 where the host can bound one, its surface otherwise [author, 2026-11-15].
 
+**What your block is protected by at rest is your host's, and no more**
+[author, 2026-11-22]. Whoever holds an image of the machine, a snapshot or
+a backup reads what the node reads, so data that must not be readable from
+one is yours to keep sealed where the node cannot open it — unless your
+operator sealed your storage when they installed you
+(`infra-client-requirements.md` §9.4), which keeps it from an image and
+leaves you unavailable after a restart of the machine until they return.
+
 ---
 
 ## 9. Sandboxing
