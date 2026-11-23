@@ -3139,7 +3139,15 @@ async fn dial_bound(
     addr: std::net::SocketAddr,
 ) -> Result<(Connection, Bound), Dialled> {
     let tls_cfg = cfg.tls_for(&target).ok_or("NotPinned")?;
-    dial_bound_with(cfg, endpoint, target, addr, tls_cfg).await
+    dial_bound_with(
+        cfg,
+        endpoint,
+        target,
+        addr,
+        tls_cfg,
+        cfg.bind.own_delegation(),
+    )
+    .await
 }
 
 /// **A connection to `target` under a transport key minted for it**
@@ -3148,6 +3156,8 @@ async fn dial_bound(
 /// (design §14.2.2). The node is bound as on any dial; what may be asked on
 /// it is a node-key fetch or a relay submission and nothing else. Never
 /// cached and never resumed, since either would tie two asks together.
+/// **No delegation is presented on it**: a delegated device's own names
+/// the device's key and not this one, and would name the identity too.
 pub async fn connect_minted(
     cfg: &ClientConfig,
     endpoint: &quinn::Endpoint,
@@ -3161,7 +3171,7 @@ pub async fn connect_minted(
         >())),
     };
     let tls_cfg = tls::client_config(fresh, &cfg.pins, &target).ok_or("not pinned")?;
-    dial_bound_with(cfg, endpoint, target, addr, tls_cfg)
+    dial_bound_with(cfg, endpoint, target, addr, tls_cfg, None)
         .await
         .map(|(c, _)| c)
         .map_err(|f| match f {
@@ -3176,6 +3186,7 @@ async fn dial_bound_with(
     target: [u8; 32],
     addr: std::net::SocketAddr,
     tls_cfg: rustls::ClientConfig,
+    own: Option<Vec<u8>>,
 ) -> Result<(Connection, Bound), Dialled> {
     let connecting = tls::dial_with(endpoint, tls_cfg, addr).map_err(|e| format!("{e:?}"))?;
     let conn = match tokio::time::timeout(cfg.connect_timeout, connecting).await {
@@ -3228,8 +3239,9 @@ async fn dial_bound_with(
     };
     log.push(Event::Bound { how });
     // a delegated dialler's own delegation, first on stream 0, before any
-    // request stream opens
-    if let Some(raw) = cfg.bind.own_delegation() {
+    // request stream opens: `own`, where the key presented is the one it
+    // names
+    if let Some(raw) = own {
         let (mut s, _r) = conn.open_bi().await.map_err(|e| e.to_string())?;
         s.write_all(&control_frame(FRAME_DELEGATION, &raw))
             .await

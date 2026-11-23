@@ -928,3 +928,47 @@ async fn a_minted_connection_may_fetch_a_node_key_or_submit_and_nothing_else() {
     assert!(!node.has_session(&MINTED));
     assert!(!node.has_session(&kh("bob")));
 }
+
+/// **A delegated device's minted connection presents no delegation**
+/// (`wire-format.md` §9.1): its own names the device's key and not the
+/// minted one, and the node, reading it first, would refuse the
+/// connection as unbound — a paired desktop's node-key fetch, refused so
+/// [bench, 2026-11-23].
+#[tokio::test]
+async fn a_delegated_devices_minted_connection_presents_no_delegation() {
+    use rhtn_archive::node_key::NodeKeyRequest;
+    let mut cfg = node_cfg("alice");
+    cfg.on_request = Some(Arc::new(|_, _, _, _| {
+        Box::pin(async { Some(b"answered".to_vec()) })
+    }));
+    let (_node, addr, _ep) = spawn_node(cfg);
+    let bob = test_identity("bob");
+    let desk = tls::Credential::from_seed(&[51; 32], kh("bob"));
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    desk.add(
+        std::slice::from_ref(&bob.public),
+        &rhtn_crypto::delegation::issue(&bob, &desk.public(), now - 60),
+    )
+    .unwrap();
+    let ccfg = client_cfg("bob").with_credential(Arc::new(desk));
+    let ask = NodeKeyRequest::One {
+        recipient: kh("carol"),
+        nonce: [4; 16],
+    }
+    .encode();
+    let conn = connect_minted(&ccfg, &client_ep(), kh("alice"), addr)
+        .await
+        .expect("the minted connection is bound");
+    assert_eq!(request_on(&conn, 3, &ask).await.unwrap(), b"answered");
+    assert!(
+        !ccfg
+            .log
+            .events()
+            .iter()
+            .any(|(_, e)| matches!(e, Event::DelegationPresented)),
+        "no delegation went out under the minted key"
+    );
+}

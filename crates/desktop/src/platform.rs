@@ -14,7 +14,7 @@
 //! window's builder makes, and this module never falls back to one.
 
 use rhtn_ffi::device::{
-    Camera, Clock, Custody, Notices, Operator, Platform, Random, Silent, Storage,
+    Camera, Clock, Custody, Diagnostics, Notices, Operator, Platform, Random, Silent, Storage,
 };
 use rhtn_ffi::types::{Ask, Told};
 use std::path::{Path, PathBuf};
@@ -56,7 +56,7 @@ impl Desk {
             notices: self.clone(),
             storage: self.clone(),
             custody,
-            diagnostics: Arc::new(Silent),
+            diagnostics: diagnostics(&self.dir),
             engine: None,
         })
     }
@@ -69,6 +69,40 @@ impl Desk {
         plain.then(|| self.dir.join(name))
     }
 }
+
+/// **Where the kernel's diagnostic lines go**: in a field-test build,
+/// `diag.log` in the state directory, appended a line at a time, as the
+/// phone's go to logcat; a line that fails to write is lost.  A releasable
+/// build's hooks are compiled out, and it writes nothing.
+#[cfg(feature = "fieldtest")]
+fn diagnostics(dir: &Path) -> Arc<dyn Diagnostics> {
+    struct Log(std::sync::Mutex<std::fs::File>);
+    impl Diagnostics for Log {
+        fn event(&self, line: String) {
+            use std::io::Write as _;
+            if let Ok(mut f) = self.0.lock() {
+                let _ = writeln!(f, "{line}");
+            }
+        }
+    }
+    match std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dir.join(DIAG))
+    {
+        Ok(f) => Arc::new(Log(std::sync::Mutex::new(f))),
+        Err(_) => Arc::new(Silent),
+    }
+}
+
+/// A releasable build's: nothing.
+#[cfg(not(feature = "fieldtest"))]
+fn diagnostics(_: &Path) -> Arc<dyn Diagnostics> {
+    Arc::new(Silent)
+}
+
+/// The field-test build's diagnostics file, in the state directory.
+pub const DIAG: &str = "diag.log";
 
 /// Make `dir` and its parents, the last readable by its owner alone.
 pub fn create_private(dir: &Path) -> Result<(), String> {

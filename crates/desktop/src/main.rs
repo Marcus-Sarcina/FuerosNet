@@ -159,6 +159,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let Some(p) = up.running.lock().unwrap().clone() else {
                         return;
                     };
+                    // **the one line that carries the wall clock**, so a
+                    // field-test build's diagnostics are placed beside the
+                    // phones'
+                    tracing::info!(
+                        target: "diag",
+                        unix_ms = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map_or(0, |d| d.as_millis() as u64),
+                        pid = std::process::id(),
+                        process = "rhtn-desktop",
+                        "diag.anchor"
+                    );
                     *up.device.lock().unwrap() = Some(d);
                     *up.threads.lock().unwrap() = Some(Arc::new(Threads::new(
                         &dir,
