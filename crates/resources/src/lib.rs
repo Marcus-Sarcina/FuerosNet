@@ -36,7 +36,7 @@ pub const GUEST_ENTRY: &str = "handle";
 /// The functions each binding of [`HOST_EXPORTS`] puts in the host
 /// instance, in the manifest's vocabulary: `rhtn/1:block` is the six
 /// functions of the storage block, the rest one function each.
-const BINDING_FUNCS: [(&str, &[&str]); 7] = [
+const BINDING_FUNCS: [(&str, &[&str]); 8] = [
     ("rhtn/1:request", &["request"]),
     ("rhtn/1:response", &["response"]),
     (
@@ -54,7 +54,14 @@ const BINDING_FUNCS: [(&str, &[&str]); 7] = [
     ("rhtn/1:clock", &["clock"]),
     ("rhtn/1:fetch", &["fetch"]),
     ("rhtn/1:jobs", &["job-schedule", "job-cancel", "job-list"]),
+    ("rhtn/1:notices", &["notice"]),
 ];
+
+/// **Where an instance's notice goes** (`resource-requirements.md` §3.3)
+/// [author, 2026-11-23]: the member's principal, the count, the line, and
+/// back why it was not taken. Bound to the one instance by whoever made
+/// it, so the instance names no instance.
+pub type Notices = Arc<dyn Fn([u8; 32], u32, Option<String>) -> Result<(), String> + Send + Sync>;
 
 /// The export a package that schedules jobs provides, and the whole of
 /// what the host calls for one: `job(id: u64, task: list<u8>)`.
@@ -544,6 +551,8 @@ pub struct Env {
     pub fetch: Option<Arc<dyn Fetcher>>,
     /// The instance's scheduled work.
     pub jobs: Option<Arc<Jobs>>,
+    /// **Where it says what waits for a member**, the host's.
+    pub notices: Option<Notices>,
     /// The host's clock, milliseconds since the epoch: advisory, and
     /// nothing in the protocol treats it as proof of anything.
     pub clock: Arc<dyn Fn() -> u64 + Send + Sync>,
@@ -556,6 +565,7 @@ impl Default for Env {
             log: None,
             fetch: None,
             jobs: None,
+            notices: None,
             clock: Arc::new(|| {
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
@@ -817,6 +827,43 @@ impl Sandbox {
             )
             .map_err(|e| Refusal::NotAComponent(e.to_string()))?;
             link_jobs(&mut inst)?;
+            // **what the instance counts as waiting for one member**
+            // (`resource-requirements.md` §3.3): the principal it was given
+            // for them, the count, and a line where it is not empty; true
+            // where the host took it, and the reason in the log where not
+            inst.func_new(
+                "notice",
+                |store: wasmtime::StoreContextMut<'_, Call>,
+                 _: wasmtime::component::types::ComponentFunc,
+                 args: &[Val],
+                 out: &mut [Val]| {
+                    let (Some(Val::List(p)), Some(Val::U32(count)), Some(Val::String(line))) =
+                        (args.first(), args.get(1), args.get(2))
+                    else {
+                        return Err(wasmtime::Error::msg(
+                            "notice takes a principal, a count and a line",
+                        ));
+                    };
+                    let Some(n) = store.data().env.notices.clone() else {
+                        return Err(wasmtime::Error::msg("no notices were granted"));
+                    };
+                    let principal: Option<[u8; 32]> = p
+                        .iter()
+                        .map(|v| if let Val::U8(b) = v { Some(*b) } else { None })
+                        .collect::<Option<Vec<u8>>>()
+                        .and_then(|b| b.try_into().ok());
+                    let taken = match principal {
+                        None => Err("a principal is 32 bytes".to_string()),
+                        Some(p) => n(p, *count, (!line.is_empty()).then(|| line.to_string())),
+                    };
+                    if let (Err(why), Some(l)) = (&taken, &store.data().env.log) {
+                        l.write(&format!("host: refused a notice: {why}"));
+                    }
+                    out[0] = Val::Bool(taken.is_ok());
+                    Ok(())
+                },
+            )
+            .map_err(|e| Refusal::NotAComponent(e.to_string()))?;
         }
 
         Ok(Self {

@@ -357,6 +357,8 @@ fn the_page_is_asked_beside_the_catalog_and_names_what_no_entry_did() {
         owner: kh("bob"),
         name: "testapp.internal".into(),
         roles: vec!["reader".into()],
+        count: 0,
+        line: None,
     };
     let forged = CatalogPage {
         nonce: [0xee; 16],
@@ -404,6 +406,8 @@ fn each_resource_swept_is_asked_once_for_its_icon_and_only_a_declared_image_is_k
         owner: kh("bob"),
         name: name.into(),
         roles: vec![],
+        count: 0,
+        line: None,
     };
     let page = CatalogPage {
         nonce: asked.nonce,

@@ -441,6 +441,13 @@ object Attachments {
                     // them redraw
                     is Event.Changed -> {
                         Model.refresh(e.nouns.toSet())
+                        // **what a resource counts as newly waiting, told in
+                        // the shade** where it may notify [author, 2026-11-23]
+                        if (uniffi.rhtn_model.Noun.RESOURCES in e.nouns) {
+                            Gateway.appContext?.let { ctx ->
+                                Notify.notices(ctx, id, Gateway.call("resources", { emptyList() }) { p.resources() })
+                            }
+                        }
                         // **a move told by a node's own record is proved as it
                         // arrives** [author, 2026-11-17]: it came on a
                         // failover session, and the next attach round may be

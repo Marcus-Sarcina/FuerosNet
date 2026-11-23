@@ -139,9 +139,70 @@ pub struct Gateway {
     /// resource: what the operator's surface names as the one exceeded
     /// (`infra-client-requirements.md` §9.3).
     throttled: BTreeMap<Keyhash, u64>,
+    /// **What each resource counts as waiting for each member**, the
+    /// latest it said and nothing before it (`resource-requirements.md`
+    /// §3.3) [author, 2026-11-23]: the count and its one line, by
+    /// (resource, member). Held in memory: a restart forgets them, and a
+    /// resource says them again when it is next told its relationships.
+    notices: BTreeMap<(Keyhash, Keyhash), (u32, Option<String>)>,
+}
+
+/// **Why a resource's notice was not taken** (`resource-requirements.md`
+/// §3.3).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NoticeRefused {
+    /// No member granted that resource here goes by that principal.
+    NoOne,
+    /// The line is empty, longer than 128 bytes, or more than one line.
+    Line,
+}
+
+impl std::fmt::Display for NoticeRefused {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            NoticeRefused::NoOne => "no member granted this resource here goes by that principal",
+            NoticeRefused::Line => "a line is 1 to 128 bytes of text on one line",
+        })
+    }
 }
 
 impl Gateway {
+    /// **Take what `resource` counts as waiting for the member it knows as
+    /// `principal`** (`resource-requirements.md` §3.3) [author,
+    /// 2026-11-23]: the latest replaces what it said before, and a count of
+    /// none withdraws it. The member is found by the pairwise principal
+    /// the resource was given for them (design §11.0.2), among those
+    /// granted it here, so a resource can name only someone who reached
+    /// it; that member is what comes back, for the node to tell.
+    pub fn notice(
+        &mut self,
+        resource: Keyhash,
+        principal: [u8; 32],
+        count: u32,
+        line: Option<String>,
+    ) -> Result<Keyhash, NoticeRefused> {
+        if line.as_ref().is_some_and(|l| {
+            l.is_empty()
+                || l.len() > rhtn_codec::bounds::NOTICE_LINE_BYTES
+                || l.chars().any(char::is_control)
+        }) {
+            return Err(NoticeRefused::Line);
+        }
+        let member = self
+            .rows
+            .iter()
+            .filter(|((r, _), row)| *r == resource && row.connect)
+            .map(|((_, m), _)| *m)
+            .find(|m| pairwise_principal(&resource, m) == principal)
+            .ok_or(NoticeRefused::NoOne)?;
+        if count == 0 {
+            self.notices.remove(&(resource, member));
+        } else {
+            self.notices.insert((resource, member), (count, line));
+        }
+        Ok(member)
+    }
+
     /// Bind `resource` at this node.
     pub fn bind(&mut self, resource: Keyhash, binding: Binding) {
         self.bindings.insert(resource, binding);
@@ -737,11 +798,18 @@ impl Gateway {
                 while name.len() > name_bytes {
                     name.pop();
                 }
+                let (count, line) = self
+                    .notices
+                    .get(&(*res, *viewer))
+                    .cloned()
+                    .unwrap_or((0, None));
                 Some(PageItem {
                     resource: *res,
                     owner,
                     name,
                     roles: r.roles.iter().cloned().collect(),
+                    count,
+                    line,
                 })
             })
             .take(rhtn_codec::bounds::CATALOG_REPLY_ENTRIES)
@@ -762,7 +830,7 @@ impl crate::federation::Addresses for Gateway {
 /// §9.2): its credentialled request traffic and nothing else.  There is no
 /// binding for topology, liveness, the queue, prekeys or role inputs, so a
 /// manifest importing one cannot be instantiated.
-pub const HOST_EXPORTS: [&str; 7] = [
+pub const HOST_EXPORTS: [&str; 8] = [
     "rhtn/1:request",
     "rhtn/1:response",
     "rhtn/1:block",
@@ -770,6 +838,7 @@ pub const HOST_EXPORTS: [&str; 7] = [
     "rhtn/1:clock",
     "rhtn/1:fetch",
     "rhtn/1:jobs",
+    "rhtn/1:notices",
 ];
 
 /// The versions of the host surface this node offers a package

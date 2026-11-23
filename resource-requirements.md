@@ -237,7 +237,7 @@ operator bound and `rhtn-audience` naming you.
 
 | Request | Carries | Your answer |
 |---|---|---|
-| `PUT /.rhtn/relationships` | the instances your operator configured yours to federate with: a patron's instance, subordinates' instances, named kin, each a resource keyhash; **and what your host provides you** [2026-10-30], as headers — `rhtn-host`, the surface versions it offers; `rhtn-block` and `rhtn-block-bytes`, where your storage block is and its ceiling; `rhtn-log` and `rhtn-log-bytes`, your log and its retention (`infra-client-requirements.md` §9.3); and `rhtn-secret`, what you present to reach either (below) | 2xx once taken; it is repeated until then, and again whenever they or the host's facts change. **Nothing else is delivered to you until you take it** [2026-10-27]: a directive is acted on under a snapshot of who may send you one, and until you answer you have accepted no snapshot |
+| `PUT /.rhtn/relationships` | the instances your operator configured yours to federate with: a patron's instance, subordinates' instances, named kin, each a resource keyhash; **and what your host provides you** [2026-10-30], as headers — `rhtn-host`, the surface versions it offers; `rhtn-block` and `rhtn-block-bytes`, where your storage block is and its ceiling; `rhtn-log` and `rhtn-log-bytes`, your log and its retention (`infra-client-requirements.md` §9.3); `rhtn-notices`, where you say what waits for a member (below) [author, 2026-11-23]; and `rhtn-secret`, what you present to reach any of them | 2xx once taken; it is repeated until then, and again whenever they or the host's facts change. **Nothing else is delivered to you until you take it** [2026-10-27]: a directive is acted on under a snapshot of who may send you one, and until you answer you have accepted no snapshot |
 | `PUT /.rhtn/envelope` | one **envelope** from a related instance, with `rhtn-origin` (that instance, hex) and `rhtn-relation` (`patron`, `subordinate` or `kin:<name>`, the node's reading of your operator's configuration) | 2xx to take it, which the node remembers; the body may carry envelopes to send (below) |
 | `GET /.rhtn/outbox` | **the items the node has taken**, as `?taken=a,b` [2026-10-27] | 2xx with `{"emit": [{"item": …, "to": …, "envelope": …}, …]}`, empty where you have nothing to send; `to` is `patron`, `subordinates`, `kin:<name>` or one related instance in hex |
 
@@ -314,7 +314,7 @@ what a directive means, what to apply, what to report and what your members are
 shown of it — including who set a policy — is your application's to decide and to
 make legible.
 
-**One exchange goes the other way, and it is how you keep anything** [author,
+**Two exchanges go the other way.** The first is how you keep anything [author,
 2026-11-05]. `rhtn-block` and `rhtn-log` name a surface of your host's, not a
 path on its filesystem: a package in the sandbox reaches its block as a binding
 it imported, and you reach the same block by asking the host, so one
@@ -339,6 +339,25 @@ container rather than an address — bounded by the host's filesystem at
 `rhtn-block-bytes`, a write past it failing as your operating system fails
 one — and the surface's operations are not there against a path. Your host
 tells you which you have, and nothing else about it changes.
+
+**The second is how a member learns that something waits for them** [author,
+2026-11-23]. **You keep the count**, since the member reads in you and you know
+what they have read, on whichever of their devices: nothing of read state is kept
+anywhere else. Tell your host the latest for a member with `PUT
+<rhtn-notices>/<principal>?count=<n>`, presenting `rhtn-secret` as above, the
+member named by the principal you were given for them (§2) and the body one line
+of text, at most 128 bytes, to go beside the count — or nothing. **The latest
+replaces what you said before, and a count of 0 withdraws it.** Your host keeps
+only that, puts it on that member's page at the node (`wire-format.md` §6.9) and
+on no one else's, and tells each session the member holds there that their page
+changed; their client then shows the count on your launcher, rolls it into their
+subnet's, and shows your line where they allowed you to notify them (§3.4's
+`notify`). A principal that is no member granted you here is refused, and so is a
+line that is empty, too long or more than one line. **Your host keeps them in
+memory**, so say every count again whenever it next tells you your relationships:
+that is how a host that restarted learns them back. A package in the sandbox says
+the same through the `rhtn/1:notices` binding (`infra-client-requirements.md`
+§9.3), with no path and no secret.
 
 ### 3.4 What you may ask of a member's client
 

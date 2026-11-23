@@ -218,3 +218,95 @@ async fn the_secret_says_which_instance_is_calling_and_reaches_no_other_instance
         400
     );
 }
+
+/// **What an instance counts as waiting for a member goes to the node**
+/// (`resource-requirements.md` §3.3) [author, 2026-11-23]: the member by
+/// the principal the instance was given, the count in the query, the line
+/// as the body; and refused in words where any of it is not one.
+// functional: CAT-030
+#[tokio::test]
+async fn an_instance_says_what_waits_for_a_member_and_the_node_is_handed_it() {
+    let surface = HostSurface::bind().await.expect("bound");
+    let at = surface.bound();
+    let secret = hex_secret(&surface.register(kh(3), None, None));
+    tokio::spawn(surface.clone().serve());
+    let principal = rhtn_node::http::base64url(&[7u8; 32]);
+    let target = format!("/notices/{principal}?count=2");
+
+    // before the node is up there is nowhere for it to go
+    assert_eq!(
+        ask(at, "PUT", &target, Some(&secret), b"ready").await.0,
+        503
+    );
+
+    let taken = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let into = taken.clone();
+    surface.notices_to(Arc::new(move |instance, p, count, line| {
+        if p == [9u8; 32] {
+            return Err("no member granted this resource here goes by that principal".into());
+        }
+        into.lock().unwrap().push((instance, p, count, line));
+        Ok(())
+    }));
+    assert_eq!(
+        ask(at, "PUT", &target, Some(&secret), b"Your order is ready\n")
+            .await
+            .0,
+        204
+    );
+    assert_eq!(
+        ask(
+            at,
+            "PUT",
+            &format!("/notices/{principal}?count=0"),
+            Some(&secret),
+            b""
+        )
+        .await
+        .0,
+        204
+    );
+    assert_eq!(
+        *taken.lock().unwrap(),
+        vec![
+            (kh(3), [7u8; 32], 2, Some("Your order is ready".to_string())),
+            (kh(3), [7u8; 32], 0, None),
+        ],
+        "the instance the secret is, the member's principal, the count and the line"
+    );
+    // refused in words: a principal that is not one, no count, and a
+    // member the node does not know by it
+    assert_eq!(
+        ask(at, "PUT", "/notices/short?count=1", Some(&secret), b"")
+            .await
+            .0,
+        400
+    );
+    assert_eq!(
+        ask(
+            at,
+            "PUT",
+            &format!("/notices/{principal}"),
+            Some(&secret),
+            b""
+        )
+        .await
+        .0,
+        400
+    );
+    let (code, why) = ask(
+        at,
+        "PUT",
+        &format!(
+            "/notices/{}?count=1",
+            rhtn_node::http::base64url(&[9u8; 32])
+        ),
+        Some(&secret),
+        b"",
+    )
+    .await;
+    assert_eq!(code, 404);
+    assert!(String::from_utf8_lossy(&why).contains("principal"));
+    // and nobody else's secret says it
+    assert_eq!(ask(at, "PUT", &target, None, b"").await.0, 401);
+}

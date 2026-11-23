@@ -2760,6 +2760,10 @@ PageItem = {
                        ;   it, at most 64 (`resource-requirements.md` §3):
                        ;   the node's own `connect` and `discover` are never
                        ;   among them
+  ? 5: uint,          ; what waits for the asker there, as the resource
+                       ;   counts it, 1 to 2^32-1; absent where nothing does
+  ? 6: tstr .size (1..128)  ; the one line the resource gave with that
+                       ;   count; only beside field 5
 }
 ```
 
@@ -2767,6 +2771,26 @@ PageItem = {
 per stream, the reply closing it. **An asker outside the answering node's horizon
 is refused as §6.4's is**: the stream closes, and no empty page is returned, an
 empty page being the true statement that nothing here is granted to the asker.
+
+**Fields 5 and 6 are what the resource last said of the asker** [author,
+2026-11-23]: the resource keeps the count, since the person reads in it, and tells
+its host the latest for each member it serves (`resource-requirements.md` §3.3),
+which replaces what it said before; the node keeps that and nothing earlier, and
+puts it on the member's page and no one else's. **Nothing waiting is field 5
+absent**, so a page has one encoding: a count of zero, or a line with no count, is
+malformed.
+
+**A node tells a member with a session that their page there changed, and
+nothing else** [author, 2026-11-23]: `PageChanged`, control frame type 9 on stream
+0 (§8.0), sent on each session the member holds when a resource they hold a grant
+on says something new of them. Its body is an empty map; what changed is on the
+page, which only the member may ask for, so a client receiving it asks for the page
+again as a sweep does, and a frame that reaches nobody costs the member nothing they
+will not see at their next sweep.
+
+```
+PageChanged = { }
+```
 
 ---
 
@@ -4202,6 +4226,7 @@ through the very ceiling that exists to bound the receiver's buffer.
 | 6 | `TopologyMemo` (§10.2) |
 | 7 | `Delegation` (§8.2): a delegated peer's first frame on a connection that opens no session [author, 2026-09-21] |
 | 8 | `Reopen` (§8.2): a node's operator giving a sealed package its key [author, 2026-11-22] |
+| 9 | `PageChanged` (§6.9): the member's page at this node has changed [author, 2026-11-23] |
 
 **Topology framing belongs on stream 0 and not on a bidirectional stream.** Both are unsolicited pushes with no reply, so neither is a request; and
 the extension posture decides it. An unknown control frame is **skipped** and the

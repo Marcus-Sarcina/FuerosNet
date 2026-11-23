@@ -151,3 +151,56 @@ fn the_scope_forms_and_the_frames_and_replies_round_trip() {
     assert_eq!(r12.code, REGISTRATION_RECORDED);
     assert_eq!(r12.encode(), fixture("P-reply-12"));
 }
+
+/// **A page item's count is one or more, and its line rides one**
+/// (`wire-format.md` §6.9) [author, 2026-11-23]: nothing waiting is the
+/// field absent, so a page has one encoding; and frame 9 carries an empty
+/// map and nothing else.
+// functional: CAT-030
+#[test]
+fn a_page_items_count_is_absent_at_none_and_a_line_needs_one() {
+    use rhtn_archive::catalog::{CatalogPage, PageItem};
+    let item = |count: u32, line: Option<&str>| PageItem {
+        resource: [1; 32],
+        owner: [2; 32],
+        name: "board".into(),
+        roles: vec![],
+        count,
+        line: line.map(String::from),
+    };
+    let page = |items| CatalogPage {
+        nonce: [3; 16],
+        items,
+    };
+    let with = page(vec![item(4, Some("Four replies to your post"))]);
+    assert_eq!(CatalogPage::decode(&with.encode()).unwrap(), with);
+    let none = page(vec![item(0, None)]);
+    assert_eq!(CatalogPage::decode(&none.encode()).unwrap(), none);
+    // a line given with nothing waiting is not carried at all
+    assert_eq!(
+        page(vec![item(0, Some("stale"))]).encode(),
+        none.encode(),
+        "one encoding for nothing waiting"
+    );
+    // and spelled on the wire the other ways, each is malformed: a count of
+    // zero, a line with no count, a line past 128 bytes
+    // the item is the page's last map, so a pair appended to the page's
+    // bytes is appended to it, and its head counts one more pair
+    let mut zero = none.encode();
+    zero.extend_from_slice(&[0x05, 0x00]);
+    let head = zero.iter().rposition(|b| *b == 0xa4).unwrap();
+    zero[head] = 0xa5;
+    assert!(CatalogPage::decode(&zero).is_err(), "a count of zero");
+    let mut lone = none.encode();
+    lone.extend_from_slice(&[0x06, 0x61, b'x']);
+    let head = lone.iter().rposition(|b| *b == 0xa4).unwrap();
+    lone[head] = 0xa5;
+    assert!(CatalogPage::decode(&lone).is_err(), "a line with no count");
+    let long = page(vec![item(1, Some(&"x".repeat(129)))]);
+    assert!(
+        CatalogPage::decode(&long.encode()).is_err(),
+        "a line past 128 bytes"
+    );
+    assert_eq!(rhtn_archive::catalog::page_changed(), vec![0xa0]);
+    assert_eq!(rhtn_archive::catalog::FRAME_PAGE_CHANGED, 9);
+}

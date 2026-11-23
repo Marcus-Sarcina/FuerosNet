@@ -212,7 +212,7 @@ object Chrome {
 
     /**
      * **A subnet's orb count, rolled up** [author, 2026-11-23]: a move of its
-     * node to answer, and what each of its resources asks that waits.
+     * node to answer, and what waits for the person at each of its resources.
      */
     fun unseen(moved: Boolean, launchers: List<Launcher>): Int =
         (if (moved) 1 else 0) + launchers.sumOf { it.unseen }

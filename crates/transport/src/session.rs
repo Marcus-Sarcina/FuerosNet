@@ -2922,6 +2922,12 @@ async fn attach_on(
                     let _ = ftx.send((6, b[body].to_vec()));
                     true
                 }
+                // **the page at this node changed** (`wire-format.md` §6.9):
+                // carried up to whoever asks for pages again
+                Family::PageChanged => {
+                    let _ = ftx.send((9, Vec::new()));
+                    true
+                }
                 _ => true,
             },
         )

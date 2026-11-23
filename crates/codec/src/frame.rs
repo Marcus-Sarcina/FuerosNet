@@ -73,6 +73,7 @@ pub fn family_of(stream: Stream, frame_type: u64) -> Option<Family> {
         (Stream::Control, 6) => TopologyMemo,
         (Stream::Control, 7) => Delegation,
         (Stream::Control, 8) => Reopen,
+        (Stream::Control, 9) => PageChanged,
         (Stream::Request, 1) => ResolveRequest,
         (Stream::Request, 2) => ArchiveRequest,
         (Stream::Request, 3) => NodeKeyRequestOrBatch,

@@ -142,6 +142,29 @@ fn main() -> std::process::ExitCode {
         let out = app.handle(&buf);
         let _ = stream.write_all(&out);
         let _ = stream.flush();
+        drop(stream);
+        // **what waits for a member, told to the host once answered**
+        // (`resource-requirements.md` §3.3); kept for the next request
+        // where the host has not said where, or did not take it
+        if let (Some(url), Some(s)) = (app.notices.clone(), secret) {
+            let owed = app.take_owed();
+            for n in owed {
+                match tell(&url, &s, &n) {
+                    Ok(204) => println!(
+                        "{{\"what\":\"noticed\",\"who\":\"{}\",\"count\":{}}}",
+                        n.principal.chars().take(16).collect::<String>(),
+                        n.count
+                    ),
+                    Ok(code) => {
+                        eprintln!("rhtn-testapp: the host answered a notice with {code}");
+                    }
+                    Err(why) => {
+                        eprintln!("rhtn-testapp: a notice did not reach the host: {why}");
+                        app.owed.push(n);
+                    }
+                }
+            }
+        }
         for line in &app.said[before..] {
             println!("{line}");
             if let Some(path) = &log
@@ -156,6 +179,33 @@ fn main() -> std::process::ExitCode {
         let _ = std::io::stdout().flush();
     }
     std::process::ExitCode::SUCCESS
+}
+
+/// **One notice, put to the host's surface** at `url` (`http://host:port/
+/// notices`): the member's principal in the path, the count in the query,
+/// the line as the body, the instance's secret presented. The status back.
+fn tell(url: &str, secret: &[u8; 32], n: &rhtn_testapp::Notice) -> Result<u16, String> {
+    let rest = url
+        .strip_prefix("http://")
+        .ok_or("the surface is not plain http")?;
+    let (authority, path) = rest.split_once('/').unwrap_or((rest, ""));
+    let body = n.line.clone().unwrap_or_default();
+    let request = format!(
+        "PUT /{path}/{}?count={} HTTP/1.1\r\nhost: {authority}\r\nrhtn-secret: {}\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+        n.principal,
+        n.count,
+        hex(secret),
+        body.len()
+    );
+    let mut s = std::net::TcpStream::connect(authority).map_err(|e| e.to_string())?;
+    let _ = s.set_read_timeout(Some(std::time::Duration::from_secs(10)));
+    s.write_all(request.as_bytes()).map_err(|e| e.to_string())?;
+    let mut back = String::new();
+    let _ = s.read_to_string(&mut back);
+    back.split(' ')
+        .nth(1)
+        .and_then(|c| c.parse().ok())
+        .ok_or_else(|| "no status came back".to_string())
 }
 
 /// `keyhash <hex>` and nothing else takes a positional argument.

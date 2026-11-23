@@ -21,6 +21,18 @@ pub const REQUEST_REGISTRATION: u64 = 7;
 /// Request type 16: the asker's catalog page (`wire-format.md` §6.9).
 pub const REQUEST_CATALOG_PAGE: u64 = 16;
 
+/// **Control frame 9: the asker's page at this node has changed**
+/// (`wire-format.md` §6.9) [author, 2026-11-23], so a client holding a
+/// session asks for it again. It carries nothing: what changed is on the
+/// page, which only the one it is for may ask for.
+pub const FRAME_PAGE_CHANGED: u64 = 9;
+
+/// The body frame 9 carries: an empty map.
+#[must_use]
+pub fn page_changed() -> Vec<u8> {
+    vec![0xa0]
+}
+
 /// `ResourceRegistrationReply` field 2.
 pub const REGISTRATION_RECORDED: u64 = 0;
 /// The registration was refused.
@@ -467,6 +479,12 @@ pub struct PageItem {
     pub name: String,
     /// The application roles the asker holds on it.
     pub roles: Vec<String>,
+    /// **What waits for the asker there, as the resource counts it**
+    /// [author, 2026-11-23]: zero where nothing does, which the wire
+    /// carries as field 5 absent.
+    pub count: u32,
+    /// The one line the resource gave with its count, where it gave one.
+    pub line: Option<String>,
 }
 
 /// A `CatalogPage` (`wire-format.md` §6.9): what the asker holds a grant on
@@ -489,7 +507,11 @@ impl CatalogPage {
         emit_uint(&mut out, 2);
         emit_array_head(&mut out, self.items.len());
         for i in &self.items {
-            emit_map_head(&mut out, 4);
+            let line = i.line.as_ref().filter(|_| i.count > 0);
+            emit_map_head(
+                &mut out,
+                4 + usize::from(i.count > 0) + usize::from(line.is_some()),
+            );
             emit_uint(&mut out, 1);
             emit_bstr(&mut out, &i.resource);
             emit_uint(&mut out, 2);
@@ -500,6 +522,14 @@ impl CatalogPage {
             emit_array_head(&mut out, i.roles.len());
             for r in &i.roles {
                 emit_tstr(&mut out, r);
+            }
+            if i.count > 0 {
+                emit_uint(&mut out, 5);
+                emit_uint(&mut out, u64::from(i.count));
+            }
+            if let Some(l) = line {
+                emit_uint(&mut out, 6);
+                emit_tstr(&mut out, l);
             }
         }
         out
@@ -547,6 +577,14 @@ impl CatalogPage {
                 owner: key(map_get(f, 2))?,
                 name: text(n)?,
                 roles,
+                count: match map_get(f, 5) {
+                    Some(Item::Uint(c)) => u32::try_from(*c).map_err(|_| "a count".to_string())?,
+                    _ => 0,
+                },
+                line: match map_get(f, 6) {
+                    Some(Item::Text(t)) => Some(text(t)?),
+                    _ => None,
+                },
             });
         }
         Ok(CatalogPage {

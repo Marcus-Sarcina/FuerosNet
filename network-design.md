@@ -6241,8 +6241,11 @@ patron plus fetch-on-foreground covers v1.
 (Messages, scheduled events, etc)."* A client holding the platform's standing
 for a kept connection (`light-client-requirements.md` §4.1) is told of messages
 and scheduled events by the node serving it, over that session, and needs no
-push service for them. The doorbell is for a client the platform refuses that
-standing, and stays its opt-in.
+push service for them. **What a resource counts as waiting for a member reaches
+them the same way** [author, 2026-11-23]: the resource keeps the count, since the
+member reads in it, and tells its host, which puts it on the member's page and
+tells their sessions the page changed (`wire-format.md` §6.9). The doorbell is
+for a client the platform refuses that standing, and stays its opt-in.
 
 **The dependency is the client's, not the network's** [2026-09-13]. A client
 opting in gives its patron a **wake endpoint** it obtained from a push service

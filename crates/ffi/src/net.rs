@@ -1084,7 +1084,12 @@ impl Net {
             }));
             let carried = courier_for_task.attach_at(serving_node, population).await;
             let tasks = vec![
-                attached::follow(handle_for_task.clone(), frames),
+                attached::follow(
+                    handle_for_task.clone(),
+                    serving_node,
+                    courier_for_task.clone(),
+                    frames,
+                ),
                 attached::collect(
                     serving_node,
                     courier_for_task.inbound_via(serving_node),
@@ -1706,7 +1711,12 @@ async fn watch(
                 all[i].0 = to;
             }
         }
-        tokio::spawn(attached::follow(handle.clone(), frames));
+        tokio::spawn(attached::follow(
+            handle.clone(),
+            to,
+            courier.clone(),
+            frames,
+        ));
         tokio::spawn(attached::collect(to, courier.inbound_via(to), deliveries));
         tell(Status::Attached {
             serving: to,

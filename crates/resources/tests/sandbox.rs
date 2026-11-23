@@ -377,6 +377,7 @@ fn a_package_keeps_what_it_wrote_in_its_block_and_logs_with_the_hosts_clock() {
         log: Some(log.clone()),
         fetch: None,
         jobs: None,
+        notices: None,
         clock: std::sync::Arc::new(|| 1_793_400_000_000),
     };
     let back = s.serve(b"a note to keep", &env).expect("served");
@@ -555,4 +556,43 @@ fn a_job_scheduled_by_a_request_is_run_by_the_host_and_writes_into_the_block() {
     // and a package that schedules but exports no `job` is not admitted
     let r = Sandbox::admit(&noting(), Limits::default());
     assert!(r.is_ok(), "noting exports the trivial job");
+}
+
+/// **A package in the sandbox says what waits for a member as one on a
+/// socket does** (`rhtn/1:notices`; `resource-requirements.md` §3.3)
+/// [author, 2026-11-23]: the principal, the count and the line reach the
+/// host's notices, and a package granted none is stopped at the call.
+// functional: CAT-030
+#[test]
+fn a_sandboxed_package_says_what_waits_through_its_notices_binding() {
+    use std::sync::{Arc, Mutex};
+    let s = Sandbox::admit(&notifying(), Limits::default()).expect("the binding is offered");
+    assert!(s.reaches().contains(&"rhtn/1:notices".to_string()));
+    let bare = s.serve(&[7u8; 32], &Env::default());
+    assert!(
+        matches!(&bare, Err(Refusal::Trapped(why)) if why.contains("no notices were granted")),
+        "{bare:?}"
+    );
+    let taken = Arc::new(Mutex::new(Vec::new()));
+    let into = taken.clone();
+    let env = Env {
+        notices: Some(Arc::new(move |p, count, line| {
+            if p == [9u8; 32] {
+                return Err("nobody".into());
+            }
+            into.lock().unwrap().push((p, count, line));
+            Ok(())
+        })),
+        ..Env::default()
+    };
+    assert_eq!(s.serve(&[7u8; 32], &env).expect("served"), vec![1]);
+    assert_eq!(
+        *taken.lock().unwrap(),
+        vec![([7u8; 32], 3, Some("three waiting".to_string()))]
+    );
+    // a member the host does not know, and a principal that is not one,
+    // are answered false and taken nowhere
+    assert_eq!(s.serve(&[9u8; 32], &env).expect("served"), vec![0]);
+    assert_eq!(s.serve(&[7u8; 5], &env).expect("served"), vec![0]);
+    assert_eq!(taken.lock().unwrap().len(), 1);
 }

@@ -190,6 +190,9 @@ pub enum Family {
     /// storage is sealed, with its key (`wire-format.md` §8.2) [author,
     /// 2026-11-22].
     Reopen,
+    /// Control frame 9: a node telling a client its page there has
+    /// changed (`wire-format.md` §6.9) [author, 2026-11-23].
+    PageChanged,
 }
 
 use T::*;
@@ -219,6 +222,7 @@ const ATTACH_ACK: Fields = &[
 /// the next attach.
 pub const MAX_CLOSED: usize = 256;
 const REOPEN: Fields = &[(1, true, Keyhash), (2, true, Key64)];
+const PAGE_CHANGED: Fields = &[];
 const HEARTBEAT: Fields = &[(1, true, Uint), (2, true, Uint)];
 const SIBLING_UPDATE: Fields = &[(1, false, SiblingRefs)];
 const TOPOLOGY_PUSH: Fields = &[(1, true, Uint), (2, true, Bstr)];
@@ -322,6 +326,8 @@ const PAGE_ITEM: Fields = &[
     (2, true, Keyhash),
     (3, true, Tstr(crate::bounds::PAGE_NAME_BYTES)),
     (4, true, Roles),
+    (5, false, Uint),
+    (6, false, Tstr(crate::bounds::NOTICE_LINE_BYTES)),
 ];
 const ARCHIVE_REPLY: Fields = &[
     (1, true, Nonce16),
@@ -429,6 +435,7 @@ pub fn fields(f: Family) -> Option<Fields> {
         TopologyPush => TOPOLOGY_PUSH,
         TopologyMemo => TOPOLOGY_MEMO,
         Reopen => REOPEN,
+        PageChanged => PAGE_CHANGED,
         ResolveRequest => RESOLVE_REQUEST,
         ArchiveRequest => ARCHIVE_REQUEST,
         CatalogQuery => CATALOG_QUERY,
@@ -789,6 +796,20 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
             }
             for r in items {
                 check_map(b, r.start, PAGE_ITEM)?;
+                // **a count is one or more, and a line rides one**: none
+                // waiting is the field absent, so each page has one
+                // encoding, and a line with nothing waiting says nothing
+                let it = parse_all(&b[r.clone()])?;
+                let Item::Map(ref f) = it else {
+                    return Err(Error("page item not map"));
+                };
+                match (map_get(f, 5), map_get(f, 6)) {
+                    (Some(Item::Uint(n)), _) if *n == 0 || *n > u64::from(u32::MAX) => {
+                        return Err(Error("a page item's count is 1 to 2^32-1"));
+                    }
+                    (None, Some(_)) => return Err(Error("a page item's line without a count")),
+                    _ => {}
+                }
             }
         }
         Roles => {

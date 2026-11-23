@@ -521,7 +521,13 @@ async fn what_the_serving_node_floods_reaches_the_clients_horizon_and_nothing_el
         rhtn_adaptors::direct::Reachable::default(),
     );
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-    let task = rhtn_adaptors::attached::follow(handle.clone(), rx);
+    let (courier, _app) = rhtn_adaptors::courier::Courier::new(
+        handle.clone(),
+        Arc::new(rhtn_adaptors::direct::NoDirect(
+            rhtn_adaptors::direct::Reachable::default(),
+        )),
+    );
+    let task = rhtn_adaptors::attached::follow(handle.clone(), kh("bob"), courier, rx);
 
     // stream 0's topology push is what a client learns from
     tx.send((

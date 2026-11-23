@@ -229,10 +229,15 @@ pub struct Resource {
     pub truncated: bool,
     /// The portion it came in is older than the node's hint.
     pub stale: bool,
-    /// **What it has asked that waits for the person** (`light-client-
-    /// requirements.md` §8.1): its launcher's count, rolled up into its
-    /// subnet's [author, 2026-11-23].
+    /// **What waits for the person there** [author, 2026-11-23]: what the
+    /// resource counts, as its node's page carried it, and what it has
+    /// asked of this client that is not yet answered (`light-client-
+    /// requirements.md` §8.1). Its launcher's count, rolled up into its
+    /// subnet's.
     pub waiting: u32,
+    /// **The one line the resource gave with its count**, where it gave
+    /// one: what a notification of it says.
+    pub notice: Option<String>,
     /// **Its icon** [author, 2026-11-23: *"badged with a favicon image
     /// determined by the resource"*]: what it serves at `/favicon.ico`,
     /// where that is a PNG (1), JPEG (2) or WebP (3) of at most 64 KiB —

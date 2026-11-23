@@ -102,8 +102,16 @@ impl Client {
     /// (`wire-format.md` §6.4).
     #[must_use]
     pub fn resources_held(&self) -> Vec<Resource> {
-        let waiting =
-            |r: &crate::Keyhash| self.asks.values().filter(|a| a.resource == *r).count() as u32;
+        // **what waits is the resource's count and the asks held**
+        // [author, 2026-11-23]: the resource keeps the one, since the
+        // person reads in it, and this client the other
+        let waiting = |p: &crate::catalog::Portion, r: &crate::Keyhash| {
+            self.asks.values().filter(|a| a.resource == *r).count() as u32
+                + p.page.get(r).map_or(0, |i| i.count)
+        };
+        let notice = |p: &crate::catalog::Portion, r: &crate::Keyhash| {
+            p.page.get(r).and_then(|i| i.line.clone())
+        };
         let icon = |r: &crate::Keyhash| self.icons.get(r).cloned().flatten().unzip();
         self.catalog
             .portions
@@ -122,7 +130,8 @@ impl Client {
                         data_practice: e.data_practice,
                         truncated: p.truncated,
                         stale: p.stale,
-                        waiting: waiting(&e.resource),
+                        waiting: waiting(p, &e.resource),
+                        notice: notice(p, &e.resource),
                         icon_format,
                         icon,
                     })
@@ -146,7 +155,8 @@ impl Client {
                             data_practice: None,
                             truncated: false,
                             stale: p.stale,
-                            waiting: waiting(&i.resource),
+                            waiting: waiting(p, &i.resource),
+                            notice: notice(p, &i.resource),
                             icon_format,
                             icon,
                         }

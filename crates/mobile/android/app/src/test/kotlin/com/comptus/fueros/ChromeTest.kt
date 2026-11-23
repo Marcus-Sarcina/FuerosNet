@@ -179,6 +179,7 @@ class ChromeTest {
             truncated = false,
             stale = false,
             waiting = waiting.toUInt(),
+            notice = null,
             iconFormat = null,
             icon = null,
         )
@@ -219,5 +220,25 @@ class ChromeTest {
         val launched = Chrome.launchers(held, ours)
         assertSame(png, launched.first { it.name == "testapp.internal" }.icon)
         assertNull("its mark stands in", launched.first { it.name == "Board" }.icon)
+    }
+
+    // functional: CAT-030
+    @Test
+    fun the_shade_is_told_only_a_rise_that_carries_a_line() {
+        val ours = "aa".repeat(32)
+        val said = { r: String, n: Int, line: String? -> offered(ours, r, "app", n).copy(notice = line) }
+        val held = listOf(
+            said("11".repeat(32), 3, "Three replies"),
+            said("22".repeat(32), 2, "Two orders"),
+            said("33".repeat(32), 4, null),
+            said("44".repeat(32), 1, "One step"),
+        )
+        val seen = mapOf("11".repeat(32) to 1, "22".repeat(32) to 2, "44".repeat(32) to 5)
+        assertEquals(
+            "a rise with a line; not a count unchanged, a count fallen, or one with nothing to say",
+            listOf("11".repeat(32)),
+            Notify.rising(seen, held).map { it.resource.hex() },
+        )
+        assertEquals("nothing seen is nothing waiting before", 3, Notify.rising(emptyMap(), held).size)
     }
 }

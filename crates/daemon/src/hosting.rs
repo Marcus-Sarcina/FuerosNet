@@ -451,6 +451,10 @@ pub struct Applied {
         Option<Arc<rhtn_resources::LogFile>>,
         [u8; 32],
     )>,
+    /// **Where this file's sandboxed instances say what waits for a
+    /// member** (`rhtn/1:notices`), lent the node's sink by
+    /// [`Applied::over`].
+    pub notices: Arc<std::sync::Mutex<Option<crate::host::Notices>>>,
     /// **The sealed resources whose key is not in the kernel**
     /// (`infra-client-requirements.md` §9.4): bound so they answer as a
     /// package that is not running, with nothing of them provisioned and
@@ -474,11 +478,12 @@ impl Backend for Closed {
 }
 
 impl Applied {
-    /// **Name the surface each instance reaches its block and log over**
-    /// (`infra-client-requirements.md` §9.3, `resource-requirements.md`
-    /// §3.3): every provisioned block and log is registered, and the
-    /// instance is told `rhtn-block`, `rhtn-log` and the `rhtn-secret`
-    /// that says which instance is calling.
+    /// **Name the surface each instance reaches its block, its log and its
+    /// notices over** (`infra-client-requirements.md` §9.3,
+    /// `resource-requirements.md` §3.3): every instance is registered,
+    /// since any may count what waits for a member [author, 2026-11-23],
+    /// and is told `rhtn-notices`, `rhtn-block` and `rhtn-log` where it has
+    /// them, and the `rhtn-secret` that says which instance is calling.
     ///
     /// **Called by whoever applied the hosting file**, because the facts
     /// are only true once this node is serving them: a URL told before
@@ -486,12 +491,10 @@ impl Applied {
     /// every instance this file did not bind, so an instance the operator
     /// stopped hosting loses its block with the binding and not after it.
     pub fn over(&mut self, surface: &crate::host::HostSurface) {
+        surface.lend(self.notices.clone());
         let mine: Vec<Keyhash> = self.provisioned.iter().map(|(r, _, _, _)| *r).collect();
         surface.retain(&mine);
         for (res, block, log, secret) in &self.provisioned {
-            if block.is_none() && log.is_none() {
-                continue;
-            }
             let secret = surface.register_with(*res, block.clone(), log.clone(), *secret);
             let Some((_, own)) = self.facts.iter_mut().find(|(r, _)| r == res) else {
                 continue;
@@ -502,6 +505,7 @@ impl Applied {
             if log.is_some() {
                 own.push(("rhtn-log".into(), surface.log_url()));
             }
+            own.push(("rhtn-notices".into(), surface.notices_url()));
             own.push(("rhtn-secret".into(), crate::host::hex_secret(&secret)));
         }
     }
@@ -560,6 +564,8 @@ pub fn apply_in(
     let mut hosts: Vec<(Keyhash, Binding)> = Vec::new();
     let mut grants: Vec<(Keyhash, Vec<Grant>)> = Vec::new();
     let mut facts: Vec<(Keyhash, Vec<(String, String)>)> = Vec::new();
+    let notices: Arc<std::sync::Mutex<Option<crate::host::Notices>>> =
+        Arc::new(std::sync::Mutex::new(None));
     #[allow(clippy::type_complexity)]
     let mut provisioned: Vec<(
         Keyhash,
@@ -752,6 +758,19 @@ pub fn apply_in(
             .map_err(|e| at(0, format!("{}: {e}", dir.display())))?;
             env.jobs = Some(Arc::new(table));
         }
+        // **what it counts as waiting for a member** (§9.3), said to the
+        // node through the slot this file's instances share, under this
+        // instance's own name
+        if !shut && manifest.imports.iter().any(|i| i == "rhtn/1:notices") {
+            let (slot, instance) = (notices.clone(), res);
+            env.notices = Some(Arc::new(move |principal, count, line| {
+                let sink = slot.lock().unwrap().clone();
+                match sink {
+                    Some(s) => s(instance, principal, count, line),
+                    None => Err("this node is not up yet".into()),
+                }
+            }));
+        }
         // **a resource is reached one way, and the file says which**
         // (§10.6): an address and this node proxies to it, a component
         // and this node runs it.  Both is a contradiction rather than a
@@ -902,6 +921,7 @@ pub fn apply_in(
         bound,
         facts,
         provisioned,
+        notices,
         closed,
     })
 }

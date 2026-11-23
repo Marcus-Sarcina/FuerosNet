@@ -1046,7 +1046,8 @@ fn no_network_primitive_is_exposed_to_a_hosted_package() {
         assert!(!exports().contains(&import));
     }
     // the whole of what a host offers, none of it of the network: the
-    // request and its answer, the package's own block, log and clock
+    // request and its answer, the package's own block, log and clock,
+    // its egress, its jobs, and its count of what waits for its members
     // (`infra-client-requirements.md` §9.3)
     assert_eq!(
         exports(),
@@ -1057,7 +1058,8 @@ fn no_network_primitive_is_exposed_to_a_hosted_package() {
             "rhtn/1:log",
             "rhtn/1:clock",
             "rhtn/1:fetch",
-            "rhtn/1:jobs"
+            "rhtn/1:jobs",
+            "rhtn/1:notices"
         ]
     );
     let ok = Manifest {
@@ -1263,6 +1265,8 @@ fn the_catalog_page_shows_what_the_viewer_holds_with_the_roles_held() {
             owner: kh("alice"),
             name: "An Instance".into(),
             roles: vec!["reader".to_string()],
+            count: 0,
+            line: None,
         }],
         "R1 by its entry's name; R2, with no connect, is not listed"
     );
@@ -1295,6 +1299,8 @@ fn a_hosted_package_with_no_entry_is_on_the_page_of_those_granted_it() {
             owner: kh("alice"),
             name: "r1.internal".into(),
             roles: vec!["writer".to_string()],
+            count: 0,
+            line: None,
         }]
     );
     assert!(g.page(&kh("bob"), &svc).is_empty(), "nobody else's page");
@@ -1304,6 +1310,74 @@ fn a_hosted_package_with_no_entry_is_on_the_page_of_those_granted_it() {
         items: g.page(&kh("carol"), &svc),
     };
     assert_eq!(CatalogPage::decode(&page.encode()).unwrap(), page);
+}
+
+/// **What a resource counts as waiting for a member reaches that member's
+/// page and nobody else's** [author, 2026-11-23] (`resource-requirements.md`
+/// §3.3, `wire-format.md` §6.9): named by the pairwise principal the
+/// resource was given, the latest replacing what it said, none withdrawing.
+// functional: CAT-030
+#[test]
+fn a_resources_count_for_a_member_is_on_that_members_page_alone() {
+    let sc = scene();
+    let backend = Arc::new(Fake::new());
+    let mut g = gateway_with(&sc, backend);
+    let svc = CatalogService::default();
+    for m in ["carol", "dave"] {
+        g.set_row(
+            R1,
+            kh(m),
+            Row {
+                roles: BTreeSet::new(),
+                connect: true,
+            },
+        )
+        .unwrap();
+    }
+    let carol = http::pairwise_principal(&R1, &kh("carol"));
+    assert_eq!(
+        g.notice(R1, carol, 2, Some("Two orders are ready".into())),
+        Ok(kh("carol")),
+        "the member the principal is"
+    );
+    let item = |g: &Gateway, m: &str| g.page(&kh(m), &svc).remove(0);
+    assert_eq!(
+        (item(&g, "carol").count, item(&g, "carol").line),
+        (2, Some("Two orders are ready".into()))
+    );
+    assert_eq!(
+        (item(&g, "dave").count, item(&g, "dave").line),
+        (0, None),
+        "nobody else's"
+    );
+    // the latest replaces, and a line is optional
+    g.notice(R1, carol, 1, None).unwrap();
+    assert_eq!((item(&g, "carol").count, item(&g, "carol").line), (1, None));
+    // a principal for a member not granted it here, or for another
+    // resource, names nobody
+    assert_eq!(
+        g.notice(R1, http::pairwise_principal(&R1, &kh("bob")), 1, None),
+        Err(NoticeRefused::NoOne)
+    );
+    assert_eq!(
+        g.notice(R1, http::pairwise_principal(&R2, &kh("carol")), 1, None),
+        Err(NoticeRefused::NoOne)
+    );
+    for bad in ["", "two\nlines", &"x".repeat(129)] {
+        assert_eq!(
+            g.notice(R1, carol, 1, Some(bad.to_string())),
+            Err(NoticeRefused::Line),
+            "{bad:?}"
+        );
+    }
+    // the page crosses the wire with them, and none withdraws
+    let page = CatalogPage {
+        nonce: [9; 16],
+        items: g.page(&kh("carol"), &svc),
+    };
+    assert_eq!(CatalogPage::decode(&page.encode()).unwrap(), page);
+    g.notice(R1, carol, 0, Some("ignored".into())).unwrap();
+    assert_eq!((item(&g, "carol").count, item(&g, "carol").line), (0, None));
 }
 
 // acceptance: RSC-25

@@ -242,12 +242,30 @@ impl Serving for AttachedNode {
 /// **What is propagated wins.** Everything the client holds here is a copy
 /// of what came down this channel, so an ingest never asks whether the
 /// local copy disagreed.
+///
+/// **And `node` saying the client's page there changed is asked again**
+/// (`wire-format.md` §6.9) [author, 2026-11-23]: frame 9 carries nothing,
+/// and the page it points at is the client's own to fetch, through
+/// `courier`, as a sweep fetches it.
 pub fn follow(
     handle: Handle,
+    node: Keyhash,
+    courier: Arc<crate::courier::Courier>,
     mut frames: tokio::sync::mpsc::UnboundedReceiver<(u64, Vec<u8>)>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         while let Some((frame_type, body)) = frames.recv().await {
+            if frame_type == rhtn_archive::catalog::FRAME_PAGE_CHANGED {
+                let msgs = handle.with(move |c| c.browse_at(node)).await;
+                let carried = courier.carry(msgs).await;
+                tracing::info!(
+                    target: "pay",
+                    node = %rhtn_client::diag::id8(&node),
+                    refused = carried.refused.len(),
+                    "pay.page_changed"
+                );
+                continue;
+            }
             // stream 0 carries memos too, and a memo is a node's routing
             // aid rather than a client's (`wire-format.md` §10.2)
             if frame_type != FRAME_TOPOLOGY_PUSH {

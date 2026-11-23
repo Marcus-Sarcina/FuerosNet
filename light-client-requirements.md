@@ -1445,10 +1445,24 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   never as a catalog** [author, 2026-11-23]: *"I don't want either app to have
   the user interact with the 'resource' or 'catalog' abstractions."* One card
   for each resource the node serving you in that subnet offers, which is what
-  opens it; its count is what it asks that waits, and those counts roll up
+  opens it; its count is what waits for the person there, and those counts roll up
   into the subnet's own beside a move of its node to answer. Nothing asks the
   person to sweep, and no screen draws their attention to the node beyond
   their answer to its invitation.
+- **Count what waits as the resource counts it** [author, 2026-11-23: the
+  resource keeps the count, one line beside it, and the node nudges]. A
+  launcher's count is the resource's own for this identity, carried on the
+  node's page (`wire-format.md` §6.9 fields 5 and 6), plus the asks it made
+  of this client that are not yet answered (§8.1); the subnet's count rolls
+  them up. **Keep no read state of your own**: the person reads in the
+  resource, which knows what they read on any of their devices, so a count
+  that falls there falls here at the next page. **When the node says the page
+  changed** (control frame 9), ask for it again as a sweep does, over the
+  session that carried the frame. **Where the person allowed the resource to
+  notify them** (§8.1's `notify`), tell the platform's notification shade of a
+  count that rose and came with a line, with the resource's name and that
+  line, while no screen of yours is showing it; a count that fell, or one
+  with no line, tells nothing.
 - **Badge each launcher with the icon its resource serves** [author,
   2026-11-23: *"Resource cards should be badged with a favicon image
   determined by the resource"*]. Ask each resource a sweep finds, once in the

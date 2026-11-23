@@ -1231,6 +1231,11 @@ fn a_manifest_declares_its_host_version_its_budget_and_its_destinations() {
     );
     assert_eq!(get("rhtn-log").as_deref(), Some(surface.log_url().as_str()));
     assert_eq!(get("rhtn-block-bytes").as_deref(), Some("4096"));
+    // **and where it says what waits for a member** [author, 2026-11-23]
+    assert_eq!(
+        get("rhtn-notices").as_deref(),
+        Some(surface.notices_url().as_str())
+    );
     let secret = get("rhtn-secret").expect("a secret");
     assert_eq!(secret.len(), 64, "32 bytes as hex: {secret}");
     assert!(secret.chars().all(|c| c.is_ascii_hexdigit()));

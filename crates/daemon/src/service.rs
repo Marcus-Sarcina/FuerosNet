@@ -884,6 +884,27 @@ impl Service {
             }));
         }
         let node = LiveNode::start_with(node_cfg, view, known.clone(), anchors, limits);
+        // **a hosted instance's count reaches the member's page, and the
+        // member is told it moved** [author, 2026-11-23]: the gateway takes
+        // the latest and names whom the principal is, and frame 9 goes to
+        // every session that member holds here, carrying nothing
+        {
+            let (view, sessions) = (node.view.clone(), node.node.clone());
+            packages.notices_to(Arc::new(move |instance, principal, count, line| {
+                let member = view
+                    .lock()
+                    .unwrap()
+                    .resources
+                    .notice(instance, principal, count, line)
+                    .map_err(|e| e.to_string())?;
+                sessions.send_control(
+                    &member,
+                    rhtn_archive::catalog::FRAME_PAGE_CHANGED,
+                    &rhtn_archive::catalog::page_changed(),
+                );
+                Ok(())
+            }));
+        }
         // **the record against the address served on** [2026-10-10].  This
         // used to compare against the configured bind, which said "the
         // address has moved" to every containerised node: a node bound to

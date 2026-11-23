@@ -78,6 +78,10 @@ pub const PAGE_ROLES: usize = 64;
 
 /// A role name's length in bytes (`resource-requirements.md` §3).
 pub const ROLE_BYTES: usize = 32;
+
+/// **A notice's line**, in bytes (`wire-format.md` §6.9 field 6): one line
+/// a resource gives beside its count, shown in a notification.
+pub const NOTICE_LINE_BYTES: usize = 128;
 /// Unknown extension keys per map (§1.3).
 pub const UNKNOWN_KEYS_PER_MAP: usize = 16;
 /// An unknown extension value, in **bytes of encoded CBOR** (§1.3): the

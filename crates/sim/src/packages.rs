@@ -346,3 +346,34 @@ pub fn scheduling() -> Vec<u8> {
 "#,
     )
 }
+
+/// **Says what waits for the member its request names**: the request body
+/// is the 32-byte principal, the count is 3 and the line `three waiting`,
+/// and the answer is the one byte the host gave back, 1 where it took the
+/// notice (`rhtn/1:notices`).
+pub fn notifying() -> Vec<u8> {
+    let src = format!(
+        r#"(component
+  (import "rhtn:host/bindings@1.0.0" (instance $b
+    (export "request" (func (result (list u8))))
+    (export "response" (func (param "body" (list u8))))
+    (export "notice" (func (param "principal" (list u8)) (param "count" u32) (param "line" string) (result bool)))
+  ))
+{ARENA}{LOWER}
+  (core func $note (canon lower (func $b "notice") (memory (core memory $arenai "memory")) (realloc (core func $arenai "cabi_realloc"))))
+  (core module $main{PREAMBLE}
+    (import "host" "notice" (func $notice (param i32 i32 i32 i32 i32) (result i32)))
+    (data (i32.const 2000) "three waiting")
+    (func (export "handle")
+      (call $request (i32.const 0))
+      (i32.store8 (i32.const 16) (call $notice (i32.load (i32.const 0)) (i32.load (i32.const 4)) (i32.const 3) (i32.const 2000) (i32.const 13)))
+      (call $response (i32.const 16) (i32.const 1)))
+  )
+  (core instance $maini (instantiate $main
+    (with "host" (instance (export "request" (func $req)) (export "response" (func $resp)) (export "notice" (func $note))))
+    (with "arena" (instance $arenai))))
+  (func (export "handle") (canon lift (core func $maini "handle")))
+)"#
+    );
+    wat::parse_str(&src).expect("a component")
+}

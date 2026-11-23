@@ -226,7 +226,8 @@ pub struct ResourceRow {
     pub node: String,
     /// The resource's own keyhash, in hex, which is what opens it.
     pub resource: String,
-    /// What it asks that waits to be seen, its card's count.
+    /// What waits for the person there, its card's count: the resource's
+    /// own count and its asks unanswered.
     pub unseen: u32,
     /// **Its icon** [author, 2026-11-23]: the format tag (1 PNG, 2 JPEG,
     /// 3 WebP) and the bytes, where it served one.

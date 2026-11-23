@@ -372,3 +372,48 @@ fn its_icon_is_one_a_launcher_keeps_and_asking_for_it_is_no_step() {
     assert!(read.body.starts_with(b"\x89PNG\r\n\x1a\n") && read.body.len() <= 65_536);
     assert_eq!(get(&mut a, WHO), first, "the walk did not move");
 }
+
+// functional: CAT-030
+#[test]
+fn it_counts_the_steps_waiting_for_each_member_and_says_them_again_to_a_new_host() {
+    let mut a = app();
+    let first = get(&mut a, WHO).2;
+    let owed = a.take_owed();
+    let n = STEPS.len() as u32;
+    assert_eq!(owed.len(), 1);
+    assert_eq!((owed[0].principal.as_str(), owed[0].count), (WHO, n));
+    assert_eq!(
+        owed[0].line.as_deref(),
+        Some(format!("{n} steps of the utility walk wait for you").as_str())
+    );
+    // a step answered is one fewer waiting
+    let ask = utility::parse(&first).unwrap();
+    let request = compose(&ask, &answer_for(&ask), 1_700_000_001_000);
+    post(&mut a, WHO, &request);
+    let owed = a.take_owed();
+    assert_eq!(owed.len(), 1);
+    assert_eq!(owed[0].count, n - 1);
+    // a request that is not the node's says nothing of anyone
+    a.handle(b"GET / HTTP/1.1\r\nhost: testapp.internal\r\nrhtn-principal: x\r\n\r\n");
+    assert!(
+        a.take_owed().is_empty(),
+        "an anonymous caller is nobody's count"
+    );
+    // **the host's facts name the surface, and every count is said again**
+    let told = a.handle(
+        format!(
+            "PUT /.rhtn/relationships HTTP/1.1\r\nhost: testapp.internal\r\nrhtn-control: node\r\n\
+             rhtn-notices: http://127.0.0.1:9/notices\r\nrhtn-secret: {}\r\ncontent-length: 0\r\n\r\n",
+            host_secret()
+        )
+        .as_bytes(),
+    );
+    assert!(told.starts_with(b"HTTP/1.1 204"));
+    assert_eq!(a.notices.as_deref(), Some("http://127.0.0.1:9/notices"));
+    let again: Vec<_> = a
+        .take_owed()
+        .into_iter()
+        .map(|o| (o.principal, o.count))
+        .collect();
+    assert!(again.contains(&(WHO.to_string(), n - 1)), "{again:?}");
+}

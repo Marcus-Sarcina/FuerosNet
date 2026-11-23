@@ -1,6 +1,7 @@
 //! **The host surface a socket-backed instance calls**
 //! (`infra-client-requirements.md` §9.3, `resource-requirements.md` §3.3):
-//! its storage block, and a write to its log.
+//! its storage block, a write to its log, and what it counts as waiting
+//! for a member, which reaches the member's page.
 //!
 //! A package in the sandbox reaches these as the bindings it imported, and
 //! the host is the write path either way — which is the whole reason this
@@ -65,11 +66,23 @@ struct Reached {
     log: Option<Arc<LogFile>>,
 }
 
+/// **Where a notice goes once the surface has read it**: the instance, the
+/// principal it named, the count and the line, and back why it was not
+/// taken. The running node's ([`HostSurface::notices_to`]), since the
+/// members and their sessions are its.
+pub type Notices =
+    Arc<dyn Fn(Keyhash, [u8; 32], u32, Option<String>) -> Result<(), String> + Send + Sync>;
+
 /// The surface, bound and holding what each instance may reach.
 pub struct HostSurface {
     listener: TcpListener,
     bound: SocketAddr,
     held: Mutex<Vec<Held>>,
+    notices: Mutex<Option<Notices>>,
+    /// **The sandbox's way to the same place** ([`HostSurface::lend`]):
+    /// each slot a hosting file's sandboxed instances reach their notices
+    /// through, filled when the node is.
+    lent: Mutex<Vec<Arc<Mutex<Option<Notices>>>>>,
 }
 
 impl HostSurface {
@@ -85,6 +98,8 @@ impl HostSurface {
             listener,
             bound,
             held: Mutex::new(Vec::new()),
+            notices: Mutex::new(None),
+            lent: Mutex::new(Vec::new()),
         }))
     }
 
@@ -104,6 +119,34 @@ impl HostSurface {
     #[must_use]
     pub fn log_url(&self) -> String {
         format!("http://{}/log", self.bound)
+    }
+
+    /// The URL an instance is told for its notices.
+    #[must_use]
+    pub fn notices_url(&self) -> String {
+        format!("http://{}/notices", self.bound)
+    }
+
+    /// **Where the notices this surface reads go** once the node is up: a
+    /// notice arriving before then is refused as one with nowhere to go.
+    pub fn notices_to(&self, sink: Notices) {
+        for slot in self.lent.lock().unwrap().iter() {
+            *slot.lock().unwrap() = Some(sink.clone());
+        }
+        *self.notices.lock().unwrap() = Some(sink);
+    }
+
+    /// **Lend the sink to a slot a sandboxed instance reaches it through**
+    /// (`infra-client-requirements.md` §9.3's `rhtn/1:notices`), so a
+    /// package in the sandbox and one on a socket say what waits to the
+    /// same place: filled now where the node is up, and when it is
+    /// otherwise.
+    pub fn lend(&self, slot: Arc<Mutex<Option<Notices>>>) {
+        *slot.lock().unwrap() = self.notices.lock().unwrap().clone();
+        let mut lent = self.lent.lock().unwrap();
+        // a slot nothing else holds is a hosting file applied and replaced
+        lent.retain(|s| Arc::strong_count(s) > 1);
+        lent.push(slot);
     }
 
     /// **What this instance presents, minted once and kept while it is
@@ -306,6 +349,36 @@ impl HostSurface {
                 405,
                 b"the log is written here and read by your operator\n".to_vec(),
             ),
+            // **what the instance counts as waiting for one member**
+            // (`resource-requirements.md` §3.3) [author, 2026-11-23]: the
+            // count in the query, the line as the body, the latest
+            // replacing what it said before
+            ("PUT", p) if p.starts_with("/notices/") => {
+                let Some(principal) = rhtn_node::federation::unbase64url(&p["/notices/".len()..])
+                    .and_then(|b| <[u8; 32]>::try_from(b).ok())
+                else {
+                    return (
+                        400,
+                        b"name the member by the principal you were given\n".to_vec(),
+                    );
+                };
+                let Some(count) = number(query, "count").and_then(|n| u32::try_from(n).ok()) else {
+                    return (400, b"say the count as ?count=, 0 to withdraw\n".to_vec());
+                };
+                let Ok(line) = std::str::from_utf8(body) else {
+                    return (400, b"a line is text\n".to_vec());
+                };
+                let line = line.trim_end_matches(['\n', '\r']);
+                let line = (!line.is_empty()).then(|| line.to_string());
+                let sink = self.notices.lock().unwrap().clone();
+                let Some(sink) = sink else {
+                    return (503, b"this node is not up yet\n".to_vec());
+                };
+                match sink(instance, principal, count, line) {
+                    Ok(()) => (204, Vec::new()),
+                    Err(why) => said(404, format!("{why}\n")),
+                }
+            }
             _ => {
                 let Some(name) = path.strip_prefix("/block/") else {
                     return (404, b"not a path this surface has\n".to_vec());

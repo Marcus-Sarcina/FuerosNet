@@ -923,7 +923,7 @@ with both lists named**, which is ordinary capacity (§9) said before any
 request. Bindings are only ever added within a version, and a removal is a
 new one.
 
-**Six bindings, and the list is closed.** Each is answered here against
+**Seven bindings, and the list is closed.** Each is answered here against
 §9.2's test — *does this give the package anything of the network?* — and
 a binding that cannot answer it is not in the surface.
 
@@ -934,15 +934,15 @@ a binding that cannot answer it is not in the surface.
 | **the log** | lines the package writes for its operator, each stamped by you, kept per instance within the bytes the package declared, the oldest going first, shown on your administration surface (§8.3) | outward only: the package writes, the operator reads; it is for operators and never carries member content, which is the package's rule to keep |
 | **the clock** | your time, milliseconds since the epoch | advisory by nature: wire timestamps are signer-controlled (`wire-format.md` §3.3) and nothing here treats yours as proof of anything |
 | **fetch** | an outbound request to one of the destinations the package's manifest declared — `https://host` or `https://host:port`, exactly, no wildcard, never your own machine or network — the package handing you one HTTP/1.1 request as bytes and taking one response as bytes, as the gateway hands it a request and takes its answer; the destination is the request's `host`, you send with your own `host` and `connection: close` over TLS to the roots your operating system trusts, bound what you read back, honour a redirect only to a declared destination and only a few times, and refuse a declared name that resolves to your own machine or network | the package's own traffic to parties its operator read and accepted at installation; you are its egress and learn nothing of the network by carrying it |
-
+| **notices** | what the package counts as waiting for one member, by the principal it was given for them (`resource-requirements.md` §3.3) [author, 2026-11-23]: a count and one line of at most 128 bytes, the latest replacing the last and a count of 0 withdrawing it; **you keep only that, in memory**, put it on that member's catalog page and no one else's (`wire-format.md` §6.9), and send `PageChanged` to each session the member holds here; refuse a principal that is no member granted the package here, and a line that is empty, too long or more than one line | the package's own count of its own members, carried to those members; it learns nothing back, not even whether a member holds a session |
 | **jobs** | durable scheduled work: the package schedules a task for a time with a budget and gets a number back, may cancel it or list what stands, and you run each job that is due on your tick by calling the package's `job` entry with the number and the task — **under the instance's authority as of now, never under any caller's session**, which ends without notice; one file per job in a directory of yours, so a restart finds every job scheduled and not yet run; a job runs once and is not retried by you; bounded by the manifest's `jobs` in flight, the refusal naming the bound, and by `job_seconds_per_day`, the day's spend kept beside the jobs and the rest waiting when it is spent, said in the log | instance-local work the package gave itself; you carry the clock and the table and nothing of the network |
 
 A package on a socket of its own has its own timers and schedules nothing
 through you.
 
 **Where the surface lives.** A package in your sandbox reaches the block,
-the log, the clock, fetch and jobs as `rhtn/1:block`, `rhtn/1:log`,
-`rhtn/1:clock`, `rhtn/1:fetch` and `rhtn/1:jobs`, imported the way it
+the log, the clock, fetch, jobs and notices as `rhtn/1:block`, `rhtn/1:log`,
+`rhtn/1:clock`, `rhtn/1:fetch`, `rhtn/1:jobs` and `rhtn/1:notices`, imported the way it
 imports `rhtn/1:request` and `rhtn/1:response`, and reaches nothing it did
 not declare; a package importing fetch that names no destination, or jobs
 without a `job` entry, is refused at installation. A package on a socket of its own has its own network, and the

@@ -369,6 +369,19 @@ pub struct Walk {
     pub taken: Vec<(String, String, Claimed, Option<String>, usize)>,
 }
 
+/// **What waits for one member, as this resource counts it**
+/// (`resource-requirements.md` §3.3): the steps of their walk still to
+/// answer, owed to the host's notices surface.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Notice {
+    /// The member, by the principal the node gave this resource for them.
+    pub principal: String,
+    /// The steps left, none once the walk is done.
+    pub count: u32,
+    /// The line beside it, where any wait.
+    pub line: Option<String>,
+}
+
 /// The test resource: one walk per principal the gateway names.
 #[derive(Debug, Default)]
 pub struct App {
@@ -380,6 +393,11 @@ pub struct App {
     pub said: Vec<String>,
     /// The secret the host started this instance with, if any.
     secret: Option<[u8; 32]>,
+    /// **Where the host takes what waits for a member**, as its
+    /// relationships exchange named it (`rhtn-notices`).
+    pub notices: Option<String>,
+    /// What waits that the host has not been told yet.
+    pub owed: Vec<Notice>,
 }
 
 impl App {
@@ -390,7 +408,36 @@ impl App {
             walks: BTreeMap::new(),
             said: Vec::new(),
             secret: None,
+            notices: None,
+            owed: Vec::new(),
         }
+    }
+
+    /// **What it counts as waiting for `principal`**: the steps left of
+    /// their walk, and a line saying so where any are.
+    fn owe(&mut self, principal: &str) {
+        if principal == "unknown" {
+            return;
+        }
+        let at = self.walks.get(principal).map_or(0, |w| w.at);
+        let left = STEPS.len().saturating_sub(at) as u32;
+        self.owed.retain(|n| n.principal != principal);
+        self.owed.push(Notice {
+            principal: principal.to_string(),
+            count: left,
+            line: (left > 0).then(|| {
+                format!(
+                    "{left} step{} of the utility walk wait{} for you",
+                    if left == 1 { "" } else { "s" },
+                    if left == 1 { "s" } else { "" }
+                )
+            }),
+        });
+    }
+
+    /// What is owed to the host's notices surface, taken.
+    pub fn take_owed(&mut self) -> Vec<Notice> {
+        std::mem::take(&mut self.owed)
     }
 
     /// **The secret the host started this instance with**
@@ -437,10 +484,28 @@ impl App {
             String::new()
         };
         match method.as_str() {
+            // **its host's facts, which say where it tells what waits**
+            // (`resource-requirements.md` §3.3); and since a host that
+            // restarted has forgotten every count, each is said again
+            "PUT" if node && target == "/.rhtn/relationships" => {
+                self.notices = header(&headers, "rhtn-notices");
+                let all: Vec<String> = self.walks.keys().cloned().collect();
+                for p in all {
+                    self.owe(&p);
+                }
+                response(204, "text/plain", Vec::new())
+            }
             // **its icon, where a client's launcher looks for one**
             // (`light-client-requirements.md` §8), which is no step
             "GET" if target == ICON_PATH => response(200, "image/png", ICON.to_vec()),
             "GET" => {
+                // a member met for the first time has the whole walk
+                // waiting, which is what their launcher wears once they
+                // leave it
+                if !self.walks.contains_key(&principal) {
+                    self.walks.insert(principal.clone(), Walk::default());
+                    self.owe(&principal);
+                }
                 let walk = self.walks.entry(principal.clone()).or_default();
                 if walk.at >= STEPS.len() {
                     let page = summary(&principal, &roles, walk);
@@ -496,6 +561,7 @@ impl App {
                 walk.at += 1;
                 let now = walk.at;
                 let done = now >= STEPS.len();
+                self.owe(&principal);
                 self.say(
                     &principal,
                     if got.given { "given" } else { "declined" },
