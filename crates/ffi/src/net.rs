@@ -1111,21 +1111,18 @@ impl Net {
             ))
         })?;
         let (attachment, serving_node, mode, queued, (left, refused)) = built;
+        // **an undelivered message does not undo the attach** [author,
+        // 2026-11-23: "there should be no dropped sessions"]: what waits on
+        // a node key stays with the client and maintenance asks again, and
+        // what the node refused is said here and nowhere else
         if refused > 0 || left > 0 {
-            // dropped: its tasks end, and the node is no longer served from
-            if let Some(s) = attachment.current.lock().unwrap().take() {
-                s.conn.close(quinn::VarInt::from_u32(0), b"detached");
-            }
-            drop(attachment);
-            courier.drop_serving(&serving_node);
-            handle.with_blocking(move |c| c.detached_from(&serving_node));
-            return Err(Refused::new(if refused > 0 {
-                format!(
-                    "the serving node refused {refused} of what attaching published, stocked or swept"
-                )
-            } else {
-                format!("{left} message(s) an attach produced had no path")
-            }));
+            tracing::warn!(
+                target: "attach",
+                node = %rhtn_client::diag::id8(&serving_node),
+                left,
+                refused,
+                "attach.unsent"
+            );
         }
         if let Some(p) = self.persist.lock().unwrap().clone() {
             courier.write_after_arrivals(p);

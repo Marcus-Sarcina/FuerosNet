@@ -629,3 +629,36 @@ fn a_greeting_with_no_path_waits_for_a_node_key_and_the_next_one_replaces_it() {
         "one greeting waits, not two"
     );
 }
+
+/// **What waits on a node key is asked for again by routine maintenance**
+/// [author, 2026-11-23], with nothing sent in between: a fetch that met
+/// nobody leaves the message with the client, and the next round retries
+/// it while it still waits.
+// functional: PAY-025
+#[test]
+fn maintenance_asks_again_for_the_node_key_a_message_waits_on() {
+    use rhtn_client::ceremony::Msg;
+    let mut s = setup(&PARTIES);
+    let _ = peered(&mut s);
+    introduced(&mut s, "alice", "bob");
+    s.handles["alice"].reach.0.set(false);
+    let asks = |out: &[Msg]| {
+        out.iter()
+            .filter(|m| matches!(m, Msg::NodeKeyRequest(r) if r.contains(&kh("bob"))))
+            .count()
+    };
+    let c = s.client("alice");
+    let _ = c.outbox();
+    assert_eq!(asks(&c.maintain()), 0, "nothing waits, nothing asked");
+    assert!(c.greet_peer(kh("bob"), false).is_some());
+    let _ = c.outbox();
+    let waiting = c.payload.pending.get(&kh("bob")).map_or(0, Vec::len);
+    assert!(waiting > 0, "the greeting waits on bob's node key");
+    assert_eq!(asks(&c.maintain()), 1, "asked again");
+    assert_eq!(asks(&c.maintain()), 1, "and at the next round");
+    assert_eq!(
+        c.payload.pending.get(&kh("bob")).map_or(0, Vec::len),
+        waiting,
+        "still waiting, and not added to"
+    );
+}

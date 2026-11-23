@@ -535,6 +535,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | PAY-022 | — | **WITHDRAWN 2026-11-20** [author]. Two initial messages crossed and the lower keyhash's session stood. There are no sessions (D §14.2.4). The number is not reused. | D §14.2.4 |
 | PAY-023 | C | **What cannot be attributed is shown as unverified, and is not answered** [author, 2026-11-19; 2026-11-20]. Every sealed body carries the sender's alias, display only; a body whose sender the recipient holds no introduction for, and which carries none — mail still queued when the recipient was restored from its phrase — is shown under that alias and marked unverified, never as the person, and nothing in it is acted on as theirs. **The header is the alias and the keyhash**, which keeps two senders of one alias apart in an index and reaches nobody: **a recipient replies only to a sender it holds as a contact** [author, 2026-11-20], so a stranger's message cannot be answered; a contact is held with its introduction, so a contact's message is always attributed. **A replay opens once**: a recipient remembers the ciphertext hashes it opened under the node's two newest keys it has seen, and an older key's message cannot be submitted again. Test: a restored client collecting a queued non-first message from a sender it holds no contact for shows it unverified under its alias, in a thread apart from another sender of the same alias, and seals no reply; a message from a held contact is attributed by the introduction held; a replay within the grace is discarded across a restart. | W §7.8.1; D §14.2.4.3; L §3 |
 | PAY-024 | C | **A launched node signs its node keys under its delegated key, and a holder checks them against the delegation it keeps** (W §§7.8, 8.2). An instance holds no identity key, so field 6 of a `NodeKey` it serves verifies under the key its operator's delegation names and under no key of the operator's identity; a receiver checks it against the delegation it holds for field 2 and defers where it holds none, as for an acknowledgement (W §7.5). Test: a node key an instance signed is refused as awaiting a delegation by a holder keeping only identities, and verifies for one keeping the delegation. | W §§7.8, 8.2, 7.5, 10.1.1 |
+| PAY-025 | C | **A message waiting on a node key is retried while a session is held, and never undoes an attach** [author, 2026-11-23] (L §3). A fetch that met nobody leaves the message with the client, and routine maintenance asks the recipient's node for the key again until one arrives and the message is sealed; an attach whose own messages did not all go keeps its session, the unsent ones said and not fatal. Test: a message whose node-key fetch went unanswered is asked for again by maintenance with nothing sent in between, and still waits; an attach that produced a message with no path is attached, holds its session and sweeps. | L §§3, 4; W §7.8 |
 
 ## 3.5 Observer-relative trust and policy evaluation
 
@@ -1086,7 +1087,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **599 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **600 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -1104,7 +1105,7 @@ This specification contains **599 numbered requirement/test families** across **
 | VER | 18 |
 | CAP | 17 |
 | REC | 12 |
-| PAY | 18 |
+| PAY | 19 |
 | POL | 22 |
 | CAT | 27 |
 | GAT | 43 |

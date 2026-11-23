@@ -6708,7 +6708,8 @@ impl Client {
     }
 
     /// Routine maintenance: a witness's matured signature, what the
-    /// outbox holds, and what went unanswered.
+    /// outbox holds, what went unanswered, and a node key for whatever
+    /// still waits on one.
     pub fn maintain(&mut self) -> Vec<Msg> {
         let now = self.now_s();
         // **a witness's window maturing is an event with nothing to
@@ -6720,6 +6721,31 @@ impl Client {
         // traffic, so a record whose own carry was missed is not stranded
         let mut out = self.outbox();
         out.extend(self.resend_unanswered(now));
+        // **a message waiting on a node key is retried** [author,
+        // 2026-11-23]: a fetch nobody answered leaves it here, and nothing
+        // else asks again until the next send to the same recipient
+        let waiting: Vec<Keyhash> = self
+            .payload
+            .pending
+            .iter()
+            .filter(|(_, w)| !w.is_empty())
+            .map(|(to, _)| *to)
+            .collect();
+        let asked: BTreeSet<Keyhash> = out
+            .iter()
+            .filter_map(|m| match m {
+                Msg::NodeKeyRequest(r) => Some(r.clone()),
+                _ => None,
+            })
+            .flatten()
+            .collect();
+        let again: Vec<Keyhash> = waiting
+            .into_iter()
+            .filter(|to| !asked.contains(to))
+            .collect();
+        if !again.is_empty() {
+            out.push(Msg::NodeKeyRequest(again));
+        }
         out
     }
 

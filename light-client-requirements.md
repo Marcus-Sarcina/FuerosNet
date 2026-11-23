@@ -763,6 +763,12 @@ does not reinvent its parts.
   Only that node holds its keys for them, so the intent a targeted fetch
   discloses reaches the party that is about to be handed the message and not
   your patron (design §19.4, P26).
+- **Keep a message that waits on a node key, and ask for the key again while
+  a session is held** [author, 2026-11-23]. A fetch nobody answered leaves the
+  message unsent and with you, not lost, and routine maintenance asks again.
+  **A message that did not go never undoes an attach** [author, 2026-11-23]:
+  *"An undelivered message should not affect the attach. Once attached, it
+  should retry, but there should be no dropped sessions."*
 - **Open, then attribute, then believe.** A message opens under your
   encryption key and the half your node hands you; its sender is whoever its
   tag verifies for (`wire-format.md` §7.8.1), and a message that does not open
