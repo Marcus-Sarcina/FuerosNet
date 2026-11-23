@@ -312,15 +312,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let (back, up) = (worker.clone(), up.clone());
                     std::thread::spawn(move || draw(&up, &back, true));
                 }
-                Ok(Act::Sweep) => {
-                    let (back, up) = (worker.clone(), up.clone());
-                    std::thread::spawn(move || {
-                        if let Some(why) = sweep(&up) {
-                            let _ = back.send_event(Said::ToPage(false, why));
-                        }
-                        draw(&up, &back, false);
-                    });
-                }
                 Ok(Act::Backup { bytes }) => {
                     let (back, up) = (worker.clone(), up.clone());
                     std::thread::spawn(move || import(&up, &back, bytes));
@@ -630,18 +621,27 @@ fn draw(up: &Up, back: &EventLoopProxy<Said>, whole: bool) {
                 .unwrap_or_default();
             Body::Thread(page.messages, page.before.is_some())
         }
-        Place::Subnet(_) | Place::Resources => Body::Catalog(
-            p.resources()
-                .into_iter()
-                .map(|r| ResourceRow {
-                    service: r.service_type,
-                    instance: r.instance,
-                    node: hex(&r.node),
-                    resource: hex(&r.resource),
-                    stale: r.stale,
-                })
-                .collect(),
-        ),
+        // **what the subnet's node offers**, one launcher each: the
+        // resources swept from the node serving this key there
+        Place::Subnet(id) => {
+            let node = snap
+                .subnets
+                .iter()
+                .find(|s| &s.id == id)
+                .map(|s| s.node.clone());
+            Body::Launchers(
+                p.resources()
+                    .into_iter()
+                    .filter(|r| node.as_deref() == Some(hex(&r.node).as_str()))
+                    .map(|r| ResourceRow {
+                        instance: r.instance,
+                        node: hex(&r.node),
+                        resource: hex(&r.resource),
+                        unseen: r.waiting,
+                    })
+                    .collect(),
+            )
+        }
         _ => Body::Plain,
     };
     let _ = back.send_event(if whole {
@@ -661,6 +661,8 @@ fn snapshot(p: &Participant, device: Device, threads: Option<&Threads>) -> Snaps
         .map(|a| (a.serving, a.addresses))
         .collect();
     let subnets = p.subnets();
+    let me = p.me();
+    let resources = p.resources();
     // **a subnet's own name for this person, then the default**, as the
     // phone's foot picks it (`Gateway.ownAlias`)
     let name = subnets
@@ -674,10 +676,31 @@ fn snapshot(p: &Participant, device: Device, threads: Option<&Threads>) -> Snaps
         connection: participant::connection(&p.attachments(), &agreed),
         subnets: subnets
             .into_iter()
-            .map(|s| SubnetRow {
-                id: hex(&s.id),
-                name: s.alias.or(s.own_alias),
-                rank: rank(&s.rank),
+            .map(|s| {
+                // **the node serving this key there**: the patron's, which
+                // speaks as the patron, else this key's own as the root
+                let node = s.patron.map_or_else(|| me.clone(), |k| k.to_vec());
+                // **the orb's count** [author, 2026-11-23]: a move of its
+                // node to answer, as the phone marks one, and what its
+                // resources ask, rolled up
+                let moved = s.relocation.as_ref().is_some_and(|r| {
+                    matches!(
+                        r.standing,
+                        rhtn_model::Standing::Proved | rhtn_model::Standing::Declined
+                    )
+                });
+                let asked: u32 = resources
+                    .iter()
+                    .filter(|r| r.node[..] == node[..])
+                    .map(|r| r.waiting)
+                    .sum();
+                SubnetRow {
+                    id: hex(&s.id),
+                    name: s.alias.or(s.own_alias),
+                    rank: rank(&s.rank),
+                    node: hex(&node),
+                    unseen: u32::from(moved) + asked,
+                }
             })
             .collect(),
         // **the people are the ones met**, as the phone's list has them:
@@ -893,23 +916,19 @@ fn attach_to(p: &Participant, node: Vec<u8>, addresses: Vec<String>) -> Result<(
         .map_err(|e| e.to_string())
 }
 
-/// **What a connection is for, fetched once one is up**: the catalog
-/// swept from every node attached to, and the profiles that name the
-/// people and subnets held — what each device fetches for itself rather
-/// than being handed (design §23.3).  The first refusal, where any.
+/// **What a connection is for, fetched once one is up**: the profiles
+/// that name the people and subnets held — what each device fetches for
+/// itself rather than being handed (design §23.3). What each node offers
+/// the kernel sweeps at the attach itself, unasked [author, 2026-11-23].
+/// The refusal, where there is one.
 fn sweep(up: &Up) -> Option<String> {
     let p = up.running.lock().unwrap().clone()?;
-    let held = p.attachments();
-    let mut why = held.is_empty().then(|| "no node is attached".to_string());
-    for node in held {
-        if let Err(e) = p.browse(node) {
-            why.get_or_insert(format!("the catalog was not swept: {e}"));
-        }
+    if p.attachments().is_empty() {
+        return Some("no node is attached".to_string());
     }
-    if let Err(e) = p.request_profiles() {
-        why.get_or_insert(format!("no profiles were asked for: {e}"));
-    }
-    why
+    p.request_profiles()
+        .err()
+        .map(|e| format!("no profiles were asked for: {e}"))
 }
 
 /// The nodes agreed to, in the kernel's order, until one answers.

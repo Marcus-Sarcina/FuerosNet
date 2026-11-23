@@ -2233,6 +2233,14 @@ impl Participant {
             }
             let addrs: Vec<SocketAddr> = order.iter().filter_map(|a| a.parse().ok()).collect();
             let a = self.net.attach(&self.handle, node, &addrs, pop)?;
+            // **a connection sweeps what it may reach, unasked** [author,
+            // 2026-11-23]: the resources granted here are on the person's
+            // subnet page from the moment they connect, and no screen asks
+            // them to look for any. What the sweep could not reach is said
+            // to the diagnostics and not to the person
+            if let Err(why) = self.net.browse(&self.handle, node) {
+                tracing::info!(target: "attach", node = %rhtn_client::diag::id8(&node), why = %why.reason(), "attach.unswept");
+            }
             self.save()?;
             Ok(a)
         })

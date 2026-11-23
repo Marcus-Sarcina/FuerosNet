@@ -85,8 +85,6 @@ pub enum Act {
     },
     /// Show the page that launches a node.
     Launch,
-    /// Sweep the catalog again from every node attached to.
-    Sweep,
     /// Restore this desktop from the identity's phrase.
     Restore {
         /// What was typed.
@@ -150,7 +148,6 @@ pub fn act(message: &str) -> Result<Act, String> {
                 .ok_or_else(|| "`yes` is missing".into());
         }
         "launch" => return Ok(Act::Launch),
-        "sweep" => return Ok(Act::Sweep),
         "go" => {
             let named = s("place")?;
             return screens::Place::parse(&named)

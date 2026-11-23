@@ -545,9 +545,14 @@ class IdentitiesTest {
             "leaving a line does not go through the identity that holds it",
             source("LeavingActivity.kt").contains("Gateway.departAs(holder, patron.first)"),
         )
-        val catalog = source("CatalogActivity.kt")
-        assertTrue("the catalog does not ask as the entry's holder", catalog.contains("Gateway.askAs("))
-        assertTrue("the entry's holder does not travel to the resource screen", catalog.contains("\"by\", entry.by"))
+        // **a subnet's launchers open as the identity that holds the
+        // subnet** [author, 2026-11-23], whichever one is in focus
+        val shell = source("ShellActivity.kt")
+        assertTrue(
+            "a subnet's launchers are not the holder's",
+            shell.contains("launchersOf(o).forEach { column.addView(launcher(o.by, it)) }"),
+        )
+        assertTrue("the holder does not travel to the resource screen", shell.contains(".putExtra(\"by\", by)"))
         assertTrue(
             "the resource screen does not ask as the holder it was given",
             source("ResourceActivity.kt").contains("Gateway.askAs(holder, node, resource, path)"),

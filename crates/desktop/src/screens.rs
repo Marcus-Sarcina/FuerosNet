@@ -23,10 +23,8 @@ pub enum Place {
     Direct,
     /// One thread, with the other party's keyhash in hex.
     Thread(String),
-    /// One subnet, by its id in hex.
+    /// One subnet, by its id in hex: its launchers.
     Subnet(String),
-    /// The catalog as swept from every node attached to.
-    Resources,
     /// The connection, a node to connect to, a node to launch.
     Options,
 }
@@ -43,7 +41,6 @@ impl Place {
                 "home" => Some(Place::Home),
                 "direct" => Some(Place::Direct),
                 "options" => Some(Place::Options),
-                "resources" => Some(Place::Resources),
                 _ => None,
             },
             Some(("thread", h)) => hex64(h).map(Place::Thread),
@@ -58,7 +55,6 @@ impl Place {
             Place::Home => "home".into(),
             Place::Direct => "direct".into(),
             Place::Options => "options".into(),
-            Place::Resources => "resources".into(),
             Place::Thread(h) => format!("thread:{h}"),
             Place::Subnet(h) => format!("subnet:{h}"),
         }
@@ -74,6 +70,13 @@ pub struct SubnetRow {
     pub name: Option<String>,
     /// This key's rank there, said in words.
     pub rank: String,
+    /// **The node serving this key there**, in hex: the patron's, else this
+    /// key's own where it is the subnet's root. What that node offers is
+    /// what the subnet's page launches.
+    pub node: String,
+    /// **What waits to be seen there**, the orb's count: a move of its
+    /// node to answer, and what its resources ask, rolled up.
+    pub unseen: u32,
 }
 
 /// One person this key knows.
@@ -94,19 +97,17 @@ impl Person {
     }
 }
 
-/// One resource of the catalog.
+/// **One resource a subnet's page launches**, as its node offered it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResourceRow {
-    /// Its service type.
-    pub service: String,
-    /// Its instance name.
+    /// The name to show it by.
     pub instance: String,
     /// The node holding it, in hex.
     pub node: String,
     /// The resource's own keyhash, in hex, which is what opens it.
     pub resource: String,
-    /// Whether the node's word on it is older than its refresh.
-    pub stale: bool,
+    /// What it asks that waits to be seen, its card's count.
+    pub unseen: u32,
 }
 
 /// **What every screen is drawn from**: the kernel's answers at one
@@ -157,15 +158,16 @@ impl Snapshot {
 }
 
 /// **What a place shows beyond the snapshot**: a thread's newest page, a
-/// subnet's catalog.
+/// subnet's launchers.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Body {
     /// The place needs nothing more.
     Plain,
     /// A thread's messages, oldest first, and whether earlier ones exist.
     Thread(Vec<Message>, bool),
-    /// The catalog as swept from the serving node.
-    Catalog(Vec<ResourceRow>),
+    /// **What a subnet's node offers this key**, one launcher each
+    /// [author, 2026-11-23]: swept at every connection, never browsed.
+    Launchers(Vec<ResourceRow>),
 }
 
 /// **A place drawn whole**: the page the window loads when it is gone to.
@@ -206,8 +208,7 @@ pub fn rail(snap: &Snapshot, place: &Place) -> String {
     let here = |p: &Place| if p == place { " class=\"here\"" } else { "" };
     let mut out = format!(
         "<a data-go=\"home\"{}><b{}>{}</b><br><small>{}</small></a>\n\
-         <a data-go=\"direct\"{}>Direct messages</a>\n\
-         <a data-go=\"resources\"{}>Resources</a>\n<h3>Subnets</h3>\n",
+         <a data-go=\"direct\"{}>Direct messages</a>\n<h3>Subnets</h3>\n",
         here(&Place::Home),
         if snap.name.is_some() {
             ""
@@ -223,7 +224,6 @@ pub fn rail(snap: &Snapshot, place: &Place) -> String {
             Place::Thread(_) => " class=\"here\"",
             _ => here(&Place::Direct),
         },
-        here(&Place::Resources),
     );
     if snap.subnets.is_empty() {
         out.push_str("<small>none yet</small>\n");
@@ -231,10 +231,11 @@ pub fn rail(snap: &Snapshot, place: &Place) -> String {
     for s in &snap.subnets {
         let p = Place::Subnet(s.id.clone());
         out.push_str(&format!(
-            "<a data-go=\"{}\"{}>{}</a>\n",
+            "<a data-go=\"{}\"{}>{}{}</a>\n",
             p.token(),
             here(&p),
-            escape(&subnet_name(s))
+            escape(&subnet_name(s)),
+            count(s.unseen)
         ));
     }
     out.push_str(&format!(
@@ -254,14 +255,10 @@ fn main(snap: &Snapshot, place: &Place, body: &Body) -> String {
             _ => thread(snap, peer, &[], false),
         },
         Place::Subnet(id) => match body {
-            Body::Catalog(rows) => subnet(snap, id, rows),
+            Body::Launchers(rows) => subnet(snap, id, rows),
             _ => subnet(snap, id, &[]),
         },
         Place::Options => options(snap),
-        Place::Resources => match body {
-            Body::Catalog(rows) => resources(rows),
-            _ => resources(&[]),
-        },
     }
 }
 
@@ -390,47 +387,42 @@ fn thread(snap: &Snapshot, peer: &str, messages: &[Message], more: bool) -> Stri
 fn subnet(snap: &Snapshot, id: &str, rows: &[ResourceRow]) -> String {
     let s = snap.subnets.iter().find(|s| s.id == id);
     format!(
-        "<h1>{}</h1>\n<p class=\"sub\">{}</p>\n<p class=\"sub mono\">{id}</p>\n\
-         <h2>Resources</h2>\n<p class=\"sub\">The catalog as swept from your serving node — \
-         which of them belong to this subnet is not a question it can answer yet.</p>\n{}",
+        "<h1>{}</h1>\n<p class=\"sub\">{}</p>\n{}",
         escape(&s.map(subnet_name).unwrap_or_else(|| short(id))),
         escape(&s.map(|s| s.rank.clone()).unwrap_or_default()),
-        catalog(rows)
+        launchers(rows)
     )
 }
 
-/// **The catalog on its own**, with or without a subnet held: each
-/// device sweeps every node it attaches to for what is available now
-/// (design §23.3), so a desktop reaches it once connected.
-fn resources(rows: &[ResourceRow]) -> String {
-    format!(
-        "<h1>Resources</h1>\n<p class=\"sub\">The catalog as swept from every node this \
-         desktop is connected to.</p>\n{}\n\
-         <p><button data-act=\"sweep\">Sweep again</button></p>",
-        catalog(rows)
-    )
-}
-
-fn catalog(rows: &[ResourceRow]) -> String {
+/// **One card per resource**, which is what opens it, with its count
+/// above its corner where something waits [author, 2026-11-23].
+fn launchers(rows: &[ResourceRow]) -> String {
     if rows.is_empty() {
-        return "<p>Nothing swept yet.</p>".to_string();
+        return String::new();
     }
-    let mut out = String::from("<ul class=\"rows\">\n");
+    let mut out = String::from("<div class=\"cards\">\n");
     for r in rows {
         out.push_str(&format!(
-            "<li>{} <small>{} · at {}…{}</small> <button data-open=\"{}\" data-node=\"{}\" \
-             data-name=\"{}\">Open</button></li>\n",
-            escape(&r.instance),
-            escape(&r.service),
-            short(&r.node),
-            if r.stale { " · stale" } else { "" },
+            "<button class=\"card\" data-open=\"{}\" data-node=\"{}\" data-name=\"{}\">\
+             {}{}</button>\n",
             escape(&r.resource),
             escape(&r.node),
             escape(&r.instance),
+            escape(&r.instance),
+            count(r.unseen),
         ));
     }
-    out.push_str("</ul>");
+    out.push_str("</div>");
     out
+}
+
+/// A count as an orb or a card wears it: nothing at none.
+fn count(n: u32) -> String {
+    match n {
+        0 => String::new(),
+        n if n > 99 => "<sup>99+</sup>".into(),
+        n => format!("<sup>{n}</sup>"),
+    }
 }
 
 fn options(snap: &Snapshot) -> String {
@@ -496,6 +488,8 @@ mod tests {
                 id: "22".repeat(32),
                 name: Some("Mirror <Manse>".into()),
                 rank: "operator".into(),
+                node: "55".repeat(32),
+                unseen: 3,
             }],
             people: vec![
                 Person {
@@ -525,7 +519,6 @@ mod tests {
             Place::Options,
             Place::Thread("ab".repeat(32)),
             Place::Subnet("cd".repeat(32)),
-            Place::Resources,
         ] {
             assert_eq!(Place::parse(&p.token()), Some(p));
         }
@@ -608,36 +601,45 @@ mod tests {
     }
 
     #[test]
-    fn a_subnet_lists_the_catalog_and_options_keep_the_connect_form() {
+    fn a_subnet_launches_what_its_node_offers_and_options_keep_the_connect_form() {
         let s = snap();
         let id = "22".repeat(32);
-        let rows = vec![ResourceRow {
-            service: "_files._tcp".into(),
-            instance: "Shared drive".into(),
-            node: "55".repeat(32),
-            resource: "66".repeat(32),
-            stale: true,
-        }];
-        let p = page(&s, &Place::Subnet(id), &Body::Catalog(rows));
-        assert!(p.contains("Shared drive") && p.contains("stale") && p.contains("operator"));
-        let all = page(
-            &s,
-            &Place::Resources,
-            &Body::Catalog(vec![ResourceRow {
-                service: "_board._tcp".into(),
-                instance: "Notices".into(),
+        let rows = vec![
+            ResourceRow {
+                instance: "Shared drive".into(),
                 node: "55".repeat(32),
                 resource: "66".repeat(32),
-                stale: false,
-            }]),
-        );
-        assert!(all.contains("Notices") && all.contains("data-act=\"sweep\""));
-        assert!(all.contains(&format!(
-            "data-open=\"{}\" data-node=\"{}\" data-name=\"Notices\"",
-            "66".repeat(32),
+                unseen: 0,
+            },
+            ResourceRow {
+                instance: "Notices".into(),
+                node: "55".repeat(32),
+                resource: "77".repeat(32),
+                unseen: 2,
+            },
+        ];
+        let p = page(&s, &Place::Subnet(id.clone()), &Body::Launchers(rows));
+        assert!(p.contains("operator"));
+        // **a card each, which is what opens it** [author, 2026-11-23]
+        assert!(p.contains(&format!(
+            "<button class=\"card\" data-open=\"{}\" data-node=\"{}\" data-name=\"Notices\">\
+             Notices<sup>2</sup></button>",
+            "77".repeat(32),
             "55".repeat(32)
         )));
-        assert!(all.contains("data-go=\"resources\" class=\"here\""));
+        assert!(
+            p.contains(">Shared drive</button>"),
+            "no count where nothing waits"
+        );
+        // and the words of the abstraction it replaced are nowhere
+        for gone in ["catalog", "Catalog", "Resources", "sweep", "Sweep"] {
+            assert!(!p.contains(gone), "{gone} on the page");
+        }
+        // **the rail wears the subnet's count**, and offers no catalog
+        let r = rail(&s, &Place::Subnet(id));
+        assert!(r.contains("Mirror &lt;Manse&gt;<sup>3</sup>"));
+        assert!(!r.contains("resources"));
+        assert_eq!(Place::parse("resources"), None);
         let o = page(&s, &Place::Options, &Body::Plain);
         assert!(o.contains("id=\"connect\"") && o.contains(&"ab".repeat(32)));
         assert!(o.contains("data-act=\"launch\""));

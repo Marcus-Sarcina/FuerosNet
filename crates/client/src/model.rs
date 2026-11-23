@@ -102,6 +102,8 @@ impl Client {
     /// (`wire-format.md` §6.4).
     #[must_use]
     pub fn resources_held(&self) -> Vec<Resource> {
+        let waiting =
+            |r: &crate::Keyhash| self.asks.values().filter(|a| a.resource == *r).count() as u32;
         self.catalog
             .portions
             .iter()
@@ -118,6 +120,7 @@ impl Client {
                         data_practice: e.data_practice,
                         truncated: p.truncated,
                         stale: p.stale,
+                        waiting: waiting(&e.resource),
                     })
                 });
                 // **and what the page names that no entry did** [author,
@@ -137,6 +140,7 @@ impl Client {
                         data_practice: None,
                         truncated: false,
                         stale: p.stale,
+                        waiting: waiting(&i.resource),
                     });
                 entries.chain(paged)
             })

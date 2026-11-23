@@ -82,7 +82,11 @@ class ShellActivity : Activity() {
      * screen that shows names.
      */
     private val watcher = Model.Watcher { nouns ->
-        if (nouns.any { it == uniffi.rhtn_model.Noun.SUBNETS || it == uniffi.rhtn_model.Noun.PROFILES || it == uniffi.rhtn_model.Noun.CONNECTION }) {
+        if (nouns.any {
+                it == uniffi.rhtn_model.Noun.SUBNETS || it == uniffi.rhtn_model.Noun.PROFILES ||
+                    it == uniffi.rhtn_model.Noun.CONNECTION || it == uniffi.rhtn_model.Noun.RESOURCES
+            }
+        ) {
             runOnUiThread { if (!isFinishing) drawFromModel() }
         }
     }
@@ -313,8 +317,9 @@ class ShellActivity : Activity() {
                     id = o.row.id.hex(),
                     alias = o.row.alias,
                     // **a move of its node to answer marks the orb**
-                    // [author, 2026-11-16]; nothing else counts here yet
-                    unseen = if (Relocate.blocks(o.row.relocation)) 1 else 0,
+                    // [author, 2026-11-16], and what its resources ask
+                    // that waits rolls up into it [author, 2026-11-23]
+                    unseen = Chrome.unseen(Relocate.blocks(o.row.relocation), launchersOf(o)),
                     by = o.by,
                     crown = Chrome.crown(
                         root = o.row.rank.root,
@@ -415,6 +420,68 @@ class ShellActivity : Activity() {
             )
         }
         return slot
+    }
+
+    /**
+     * **What a subnet's serving node offers its holder**: the node is the
+     * patron's, which speaks as the patron, else the holder's own where it
+     * is the subnet's root.
+     */
+    private fun launchersOf(o: Identities.Owned<uniffi.rhtn_model.Subnet>): List<Chrome.Launcher> {
+        val node = o.row.patron?.hex() ?: Gateway.keyhash(o.by) ?: return emptyList()
+        return Chrome.launchers(Gateway.resourcesHeld().filter { it.by == o.by }.map { it.row }, node)
+    }
+
+    /** **One launcher card**: the resource's name, its count above its
+     *  corner where something waits, and opening it on a tap. */
+    private fun launcher(by: String, l: Chrome.Launcher): View {
+        val c = Palette.now
+        val card = FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { setMargins(dp(16), dp(8), dp(16), dp(8)) }
+            contentDescription = l.name + (Chrome.badge(l.unseen)?.let { ", $it waiting" } ?: "")
+            isClickable = true
+            setOnClickListener {
+                startActivity(
+                    Intent(this@ShellActivity, ResourceActivity::class.java)
+                        .putExtra("by", by)
+                        .putExtra("node", l.node)
+                        .putExtra("resource", l.resource)
+                        .putExtra("name", l.name)
+                        .putExtra("path", "/"),
+                )
+            }
+        }
+        card.addView(
+            TextView(this).apply {
+                text = l.name
+                textSize = 17f
+                typeface = Type.bold
+                setTextColor(c.ink)
+                setPadding(dp(16), dp(20), dp(16), dp(20))
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(c.sunken)
+                    setStroke(dp(1), c.rule)
+                    cornerRadius = dp(10).toFloat()
+                }
+            },
+        )
+        Chrome.badge(l.unseen)?.let { n ->
+            card.addView(
+                TextView(this).apply {
+                    text = n
+                    textSize = 10f
+                    typeface = Type.bold
+                    setTextColor(Palette.RAIL_INK)
+                    gravity = Gravity.CENTER
+                    background = Crowns.disc(Palette.COUNT)
+                    layoutParams = FrameLayout.LayoutParams(dp(20), dp(20), Gravity.TOP or Gravity.END)
+                },
+            )
+        }
+        return card
     }
 
     private fun unseenOf(rung: Chrome.Rung): Int = when (rung) {
@@ -774,13 +841,10 @@ class ShellActivity : Activity() {
                         go(Chrome.Place.SubnetOptions(where.id))
                     }.apply { contentDescription = "This subnet's options" },
                 )
-                column.addView(
-                    row(
-                        "Resources",
-                        "the catalog as swept from your serving node — which of them " +
-                            "belong to this subnet is not a question it can answer yet",
-                    ) { startActivity(Intent(this, CatalogActivity::class.java).putExtra("by", Identities.focused())) },
-                )
+                // **what this subnet's node offers, one card each**
+                // [author, 2026-11-23]: swept when the node was connected
+                // to, and opened as the identity that holds the subnet
+                owned?.let { o -> launchersOf(o).forEach { column.addView(launcher(o.by, it)) } }
             }
             is Chrome.Place.Direct -> {
                 // not reached: the rail's orb opens the conversations

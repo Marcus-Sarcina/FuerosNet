@@ -186,6 +186,30 @@ object Chrome {
      */
     fun suggestingSecondPatron(patrons: Int): Boolean = patrons == 1
 
+    /** **One launcher on a subnet's page** [author, 2026-11-23]: a resource
+     *  its serving node offered, which the card opens, and what it asks
+     *  that waits, which the card wears. */
+    data class Launcher(val node: String, val resource: String, val name: String, val unseen: Int)
+
+    /**
+     * **What a subnet launches**: the resources swept from the node serving
+     * its holder there, one card each, named as the node named them. The
+     * person never browses for them; connecting is what sweeps
+     * [author, 2026-11-23].
+     */
+    fun launchers(offered: List<uniffi.rhtn_model.Resource>, node: String): List<Launcher> =
+        offered
+            .filter { it.node.hex() == node }
+            .map { Launcher(it.node.hex(), it.resource.hex(), it.instance, it.waiting.toInt()) }
+            .sortedBy { it.name.lowercase() }
+
+    /**
+     * **A subnet's orb count, rolled up** [author, 2026-11-23]: a move of its
+     * node to answer, and what each of its resources asks that waits.
+     */
+    fun unseen(moved: Boolean, launchers: List<Launcher>): Int =
+        (if (moved) 1 else 0) + launchers.sumOf { it.unseen }
+
     fun badge(n: Int): String? = when {
         n <= 0 -> null
         n > 99 -> "99+"

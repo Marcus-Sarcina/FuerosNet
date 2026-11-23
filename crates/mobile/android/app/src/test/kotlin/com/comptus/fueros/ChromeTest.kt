@@ -166,4 +166,41 @@ class ChromeTest {
         assertTrue("and suggests the remedy: $said", said.contains("second adoption"))
     }
 
+    private fun offered(node: String, resource: String, name: String, waiting: Int) =
+        uniffi.rhtn_model.Resource(
+            node = node.unhex(),
+            resource = resource.unhex(),
+            owner = "99".repeat(32).unhex(),
+            serviceType = "",
+            instance = name,
+            endpoint = ByteArray(0),
+            dataPractice = null,
+            truncated = false,
+            stale = false,
+            waiting = waiting.toUInt(),
+        )
+
+    // functional: UX-018
+    @Test
+    fun a_subnet_launches_what_its_node_offers_and_its_orb_wears_their_count() {
+        val ours = "aa".repeat(32)
+        val theirs = "bb".repeat(32)
+        val held = listOf(
+            offered(ours, "11".repeat(32), "testapp.internal", 0),
+            offered(theirs, "22".repeat(32), "elsewhere", 4),
+            offered(ours, "33".repeat(32), "Board", 2),
+        )
+        val launched = Chrome.launchers(held, ours)
+        assertEquals(
+            "one card each for what the subnet's node offered, and nothing another node did",
+            listOf(
+                Chrome.Launcher(ours, "33".repeat(32), "Board", 2),
+                Chrome.Launcher(ours, "11".repeat(32), "testapp.internal", 0),
+            ),
+            launched,
+        )
+        assertEquals("the resources' asks roll up", 2, Chrome.unseen(false, launched))
+        assertEquals("and a move of the node besides", 3, Chrome.unseen(true, launched))
+        assertEquals(0, Chrome.unseen(false, emptyList()))
+    }
 }

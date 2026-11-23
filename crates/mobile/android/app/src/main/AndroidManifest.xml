@@ -131,7 +131,6 @@
              catalog did from 2026-10-16 until 2026-10-27, no test having
              touched an Activity. `ManifestTest` holds every one a source
              names. -->
-        <activity android:name=".CatalogActivity" android:exported="false" />
         <activity android:name=".AttachActivity" android:exported="false" />
         <!-- E3: the lines this key holds, what leaving one costs, and the
              departure behind it. Reached from a subnet's options. -->

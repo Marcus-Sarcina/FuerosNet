@@ -278,6 +278,17 @@ const STYLE: &str = "body { background: var(--ground); color: var(--ink);\n\
      a[data-go]:hover { background: var(--control) }\n\
      a[data-go].here { background: var(--sunken) }\n\
      ul.rows { list-style: none; padding: 0; margin: 0 }\n\
+     .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));\n\
+       gap: .75rem; margin: 1.5rem 0 }\n\
+     button.card { position: relative; background: var(--sunken); color: var(--ink);\n\
+       border: 1px solid var(--rule); border-radius: 8px; padding: 1.25rem .9rem;\n\
+       margin: 0; text-align: left; font-weight: 600; cursor: pointer;\n\
+       overflow-wrap: anywhere }\n\
+     button.card:hover { background: var(--control) }\n\
+     sup { display: inline-block; min-width: 1.1em; margin-left: .35em; padding: 0 .3em;\n\
+       border-radius: .6em; background: var(--accent); color: var(--on-accent);\n\
+       font-size: 11px; line-height: 1.5; text-align: center; vertical-align: super }\n\
+     button.card sup { position: absolute; top: -.5em; right: -.5em; margin: 0 }\n\
      ul.rows small { color: var(--sub) }\n\
      .said { margin: .5rem 0; padding: .5rem .75rem; border-radius: 6px; background: var(--sunken);\n\
        max-width: 80%; width: fit-content }\n\

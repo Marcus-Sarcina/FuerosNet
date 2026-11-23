@@ -229,6 +229,10 @@ pub struct Resource {
     pub truncated: bool,
     /// The portion it came in is older than the node's hint.
     pub stale: bool,
+    /// **What it has asked that waits for the person** (`light-client-
+    /// requirements.md` §8.1): its launcher's count, rolled up into its
+    /// subnet's [author, 2026-11-23].
+    pub waiting: u32,
 }
 
 /// **A profile** (`wire-format.md` §7.11): a subject's own for a subnet

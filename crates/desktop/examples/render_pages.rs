@@ -22,11 +22,15 @@ fn main() {
                 id: "2e".repeat(32),
                 name: Some("Mirror Manse".into()),
                 rank: "Its root, and its operator. Your downline here: 2 direct lines.".into(),
+                node: "70".repeat(32),
+                unseen: 2,
             },
             SubnetRow {
                 id: "9a".repeat(32),
                 name: None,
                 rank: "A member. No line of yours is issued here.".into(),
+                node: "75".repeat(32),
+                unseen: 0,
             },
         ],
         people: vec![
@@ -69,20 +73,18 @@ fn main() {
         ],
         true,
     );
-    let catalog = Body::Catalog(vec![
+    let catalog = Body::Launchers(vec![
         ResourceRow {
-            service: "_files._tcp".into(),
             instance: "Shared drive".into(),
             node: "70".repeat(32),
             resource: "71".repeat(32),
-            stale: false,
+            unseen: 0,
         },
         ResourceRow {
-            service: "_board._tcp".into(),
             instance: "Notices".into(),
             node: "70".repeat(32),
             resource: "72".repeat(32),
-            stale: true,
+            unseen: 2,
         },
     ]);
     let pages = [
