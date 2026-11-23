@@ -216,6 +216,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     up.closing.store(true, Ordering::Relaxed);
                     if let Some(p) = up.running.lock().unwrap().as_ref() {
                         let _ = p.detach();
+                        // **written before it goes**: the shell's point
+                        // for it, as the kernel's `save` asks
+                        let _ = p.save();
                     }
                     *control_flow = ControlFlow::Exit;
                 } else {

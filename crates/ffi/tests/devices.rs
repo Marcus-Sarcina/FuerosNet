@@ -168,7 +168,14 @@ fn two_devices_of_one_identity_pair_by_contribution_and_the_dataset_crosses_on_t
             .contains("Unsealable"),
         "a carriage that does not open under the pairing is refused"
     );
+    // emptied so that what the take writes is seen: the sibling list is
+    // written by every save, so its return is the save's
+    desk_shell.store.lock().unwrap().clear();
     let took = desk.take_dataset_carriage(sealed).unwrap();
+    assert!(
+        desk_shell.store.lock().unwrap().contains_key("siblings"),
+        "what was taken is written before the take returns, so a restart keeps it"
+    );
     assert_eq!(
         desk_shell.questions.lock().unwrap().len(),
         2,

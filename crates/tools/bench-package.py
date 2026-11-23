@@ -20,6 +20,9 @@ option after it is handed to `rhtn node <verb>` as it is
   - **`--owner`** for an install is that identity's keyhash where none is
     given, since a bench package is owned by the node's operator.
 
+`--image` names a digest, never a tag (`docker.io/sarcina/<name>@sha256:<64
+hex>`, the `digest:` line `docker push` ends with): the node refuses a tag.
+
 A second `install` of the same `--resource` with a new `--image` is how a
 build is deployed again: the node replaces the package under the name it
 derives from the resource, and keeps its grants, its block, its log and its

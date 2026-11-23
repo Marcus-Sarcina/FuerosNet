@@ -1991,10 +1991,11 @@ impl Participant {
     /// The sealed dataset from the device beside this one, taken into
     /// this device: its holder is asked first and `Declined` moves
     /// nothing; one that does not open under the pairing is `Unsealable`.
-    /// What it came to is counted back.
+    /// What it came to is counted back, once it is written: what was taken
+    /// is what a restart would need.
     pub fn take_dataset_carriage(&self, sealed: Vec<u8>) -> Result<DatasetTaken, Refused> {
         self.call("take_dataset_carriage", || {
-            self.handle.with_blocking(move |c| {
+            let took = self.handle.with_blocking(move |c| {
                 c.take_dataset_carriage(&sealed)
                     .map(|r| DatasetTaken {
                         records: r.records as u64,
@@ -2003,7 +2004,9 @@ impl Participant {
                         refused: r.refused as u64,
                     })
                     .map_err(|a| Refused::new(format!("{a:?}")))
-            })
+            })?;
+            self.save()?;
+            Ok(took)
         })
     }
 
