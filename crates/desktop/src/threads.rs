@@ -165,6 +165,10 @@ pub struct Entry {
     pub name: String,
     /// Whether it is a direct thread rather than a board's.
     pub direct: bool,
+    /// **The identity it is held as**, in hex: read from the store it came
+    /// out of and never written into it, since a conversation continues in
+    /// the identity it started in (`light-client-requirements.md` §2).
+    pub by: String,
 }
 
 /// **A page read backwards**: the messages in file order, where the page
@@ -237,6 +241,7 @@ impl Threads {
                         .to_string(),
                     direct: e.get("direct").and_then(Value::as_bool).unwrap_or(false),
                     peer,
+                    by: self.by.clone(),
                 })
             })
             .collect()
@@ -267,6 +272,7 @@ impl Threads {
                 peer: peer.to_string(),
                 name: name.to_string(),
                 direct: true,
+                by: self.by.clone(),
             }),
         }
         self.write_index(&all)

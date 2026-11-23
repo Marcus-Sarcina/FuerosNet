@@ -20,29 +20,34 @@ pub const HELD: &str = "device.json";
 /// up (design §23.3).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Held {
-    /// Paired from the phone: the identity's `KeyMaterial`
-    /// (`wire-format.md` §2.2) and the run of delegations, in window order
-    /// (§8.2), beside the transport seed the keyring holds.
-    Paired {
-        /// The identity's `KeyMaterial`.
-        material: Vec<u8>,
-        /// The run.
-        run: Vec<Vec<u8>>,
-    },
+    /// Paired from the phone: **every identity the phone brought** [author,
+    /// 2026-11-23], each its `KeyMaterial` (`wire-format.md` §2.2) and its
+    /// run of delegations in window order (§8.2), beside the transport
+    /// seed the keyring holds for it.
+    Paired(Vec<PairedIdentity>),
     /// Restored from the phrase: the identity's seeds are the keyring's,
     /// and nothing else is needed to start.
     Restored,
+}
+
+/// One identity a pairing brought.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PairedIdentity {
+    /// The identity's `KeyMaterial`.
+    pub material: Vec<u8>,
+    /// The run.
+    pub run: Vec<Vec<u8>>,
 }
 
 impl Held {
     /// Write it under `dir`, whole or not at all.
     pub fn keep(&self, dir: &Path) -> Result<(), String> {
         let v = match self {
-            Held::Paired { material, run } => serde_json::json!({
-                "paired": {
-                    "material": hex(material),
-                    "run": run.iter().map(|d| hex(d)).collect::<Vec<_>>(),
-                }
+            Held::Paired(all) => serde_json::json!({
+                "paired": all.iter().map(|p| serde_json::json!({
+                    "material": hex(&p.material),
+                    "run": p.run.iter().map(|d| hex(d)).collect::<Vec<_>>(),
+                })).collect::<Vec<_>>()
             }),
             Held::Restored => serde_json::json!({ "restored": true }),
         };
@@ -63,25 +68,38 @@ impl Held {
         if v.get("restored").and_then(serde_json::Value::as_bool) == Some(true) {
             return Ok(Some(Held::Restored));
         }
-        let p = v
+        let all = v
             .get("paired")
-            .ok_or_else(|| format!("{HELD}: neither paired nor restored"))?;
+            .and_then(serde_json::Value::as_array)
+            .ok_or_else(|| {
+                format!(
+                    "{HELD}: neither paired nor restored as this desktop keeps them; \
+                     pair it again on a fresh directory"
+                )
+            })?;
         let bytes = |s: Option<&serde_json::Value>| {
             s.and_then(serde_json::Value::as_str)
                 .and_then(unhex)
                 .ok_or_else(|| format!("{HELD}: a field is not hex"))
         };
-        let run = p
-            .get("run")
-            .and_then(serde_json::Value::as_array)
-            .ok_or_else(|| format!("{HELD}: no run"))?
-            .iter()
-            .map(|d| bytes(Some(d)))
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(Some(Held::Paired {
-            material: bytes(p.get("material"))?,
-            run,
-        }))
+        let mut out = Vec::new();
+        for p in all {
+            let run = p
+                .get("run")
+                .and_then(serde_json::Value::as_array)
+                .ok_or_else(|| format!("{HELD}: no run"))?
+                .iter()
+                .map(|d| bytes(Some(d)))
+                .collect::<Result<Vec<_>, _>>()?;
+            out.push(PairedIdentity {
+                material: bytes(p.get("material"))?,
+                run,
+            });
+        }
+        if out.is_empty() {
+            return Err(format!("{HELD}: paired with no identity"));
+        }
+        Ok(Some(Held::Paired(out)))
     }
 }
 
@@ -111,6 +129,25 @@ pub fn keep_colour(dir: &Path, me: &[u8], name: &str) -> Result<(), String> {
     v[hex(me)] = serde_json::Value::String(name.to_string());
     crate::platform::write_whole(&dir.join(COLOURS), v.to_string().as_bytes())
         .map_err(|e| format!("{COLOURS}: {e}"))
+}
+
+/// **Where the identity in focus is kept** [author, 2026-11-23], so the
+/// desktop starts again on the one it was left on.
+pub const FOCUS: &str = "focus";
+
+/// The identity in focus when the desktop was last left, its keyhash in
+/// hex, where one was kept.
+pub fn focus_of(dir: &Path) -> Option<String> {
+    std::fs::read_to_string(dir.join(FOCUS))
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| s.len() == 64 && s.chars().all(|c| c.is_ascii_hexdigit()))
+}
+
+/// Keep `by` as the identity in focus.
+pub fn keep_focus(dir: &Path, by: &[u8]) -> Result<(), String> {
+    crate::platform::write_whole(&dir.join(FOCUS), hex(by).as_bytes())
+        .map_err(|e| format!("{FOCUS}: {e}"))
 }
 
 /// **How many days a run covers**: each window is 48 hours and the run
@@ -371,7 +408,7 @@ document.addEventListener('click', e => {
   }
   if (b.dataset.act) return post({ act: b.dataset.act });
   if (b.dataset.cost) {
-    post({ act: 'cost', patron: b.dataset.cost });
+    post({ act: 'cost', patron: b.dataset.cost, by: b.dataset.by });
     return say('working out what leaving costs…');
   }
   // **two presses, since it cannot be undone**: the first arms, and the
@@ -383,10 +420,11 @@ document.addEventListener('click', e => {
       return say('This cannot be taken back.');
     }
     b.disabled = true;
-    post({ act: 'leave', patron: b.dataset.leave });
+    post({ act: 'leave', patron: b.dataset.leave, by: b.dataset.by });
     return say('leaving…');
   }
   if (b.dataset.colour) return post({ act: 'colour', name: b.dataset.colour });
+  if (b.dataset.focus) return post({ act: 'focus', by: b.dataset.focus });
   if (b.id === 'name') {
     const f = document.getElementById('rename');
     if (!f.value.trim()) return say('type the name first');
@@ -394,7 +432,7 @@ document.addEventListener('click', e => {
     return say('publishing…');
   }
   if (b.dataset.open) {
-    post({ act: 'open', resource: b.dataset.open, node: b.dataset.node, name: b.dataset.name });
+    post({ act: 'open', resource: b.dataset.open, node: b.dataset.node, by: b.dataset.by, name: b.dataset.name });
     return say('opening ' + b.dataset.name + '…');
   }
   if (b.id === 'restore') {
@@ -428,6 +466,11 @@ function send() {
   post({ act: 'send', to: t.dataset.peer, text: t.value });
   t.value = '';
 }
+// **a double click on the nameplate opens which identity acts** [author,
+// 2026-11-23], where the phone presses and holds
+document.addEventListener('dblclick', e => {
+  if (e.target.closest('a.plate')) post({ act: 'go', place: 'identities' });
+});
 // Enter sends, as a chat's box does; Shift and Enter is a new line
 document.addEventListener('keydown', e => {
   if (e.target.id === 'text' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
@@ -445,17 +488,23 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
         crate::platform::create_private(&d).unwrap();
         assert_eq!(Held::load(&d).unwrap(), None);
-        let h = Held::Paired {
-            material: vec![1, 2, 0xff],
-            run: vec![vec![9; 4], vec![0; 3]],
-        };
+        let h = Held::Paired(vec![
+            PairedIdentity {
+                material: vec![1, 2, 0xff],
+                run: vec![vec![9; 4], vec![0; 3]],
+            },
+            PairedIdentity {
+                material: vec![7],
+                run: vec![vec![1; 2]],
+            },
+        ]);
         h.keep(&d).unwrap();
         assert_eq!(Held::load(&d).unwrap(), Some(h));
         Held::Restored.keep(&d).unwrap();
         assert_eq!(Held::load(&d).unwrap(), Some(Held::Restored));
         std::fs::write(
             d.join(HELD),
-            b"{\"paired\":{\"material\":\"zz\",\"run\":[]}}",
+            b"{\"paired\":[{\"material\":\"zz\",\"run\":[]}]}",
         )
         .unwrap();
         assert!(Held::load(&d).is_err(), "a kept file that does not read");

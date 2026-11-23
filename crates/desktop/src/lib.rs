@@ -116,6 +116,8 @@ pub enum Act {
     /// (`light-client-requirements.md` §8), through the node that served
     /// its catalog entry.
     Open {
+        /// The identity that holds the subnet it is offered in.
+        by: Vec<u8>,
         /// The node.
         node: Vec<u8>,
         /// The resource.
@@ -132,13 +134,22 @@ pub enum Act {
     },
     /// **What leaving a patron would cost**, worked out and shown.
     Cost {
+        /// The identity holding the line.
+        by: Vec<u8>,
         /// The patron's keyhash.
         patron: Vec<u8>,
     },
     /// **Leave a patron**, on the second press (`light-client-requirements.md` §6).
     Leave {
+        /// The identity holding the line, which is the one that leaves.
+        by: Vec<u8>,
         /// The patron's keyhash.
         patron: Vec<u8>,
+    },
+    /// **Put an identity in focus** [author, 2026-11-23].
+    Focus {
+        /// Its keyhash.
+        by: Vec<u8>,
     },
     /// **Name a subnet**, as its root, by convention (`light-client-requirements.md` §4.4).
     Rename {
@@ -212,10 +223,16 @@ pub fn act(message: &str) -> Result<Act, String> {
         "cost" | "leave" => {
             let patron =
                 node_key(&s("patron")?).map_err(|_| "a patron's key is 64 hex characters")?;
+            let by = node_key(&s("by")?).map_err(|_| "an identity is 64 hex characters")?;
             return Ok(if s("act")? == "cost" {
-                Act::Cost { patron }
+                Act::Cost { by, patron }
             } else {
-                Act::Leave { patron }
+                Act::Leave { by, patron }
+            });
+        }
+        "focus" => {
+            return Ok(Act::Focus {
+                by: node_key(&s("by")?).map_err(|_| "an identity is 64 hex characters")?,
             });
         }
         "rename" => {
@@ -235,6 +252,7 @@ pub fn act(message: &str) -> Result<Act, String> {
         }
         "open" => {
             return Ok(Act::Open {
+                by: node_key(&s("by")?).map_err(|_| "an identity is 64 hex characters")?,
                 node: node_key(&s("node")?)?,
                 resource: node_key(&s("resource")?)
                     .map_err(|_| "a resource's key is 64 hex characters")?,
@@ -562,16 +580,22 @@ mod tests {
         assert_eq!(act(r#"{"act":"back"}"#).unwrap(), Act::Back);
         let k = "ab".repeat(32);
         assert_eq!(
-            act(&format!(r#"{{"act":"cost","patron":"{k}"}}"#)).unwrap(),
+            act(&format!(r#"{{"act":"cost","patron":"{k}","by":"{k}"}}"#)).unwrap(),
             Act::Cost {
+                by: vec![0xab; 32],
                 patron: vec![0xab; 32]
             }
         );
         assert_eq!(
-            act(&format!(r#"{{"act":"leave","patron":"{k}"}}"#)).unwrap(),
+            act(&format!(r#"{{"act":"leave","patron":"{k}","by":"{k}"}}"#)).unwrap(),
             Act::Leave {
+                by: vec![0xab; 32],
                 patron: vec![0xab; 32]
             }
+        );
+        assert_eq!(
+            act(&format!(r#"{{"act":"focus","by":"{k}"}}"#)).unwrap(),
+            Act::Focus { by: vec![0xab; 32] }
         );
         assert_eq!(
             act(&format!(
@@ -635,11 +659,12 @@ mod tests {
         );
         assert_eq!(
             act(&format!(
-                r#"{{"act":"open","node":"{k}","resource":"{}","name":" Notices "}}"#,
+                r#"{{"act":"open","by":"{k}","node":"{k}","resource":"{}","name":" Notices "}}"#,
                 "cd".repeat(32)
             ))
             .unwrap(),
             Act::Open {
+                by: vec![0xab; 32],
                 node: vec![0xab; 32],
                 resource: vec![0xcd; 32],
                 name: "Notices".into()
@@ -654,11 +679,11 @@ mod tests {
             ),
             (r#"{"act":"go","place":"meet"}"#, "not a place"),
             (
-                &*format!(r#"{{"act":"open","node":"{k}","resource":"ab","name":"x"}}"#),
+                &*format!(r#"{{"act":"open","by":"{k}","node":"{k}","resource":"ab","name":"x"}}"#),
                 "resource's key",
             ),
             (
-                &*format!(r#"{{"act":"open","node":"{k}","resource":"{k}"}}"#),
+                &*format!(r#"{{"act":"open","by":"{k}","node":"{k}","resource":"{k}"}}"#),
                 "name",
             ),
             (r#"{"act":"backup","data":"zz"}"#, "hex"),

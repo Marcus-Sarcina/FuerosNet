@@ -14,7 +14,13 @@
 //!    secrets, so this desktop reads what is sealed to the person;
 //! 4. the dataset (design §23.3): this desktop's contribution, the
 //!    phone's, and the hand-over sealed under the key the two derive, each
-//!    holder saying yes on their own device.
+//!    holder saying yes on their own device — or an empty carriage where
+//!    the phone's holder said no;
+//! 5. **for each further identity the phone holds** [author, 2026-11-23:
+//!    *"one pairing session with a fresh key per identity"*], its
+//!    `DeviceNext`, this desktop's introduction of a key minted for that
+//!    identity alone, the credential for it, and that identity's dataset as
+//!    in 4 — until the phone closes the session.
 //!
 //! **The bearer is this shell's and the phone's, not the protocol's**
 //! (§14.3): one TCP connection on the local network, each carriage as a
@@ -24,7 +30,9 @@
 //! this side can keep it: a carriage that reached it another way is not
 //! taken as having crossed the local interface.
 
-use rhtn_client::local::{DeviceCredential, DeviceIntroduction, DeviceOffer, DeviceStart};
+use rhtn_client::local::{
+    DeviceCredential, DeviceIntroduction, DeviceNext, DeviceOffer, DeviceStart,
+};
 use rhtn_ffi::client::Participant;
 use rhtn_ffi::device::Platform;
 use std::io::{Read, Write};
@@ -33,6 +41,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use zeroize::Zeroizing;
+
+/// **Where each identity a pairing brings keeps its state**: its kernel's
+/// platform, made from its key material.
+pub type PlatformFor<'a> = dyn Fn(&[u8]) -> Result<Arc<Platform>, String> + 'a;
 
 /// What [`Offer::pair`] says when it was stopped before a phone came.
 pub const STOPPED: &str = "the pairing was stopped before a phone came";
@@ -53,11 +65,17 @@ pub struct Offer {
     listener: TcpListener,
 }
 
-/// What a finished pairing leaves: the running participant, and what this
-/// desktop keeps to start it again.
+/// What a finished pairing leaves, one for each identity the phone brought:
+/// the running participant, and what this desktop keeps to start it again.
 pub struct Paired {
     /// The kernel, standing on the run.
     pub participant: Arc<Participant>,
+    /// **The transport seed this identity's key is made from**, its own:
+    /// no two identities on this desktop present one key, since a key two
+    /// identities present links them (`light-client-requirements.md` §2).
+    pub seed: Zeroizing<[u8; 32]>,
+    /// The colour the phone shows this identity in, where it said.
+    pub colour: Option<String>,
     /// The identity's `KeyMaterial`.
     pub material: Vec<u8>,
     /// The run, in window order as the phone sent it.
@@ -117,9 +135,9 @@ impl Offer {
     pub fn pair(
         &self,
         known: Vec<Vec<u8>>,
-        platform: Arc<Platform>,
+        platform: &PlatformFor<'_>,
         stop: &AtomicBool,
-    ) -> Result<Paired, String> {
+    ) -> Result<Vec<Paired>, String> {
         let session = self.offer.session();
         self.listener
             .set_nonblocking(true)
@@ -152,17 +170,20 @@ impl Offer {
             break (stream, DeviceStart::decode(&plain)?);
         };
 
-        let mut ids = known;
-        if !ids.contains(&start.material) {
-            ids.push(start.material.clone());
-        }
+        let ids = |material: &[u8]| {
+            let mut ids = known.clone();
+            if !ids.iter().any(|k| k == material) {
+                ids.push(material.to_vec());
+            }
+            ids
+        };
         let participant = Arc::new(
             Participant::start_delegated(
                 start.material.clone(),
                 self.seed.to_vec(),
                 vec![start.delegation.clone()],
-                ids,
-                platform,
+                ids(&start.material),
+                platform(&start.material)?,
             )
             .map_err(|e| e.to_string())?,
         );
@@ -170,30 +191,82 @@ impl Offer {
             device: self.offer.device,
         };
         write_frame(&mut stream, &session.seal(&intro.encode()))?;
-
-        let plain = session
-            .open(&read_frame(&mut stream)?)
-            .ok_or("the credential does not open under this offer")?;
-        let credential = DeviceCredential::decode(&plain)?;
+        let credential = self.credential(&session, &mut stream, &participant)?;
         if credential.run.first() != Some(&start.delegation) {
             return Err("the run does not open with the window this desktop stood up on".into());
         }
-        participant
-            .take_run(credential.run.clone())
-            .map_err(|e| e.to_string())?;
-        // the identity's encryption secrets, so this desktop reads what is
-        // sealed to the person (`wire-format.md` §14.3.3)
-        participant
-            .take_encryption_secrets(credential.kem_seed.to_vec(), credential.auth.to_vec())
-            .map_err(|e| e.to_string())?;
-
         let dataset = self.dataset(&session, &mut stream, &participant)?;
-        Ok(Paired {
+        let mut paired = vec![Paired {
             participant,
+            seed: self.seed.clone(),
+            colour: start.colour,
             material: start.material,
             run: credential.run,
             dataset,
-        })
+        }];
+
+        // **every further identity the phone holds, on this one session,
+        // each under a key of its own** [author, 2026-11-23]; the phone
+        // closing the session is the end of them
+        while let Ok(sealed) = read_frame(&mut stream) {
+            let plain = session
+                .open(&sealed)
+                .ok_or("the next identity does not open under this offer")?;
+            let next = DeviceNext::decode(&plain)?;
+            if paired.iter().any(|p| p.material == next.material) {
+                return Err("the phone named an identity twice".into());
+            }
+            let seed = fresh_seed();
+            let intro = DeviceIntroduction {
+                device: device_key(&seed),
+            };
+            write_frame(&mut stream, &session.seal(&intro.encode()))?;
+            let plain = session
+                .open(&read_frame(&mut stream)?)
+                .ok_or("the credential does not open under this offer")?;
+            let credential = DeviceCredential::decode(&plain)?;
+            let first = credential
+                .run
+                .first()
+                .ok_or("the credential carries no run")?;
+            let participant = Arc::new(
+                Participant::start_delegated(
+                    next.material.clone(),
+                    seed.to_vec(),
+                    vec![first.clone()],
+                    ids(&next.material),
+                    platform(&next.material)?,
+                )
+                .map_err(|e| e.to_string())?,
+            );
+            take(&participant, &credential)?;
+            let dataset = self.dataset(&session, &mut stream, &participant)?;
+            paired.push(Paired {
+                participant,
+                seed,
+                colour: next.colour,
+                material: next.material,
+                run: credential.run,
+                dataset,
+            });
+        }
+        Ok(paired)
+    }
+
+    /// The credential for the key this desktop just introduced, taken: the
+    /// run, and the identity's encryption secrets.
+    fn credential(
+        &self,
+        session: &rhtn_client::local::DeviceSession,
+        stream: &mut TcpStream,
+        participant: &Participant,
+    ) -> Result<DeviceCredential, String> {
+        let plain = session
+            .open(&read_frame(stream)?)
+            .ok_or("the credential does not open under this offer")?;
+        let credential = DeviceCredential::decode(&plain)?;
+        take(participant, &credential)?;
+        Ok(credential)
     }
 
     /// The dataset's three carriages: this desktop's contribution out, the
@@ -215,15 +288,32 @@ impl Offer {
         participant
             .take_dataset_contribution(theirs.to_vec())
             .map_err(|e| e.to_string())?;
-        // the phone closes rather than sends where its holder said no
+        // **an empty carriage where its holder said no**, so the session
+        // goes on to the next identity; a phone that closed instead has
+        // said no to this one and brings no more
         let Ok(sealed) = read_frame(stream) else {
             return Ok(false);
         };
         let carriage = session
             .open(&sealed)
             .ok_or("the hand-over does not open under this offer")?;
+        if carriage.is_empty() {
+            return Ok(false);
+        }
         Ok(participant.take_dataset_carriage(carriage.to_vec()).is_ok())
     }
+}
+
+/// Take a credential into `participant`: the run, and the identity's
+/// encryption secrets, so this desktop reads what is sealed to the person
+/// (`wire-format.md` §14.3.3).
+fn take(participant: &Participant, credential: &DeviceCredential) -> Result<(), String> {
+    participant
+        .take_run(credential.run.clone())
+        .map_err(|e| e.to_string())?;
+    participant
+        .take_encryption_secrets(credential.kem_seed.to_vec(), credential.auth.to_vec())
+        .map_err(|e| e.to_string())
 }
 
 /// A transport seed drawn fresh, for a first pairing.
@@ -367,35 +457,46 @@ mod tests {
     }
 
     /// The phone's side, as its shell runs it: read the code, connect, and
-    /// answer each carriage through the kernel.
+    /// answer each carriage through the kernel — for each identity it
+    /// holds, the first by `DeviceStart` and the rest by `DeviceNext`, each
+    /// with whether its holder hands the dataset over.
     fn phone(
-        phone: Arc<Participant>,
+        identities: Vec<(Arc<Participant>, bool)>,
         code: Vec<u8>,
-        hand: bool,
-    ) -> Result<DeviceCredential, String> {
+    ) -> Result<Vec<DeviceCredential>, String> {
         let link = DeviceLink::read(code).map_err(|e| e.to_string())?;
         let mut s = TcpStream::connect(link.reach()).map_err(|e| e.to_string())?;
-        let start = phone
-            .device_start(link.clone(), now() - 60, 3)
-            .map_err(|e| e.to_string())?;
-        write_frame(&mut s, &start)?;
-        let intro = read_frame(&mut s)?;
-        let credential = phone
-            .device_credential(link.clone(), intro)
-            .map_err(|e| e.to_string())?;
-        // what crossed, as the desktop opens it, kept for the test to read
-        let crossed =
-            DeviceCredential::decode(&link.open(credential.clone()).map_err(|e| e.to_string())?)?;
-        write_frame(&mut s, &credential)?;
-        // shown before the other's is taken: showing ends the pairing before
-        let mine = phone.dataset_contribution().map_err(|e| e.to_string())?;
-        let theirs = link.open(read_frame(&mut s)?).map_err(|e| e.to_string())?;
-        phone
-            .take_dataset_contribution(theirs)
-            .map_err(|e| e.to_string())?;
-        write_frame(&mut s, &link.seal(mine))?;
-        if hand {
-            let carriage = phone.dataset_carriage().map_err(|e| e.to_string())?;
+        let mut crossed = Vec::new();
+        for (i, (phone, hand)) in identities.into_iter().enumerate() {
+            let first = if i == 0 {
+                phone.device_start(link.clone(), now() - 60, 3, Some("Teal".into()))
+            } else {
+                phone.device_next(link.clone(), None)
+            };
+            write_frame(&mut s, &first.map_err(|e| e.to_string())?)?;
+            let intro = read_frame(&mut s)?;
+            let credential = phone
+                .device_credential(link.clone(), intro, now() - 60, 3)
+                .map_err(|e| e.to_string())?;
+            // what crossed, as the desktop opens it, kept for the test
+            crossed.push(DeviceCredential::decode(
+                &link.open(credential.clone()).map_err(|e| e.to_string())?,
+            )?);
+            write_frame(&mut s, &credential)?;
+            // shown before the other's is taken
+            let mine = phone.dataset_contribution().map_err(|e| e.to_string())?;
+            let theirs = link.open(read_frame(&mut s)?).map_err(|e| e.to_string())?;
+            phone
+                .take_dataset_contribution(theirs)
+                .map_err(|e| e.to_string())?;
+            write_frame(&mut s, &link.seal(mine))?;
+            // **an empty carriage is the holder's no**, and the session
+            // goes on to the next identity
+            let carriage = if hand {
+                phone.dataset_carriage().map_err(|e| e.to_string())?
+            } else {
+                Vec::new()
+            };
             write_frame(&mut s, &link.seal(carriage))?;
         }
         Ok(crossed)
@@ -409,11 +510,22 @@ mod tests {
         let offer = Offer::new(fresh_seed(), "127.0.0.1".parse().unwrap()).unwrap();
         let code = offer.code();
         let p = ph.clone();
-        let side = std::thread::spawn(move || phone(p, code, true));
-        let paired = offer
-            .pair(vec![], platform(&dd), &AtomicBool::new(false))
+        let side = std::thread::spawn(move || phone(vec![(p, true)], code));
+        let mut paired = offer
+            .pair(vec![], &|_| Ok(platform(&dd)), &AtomicBool::new(false))
             .expect("paired");
-        let crossed = side.join().unwrap().expect("the phone's side runs");
+        let crossed = side
+            .join()
+            .unwrap()
+            .expect("the phone's side runs")
+            .remove(0);
+        assert_eq!(paired.len(), 1, "one identity, one pairing");
+        let paired = paired.remove(0);
+        assert_eq!(
+            paired.colour.as_deref(),
+            Some("Teal"),
+            "the phone's colour for it"
+        );
 
         assert_eq!(paired.material, ph.material());
         assert_eq!(paired.run.len(), 3);
@@ -442,6 +554,65 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dd);
     }
 
+    /// **Every identity the phone holds crosses on one session, each under a
+    /// key of its own** [author, 2026-11-23], and a no to one identity's
+    /// dataset leaves the next one's standing.
+    // functional: APP-020
+    #[test]
+    fn every_identity_the_phone_holds_is_paired_on_one_session_under_a_key_of_its_own() {
+        let (pa, pb, dd) = (scratch("two-a"), scratch("two-b"), scratch("two-desk"));
+        let alice = Arc::new(Participant::start(seeds("alice"), vec![], platform(&pa)).unwrap());
+        let bob = Arc::new(Participant::start(seeds("bob"), vec![], platform(&pb)).unwrap());
+        let offer = Offer::new(fresh_seed(), "127.0.0.1".parse().unwrap()).unwrap();
+        let code = offer.code();
+        let (a, b) = (alice.clone(), bob.clone());
+        let side = std::thread::spawn(move || phone(vec![(a, false), (b, true)], code));
+        let made = Mutex::new(0);
+        let paired = offer
+            .pair(
+                vec![],
+                &|_| {
+                    let mut n = made.lock().unwrap();
+                    *n += 1;
+                    Ok(platform(&dd.join(n.to_string())))
+                },
+                &AtomicBool::new(false),
+            )
+            .expect("paired");
+        let crossed = side.join().unwrap().expect("the phone's side runs");
+        assert_eq!(paired.len(), 2);
+        assert_eq!(paired[0].material, alice.material());
+        assert_eq!(paired[1].material, bob.material());
+        assert!(
+            !paired[0].dataset && paired[1].dataset,
+            "a no to alice's, a yes to bob's"
+        );
+        assert_eq!(paired[1].colour, None);
+        // **a key each, and the first the offer's**
+        let (ka, kb) = (
+            paired[0].participant.presented_key(),
+            paired[1].participant.presented_key(),
+        );
+        assert_eq!(ka, offer.device().to_vec());
+        assert_ne!(ka, kb, "no key presented by two identities");
+        assert_eq!(kb, device_key(&paired[1].seed).to_vec());
+        assert_eq!(crossed[1].run, paired[1].run);
+        // and the phone refuses a second identity's introduction naming the
+        // first one's key: two identities on one key are linked by it
+        let link = DeviceLink::read(offer.code()).unwrap();
+        let _ = bob.device_next(link.clone(), None).unwrap();
+        let reused = link.seal(
+            DeviceIntroduction {
+                device: offer.device(),
+            }
+            .encode(),
+        );
+        assert!(bob.device_credential(link, reused, now() - 60, 3).is_err());
+        for d in [pa, pb, dd] {
+            let _ = std::fs::remove_dir_all(d);
+        }
+    }
+
     // functional: NET-035
     #[test]
     fn a_carriage_under_another_offer_opens_on_neither_side() {
@@ -466,7 +637,10 @@ mod tests {
         let d = scratch("stopped");
         let offer = Offer::new(fresh_seed(), "127.0.0.1".parse().unwrap()).unwrap();
         let stop = AtomicBool::new(true);
-        let e = offer.pair(vec![], platform(&d), &stop).err().unwrap();
+        let e = offer
+            .pair(vec![], &|_| Ok(platform(&d)), &stop)
+            .err()
+            .unwrap();
         assert_eq!(e, STOPPED);
         let _ = std::fs::remove_dir_all(&d);
     }

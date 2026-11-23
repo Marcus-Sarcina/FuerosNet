@@ -17,6 +17,11 @@ fn main() {
         name: Some("Marcus".into()),
         device: Device::Restored,
         colour: "Teal".into(),
+        held: vec![screens::Holder {
+            by: "70".repeat(32),
+            name: Some("Marcus".into()),
+            colour: "Teal".into(),
+        }],
         connection: "Connected to 703a82c269ea77ad… at 157.245.85.18:7431".into(),
         subnets: vec![
             SubnetRow {
@@ -26,6 +31,8 @@ fn main() {
                 crown: Crown::Full,
                 node: "70".repeat(32),
                 unseen: 2,
+                by: "70".repeat(32),
+                colour: "Teal".into(),
             },
             SubnetRow {
                 id: "9a".repeat(32),
@@ -34,6 +41,8 @@ fn main() {
                 crown: Crown::None,
                 node: "75".repeat(32),
                 unseen: 0,
+                by: "70".repeat(32),
+                colour: "Teal".into(),
             },
         ],
         people: vec![
@@ -41,17 +50,20 @@ fn main() {
                 key: "33".repeat(32),
                 alias: Some("Carol".into()),
                 how: "met 3 times".into(),
+                by: "70".repeat(32),
             },
             Person {
                 key: "44".repeat(32),
                 alias: None,
                 how: "met once".into(),
+                by: "70".repeat(32),
             },
         ],
         threads: vec![Entry {
             peer: "33".repeat(32),
             name: "Carol".into(),
             direct: true,
+            by: "70".repeat(32),
         }],
     };
     let said = |id, mine, text: &str, delivery| Message {
@@ -143,6 +155,7 @@ fn main() {
                         nibbles: 2,
                     },
                     alias: Some("Carol".into()),
+                    by: "70".repeat(32),
                 }]),
             ),
         ),

@@ -151,26 +151,70 @@ of fields, whatever a client draws:
 - **No archive record**: a post is not a transaction, which is why the board
   was never a protocol archive [ruled 2026-10-28].
 
-## Questions that block writing this into the design
+## Answered 2026-11-23 [author]
 
-**A. "Does not require a wire definition."** Nodes of different implementations
-must still exchange posts, and the fields in section 6 are what they would agree on. I
-read your words as one of these:
-1. **Posts ride an existing carrier unchanged.** [proposed] The relay a message
-   already takes between nodes (`wire-format.md` §7.10), under a reserved
-   payload kind, signed rather than sealed. Section 6 is then written in the design's
-   propagation section as the post's contents, not as a new frame.
-2. **The post is the board application's own format**, and nodes forward bytes
-   they do not parse. But then no node can check the cap, the band or the
-   signature, which section 3's first-node enforcement needs.
+**A. What a node reads.** Already settled, and I had lost it: a post rides
+payload messaging with distant nodes as relays [2026-10-28: *"shell-native over
+payload messaging with distant nodes acting as relays for unlimited fanout in a
+single subdomain. It may be beneficial to add a new message type to the
+protocol"*], and **the `+n/-m` count is a visibility counter each node adjusts as
+it forwards, which "doubles as a routing signal to downstream nodes"**
+[2026-11-18]. Today: *"the node should just deliver dumb opaque blobs and the app
+should retain responsibility for presentation, including unreads."* So:
+- **A node reads the counter and nothing else of the post.** It learns the
+  sender from the session the post arrived on, which is what the first node's
+  transmission-authority cap needs; the signature, thread, timestamp and body are
+  inside the blob, which the apps verify and present. Section 6's table shrinks
+  to two fields on the wire: the counter, and the blob.
+- **The carrier is one new message type** carrying `[up, down, blob]`, the
+  counter in the forwarding node's own coordinates.
 
-Which did you mean, or something else?
+**B. The unread count is the app's**, which holds the pool: the node never sees a
+post's timestamp, which is why the two keep different retention.
 
-**B. The board's unseen count**: is it the client's own, since the client holds
-the pool and knows what it showed (my section 7 proposal), or should the node count it
-as a resource's count is kept?
+**C. Only upward reach is throttled, as a matter of principle.** *"Since the rule
+is that you can reach upward 2 layers plus the depth of your infra-operating
+downline, the reach boundary would always equal or exceed the downline depth even
+if the rule was symmetrical."* Note the wording: **the depth of the
+infra-operating downline**, which is what the node-operation flag in the table
+measures.
 
-**C. Downward reach uncapped**: confirm that section 3's authority limits only `+n`.
+**D. The downline table is built with the board but is application-wide state**,
+for other purposes later, not encapsulated by the board.
 
-**D. The downline table is unbuilt** (section 4). Build it as part of the board, or
-first as its own piece?
+## The mechanism, derived from the rulings above [proposed, 2026-11-23]
+
+Reach has two legs, and the counter has to say which one a copy is on. Your reach
+rule: upward, each ancestor to `n` *and that ancestor's direct subordinates, and
+nothing further down their branches*; downward, the writer's own subtree to `m`.
+Re-expressing the counter alone (`+3/-3` becomes `+2/-4` at the patron) would
+send the patron's whole subtree to depth 4, which reaches into the siblings'
+branches. So the copy that travels up and the copies that travel down are
+different copies:
+
+- **The carrier is one new request type**, `BoardPost`, carrying `{subnet, up,
+  down, blob}`. `up` and `down` are the counter in the receiving node's own
+  coordinates.
+- **At the writer's node**, the first node, `up` is capped at the writer's
+  transmission authority. That is 2 plus the depth of the writer's
+  infra-operating downline, from the downline table. The node then:
+  - delivers to its own attached members in band;
+  - sends one copy up, `(up - 1, 1)`, to its patron's node, if `up > 0`;
+  - sends copies down to the nodes its `-min(m, 3)` list names, each carrying
+    `(0, m - d)`, where `d` is that node's depth below this one.
+- **On the upward leg** (`down` is 1), a node delivers to its owner and its
+  direct subordinates, and its `-1` list carries the copy to the subordinates
+  that run nodes, which deliver to their owners and go no further. While
+  `up > 0`, it sends `(up - 1, 1)` on up.
+- **On the downward leg** (`up` is 0), a node delivers to its attached members
+  within `down` levels and repeats the list step.
+- **No node forwards a blob it has already forwarded**, keyed by the blob's hash.
+- **A client posts by the same request to its own node**, and reads what it
+  missed from that node's queue on attaching, as it reads its mailbox.
+- **What a node keeps** is the blob, the counter and the subnet, in its 100 MB
+  FIFO. It holds no author, no thread and no timestamp, which are inside the
+  blob.
+
+This is mine, not yours. Its one judgement is that the counter's `down` on the
+upward leg is fixed at 1, which encodes "and that ancestor's direct
+subordinates".

@@ -193,15 +193,49 @@ class DesktopActivity : Activity() {
     }
 
     private fun run(p: Participant, link: DeviceLink, input: DataInputStream, out: DataOutputStream) {
-        val notBefore = System.currentTimeMillis() / 1000 - Desktop.LEAD_S
+        val notBefore = (System.currentTimeMillis() / 1000 - Desktop.LEAD_S).toULong()
+        // **every identity this phone holds, on this one session, each
+        // under a key of the desktop's own** [author, 2026-11-23]: the one
+        // this was opened from first, then the rest; removals never follow
+        val colours = Identities.identityColours(this)
+        val colour = { id: String ->
+            Identities.colourName(Identities.colourOf(colours, id)).takeIf { n -> Palette.IDENTITY.any { it.first == n } }
+        }
+        val rest = Gateway.loaded.filterKeys { it != by }.toList()
         val start = Gateway.call("deviceStart", { e -> stop("no run was signed: ${e.reason}"); null }) {
-            p.deviceStart(link, notBefore.toULong(), Desktop.RUN.toUInt())
+            p.deviceStart(link, notBefore, Desktop.RUN.toUInt(), colour(by))
         } ?: return
-        Desktop.write(out, start)
+        if (!hand(p, link, start, notBefore, input, out)) return
+        for ((id, q) in rest) {
+            val next = Gateway.call("deviceNext", { e -> stop("the next identity: ${e.reason}"); null }) {
+                q.deviceNext(link, colour(id))
+            } ?: return
+            if (!hand(q, link, next, notBefore, input, out)) return
+        }
+        advance(Desktop.Step.DONE)
+    }
+
+    /**
+     * **One identity handed to the desktop**: what opens it (`first`), the
+     * desktop's introduction answered with a run over its key, and the
+     * dataset, which this phone's holder is asked for. A no is an empty
+     * carriage, so the session goes on to the next identity. False where
+     * the pairing stopped.
+     */
+    private fun hand(
+        p: Participant,
+        link: DeviceLink,
+        first: ByteArray,
+        notBefore: ULong,
+        input: DataInputStream,
+        out: DataOutputStream,
+    ): Boolean {
+        advance(Desktop.Step.CREDENTIAL)
+        Desktop.write(out, first)
         val intro = Desktop.read(input)
         val credential = Gateway.call("deviceCredential", { e -> stop("the desktop's introduction was refused: ${e.reason}"); null }) {
-            p.deviceCredential(link, intro)
-        } ?: return
+            p.deviceCredential(link, intro, notBefore, Desktop.RUN.toUInt())
+        } ?: return false
         Desktop.write(out, credential)
         Diag.event("desktop.credential", "windows" to Desktop.RUN)
 
@@ -209,23 +243,22 @@ class DesktopActivity : Activity() {
         // shown before the other's is taken: showing ends the pairing before
         val mine = Gateway.call("datasetContribution", { e -> stop("no contribution: ${e.reason}"); null }) {
             p.datasetContribution()
-        } ?: return
+        } ?: return false
         val theirs = Gateway.call("DeviceLink.open", { e -> stop("the desktop's contribution: ${e.reason}"); null }) {
             link.open(Desktop.read(input))
-        } ?: return
+        } ?: return false
         Gateway.call("takeDatasetContribution", { e -> stop("the desktop's contribution was refused: ${e.reason}"); null }) {
             p.takeDatasetContribution(theirs)
-        } ?: return
+        } ?: return false
         Desktop.write(out, link.seal(mine))
-        // the kernel asks this phone's holder before composing anything; a
-        // no closes the connection, which the desktop reads as no dataset
+        // the kernel asks this phone's holder before composing anything;
+        // **a no is an empty carriage**, which the desktop reads as no
+        // dataset for this identity and goes on
         val sealed = Gateway.call("datasetCarriage", { _ -> null }) { p.datasetCarriage() }
-        if (sealed != null) {
-            Desktop.write(out, link.seal(sealed))
-            Diag.event("desktop.handed", "bytes" to sealed.size)
-        }
-        handed = sealed != null
-        advance(Desktop.Step.DONE)
+        Desktop.write(out, link.seal(sealed ?: ByteArray(0)))
+        if (sealed != null) Diag.event("desktop.handed", "bytes" to sealed.size)
+        handed = (handed ?: true) && sealed != null
+        return true
     }
 
     private fun advance(to: Desktop.Step) {

@@ -19,10 +19,10 @@
 
 use rhtn_cli::launch::TlsTransport;
 use rhtn_desktop::custody::Keyring;
-use rhtn_desktop::participant::{self, Device, Held, hex};
+use rhtn_desktop::participant::{self, Device, Held, PairedIdentity, hex};
 use rhtn_desktop::platform::{self, Desk};
 use rhtn_desktop::screens::{
-    self, Body, Crown, History, LineRow, Person, Place, ResourceRow, Snapshot, SubnetRow,
+    self, Body, Crown, History, Holder, LineRow, Person, Place, ResourceRow, Snapshot, SubnetRow,
 };
 use rhtn_desktop::threads::{self, Delivery, Record, Sealer, Threads};
 use rhtn_desktop::{Act, act, code, directory, frame, pairing, phrase, said, verify_and_keep};
@@ -154,9 +154,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // workers that ask it, since none of that happens on this thread
     let up = Arc::new(Up {
         running: Mutex::new(None),
+        held: Mutex::new(Vec::new()),
         device: Mutex::new(None),
         place: Mutex::new(History::default()),
-        threads: Mutex::new(None),
         closing: AtomicBool::new(false),
         dir: dir.clone(),
     });
@@ -165,50 +165,64 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         let (back, dir, up) = (event_loop.create_proxy(), dir.clone(), up.clone());
         let phrases = phrases.clone();
-        std::thread::spawn(
-            move || match start(&dir, at, given, &back, &up.running, &phrases) {
-                Ok(d) => {
-                    let Some(p) = up.running.lock().unwrap().clone() else {
-                        return;
-                    };
-                    // **the one line that carries the wall clock**, so a
-                    // field-test build's diagnostics are placed beside the
-                    // phones'
-                    tracing::info!(
-                        target: "diag",
-                        unix_ms = std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .map_or(0, |d| d.as_millis() as u64),
-                        pid = std::process::id(),
-                        process = "rhtn-desktop",
-                        "diag.anchor"
-                    );
-                    *up.device.lock().unwrap() = Some(d);
-                    *up.threads.lock().unwrap() = Some(Arc::new(Threads::new(
-                        &dir,
-                        &hex(&p.me()),
-                        Box::new(KernelSealer(p.clone())),
-                    )));
-                    draw(&up, &back, true);
-                    {
-                        let (up, back) = (up.clone(), back.clone());
-                        std::thread::spawn(move || pump(&up, &back, &p));
-                    }
-                    // **the nodes agreed to are attached at every start**, as
-                    // the phone's are: the first that answers
-                    let p = up.running.lock().unwrap().clone();
-                    if let Some(p) = p.filter(|p| !p.agreed().is_empty()) {
-                        reattach(&p);
-                        draw(&up, &back, false);
-                        let _ = sweep(&up);
-                        draw(&up, &back, false);
-                    }
+        std::thread::spawn(move || match start(&dir, at, given, &back, &phrases) {
+            Ok((d, kernels)) => {
+                // **every identity held, each with its conversations,
+                // and the one in focus** as it was last left
+                let idents: Vec<Ident> = kernels
+                    .into_iter()
+                    .map(|p| Ident {
+                        threads: Arc::new(Threads::new(
+                            &dir,
+                            &hex(&p.me()),
+                            Box::new(KernelSealer(p.clone())),
+                        )),
+                        p,
+                    })
+                    .collect();
+                let focus = participant::focus_of(&dir);
+                let Some(first) = idents
+                    .iter()
+                    .find(|i| Some(hex(&i.p.me())) == focus)
+                    .or(idents.first())
+                    .map(|i| i.p.clone())
+                else {
+                    return;
+                };
+                *up.running.lock().unwrap() = Some(first);
+                *up.held.lock().unwrap() = idents.clone();
+                // **the one line that carries the wall clock**, so a
+                // field-test build's diagnostics are placed beside the
+                // phones'
+                tracing::info!(
+                    target: "diag",
+                    unix_ms = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map_or(0, |d| d.as_millis() as u64),
+                    pid = std::process::id(),
+                    process = "rhtn-desktop",
+                    "diag.anchor"
+                );
+                *up.device.lock().unwrap() = Some(d);
+                draw(&up, &back, true);
+                for i in &idents {
+                    let (up, back, i) = (up.clone(), back.clone(), i.clone());
+                    std::thread::spawn(move || pump(&up, &back, &i));
                 }
-                Err(why) => {
-                    let _ = back.send_event(Said::Show(participant::stopped_page(&why)));
+                // **the nodes each identity agreed to are attached at
+                // every start**, as the phone's are: the first that
+                // answers, for every identity
+                for i in idents.iter().filter(|i| !i.p.agreed().is_empty()) {
+                    reattach(&i.p);
+                    draw(&up, &back, false);
+                    let _ = sweep(&i.p);
+                    draw(&up, &back, false);
                 }
-            },
-        );
+            }
+            Err(why) => {
+                let _ = back.send_event(Said::Show(participant::stopped_page(&why)));
+            }
+        });
     }
 
     // the provider's own windows, held so that they stay open; a web view
@@ -238,11 +252,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // the session closed cleanly, so the node queues for
                     // this desktop from now and not after missed intervals
                     up.closing.store(true, Ordering::Relaxed);
-                    if let Some(p) = up.running.lock().unwrap().as_ref() {
-                        let _ = p.detach();
+                    for i in up.idents() {
+                        let _ = i.p.detach();
                         // **written before it goes**: the shell's point
                         // for it, as the kernel's `save` asks
-                        let _ = p.save();
+                        let _ = i.p.save();
                     }
                     *control_flow = ControlFlow::Exit;
                 } else {
@@ -320,20 +334,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     });
                 }
-                Ok(Act::Cost { patron }) => {
+                Ok(Act::Cost { by, patron }) => {
                     let (back, up) = (worker.clone(), up.clone());
-                    std::thread::spawn(move || cost(&up, &back, patron));
+                    std::thread::spawn(move || cost(&up, &back, by, patron));
+                }
+                // **which identity is in focus** [author, 2026-11-23], kept
+                // so the desktop starts again on it
+                Ok(Act::Focus { by }) => {
+                    let (back, up) = (worker.clone(), up.clone());
+                    std::thread::spawn(move || {
+                        if let Some(i) = up.by(&by) {
+                            *up.running.lock().unwrap() = Some(i.p.clone());
+                            if let Err(why) = participant::keep_focus(&up.dir, &by) {
+                                let _ = back
+                                    .send_event(Said::ToPage(false, format!("not kept: {why}")));
+                            }
+                        }
+                        up.place.lock().unwrap().back();
+                        draw(&up, &back, true);
+                    });
                 }
                 // **leaving is the person's right, and signed**: a paired
                 // desktop is never offered it, and the kernel refuses a
                 // departure from a key it holds no seed for in any case
-                Ok(Act::Leave { patron }) => {
+                Ok(Act::Leave { by, patron }) => {
                     let (back, up) = (worker.clone(), up.clone());
                     std::thread::spawn(move || {
-                        let Some(p) = up.running.lock().unwrap().clone() else {
+                        // **left by the identity that holds the line**, never
+                        // by whichever is in focus
+                        let Some(i) = up.by(&by) else {
                             return;
                         };
-                        let said = match p.depart(patron, None) {
+                        let said = match i.p.depart(patron, None) {
                             Ok(_) => (true, "Left. The line is ended.".to_string()),
                             Err(why) => (false, format!("not left: {why}")),
                         };
@@ -344,10 +376,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Ok(Act::Rename { subnet, name }) => {
                     let (back, up) = (worker.clone(), up.clone());
                     std::thread::spawn(move || {
-                        let Some(p) = up.running.lock().unwrap().clone() else {
+                        let Some(i) = up.for_subnet(&hex(&subnet)) else {
                             return;
                         };
-                        let said = match p.publish_profile(subnet, 1, name.clone(), None, None) {
+                        let said = match i.p.publish_profile(subnet, 1, name.clone(), None, None) {
                             Ok(()) => (true, format!("Named {name}; published to your node.")),
                             Err(why) => (false, format!("not published: {why}")),
                         };
@@ -379,6 +411,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     std::thread::spawn(move || import(&up, &back, bytes));
                 }
                 Ok(Act::Open {
+                    by,
                     node,
                     resource,
                     name,
@@ -390,7 +423,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         return;
                     }
                     let (back, up, root) = (worker.clone(), up.clone(), root.clone());
-                    std::thread::spawn(move || open(&up, &back, &root, node, resource, name));
+                    std::thread::spawn(move || {
+                        // **opened as the identity that holds the subnet**
+                        if let Some(i) = up.by(&by) {
+                            open(&i.p, &back, &root, node, resource, name)
+                        }
+                    });
                 }
                 Ok(Act::Send { to, text }) => {
                     let (back, up) = (worker.clone(), up.clone());
@@ -408,7 +446,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     std::thread::spawn(move || match serve_from(&p, node, address) {
                         Ok(()) => {
                             draw(&up, &back, false);
-                            if let Some(why) = sweep(&up) {
+                            if let Some(why) = sweep(&p) {
                                 let _ = back.send_event(Said::ToPage(false, why));
                             }
                             draw(&up, &back, false);
@@ -463,9 +501,8 @@ fn start(
     at: Option<std::net::IpAddr>,
     given: Option<Zeroizing<String>>,
     back: &EventLoopProxy<Said>,
-    running: &Mutex<Option<Arc<Participant>>>,
     phrases: &Mutex<Option<Sender<First>>>,
-) -> Result<Device, String> {
+) -> Result<(Device, Vec<Arc<Participant>>), String> {
     platform::create_private(dir)?;
     let keyring = Arc::new(Keyring::new(dir));
     let asker = {
@@ -482,8 +519,20 @@ fn start(
             let _ = back.send_event(Said::ToPage(true, format!("{told:?}")));
         })
     };
-    let desk = Desk::new(&state(dir), asker, teller)?;
+    let desk = Desk::new(&state(dir), asker.clone(), teller.clone())?;
     let platform = desk.platform(keyring.clone());
+    // **each paired identity keeps its state apart** [author, 2026-11-23]:
+    // a directory of its own under the state, by its keyhash
+    let platform_for = {
+        let (dir, keyring) = (dir.to_path_buf(), keyring.clone());
+        move |material: &[u8]| -> Result<Arc<rhtn_ffi::device::Platform>, String> {
+            let who = keyhash_of(material)?;
+            Ok(
+                Desk::new(&state(&dir).join(&who), asker.clone(), teller.clone())?
+                    .platform(keyring.clone()),
+            )
+        }
+    };
 
     let held = Held::load(dir)?;
     if held.is_some() && given.is_some() {
@@ -494,23 +543,35 @@ fn start(
         );
     }
     match held {
-        Some(Held::Paired { material, run }) => {
-            let seed = keyring
-                .seed()?
-                .ok_or("this desktop was paired, and the keyring holds no transport seed for it")?;
-            let p = Participant::start_delegated(
-                material,
-                seed.to_vec(),
-                run.clone(),
-                vec![],
-                platform,
-            )
-            .map_err(|e| custody_said(&keyring, e.to_string()))?;
-            *running.lock().unwrap() = Some(Arc::new(p));
-            return Ok(Device::Paired {
-                days: participant::run_days(&run),
-                dataset: None,
-            });
+        Some(Held::Paired(all)) => {
+            let days = participant::run_days(&all[0].run);
+            let mut kernels = Vec::new();
+            for PairedIdentity { material, run } in all {
+                let who = keyhash_of(&material)?;
+                let seed = keyring.seed_for(&who)?.ok_or_else(|| {
+                    format!(
+                        "this desktop was paired, and the keyring holds no transport seed \
+                         for {}…",
+                        &who[..16]
+                    )
+                })?;
+                let p = Participant::start_delegated(
+                    material.clone(),
+                    seed.to_vec(),
+                    run,
+                    vec![],
+                    platform_for(&material)?,
+                )
+                .map_err(|e| custody_said(&keyring, e.to_string()))?;
+                kernels.push(Arc::new(p));
+            }
+            return Ok((
+                Device::Paired {
+                    days,
+                    dataset: None,
+                },
+                kernels,
+            ));
         }
         Some(Held::Restored) => {
             let seeds = keyring
@@ -518,8 +579,7 @@ fn start(
                 .ok_or("this desktop was restored, and the keyring holds no seeds for it")?;
             let p = Participant::start(seeds.to_vec(), vec![], platform)
                 .map_err(|e| custody_said(&keyring, e.to_string()))?;
-            *running.lock().unwrap() = Some(Arc::new(p));
-            return Ok(Device::Restored);
+            return Ok((Device::Restored, vec![Arc::new(p)]));
         }
         None => {}
     }
@@ -528,7 +588,7 @@ fn start(
     // field-test build's bench), with no code shown and nothing typed
     if let Some(typed) = given {
         let seeds = phrase::seeds(&typed)?;
-        return restore(dir, &keyring, platform, &seeds, running);
+        return restore(dir, &keyring, platform, &seeds);
     }
 
     // **the transport seed is kept before the code is shown**: a keyring
@@ -560,16 +620,16 @@ fn start(
     *phrases.lock().unwrap() = Some(tx.clone());
     let stop = Arc::new(AtomicBool::new(false));
     let mut waiting = offer.map(|offer| {
-        let (platform, stop) = (platform.clone(), stop.clone());
+        let stop = stop.clone();
         std::thread::spawn(move || {
-            let _ = tx.send(First::Paired(offer.pair(vec![], platform, &stop)));
+            let _ = tx.send(First::Paired(offer.pair(vec![], &platform_for, &stop)));
         })
     });
     loop {
         match rx.recv().map_err(|_| "the window closed".to_string())? {
             First::Paired(Ok(paired)) => {
                 *phrases.lock().unwrap() = None;
-                return finish_paired(dir, paired, running);
+                return finish_paired(dir, &keyring, paired);
             }
             First::Paired(Err(why)) if why == pairing::STOPPED => {}
             First::Paired(Err(why)) => return Err(custody_said(&keyring, why)),
@@ -590,10 +650,10 @@ fn start(
                 *phrases.lock().unwrap() = None;
                 while let Ok(m) = rx.try_recv() {
                     if let First::Paired(Ok(paired)) = m {
-                        return finish_paired(dir, paired, running);
+                        return finish_paired(dir, &keyring, paired);
                     }
                 }
-                return restore(dir, &keyring, platform, &seeds, running);
+                return restore(dir, &keyring, platform, &seeds);
             }
         }
     }
@@ -601,7 +661,7 @@ fn start(
 
 /// What reaches a first start: the pairing's outcome, or a phrase typed.
 enum First {
-    Paired(Result<pairing::Paired, String>),
+    Paired(Result<Vec<pairing::Paired>, String>),
     Phrase(Zeroizing<String>),
 }
 
@@ -613,45 +673,121 @@ fn restore(
     keyring: &Keyring,
     platform: Arc<rhtn_ffi::device::Platform>,
     seeds: &[u8],
-    running: &Mutex<Option<Arc<Participant>>>,
-) -> Result<Device, String> {
+) -> Result<(Device, Vec<Arc<Participant>>), String> {
     keyring.keep_identity(seeds)?;
     let p = Participant::start(seeds.to_vec(), vec![], platform)
         .map_err(|e| custody_said(keyring, e.to_string()))?;
     Held::Restored.keep(dir)?;
-    *running.lock().unwrap() = Some(Arc::new(p));
-    Ok(Device::Restored)
+    Ok((Device::Restored, vec![Arc::new(p)]))
 }
 
-/// A pairing finished: keep what starts it again, and say what it made.
+/// An identity's keyhash in hex, from its key material.
+fn keyhash_of(material: &[u8]) -> Result<String, String> {
+    rhtn_crypto::Identity::from_key_material(material)
+        .map(|i| hex(&i.keyhash))
+        .ok_or_else(|| "key material that is no identity's".to_string())
+}
+
+/// **A pairing finished**: each identity's transport seed kept by the
+/// keyring and its colour beside it, what starts every one of them again
+/// kept, and what it made said.
 fn finish_paired(
     dir: &Path,
-    paired: pairing::Paired,
-    running: &Mutex<Option<Arc<Participant>>>,
-) -> Result<Device, String> {
-    Held::Paired {
-        material: paired.material.clone(),
-        run: paired.run.clone(),
+    keyring: &Keyring,
+    paired: Vec<pairing::Paired>,
+) -> Result<(Device, Vec<Arc<Participant>>), String> {
+    for p in &paired {
+        let who = keyhash_of(&p.material)?;
+        keyring.keep_seed_for(&who, &p.seed)?;
+        if let Some(c) = p
+            .colour
+            .as_deref()
+            .filter(|c| rhtn_desktop::screens::PALETTE.iter().any(|(n, _)| n == c))
+        {
+            participant::keep_colour(dir, &p.participant.me(), c)?;
+        }
     }
+    Held::Paired(
+        paired
+            .iter()
+            .map(|p| PairedIdentity {
+                material: p.material.clone(),
+                run: p.run.clone(),
+            })
+            .collect(),
+    )
     .keep(dir)?;
-    *running.lock().unwrap() = Some(paired.participant);
-    Ok(Device::Paired {
-        days: participant::run_days(&paired.run),
-        dataset: Some(paired.dataset),
-    })
+    let device = Device::Paired {
+        days: participant::run_days(&paired[0].run),
+        dataset: Some(paired.iter().all(|p| p.dataset)),
+    };
+    Ok((device, paired.into_iter().map(|p| p.participant).collect()))
 }
 
-/// **What the window's workers share**: the kernel once it is up, what
-/// this desktop is to it, where the window is, the identity's threads,
-/// and whether the window is closing.
+/// **What the window's workers share**: the identity in focus, every
+/// identity held, what this desktop is to them, where the window is, and
+/// whether the window is closing.
 struct Up {
+    /// **The identity in focus** [author, 2026-11-23]: the one a direct
+    /// message starts as, a node is connected for, and the foot names.
     running: Mutex<Option<Arc<Participant>>>,
+    /// **Every identity this desktop holds**, each with its conversations;
+    /// what a row shows acts as the identity that holds it.
+    held: Mutex<Vec<Ident>>,
     device: Mutex<Option<Device>>,
     place: Mutex<History>,
     /// Where this desktop keeps what it keeps, its colours among it.
     dir: PathBuf,
-    threads: Mutex<Option<Arc<Threads>>>,
     closing: AtomicBool,
+}
+
+/// **One identity this desktop holds**: its kernel and its conversations.
+#[derive(Clone)]
+struct Ident {
+    p: Arc<Participant>,
+    threads: Arc<Threads>,
+}
+
+impl Up {
+    /// Every identity held.
+    fn idents(&self) -> Vec<Ident> {
+        self.held.lock().unwrap().clone()
+    }
+
+    /// The identity in focus.
+    fn focused(&self) -> Option<Ident> {
+        let p = self.running.lock().unwrap().clone()?;
+        self.idents().into_iter().find(|i| Arc::ptr_eq(&i.p, &p))
+    }
+
+    /// The identity whose keyhash is `by`.
+    fn by(&self, by: &[u8]) -> Option<Ident> {
+        self.idents().into_iter().find(|i| i.p.me() == by)
+    }
+
+    /// **The identity a conversation with `peer` is held as**: the one
+    /// whose threads hold it, since a conversation continues in the
+    /// identity it started in; else the one that met them; else the one in
+    /// focus, which is where a new one starts (`light-client-requirements.md`
+    /// §2).
+    fn for_peer(&self, peer: &str) -> Option<Ident> {
+        let all = self.idents();
+        all.iter()
+            .find(|i| i.threads.index().iter().any(|e| e.peer == peer))
+            .or_else(|| {
+                all.iter()
+                    .find(|i| i.p.contacts().iter().any(|c| hex(&c.keyhash) == peer))
+            })
+            .cloned()
+            .or_else(|| self.focused())
+    }
+
+    /// **The identity holding subnet `id`**, which acts there.
+    fn for_subnet(&self, id: &str) -> Option<Ident> {
+        self.idents()
+            .into_iter()
+            .find(|i| i.p.subnets().iter().any(|s| hex(&s.id) == id))
+    }
 }
 
 /// The kernel's sealing service, which the threads are kept under.
@@ -670,24 +806,25 @@ impl Sealer for KernelSealer {
 /// whole where it was just gone to, its rail and body alone otherwise.
 /// Off the drawing thread, since every question here waits on the kernel.
 fn draw(up: &Up, back: &EventLoopProxy<Said>, whole: bool) {
-    let p = up.running.lock().unwrap().clone();
+    let focus = up.running.lock().unwrap().clone();
     let d = up.device.lock().unwrap().clone();
-    let (Some(p), Some(d)) = (p, d) else {
+    let (Some(focus), Some(d)) = (focus, d) else {
         return;
     };
     let place = up.place.lock().unwrap().here().clone();
-    let threads = up.threads.lock().unwrap().clone();
-    let mut snap = snapshot(&p, d, threads.as_deref());
-    snap.colour = participant::colour_of(&up.dir, &snap.me);
+    let idents = up.idents();
+    let snap = snapshot(&idents, &focus, d, &up.dir);
     let body = match &place {
+        // **a conversation as the identity it is held as**
         Place::Thread(peer) => {
-            let page = threads
-                .map(|t| t.page(peer, None, threads::PAGE, HashMap::new()))
+            let page = up
+                .for_peer(peer)
+                .map(|i| i.threads.page(peer, None, threads::PAGE, HashMap::new()))
                 .unwrap_or_default();
             Body::Thread(page.messages, page.before.is_some())
         }
         // **what the subnet's node offers**, one launcher each: the
-        // resources swept from the node serving this key there
+        // resources swept from the node serving its holder there
         Place::Subnet(id) => {
             let node = snap
                 .subnets
@@ -695,7 +832,9 @@ fn draw(up: &Up, back: &EventLoopProxy<Said>, whole: bool) {
                 .find(|s| &s.id == id)
                 .map(|s| s.node.clone());
             Body::Launchers(
-                p.resources()
+                up.for_subnet(id)
+                    .map(|i| i.p.resources())
+                    .unwrap_or_default()
                     .into_iter()
                     .filter(|r| node.as_deref() == Some(hex(&r.node).as_str()))
                     .map(|r| ResourceRow {
@@ -708,19 +847,22 @@ fn draw(up: &Up, back: &EventLoopProxy<Said>, whole: bool) {
                     .collect(),
             )
         }
-        // **every line this key holds**, each patron by the alias held
-        Place::Authority => {
-            let names = aliases(&p);
-            Body::Authority(
-                p.lines()
-                    .into_iter()
-                    .map(|line| LineRow {
+        // **every line every identity holds** [author, 2026-11-07], each
+        // patron by the alias held, each left by the identity holding it
+        Place::Authority => Body::Authority(
+            idents
+                .iter()
+                .flat_map(|i| {
+                    let names = aliases(&i.p);
+                    let by = hex(&i.p.me());
+                    i.p.lines().into_iter().map(move |line| LineRow {
                         alias: names.get(&hex(&line.patron)).cloned(),
+                        by: by.clone(),
                         line,
                     })
-                    .collect(),
-            )
-        }
+                })
+                .collect(),
+        ),
         _ => Body::Plain,
     };
     let _ = back.send_event(if whole {
@@ -743,17 +885,18 @@ fn aliases(p: &Participant) -> HashMap<String, String> {
 /// **What leaving `patron` costs, put on the authority screen** where it
 /// still stands: worked out off the drawing thread, since it walks the
 /// topology this key holds.
-fn cost(up: &Up, back: &EventLoopProxy<Said>, patron: Vec<u8>) {
-    let p = up.running.lock().unwrap().clone();
+fn cost(up: &Up, back: &EventLoopProxy<Said>, by: Vec<u8>, patron: Vec<u8>) {
+    let i = up.by(&by);
     let d = up.device.lock().unwrap().clone();
-    let (Some(p), Some(d)) = (p, d) else {
+    let (Some(i), Some(d)) = (i, d) else {
         return;
     };
-    let names = aliases(&p);
+    let names = aliases(&i.p);
     let who = hex(&patron);
-    let c = p.cost_of_leaving(patron).map_err(|e| e.to_string());
+    let c = i.p.cost_of_leaving(patron).map_err(|e| e.to_string());
     let script = screens::cost_script(
         &d,
+        &hex(&by),
         &who,
         names.get(&who).map(String::as_str),
         c.as_ref().map_err(String::as_str),
@@ -764,74 +907,94 @@ fn cost(up: &Up, back: &EventLoopProxy<Said>, patron: Vec<u8>) {
 
 /// **The kernel's answers as the screens' rows**: where it is connected,
 /// its subnets, the people met, the threads kept.
-fn snapshot(p: &Participant, device: Device, threads: Option<&Threads>) -> Snapshot {
-    let agreed: Vec<(Vec<u8>, Vec<String>)> = p
+fn snapshot(idents: &[Ident], focus: &Participant, device: Device, dir: &Path) -> Snapshot {
+    // **a subnet's own name for this person, then the default**, as the
+    // phone's foot picks it (`Gateway.ownAlias`)
+    let named = |p: &Participant| {
+        p.subnets()
+            .iter()
+            .find_map(|s| s.own_alias.clone().filter(|a| !a.trim().is_empty()))
+            .or_else(|| p.default_alias().filter(|a| !a.trim().is_empty()))
+    };
+    let agreed: Vec<(Vec<u8>, Vec<String>)> = focus
         .agreed()
         .into_iter()
         .map(|a| (a.serving, a.addresses))
         .collect();
-    let subnets = p.subnets();
-    let me = p.me();
-    let resources = p.resources();
-    // **a subnet's own name for this person, then the default**, as the
-    // phone's foot picks it (`Gateway.ownAlias`)
-    let name = subnets
-        .iter()
-        .find_map(|s| s.own_alias.clone().filter(|a| !a.trim().is_empty()))
-        .or_else(|| p.default_alias().filter(|a| !a.trim().is_empty()));
-    Snapshot {
-        colour: String::new(),
-        me: p.me(),
-        name,
-        device,
-        connection: participant::connection(&p.attachments(), &agreed),
-        subnets: subnets
-            .into_iter()
-            .map(|s| {
-                // **the node serving this key there**: the patron's, which
-                // speaks as the patron, else this key's own as the root
-                let node = s.patron.map_or_else(|| me.clone(), |k| k.to_vec());
-                // **the orb's count** [author, 2026-11-23]: a move of its
-                // node to answer, as the phone marks one, and what its
-                // resources ask, rolled up
-                let moved = s.relocation.as_ref().is_some_and(|r| {
-                    matches!(
-                        r.standing,
-                        rhtn_model::Standing::Proved | rhtn_model::Standing::Declined
-                    )
-                });
-                let asked: u32 = resources
-                    .iter()
-                    .filter(|r| r.node[..] == node[..])
-                    .map(|r| r.waiting)
-                    .sum();
-                SubnetRow {
-                    id: hex(&s.id),
-                    name: s.alias.or(s.own_alias),
-                    rank: rank(&s.rank),
-                    crown: Crown::of(s.rank.root, s.rank.operator, s.rank.subordinates),
-                    node: hex(&node),
-                    unseen: u32::from(moved) + asked,
-                }
+    let mut snap = Snapshot {
+        colour: participant::colour_of(dir, &focus.me()),
+        me: focus.me(),
+        name: named(focus),
+        held: idents
+            .iter()
+            .map(|i| Holder {
+                by: hex(&i.p.me()),
+                name: named(&i.p),
+                colour: participant::colour_of(dir, &i.p.me()),
             })
             .collect(),
+        device,
+        connection: participant::connection(&focus.attachments(), &agreed),
+        subnets: Vec::new(),
+        people: Vec::new(),
+        threads: Vec::new(),
+    };
+    // **every identity's rows together** [author, 2026-11-07], each saying
+    // whose it is
+    for i in idents {
+        let p = &i.p;
+        let me = p.me();
+        let by = hex(&me);
+        let colour = participant::colour_of(dir, &me);
+        let resources = p.resources();
+        snap.subnets.extend(p.subnets().into_iter().map(|s| {
+            // **the node serving this key there**: the patron's, which
+            // speaks as the patron, else this key's own as the root
+            let node = s.patron.map_or_else(|| me.clone(), |k| k.to_vec());
+            // **the orb's count** [author, 2026-11-23]: a move of its node
+            // to answer, as the phone marks one, and what waits at its
+            // resources, rolled up
+            let moved = s.relocation.as_ref().is_some_and(|r| {
+                matches!(
+                    r.standing,
+                    rhtn_model::Standing::Proved | rhtn_model::Standing::Declined
+                )
+            });
+            let asked: u32 = resources
+                .iter()
+                .filter(|r| r.node[..] == node[..])
+                .map(|r| r.waiting)
+                .sum();
+            SubnetRow {
+                id: hex(&s.id),
+                name: s.alias.or(s.own_alias),
+                rank: rank(&s.rank),
+                crown: Crown::of(s.rank.root, s.rank.operator, s.rank.subordinates),
+                node: hex(&node),
+                unseen: u32::from(moved) + asked,
+                by: by.clone(),
+                colour: colour.clone(),
+            }
+        }));
         // **the people are the ones met**, as the phone's list has them:
         // an introduction, a verifier and a node are held but not listed
-        people: p
-            .contacts()
-            .into_iter()
-            .filter(|c| c.how == rhtn_model::How::Counterparty)
-            .map(|c| Person {
-                key: hex(&c.keyhash),
-                alias: c.alias,
-                how: match c.count {
-                    1 => "met once".to_string(),
-                    n => format!("met {n} times"),
-                },
-            })
-            .collect(),
-        threads: threads.map(Threads::index).unwrap_or_default(),
+        snap.people.extend(
+            p.contacts()
+                .into_iter()
+                .filter(|c| c.how == rhtn_model::How::Counterparty)
+                .map(|c| Person {
+                    key: hex(&c.keyhash),
+                    alias: c.alias,
+                    how: match c.count {
+                        1 => "met once".to_string(),
+                        n => format!("met {n} times"),
+                    },
+                    by: by.clone(),
+                }),
+        );
+        snap.threads.extend(i.threads.index());
     }
+    snap
 }
 
 /// What this key is in a subnet, in the phone's words for its downline.
@@ -854,7 +1017,8 @@ fn rank(r: &rhtn_model::Rank) -> String {
 /// kept in its thread as it arrives, and the place redrawn where what it
 /// shows changed.  The phone's loop, less the meeting a desktop never
 /// holds.
-fn pump(up: &Up, back: &EventLoopProxy<Said>, p: &Participant) {
+fn pump(up: &Up, back: &EventLoopProxy<Said>, i: &Ident) {
+    let p = &i.p;
     while !up.closing.load(Ordering::Relaxed) {
         let Some(e) = p.next_event(2000) else {
             continue;
@@ -869,8 +1033,10 @@ fn pump(up: &Up, back: &EventLoopProxy<Said>, p: &Participant) {
                     .and_then(|c| c.alias)
                     .unwrap_or_else(|| peer.chars().take(16).collect());
                 let text = String::from_utf8_lossy(&bytes).into_owned();
-                let kept = up.threads.lock().unwrap().clone().map(|t| {
-                    t.append(
+                // **kept as the identity it arrived for**
+                let t = &i.threads;
+                let kept = t
+                    .append(
                         &peer,
                         &Record::Said {
                             mine: false,
@@ -880,9 +1046,8 @@ fn pump(up: &Up, back: &EventLoopProxy<Said>, p: &Participant) {
                             reason: None,
                         },
                     )
-                    .and_then(|_| t.list(&peer, &who))
-                });
-                if let Some(Err(why)) = kept {
+                    .and_then(|_| t.list(&peer, &who));
+                if let Err(why) = kept {
                     let _ = back.send_event(Said::ToPage(
                         false,
                         format!("a message from {who} was not kept: {why}"),
@@ -964,13 +1129,13 @@ fn imported(records: u64, discarded: u64) -> String {
 /// sending first, so it is on the screen at once, then handed to the
 /// kernel, and the answer kept as a change to it.
 fn send(up: &Up, back: &EventLoopProxy<Said>, to: Vec<u8>, text: String) {
-    let p = up.running.lock().unwrap().clone();
-    let t = up.threads.lock().unwrap().clone();
-    let (Some(p), Some(t)) = (p, t) else {
+    let peer = hex(&to);
+    // **as the identity the conversation is held as**, else the one in
+    // focus, where a new one starts (`light-client-requirements.md` §2)
+    let Some(Ident { p, threads: t }) = up.for_peer(&peer) else {
         let _ = back.send_event(Said::ToPage(false, "this desktop is not set up yet".into()));
         return;
     };
-    let peer = hex(&to);
     let mine = Record::Said {
         mine: true,
         who: "me".into(),
@@ -1033,8 +1198,7 @@ fn attach_to(p: &Participant, node: Vec<u8>, addresses: Vec<String>) -> Result<(
 /// itself rather than being handed (design §23.3). What each node offers
 /// the kernel sweeps at the attach itself, unasked [author, 2026-11-23].
 /// The refusal, where there is one.
-fn sweep(up: &Up) -> Option<String> {
-    let p = up.running.lock().unwrap().clone()?;
+fn sweep(p: &Participant) -> Option<String> {
     if p.attachments().is_empty() {
         return Some("no node is attached".to_string());
     }
@@ -1049,7 +1213,8 @@ fn sweep(up: &Up) -> Option<String> {
 /// diagnostics and not to the person, whose attention is not drawn to the
 /// node.
 fn opened(up: &Up, back: &EventLoopProxy<Said>, id: &str) {
-    let Some(p) = up.running.lock().unwrap().clone() else {
+    // **as the identity that holds the subnet**
+    let Some(Ident { p, .. }) = up.for_subnet(id) else {
         return;
     };
     let me = p.me();
@@ -1184,19 +1349,15 @@ fn open_console(
 /// question about its code where its page declares code and the person has
 /// not answered; then the window.
 fn open(
-    up: &Up,
+    p: &Arc<Participant>,
     back: &EventLoopProxy<Said>,
     root: &Path,
     node: Vec<u8>,
     resource: Vec<u8>,
     name: String,
 ) {
-    let Some(p) = up.running.lock().unwrap().clone() else {
-        let _ = back.send_event(Said::ToPage(false, "this desktop is not set up yet".into()));
-        return;
-    };
     let first = frame::compose("GET", "/", None, b"");
-    let answer = match carry(&p, &node, &resource, first, &name, back) {
+    let answer = match carry(p, &node, &resource, first, &name, back) {
         Ok(a) => a,
         Err(why) => {
             let _ = back.send_event(Said::ToPage(false, format!("{name}: {why}")));

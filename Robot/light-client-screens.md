@@ -882,8 +882,9 @@ rail, the foot, the chrome rule and back by the phone's `History` rules.
   carry over removals"*], with the phone's identity list as the picker —
   **opened by a double click on the nameplate** rather than press and hold
   [author, 2026-11-23]; the focus is for starting a direct message, there
-  being no meeting on a desktop. **Not built**: blocked on how a second
-  identity is introduced on one pairing session (asked 2026-11-23).
+  being no meeting on a desktop. **Built 2026-11-23**: one pairing session,
+  a fresh key per identity [author, 2026-11-23], `DeviceNext` in
+  `wire-format.md` §14.3.3; colours ride `DeviceStart`/`DeviceNext`.
 - **A subnet's authority screen and its renaming carry over** [author,
   2026-11-23]; on a paired desktop, which signs nothing, both are shown and
   the act is left to the phone [author, 2026-11-23: "Show, act on phone"].

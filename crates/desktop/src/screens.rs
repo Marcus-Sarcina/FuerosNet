@@ -38,6 +38,9 @@ pub enum Place {
     Authority,
     /// The colour of the identity in focus, chosen from the palette.
     Colour,
+    /// **Which identity is in focus** [author, 2026-11-23], opened by a
+    /// double click on the nameplate: the one a direct message starts as.
+    Identities,
 }
 
 impl Place {
@@ -55,6 +58,7 @@ impl Place {
                 "node" => Some(Place::Node),
                 "authority" => Some(Place::Authority),
                 "colour" => Some(Place::Colour),
+                "identities" => Some(Place::Identities),
                 _ => None,
             },
             Some(("thread", h)) => hex64(h).map(Place::Thread),
@@ -73,6 +77,7 @@ impl Place {
             Place::Node => "node".into(),
             Place::Authority => "authority".into(),
             Place::Colour => "colour".into(),
+            Place::Identities => "identities".into(),
             Place::Thread(h) => format!("thread:{h}"),
             Place::Subnet(h) => format!("subnet:{h}"),
             Place::SubnetOptions(h) => format!("subnet-options:{h}"),
@@ -206,6 +211,11 @@ pub struct SubnetRow {
     /// **What waits to be seen there**, the orb's count: a move of its
     /// node to answer, and what its resources ask, rolled up.
     pub unseen: u32,
+    /// **The identity holding it**, in hex: what acts there acts as this
+    /// one [author, 2026-11-07].
+    pub by: String,
+    /// That identity's colour, which its orb wears [author, 2026-11-12].
+    pub colour: String,
 }
 
 /// One person this key knows.
@@ -217,6 +227,8 @@ pub struct Person {
     pub alias: Option<String>,
     /// How they are known, in words.
     pub how: String,
+    /// The identity that met them, in hex.
+    pub by: String,
 }
 
 impl Person {
@@ -255,9 +267,12 @@ pub struct Snapshot {
     pub name: Option<String>,
     /// What this desktop is to it.
     pub device: Device,
-    /// **The identity's colour**, by its palette name: what the foot and
-    /// each subnet's orb wear [author, 2026-11-12].
+    /// **The colour of the identity in focus**, by its palette name: what
+    /// the foot wears [author, 2026-11-12].
     pub colour: String,
+    /// **Every identity this desktop holds** [author, 2026-11-23], the one
+    /// in focus among them.
+    pub held: Vec<Holder>,
     /// Where it is connected, in one line.
     pub connection: String,
     /// Every subnet this key is in.
@@ -317,6 +332,19 @@ pub struct LineRow {
     pub line: rhtn_model::Line,
     /// The patron's alias, where one has been received.
     pub alias: Option<String>,
+    /// The identity holding the line, in hex, which is the one that leaves.
+    pub by: String,
+}
+
+/// **One identity this desktop holds**, as the picker lists it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Holder {
+    /// Its keyhash, in hex.
+    pub by: String,
+    /// What it is called, else none and its key stands in.
+    pub name: Option<String>,
+    /// Its colour.
+    pub colour: String,
 }
 
 /// **The identity colours** [author, 2026-11-12], by the names the phone
@@ -418,7 +446,7 @@ pub fn rail(snap: &Snapshot, place: &Place) -> String {
             s.unseen,
             // **a subnet's orb wears the colour of the identity holding it**
             // [author, 2026-11-12]
-            Some(&snap.colour),
+            Some(&s.colour),
         ));
     }
     out
@@ -551,6 +579,7 @@ fn main(snap: &Snapshot, place: &Place, body: &Body) -> String {
         Place::Options => options(snap),
         Place::Node => node(snap),
         Place::Colour => colour(snap),
+        Place::Identities => identities(snap),
         Place::Authority => match body {
             Body::Authority(lines) => authority(lines),
             _ => authority(&[]),
@@ -610,10 +639,13 @@ fn direct(snap: &Snapshot) -> String {
     }
     if !snap.threads.is_empty() {
         out.push_str("<h2>Conversations</h2>\n<ul class=\"rows\">\n");
+        // **each thread marked with the colour of the identity it is held
+        // as** [author, 2026-11-12]
         for t in &snap.threads {
             out.push_str(&format!(
-                "<li><a data-go=\"thread:{}\">{}</a></li>\n",
+                "<li><a data-go=\"thread:{}\">{}{}</a></li>\n",
                 t.peer,
+                swatch(snap, &t.by),
                 escape(&snap.name_of(&t.peer))
             ));
         }
@@ -681,7 +713,7 @@ fn subnet(snap: &Snapshot, id: &str, rows: &[ResourceRow]) -> String {
             false,
             Some(&Place::SubnetOptions(id.to_string()))
         ),
-        launchers(rows)
+        launchers(rows, s.map_or("", |s| s.by.as_str()))
     )
 }
 
@@ -730,6 +762,46 @@ fn subnet_options(snap: &Snapshot, id: &str) -> String {
     out
 }
 
+/// The mark of the colour `by` wears, where this desktop holds more than
+/// one identity and so the mark says something.
+fn swatch(snap: &Snapshot, by: &str) -> String {
+    if snap.held.len() < 2 {
+        return String::new();
+    }
+    snap.held
+        .iter()
+        .find(|h| h.by == by)
+        .map(|h| {
+            format!(
+                "<i class=\"swatch\" style=\"background: var({})\"></i>",
+                token(&h.colour)
+            )
+        })
+        .unwrap_or_default()
+}
+
+/// **Which identity is in focus** [author, 2026-11-23]: the phone's list,
+/// the one in focus marked, and nothing else — no narrative, no door to
+/// another, since a desktop is given its identities by pairing.
+fn identities(snap: &Snapshot) -> String {
+    let mut out = bar("Identity", true, None);
+    for h in &snap.held {
+        let name = h
+            .name
+            .clone()
+            .unwrap_or_else(|| format!("{}…", short(&h.by)));
+        out.push_str(&format!(
+            "<button class=\"row\" data-focus=\"{}\"><span><i class=\"swatch\" \
+             style=\"background: var({})\"></i>{}{}</span></button>\n",
+            h.by,
+            token(&h.colour),
+            if h.by == hex(&snap.me) { "● " } else { "" },
+            escape(&name)
+        ));
+    }
+    out
+}
+
 /// **The colour of the identity in focus**, chosen from the palette by
 /// name, as the phone's options offer it.
 fn colour(snap: &Snapshot) -> String {
@@ -758,8 +830,9 @@ fn authority(lines: &[LineRow]) -> String {
     }
     for l in lines {
         out.push_str(&format!(
-            "<button class=\"row\" data-cost=\"{}\"><span class=\"mono\">{}</span></button>\n",
+            "<button class=\"row\" data-cost=\"{}\" data-by=\"{}\"><span class=\"mono\">{}</span></button>\n",
             hex(&l.line.patron),
+            escape(&l.by),
             escape(&crate::authority::line(&l.line, l.alias.as_deref()))
         ));
     }
@@ -772,6 +845,7 @@ fn authority(lines: &[LineRow]) -> String {
 /// on a desktop that signs nothing, where the act is done instead.
 pub fn cost_script(
     device: &Device,
+    by: &str,
     patron: &str,
     alias: Option<&str>,
     cost: Result<&rhtn_model::Cost, &str>,
@@ -788,7 +862,7 @@ pub fn cost_script(
             crate::authority::words(c, names),
             match device {
                 Device::Restored => format!(
-                    "<p><button data-leave=\"{patron}\" data-again=\"{}\">{}</button></p>",
+                    "<p><button data-leave=\"{patron}\" data-by=\"{by}\" data-again=\"{}\">{}</button></p>",
                     escape(&crate::authority::button(patron, alias, true)),
                     escape(&crate::authority::button(patron, alias, false))
                 ),
@@ -808,7 +882,7 @@ pub fn cost_script(
 /// **One card per resource**, which is what opens it: its icon, else its
 /// mark, its name, and its count above its corner where something waits
 /// [author, 2026-11-23].
-fn launchers(rows: &[ResourceRow]) -> String {
+fn launchers(rows: &[ResourceRow], by: &str) -> String {
     if rows.is_empty() {
         return String::new();
     }
@@ -827,7 +901,7 @@ fn launchers(rows: &[ResourceRow]) -> String {
             None => escape(&mark(Some(&r.instance), &r.resource)),
         };
         out.push_str(&format!(
-            "<button class=\"card\" data-open=\"{}\" data-node=\"{}\" data-name=\"{}\">\
+            "<button class=\"card\" data-open=\"{}\" data-node=\"{}\" data-by=\"{by}\" data-name=\"{}\">\
              <span class=\"icon\">{face}</span><span class=\"name\">{}</span>{}</button>\n",
             escape(&r.resource),
             escape(&r.node),
@@ -980,6 +1054,11 @@ mod tests {
             name: Some("Ann <A>".into()),
             device: Device::Restored,
             colour: "Teal".into(),
+            held: vec![Holder {
+                by: "ab".repeat(32),
+                name: Some("Ann <A>".into()),
+                colour: "Teal".into(),
+            }],
             connection: "Connected to 1111111111111111…".into(),
             subnets: vec![SubnetRow {
                 id: "22".repeat(32),
@@ -988,23 +1067,28 @@ mod tests {
                 crown: Crown::Gold,
                 node: "55".repeat(32),
                 unseen: 3,
+                by: "ab".repeat(32),
+                colour: "Teal".into(),
             }],
             people: vec![
                 Person {
                     key: "33".repeat(32),
                     alias: Some("Carol".into()),
                     how: "met".into(),
+                    by: "ab".repeat(32),
                 },
                 Person {
                     key: "44".repeat(32),
                     alias: None,
                     how: "introduced".into(),
+                    by: "ab".repeat(32),
                 },
             ],
             threads: vec![Entry {
                 peer: "33".repeat(32),
                 name: "33".repeat(32),
                 direct: true,
+                by: "ab".repeat(32),
             }],
         }
     }
@@ -1214,11 +1298,12 @@ mod tests {
         // **a card each, which is what opens it** [author, 2026-11-23], and
         // **badged with the icon the resource serves**
         assert!(p.contains(&format!(
-            "<button class=\"card\" data-open=\"{}\" data-node=\"{}\" data-name=\"Notices\">\
+            "<button class=\"card\" data-open=\"{}\" data-node=\"{}\" data-by=\"{}\" data-name=\"Notices\">\
              <span class=\"icon\"><img src=\"data:image/png;base64,iVBORw==\" alt=\"\"></span>\
              <span class=\"name\">Notices</span><sup>2</sup></button>",
             "77".repeat(32),
-            "55".repeat(32)
+            "55".repeat(32),
+            "ab".repeat(32)
         )));
         assert!(
             p.contains(
@@ -1321,6 +1406,7 @@ mod tests {
             &Body::Authority(vec![LineRow {
                 line,
                 alias: Some("Carol".into()),
+                by: "ab".repeat(32),
             }]),
         );
         assert!(a.contains(&format!("data-cost=\"{}\"", "33".repeat(32))));
@@ -1335,7 +1421,14 @@ mod tests {
         };
         let names = std::collections::HashMap::new();
         let who = "33".repeat(32);
-        let restored = cost_script(&Device::Restored, &who, Some("Carol"), Ok(&cost), &names);
+        let restored = cost_script(
+            &Device::Restored,
+            &"ab".repeat(32),
+            &who,
+            Some("Carol"),
+            Ok(&cost),
+            &names,
+        );
         assert!(restored.contains("Nothing this device can see goes with it."));
         assert!(restored.contains("2 resources stay within reach."));
         assert!(
@@ -1345,9 +1438,23 @@ mod tests {
         assert!(
             restored.contains("Press again to leave Carol") && restored.contains(">Leave Carol<")
         );
-        let on_phone = cost_script(&paired.device, &who, Some("Carol"), Ok(&cost), &names);
+        let on_phone = cost_script(
+            &paired.device,
+            &"ab".repeat(32),
+            &who,
+            Some("Carol"),
+            Ok(&cost),
+            &names,
+        );
         assert!(!on_phone.contains("data-leave") && on_phone.contains("leave on the phone"));
-        let refused = cost_script(&Device::Restored, &who, None, Err("no such line"), &names);
+        let refused = cost_script(
+            &Device::Restored,
+            &"ab".repeat(32),
+            &who,
+            None,
+            Err("no such line"),
+            &names,
+        );
         assert!(refused.contains("No cost for 333333333333…: no such line"));
     }
 
@@ -1369,6 +1476,49 @@ mod tests {
         assert_eq!(token("Nonesuch"), "--rail-orb");
         assert_eq!(Place::parse("colour"), Some(Place::Colour));
         assert_eq!(Place::parse("authority"), Some(Place::Authority));
+    }
+
+    // **every identity the desktop holds, and which acts** [author,
+    // 2026-11-23]: the picker marks the one in focus, a thread is marked
+    // with the colour of the identity it is held as once there are two, and
+    // a subnet's orb wears its holder's colour
+    #[test]
+    fn the_identities_held_are_listed_and_each_row_wears_its_holders_colour() {
+        let mut s = snap();
+        let one = page(&s, &Place::Direct, &Body::Plain);
+        assert!(
+            !one.contains("class=\"swatch\""),
+            "one identity marks nothing"
+        );
+        s.held.push(Holder {
+            by: "cd".repeat(32),
+            name: None,
+            colour: "Pink".into(),
+        });
+        s.threads.push(Entry {
+            peer: "44".repeat(32),
+            name: "44".repeat(32),
+            direct: true,
+            by: "cd".repeat(32),
+        });
+        s.subnets[0].colour = "Pink".into();
+        let d = page(&s, &Place::Direct, &Body::Plain);
+        assert!(d.contains("var(--identity-teal)") && d.contains("var(--identity-pink)"));
+        let i = page(&s, &Place::Identities, &Body::Plain);
+        assert!(i.contains(&format!("data-focus=\"{}\"", "ab".repeat(32))));
+        assert!(
+            i.contains("● Ann &lt;A&gt;") && i.contains(&format!("{}…", short(&"cd".repeat(32))))
+        );
+        assert!(
+            !i.contains("New"),
+            "no door to another: a desktop's are paired"
+        );
+        assert!(rail(&s, &Place::Home).contains("var(--identity-pink)\">M&lt;"));
+        assert!(
+            foot(&s).contains("var(--identity-teal)"),
+            "the foot is the focus's"
+        );
+        assert_eq!(Place::parse("identities"), Some(Place::Identities));
     }
 
     #[test]

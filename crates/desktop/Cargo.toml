@@ -53,6 +53,9 @@ zeroize = { workspace = true }
 # the phrase's checksum, and the seeds' HKDF: the kernel's own SHA-256
 # and the AEAD library the kernel already links (ISC AND Apache-2.0)
 rhtn-codec = { path = "../codec" }
+# an identity's keyhash from its key material, which names where each
+# paired identity keeps its state
+rhtn-crypto = { path = "../crypto" }
 aws-lc-rs = "1.18"
 # MIT OR Apache-2.0; the symbol the phone reads, drawn here as an SVG,
 # with none of the crate's image renderers

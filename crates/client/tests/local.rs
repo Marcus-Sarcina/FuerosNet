@@ -638,3 +638,42 @@ fn an_intent_carries_a_node_after_a_number_or_a_null_in_its_place() {
     twelve.push(0xf6);
     assert!(IntentExchange::decode(&twelve).is_err(), "twelve fields");
 }
+
+/// **`DeviceStart` and `DeviceNext` carry a colour where one is given, and
+/// read back either way** (`wire-format.md` §14.3.3) [author, 2026-11-23]:
+/// a fourth or third field of 1 to 16 bytes of text, display only.
+// functional: APP-020
+#[test]
+fn the_start_and_the_next_identity_carry_a_colour_or_none_and_read_back() {
+    let material = rhtn_crypto::SigningIdentity::from_seeds(&[1; 32], &[2; 32])
+        .public
+        .key_material();
+    for colour in [None, Some("Teal".to_string())] {
+        let start = DeviceStart {
+            material: material.clone(),
+            delegation: vec![7; 40],
+            colour: colour.clone(),
+        };
+        assert_eq!(DeviceStart::decode(&start.encode()).unwrap(), start);
+        let next = DeviceNext {
+            material: material.clone(),
+            colour: colour.clone(),
+        };
+        assert_eq!(DeviceNext::decode(&next.encode()).unwrap(), next);
+    }
+    // a colour past 16 bytes, or empty, is refused
+    for bad in [String::new(), "x".repeat(17)] {
+        let next = DeviceNext {
+            material: material.clone(),
+            colour: Some(bad.clone()),
+        };
+        assert!(DeviceNext::decode(&next.encode()).is_err(), "{bad:?}");
+    }
+    // and a start without one encodes as it always did: three fields
+    let plain = DeviceStart {
+        material,
+        delegation: vec![7; 40],
+        colour: None,
+    };
+    assert_eq!(plain.encode()[0], 0x83);
+}

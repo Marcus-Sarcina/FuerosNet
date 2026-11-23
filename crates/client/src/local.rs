@@ -708,16 +708,25 @@ pub struct DeviceStart {
     pub material: Vec<u8>,
     /// The run's first `Delegation` (§8.2).
     pub delegation: Vec<u8>,
+    /// **The colour the ceremony device shows this identity in**, a
+    /// palette name, where it shows one [author, 2026-11-23]: display only.
+    pub colour: Option<String>,
 }
+
+/// The longest colour name a pairing carries.
+pub const COLOUR_BYTES: usize = 16;
 
 impl DeviceStart {
     /// The bytes of this `DeviceStart`, as §14.3.3 composes them.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
-        emit_array_head(&mut out, 3);
+        emit_array_head(&mut out, 3 + usize::from(self.colour.is_some()));
         emit_uint(&mut out, 1);
         out.extend_from_slice(&self.material);
         emit_bstr(&mut out, &self.delegation);
+        if let Some(c) = &self.colour {
+            emit_tstr(&mut out, c);
+        }
         out
     }
 
@@ -727,8 +736,10 @@ impl DeviceStart {
         let Item::Array(f) = &item else {
             return Err("DeviceStart: not an array".into());
         };
-        let [v, _, d] = f.as_slice() else {
-            return Err("DeviceStart: not three fields".into());
+        let (v, d, c) = match f.as_slice() {
+            [v, _, d] => (v, d, None),
+            [v, _, d, c] => (v, d, Some(c)),
+            _ => return Err("DeviceStart: not three or four fields".into()),
         };
         if !matches!(v, Item::Uint(1)) {
             return Err("DeviceStart: not version 1".into());
@@ -743,6 +754,71 @@ impl DeviceStart {
         Ok(DeviceStart {
             material,
             delegation,
+            colour: c.map(|c| colour(b, c, "DeviceStart")).transpose()?,
+        })
+    }
+}
+
+/// A colour name as a pairing carries it: text of 1 to [`COLOUR_BYTES`].
+fn colour(b: &[u8], c: &Item, what: &str) -> Result<String, String> {
+    match c {
+        Item::Text(r) if !r.is_empty() && r.len() <= COLOUR_BYTES => {
+            String::from_utf8(b[r.clone()].to_vec())
+                .map_err(|_| format!("{what}: a colour is text"))
+        }
+        _ => Err(format!(
+            "{what}: a colour is 1 to {COLOUR_BYTES} bytes of text"
+        )),
+    }
+}
+
+/// **The ceremony device's next identity, on the same session**
+/// (§14.3.3) [author, 2026-11-23: *"one pairing session with a fresh key
+/// per identity"*]: after one identity's dataset, another the ceremony
+/// device holds, which the device answers with an introduction of a key
+/// minted for that identity alone, so no two identities present one key.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeviceNext {
+    /// The identity's key material in full (§2.2).
+    pub material: Vec<u8>,
+    /// The colour the ceremony device shows it in, where it shows one.
+    pub colour: Option<String>,
+}
+
+impl DeviceNext {
+    /// The bytes of this `DeviceNext`, as §14.3.3 composes them.
+    pub fn encode(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        emit_array_head(&mut out, 2 + usize::from(self.colour.is_some()));
+        emit_uint(&mut out, 1);
+        out.extend_from_slice(&self.material);
+        if let Some(c) = &self.colour {
+            emit_tstr(&mut out, c);
+        }
+        out
+    }
+
+    /// Read a `DeviceNext` from `b`; an error naming what did not read.
+    pub fn decode(b: &[u8]) -> Result<Self, String> {
+        let item = parse_all(b).map_err(|e| format!("DeviceNext: {}", e.0))?;
+        let Item::Array(f) = &item else {
+            return Err("DeviceNext: not an array".into());
+        };
+        let (v, c) = match f.as_slice() {
+            [v, _] => (v, None),
+            [v, _, c] => (v, Some(c)),
+            _ => return Err("DeviceNext: not two or three fields".into()),
+        };
+        if !matches!(v, Item::Uint(1)) {
+            return Err("DeviceNext: not version 1".into());
+        }
+        let ranges = array_item_ranges(b, 0).ok_or("DeviceNext: item ranges")?;
+        let material = b[ranges[1].clone()].to_vec();
+        rhtn_crypto::Identity::from_key_material(&material)
+            .ok_or("DeviceNext: the key material does not read as an identity")?;
+        Ok(DeviceNext {
+            material,
+            colour: c.map(|c| colour(b, c, "DeviceNext")).transpose()?,
         })
     }
 }

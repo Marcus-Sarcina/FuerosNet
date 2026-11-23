@@ -49,6 +49,9 @@ pub struct DeviceLink {
     session: rhtn_client::local::DeviceSession,
     reach: String,
     run: std::sync::Mutex<Vec<Vec<u8>>>,
+    /// **Every key this link has delegated to**, so a key offered for a
+    /// second identity is never one already given to a first.
+    introduced: std::sync::Mutex<Vec<[u8; 32]>>,
 }
 
 #[uniffi::export]
@@ -61,6 +64,7 @@ impl DeviceLink {
             session: o.session(),
             reach: o.reach,
             run: std::sync::Mutex::new(Vec::new()),
+            introduced: std::sync::Mutex::new(Vec::new()),
         }))
     }
 
@@ -1711,15 +1715,37 @@ impl Participant {
         link: Arc<DeviceLink>,
         not_before: u64,
         count: u32,
+        colour: Option<String>,
     ) -> Result<Vec<u8>, Refused> {
         self.call("device_start", || {
             let run = self.delegate(link.session.device().to_vec(), not_before, count)?;
             let start = rhtn_client::local::DeviceStart {
                 material: self.material(),
                 delegation: run[0].clone(),
+                colour,
             };
             *link.run.lock().unwrap() = run;
             Ok(link.session.seal(&start.encode()))
+        })
+    }
+
+    /// **On the ceremony device, this identity as the next on a session
+    /// already used** (`wire-format.md` §14.3.3) [author, 2026-11-23]: the
+    /// identity and its colour, sealed for the link; the device answers
+    /// with an introduction of a key minted for this identity alone, which
+    /// [`Self::device_credential`] then delegates to.
+    pub fn device_next(
+        &self,
+        link: Arc<DeviceLink>,
+        colour: Option<String>,
+    ) -> Result<Vec<u8>, Refused> {
+        self.call("device_next", || {
+            link.run.lock().unwrap().clear();
+            let next = rhtn_client::local::DeviceNext {
+                material: self.material(),
+                colour,
+            };
+            Ok(link.session.seal(&next.encode()))
         })
     }
 
@@ -1728,10 +1754,18 @@ impl Participant {
     /// names a key other than the offer's, its bundle signed, and the
     /// credential sealed for the link.  The run is the one
     /// [`Self::device_start`] held, so the device holds one run.
+    ///
+    /// **After [`Self::device_next`] the run is signed here**, from
+    /// `not_before` for `count` windows, over the key the introduction
+    /// offers — refused where that key is the offer's or one this link
+    /// already delegated to, since two identities presenting one key are
+    /// linked by it (`light-client-requirements.md` §2).
     pub fn device_credential(
         &self,
         link: Arc<DeviceLink>,
         sealed: Vec<u8>,
+        not_before: u64,
+        count: u32,
     ) -> Result<Vec<u8>, Refused> {
         self.call("device_credential", || {
             let plain = link
@@ -1740,9 +1774,22 @@ impl Participant {
                 .ok_or_else(|| Refused::new("the introduction does not open under this offer"))?;
             let intro =
                 rhtn_client::local::DeviceIntroduction::decode(&plain).map_err(Refused::new)?;
-            if intro.device != link.session.device() {
+            let started = !link.run.lock().unwrap().is_empty();
+            if started && intro.device != link.session.device() {
                 return Err(Refused::new("the introduction names another key"));
             }
+            if !started {
+                if intro.device == link.session.device()
+                    || link.introduced.lock().unwrap().contains(&intro.device)
+                {
+                    return Err(Refused::new(
+                        "the introduction names a key another identity was given",
+                    ));
+                }
+                let run = self.delegate(intro.device.to_vec(), not_before, count)?;
+                *link.run.lock().unwrap() = run;
+            }
+            link.introduced.lock().unwrap().push(intro.device);
             let run = link.run.lock().unwrap().clone();
             if run.is_empty() {
                 return Err(Refused::new("no run started on this link"));

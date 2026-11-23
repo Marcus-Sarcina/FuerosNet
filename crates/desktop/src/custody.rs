@@ -127,6 +127,31 @@ impl Keyring {
         }
     }
 
+    /// **The transport seed of one paired identity**, by its keyhash in
+    /// hex: each identity presents a key of its own [author, 2026-11-23].
+    pub fn seed_for(&self, who: &str) -> Result<Option<Zeroizing<[u8; 32]>>, String> {
+        match self.read(&format!("transport-seed:{who}")) {
+            Held::Some(b) => {
+                let s: [u8; 32] = b
+                    .as_slice()
+                    .try_into()
+                    .map_err(|_| "a kept transport seed is not 32 bytes".to_string())?;
+                Ok(Some(Zeroizing::new(s)))
+            }
+            Held::None => Ok(None),
+            Held::Unreachable(e) => Err(format!("the keyring could not be read: {e}")),
+        }
+    }
+
+    /// Keep one paired identity's transport seed, never over another.
+    pub fn keep_seed_for(&self, who: &str, seed: &[u8; 32]) -> Result<(), String> {
+        if self.keep_new(&format!("transport-seed:{who}"), seed) {
+            Ok(())
+        } else {
+            Err(self.why().unwrap_or_default())
+        }
+    }
+
     /// Keep the transport seed a first pairing drew.
     pub fn keep_seed(&self, seed: &[u8; 32]) -> Result<(), String> {
         if self.keep_new("transport-seed", seed) {

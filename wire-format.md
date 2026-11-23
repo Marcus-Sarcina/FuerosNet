@@ -6090,6 +6090,9 @@ DeviceStart = [                ; the ceremony device, first, on the session
                                ;   offer's key: what the device stands up on
                                ;   to present the key its introduction
                                ;   offers
+  ? tstr .size (1..16),        ; the colour the ceremony device shows this
+                               ;   identity in, a palette name: display
+                               ;   only [author, 2026-11-23]
 ]
 ```
 
@@ -6097,6 +6100,30 @@ Then `DeviceIntroduction` from the device and `DeviceCredential` from the
 ceremony device, as above. **The credential's run opens with the delegation
 `DeviceStart` carried, byte for byte**, so the device holds one run and not
 two that overlap.
+
+**Every identity the ceremony device holds crosses on the one session, each
+under a key of its own** [author, 2026-11-23: *"one pairing session with a
+fresh key per identity"*]. After the first identity's dataset (below), the
+ceremony device opens each further identity with `DeviceNext`; the device
+answers with a `DeviceIntroduction` of a key it minted for that identity alone,
+and the ceremony device answers that with a `DeviceCredential` whose run it
+signs then, over that key, and that identity's dataset follows as the first
+one's did. **A key the session already delegated to, the offer's included, is
+refused for another identity**, since two identities presenting one key are
+linked by it and identities are the unit of unlinkability
+(`light-client-requirements.md` §2). The ceremony device closing the session is
+the end of them; what a holder removes from either device afterwards stays on
+that device.
+
+```
+DeviceNext = [                 ; the ceremony device, after an identity's
+                               ;   dataset, on the same session
+  uint,                        ; version, 1
+  KeyMaterial,                 ; §2.2: the next identity, one this session
+                               ;   has not named
+  ? tstr .size (1..16),        ; its colour, as `DeviceStart`'s
+]
+```
 
 | | |
 |---|---|
@@ -6165,5 +6192,7 @@ until both contributions are in and both holders have said yes.
 session instead of the screen** [author, 2026-11-18], and the hand-over
 after them: the offer's secret is what the screen carried, and a third
 device on the same network lacks it as it would lack a contribution read
-off a screen. A later hand-over to the same device opens the same way, from
+off a screen. **Where the ceremony device's holder says no, it sends an empty
+carriage in place of the hand-over**, so the session goes on to its next
+identity. A later hand-over to the same device opens the same way, from
 a fresh offer, and carries the dataset's messages alone.
