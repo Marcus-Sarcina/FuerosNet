@@ -151,6 +151,17 @@ fn two_devices_of_one_identity_pair_by_contribution_and_the_dataset_crosses_on_t
         "one pairing, named the same on both"
     );
 
+    // the phone serves from a node, and the desk from another at an
+    // address the phone has since moved from
+    let (node, other) = (vec![0x11u8; 32], vec![0x22u8; 32]);
+    phone
+        .agree_to(node.clone(), vec!["203.0.113.7:7431".into()])
+        .unwrap();
+    desk.agree_to(other.clone(), vec!["198.51.100.2:7431".into()])
+        .unwrap();
+    desk.agree_to(node.clone(), vec!["198.51.100.9:7431".into()])
+        .unwrap();
+
     // the hand-over, each holder asked on their own device
     let sealed = phone.dataset_carriage().unwrap();
     assert_eq!(
@@ -180,6 +191,19 @@ fn two_devices_of_one_identity_pair_by_contribution_and_the_dataset_crosses_on_t
         desk_shell.questions.lock().unwrap().len(),
         2,
         "the desk's holder was asked each time"
+    );
+    let agreed: Vec<(Vec<u8>, Vec<String>)> = desk
+        .agreed()
+        .into_iter()
+        .map(|a| (a.serving, a.addresses))
+        .collect();
+    assert_eq!(
+        agreed,
+        vec![
+            (node, vec!["203.0.113.7:7431".to_string()]),
+            (other, vec!["198.51.100.2:7431".to_string()]),
+        ],
+        "the phone's agreement taken over the desk's for its node, and the desk's own kept"
     );
     assert_eq!(took.refused, 0);
     assert_eq!(

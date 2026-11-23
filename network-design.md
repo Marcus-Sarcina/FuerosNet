@@ -9127,7 +9127,11 @@ archive.
 
 **The latest dataset is the whole of it** [author, 2026-10-16]: the archive, the
 derived view the client keeps beside it — contacts, held locators, profiles —
-and the sealed captures. **Not the catalogue** [author, 2026-11-15]: rather than
+and the sealed captures; **and the nodes agreed to, with the addresses each
+agreement names** [author, 2026-11-23], so the device given the dataset attaches
+where the one that handed it does. Each is taken as the receiving device's
+agreement, replacing its own for that node, and none it holds is withdrawn.
+**Not the catalogue** [author, 2026-11-15]: rather than
 one device's view of what is available replicated to another, each device
 sweeps every patron it attaches to for the roles available now (§11.5), which
 cannot fall out of step with what a sweep would show, and tells that node of

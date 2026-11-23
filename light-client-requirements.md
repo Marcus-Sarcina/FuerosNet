@@ -981,7 +981,10 @@ nothing below reaches across them.
   2026-10-16]. The other device is brought to your whole state: the archive,
   the view you keep beside it — your contacts and the aliases you have fetched
   for them (§4.3), the locators you hold, the profiles you publish (§4.4) —
-  and your sealed captures, which cross as the ciphertext they are. **Not your
+  and your sealed captures, which cross as the ciphertext they are. **And the
+  nodes you agreed to, with their addresses** [author, 2026-11-23]: the other
+  device takes each as its own agreement, replacing its own for that node and
+  withdrawing none it holds, and attaches where you do (§4). **Not your
   catalogue view** [author, 2026-11-15]: the other device sweeps each patron it
   attaches to for what is available now (§8), which also tells that node of
   it (design §23.3). **The identity seed does not cross**:

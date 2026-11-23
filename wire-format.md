@@ -5563,7 +5563,7 @@ design already depends on.
 | Traversal candidates | Two participants' devices | design §12.6.3 [author, 2026-09-25] | `CandidateHandover` (§14.3.2), carrying the `Candidate` structure this document now defines; the same candidates travel the end-to-end payload path when a direct connection is set up remotely (design §12.6.3, §14.1.1) |
 | The capture-key handover — the key each participant derived for the captures the other holds of them, handed across at capture time | Two participants' devices | design §7.5.2, design §7.5.2.6 | `CaptureKeyHandover` (§14.3.2): the 32-byte key design §7.5.2.6 derives, anchored to the ceremony-id like the proximity outcomes and the candidates [author, 2026-10-02] |
 | A delegated device's transport key, and what the ceremony device hands back for it | Two devices of one identity | design §23.3, §8.2 | `DeviceIntroduction` then `DeviceCredential` (§14.3.3): the key the delegations will name, then §8.2's delegations and the identity's encryption secrets (§2.5) [author, 2026-11-19]; for a device with no camera, `DeviceOffer` read off its screen first and `DeviceStart` before the two |
-| **The dataset one device of an identity hands another** — the records the other lacks, the view and the sealed captures, on both holders' acknowledgement | Two devices of one identity | design §23.3, design §10.2 [author, 2026-11-15] | `DatasetContribution` then `DatasetHandover` (§14.3.3): the contributions as §14.3.2's optical step, the dataset sealed under the key they derive |
+| **The dataset one device of an identity hands another** — the records the other lacks, the view, the sealed captures and the nodes agreed to, on both holders' acknowledgement | Two devices of one identity | design §23.3, design §10.2 [author, 2026-11-15] | `DatasetContribution` then `DatasetHandover` (§14.3.3): the contributions as §14.3.2's optical step, the dataset sealed under the key they derive |
 | **The participants' own legs of the conversation** — kinds 9 to 19 of §7.10.1, each one addressed to the co-present counterparty, the arranging of an adoption among them, and the prune's two legs, kinds 22 and 23, which no witness sees [author, 2026-10-19] | Two participants' devices | §7.10.1, design §7.1 [author, 2026-10-05] | The kind-tagged plaintext §7.10.1 defines, **unchanged**, sealed under the local session (§14.3.2) and carried by the same bearer. A witness's or verifier's leg of the same kind travels the end-to-end payload path instead; the leg is chosen by who the recipient is |
 
 **The last row is the one that is not between two people.** A phone
@@ -6078,9 +6078,11 @@ DatasetHandover = bstr         ; the dataset, sealed as §14.3.2's carriages
                                ;   contributions by their bytes, the two
                                ;   devices sharing one keyhash. Inside: the
                                ;   records the receiver's heads do not reach,
-                               ;   and the whole of the view and the sealed
-                               ;   captures, in the client's own encoding
-                               ;   (design §23.3); no seed and no credential
+                               ;   the whole of the view and the sealed
+                               ;   captures, and the nodes agreed to with
+                               ;   their addresses, in the client's own
+                               ;   encoding (design §23.3); no seed and no
+                               ;   credential
 ```
 
 **What binds it is the same as above and no more**: the two devices share

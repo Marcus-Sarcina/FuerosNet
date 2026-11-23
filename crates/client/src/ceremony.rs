@@ -954,8 +954,40 @@ fn insert_absent<K: Ord, V>(mine: &mut BTreeMap<K, V>, theirs: BTreeMap<K, V>) -
 const NO_SEED: &str = "this device holds no seed";
 
 /// The shape of the dataset one device of an identity hands another
-/// (design §23.3): `[version, owner, heads, contents]`.
-pub const DATASET_VERSION: u64 = 1;
+/// (design §23.3): `[version, owner, heads, contents, agreed]`, the last
+/// `[* [node, [* address]]]`.
+pub const DATASET_VERSION: u64 = 2;
+
+/// **The agreements a dataset carries**: `[* [node, [* address]]]`, each
+/// node a keyhash.  `None` where any does not read.
+fn dataset_agreements(
+    bytes: &[u8],
+    item: &rhtn_codec::cbor::Item,
+) -> Option<Vec<(Keyhash, Vec<String>)>> {
+    use rhtn_codec::cbor::Item;
+    let Item::Array(rows) = item else {
+        return None;
+    };
+    rows.iter()
+        .map(|row| {
+            let Item::Array(pair) = row else { return None };
+            let [Item::Bytes(n), Item::Array(addrs)] = pair.as_slice() else {
+                return None;
+            };
+            let node: Keyhash = bytes[n.clone()].try_into().ok()?;
+            let addresses = addrs
+                .iter()
+                .map(|a| match a {
+                    Item::Text(t) => std::str::from_utf8(&bytes[t.clone()])
+                        .ok()
+                        .map(String::from),
+                    _ => None,
+                })
+                .collect::<Option<Vec<String>>>()?;
+            Some((node, addresses))
+        })
+        .collect()
+}
 
 fn hex8(k: &Keyhash) -> String {
     k[..4].iter().map(|b| format!("{b:02x}")).collect()
@@ -5063,7 +5095,10 @@ impl Client {
     /// the view kept beside the archive — the contacts with the locators
     /// and aliases they carry, the profiles, the own-capture rows, the
     /// disclosure sets, late responses, direct hints and the blobs held for
-    /// peers — and the sealed captures, as the ciphertext they are.
+    /// peers — and the sealed captures, as the ciphertext they are; and
+    /// the nodes agreed to, with the addresses each agreement names
+    /// [author, 2026-11-23], so the other device attaches where this one
+    /// does.
     ///
     /// **No seed and no credential cross.**  The store writes no key; a
     /// signing device holds the identity because its holder put the
@@ -5107,7 +5142,7 @@ impl Client {
         };
         let heads = self.archive.heads();
         let mut out = Vec::new();
-        emit_array_head(&mut out, 4);
+        emit_array_head(&mut out, 5);
         emit_uint(&mut out, DATASET_VERSION);
         emit_bstr(&mut out, &me);
         emit_array_head(&mut out, heads.len());
@@ -5115,6 +5150,15 @@ impl Client {
             emit_bstr(&mut out, h);
         }
         emit_bstr(&mut out, &backup::encode_contents(&contents));
+        emit_array_head(&mut out, self.payload.agreed.len());
+        for (node, addresses) in &self.payload.agreed {
+            emit_array_head(&mut out, 2);
+            emit_bstr(&mut out, node);
+            emit_array_head(&mut out, addresses.len());
+            for a in addresses {
+                emit_tstr(&mut out, a);
+            }
+        }
         tracing::info!(
             target: "peer",
             records = contents.records.len(),
@@ -5132,13 +5176,18 @@ impl Client {
     /// inserted where absent.  **Nothing is asked of the person and nothing
     /// of a seed**: a device holding none takes it as readily, and signs no
     /// more afterwards than before.
+    ///
+    /// **The other device's agreements are the person's**, both holders
+    /// having said yes to the hand-over: each is taken, replacing this
+    /// device's for the same node, and none this device holds is
+    /// withdrawn [author, 2026-11-23].
     pub(crate) fn take_dataset(&mut self, bytes: &[u8]) -> Result<Reconciled, String> {
         use rhtn_codec::cbor::{Item, parse_all};
         let item = parse_all(bytes).map_err(|_| "not a dataset".to_string())?;
         let Item::Array(f) = &item else {
             return Err("not a dataset".into());
         };
-        let [v, owner, _heads, body] = f.as_slice() else {
+        let [v, owner, _heads, body, agreed] = f.as_slice() else {
             return Err("not a dataset".into());
         };
         match v {
@@ -5160,7 +5209,14 @@ impl Client {
             Some(k) if k == self.public.keyhash => {}
             _ => return Err("this dataset names another owner".into()),
         }
-        Ok(self.take_contents(contents, "device"))
+        let agreements =
+            dataset_agreements(bytes, agreed).ok_or("the dataset's agreements do not read")?;
+        let taken = self.take_contents(contents, "device");
+        // one naming no address is nothing to dial, and is left out
+        for (node, addresses) in agreements.into_iter().filter(|(_, a)| !a.is_empty()) {
+            self.agree_to(node, addresses);
+        }
+        Ok(taken)
     }
 
     /// **Every contact out of the dataset**, how many went: the bench's
