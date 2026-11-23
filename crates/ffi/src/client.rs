@@ -1473,6 +1473,7 @@ impl Participant {
         self.call("browse", || {
             let node = keyhash(&node).ok_or_else(|| Refused::new("a node is 32 bytes"))?;
             self.net.browse(&self.handle, node)?;
+            self.icons_at(node);
             self.save()
         })
     }
@@ -2238,8 +2239,11 @@ impl Participant {
             // subnet page from the moment they connect, and no screen asks
             // them to look for any. What the sweep could not reach is said
             // to the diagnostics and not to the person
-            if let Err(why) = self.net.browse(&self.handle, node) {
-                tracing::info!(target: "attach", node = %rhtn_client::diag::id8(&node), why = %why.reason(), "attach.unswept");
+            match self.net.browse(&self.handle, node) {
+                Ok(()) => self.icons_at(node),
+                Err(why) => {
+                    tracing::info!(target: "attach", node = %rhtn_client::diag::id8(&node), why = %why.reason(), "attach.unswept");
+                }
             }
             self.save()?;
             Ok(a)
@@ -4891,6 +4895,32 @@ pub fn network_point(
 }
 
 impl Participant {
+    /// **Ask each resource at `node` for its icon, once a run**
+    /// (`rhtn_client::ceremony::ICON_PATH`) [author, 2026-11-23]: after a
+    /// sweep, for what it found that has not been asked. An answer that is
+    /// an ask is not held — nobody opened anything to be asked — and one
+    /// not delivered is asked again at the next sweep. A node that stops
+    /// answering ends the round.
+    fn icons_at(&self, node: rhtn_model::Keyhash) {
+        let wanted = self.handle.with_blocking(move |c| c.icons_wanted(node));
+        for r in wanted {
+            let msg = self.handle.with_blocking(move |c| c.icon_request(node, r));
+            let Ok(answers) = self.net.carry_for_answer(vec![msg]) else {
+                return;
+            };
+            let Some(reply) = answers.into_iter().next() else {
+                continue;
+            };
+            if let Ok((0, body)) = self
+                .handle
+                .with_blocking(move |c| c.take_resource_response(&reply))
+            {
+                self.handle
+                    .with_blocking(move |c| c.take_icon(r, body.as_deref()));
+            }
+        }
+    }
+
     /// Carry one request to a resource and read what came back, once.
     fn carry_to_resource(
         &self,

@@ -63,7 +63,7 @@ workspace.
 
 ## A resource's window
 
-The catalog's **Open** frames a resource's page in a window of its own,
+A launcher card on a subnet's page frames a resource's page in a window of its own,
 under the policy `light-client-requirements.md` §8 sets and the phone
 already keeps (`src/frame.rs` says how each rule is met here):
 

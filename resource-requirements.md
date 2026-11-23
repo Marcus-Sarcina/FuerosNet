@@ -837,6 +837,14 @@ owner, the role set fingerprints the *user within it*. Not a reason to withhold
 roles; a reason for operators to choose names knowing they are public to those who
 can see the resource.
 
+**Its icon is what it serves at `/favicon.ico`** [author, 2026-11-23]. A member's
+client badges the launcher it shows for a resource with the answer to `GET
+/favicon.ico`, asked once in its run, where that answer is 200 with a declared
+`image/png`, `image/jpeg` or `image/webp` of at most 64 KiB
+(`light-client-requirements.md` §8); a resource serving none is shown by its
+mark. Serve it to anyone who reaches you: it is asked by a client nobody is
+using yet, so answering it with an ask (§3.4) shows nothing and is not held.
+
 ---
 
 ## 8. Packaging

@@ -24,6 +24,13 @@ use std::collections::BTreeMap;
 /// constant would not notice the contract moving.
 pub const ASK_MEDIA: &str = "application/vnd.rhtn.utility+json";
 
+/// **Where a client asks for this resource's icon** (`light-client-requirements.md`
+/// §8), written out for the reason [`ASK_MEDIA`] is.
+pub const ICON_PATH: &str = "/favicon.ico";
+
+/// The icon served there: a 64-pixel PNG.
+pub const ICON: &[u8] = include_bytes!("../res/icon.png");
+
 /// The tag the claim's signed array opens with (§3.4).
 pub const CLAIM_TAG: &str = "rhtn/utility@1";
 
@@ -430,6 +437,9 @@ impl App {
             String::new()
         };
         match method.as_str() {
+            // **its icon, where a client's launcher looks for one**
+            // (`light-client-requirements.md` §8), which is no step
+            "GET" if target == ICON_PATH => response(200, "image/png", ICON.to_vec()),
             "GET" => {
                 let walk = self.walks.entry(principal.clone()).or_default();
                 if walk.at >= STEPS.len() {

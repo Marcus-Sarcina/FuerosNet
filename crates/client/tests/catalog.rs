@@ -387,3 +387,96 @@ fn the_page_is_asked_beside_the_catalog_and_names_what_no_entry_did() {
         "and not twice"
     );
 }
+
+// functional: CAT-029
+#[test]
+fn each_resource_swept_is_asked_once_for_its_icon_and_only_a_declared_image_is_kept() {
+    use rhtn_client::ceremony::{ICON_PATH, Msg};
+    let mut c = fresh("alice");
+    c.attach(kh("w1"), &[]);
+    let posted = c.browse_at(kh("w1"));
+    let [_, Msg::CatalogPage { bytes, .. }] = posted.as_slice() else {
+        panic!("the page asked for: {posted:?}")
+    };
+    let asked = CatalogPageRequest::decode(bytes).unwrap();
+    let item = |b: u8, name: &str| PageItem {
+        resource: [b; 32],
+        owner: kh("bob"),
+        name: name.into(),
+        roles: vec![],
+    };
+    let page = CatalogPage {
+        nonce: asked.nonce,
+        items: vec![
+            item(0x51, "png"),
+            item(0x52, "page"),
+            item(0x53, "undeclared"),
+            item(0x54, "too big"),
+            item(0x55, "svg"),
+            item(0x56, "missing"),
+        ],
+    };
+    assert_eq!(c.take_catalog_page(kh("w1"), &page.encode()), Ok(6));
+    assert_eq!(c.icons_wanted(kh("w1")).len(), 6);
+    assert!(c.icons_wanted(kh("w2")).is_empty(), "nothing swept there");
+    // **the path the web's browsers try**, as the shells compose a request
+    let Msg::ResourceRequest { node, bytes } = c.icon_request(kh("w1"), [0x51; 32]) else {
+        panic!("not a resource request")
+    };
+    assert_eq!(node, kh("w1"));
+    let req = rhtn_archive::catalog::ResourceRequest::decode(&bytes).unwrap();
+    assert_eq!(req.resource, [0x51; 32]);
+    assert!(
+        req.message
+            .starts_with(format!("GET {ICON_PATH} HTTP/1.1\r\n").as_bytes())
+    );
+    let answered = |status: &str, media: Option<&str>, body: &[u8]| {
+        let mut m = format!("HTTP/1.1 {status}\r\n");
+        if let Some(t) = media {
+            m.push_str(&format!("content-type: {t}\r\n"));
+        }
+        m.push_str(&format!("content-length: {}\r\n\r\n", body.len()));
+        let mut m = m.into_bytes();
+        m.extend_from_slice(body);
+        m
+    };
+    let png = b"\x89PNG\r\n\x1a\nnot really";
+    c.take_icon(
+        [0x51; 32],
+        Some(&answered("200 OK", Some("image/png"), png)),
+    );
+    c.take_icon(
+        [0x52; 32],
+        Some(&answered("200 OK", Some("text/html"), b"<p>hi</p>")),
+    );
+    // **nothing is sniffed**: PNG bytes declared as nothing are not an icon
+    c.take_icon([0x53; 32], Some(&answered("200 OK", None, png)));
+    c.take_icon(
+        [0x54; 32],
+        Some(&answered(
+            "200 OK",
+            Some("image/webp"),
+            &vec![0; rhtn_codec::bounds::PROFILE_IMAGE_BYTES + 1],
+        )),
+    );
+    c.take_icon(
+        [0x55; 32],
+        Some(&answered("200 OK", Some("image/svg+xml"), b"<svg/>")),
+    );
+    c.take_icon(
+        [0x56; 32],
+        Some(&answered("404 Not Found", Some("image/png"), png)),
+    );
+    assert!(
+        c.icons_wanted(kh("w1")).is_empty(),
+        "each asked once a run, answered or not"
+    );
+    for r in c.resources_held() {
+        if r.resource == [0x51; 32] {
+            assert_eq!(r.icon_format, Some(rhtn_archive::profile::IMAGE_PNG));
+            assert_eq!(r.icon.as_deref(), Some(&png[..]));
+        } else {
+            assert_eq!((r.icon_format, r.icon), (None, None), "{}", r.instance);
+        }
+    }
+}

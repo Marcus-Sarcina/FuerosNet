@@ -3,7 +3,7 @@
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).
 
-**Pinned**: wire-format.md `b578359b32a0fe477dbf32d3f15f7c958ea537dd8e25331ed842f9d6647dd92e` · network-design.md `dc890eae3c82c88f0cf3629847b7001cad7a7ac8b7b3cd49ef0036a9dd88bc73`
+**Pinned**: wire-format.md `b578359b32a0fe477dbf32d3f15f7c958ea537dd8e25331ed842f9d6647dd92e` · network-design.md `87b92276b0c92c1ff5d648be121d9f797e3a295bfe3b899ddd79eb7b65876a2a`
 
 ## The result model is structured, not a single status
 

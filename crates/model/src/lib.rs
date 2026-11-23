@@ -233,6 +233,14 @@ pub struct Resource {
     /// requirements.md` §8.1): its launcher's count, rolled up into its
     /// subnet's [author, 2026-11-23].
     pub waiting: u32,
+    /// **Its icon** [author, 2026-11-23: *"badged with a favicon image
+    /// determined by the resource"*]: what it serves at `/favicon.ico`,
+    /// where that is a PNG (1), JPEG (2) or WebP (3) of at most 64 KiB —
+    /// the tags and bound of `wire-format.md` §7.11's profile image — and
+    /// none until it has been asked or where it served none.
+    pub icon_format: Option<u64>,
+    /// The icon's bytes, in that format.
+    pub icon: Option<Vec<u8>>,
 }
 
 /// **A profile** (`wire-format.md` §7.11): a subject's own for a subnet

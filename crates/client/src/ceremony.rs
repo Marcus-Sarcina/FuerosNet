@@ -661,6 +661,11 @@ pub struct PendingAsk {
     pub at: u64,
 }
 
+/// **Where a resource's icon is asked for** (`light-client-requirements.md`
+/// §8) [author, 2026-11-23]: the path the web's own browsers try, so a
+/// resource chooses its icon by what it serves there.
+pub const ICON_PATH: &str = "/favicon.ico";
+
 /// A participant client: its identity, archive and store, its two query
 /// roles, whom it recognises, and the device it runs on.
 pub struct Client {
@@ -789,6 +794,12 @@ pub struct Client {
     pub asks: BTreeMap<u64, PendingAsk>,
     /// The number the next ask gets.
     pub asked: u64,
+    /// **What each resource serves as its icon** (`light-client-requirements.md`
+    /// §8) [author, 2026-11-23], by resource: a format tag of `wire-format.md`
+    /// §7.11's profile image and the bytes, or none where it served none
+    /// that is one. **Held in memory alone**, as nothing else a resource
+    /// answers is kept: a restart asks again at the next sweep.
+    pub icons: BTreeMap<Keyhash, Option<(u64, Vec<u8>)>>,
     /// **The device's application secret** (`crate::utility`): what every
     /// per-audience application key expands from.  Minted at first need,
     /// kept with the device's own state and never in the backup — a
@@ -1126,6 +1137,7 @@ impl Client {
             rotation: None,
             asks: BTreeMap::new(),
             asked: 0,
+            icons: BTreeMap::new(),
             application_secret: None,
             recovery_responses: Vec::new(),
             active: None,
@@ -6377,6 +6389,17 @@ impl Client {
             .collect()
     }
 
+    /// **The request for a resource's icon**: `GET` [`ICON_PATH`], composed
+    /// as the shells compose a page's.
+    #[must_use]
+    pub fn icon_request(&self, node: Keyhash, resource: Keyhash) -> Msg {
+        self.request_resource(
+            node,
+            resource,
+            format!("GET {ICON_PATH} HTTP/1.1\r\nhost: resource\r\n\r\n").into_bytes(),
+        )
+    }
+
     /// **Ask a resource for something** (`wire-format.md` §11.1): the
     /// request goes to the node hosting it, which parses and re-serialises
     /// the application message and evaluates the asker's reach before the
@@ -6547,6 +6570,53 @@ impl Client {
         let n = page.items.len();
         self.catalog.portion(node).page = page.items.into_iter().map(|i| (i.resource, i)).collect();
         Ok(n)
+    }
+
+    /// **The resources at `node` whose icon has not been asked for**: every
+    /// one its portion holds, by entry or by page, that [`Client::icons`]
+    /// has no answer for.
+    #[must_use]
+    pub fn icons_wanted(&self, node: Keyhash) -> Vec<Keyhash> {
+        let Some(p) = self.catalog.portions.get(&node) else {
+            return Vec::new();
+        };
+        let mut out: Vec<Keyhash> = p
+            .entries
+            .values()
+            .filter_map(|b| rhtn_archive::catalog::CatalogEntry::parse(b).ok())
+            .map(|e| e.resource)
+            .chain(p.page.keys().copied())
+            .filter(|r| !self.icons.contains_key(r))
+            .collect();
+        out.sort_unstable();
+        out.dedup();
+        out
+    }
+
+    /// **Take what a resource answered at [`ICON_PATH`]**, delivered: its
+    /// icon where it answered 200 with a declared PNG, JPEG or WebP of at
+    /// most 64 KiB — the profile image's formats and bound — and none
+    /// otherwise, which is kept too, so it is not asked again this run.
+    /// **Nothing is sniffed**: the declared type decides (§8).
+    pub fn take_icon(&mut self, resource: Keyhash, message: Option<&[u8]>) {
+        use rhtn_archive::profile::{IMAGE_JPEG, IMAGE_PNG, IMAGE_WEBP};
+        let icon = message
+            .and_then(|m| crate::resource::answer(m).ok())
+            .filter(|a| a.http_status == 200)
+            .and_then(|a| {
+                let tag = match a.media.as_deref()? {
+                    "image/png" => IMAGE_PNG,
+                    "image/jpeg" => IMAGE_JPEG,
+                    "image/webp" => IMAGE_WEBP,
+                    _ => return None,
+                };
+                (1..=rhtn_codec::bounds::PROFILE_IMAGE_BYTES)
+                    .contains(&a.body.len())
+                    .then_some((tag, a.body))
+            });
+        tracing::info!(target: "cer", resource = %id8(&resource), icon = icon.is_some(), "cer.icon");
+        self.icons.insert(resource, icon);
+        self.changed.insert(rhtn_model::Noun::Resources);
     }
 
     /// The node the sweep under way is reading, which is where its

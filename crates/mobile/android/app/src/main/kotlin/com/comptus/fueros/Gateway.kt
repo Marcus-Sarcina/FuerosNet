@@ -684,24 +684,17 @@ object Gateway {
         return call("hostRunnerPrivateKey", { null }) { p.hostRunnerPrivateKey() }
     }
 
-    /** Sweep the serving node's catalog (`wire-format.md` §6.4). */
-    fun browse(): String? {
-        // **every held identity sweeps its own** [author, 2026-11-07]: a
-        // catalog is read inside the subnets an identity belongs to, and
-        // the roll below shows them together. The refusal reported is the
-        // first, since one identity's node refusing says nothing about
-        // another's.
-        if (loaded.isEmpty()) return "the kernel is not running"
+    /**
+     * **Sweep the node serving a subnet, as the identity that holds it**
+     * (`light-client-requirements.md` §8) [author, 2026-11-23: *"Sweep
+     * when the user opens the subnet"*]: its catalog and its page, and the
+     * icon of anything new on them. The refusal, where there is one, which
+     * goes to the diagnostics and not to the person.
+     */
+    fun browse(by: String, node: String): String? {
+        val p = loaded[by] ?: return "that identity is not open here"
         var why: String? = null
-        for ((_, p) in loaded) {
-            // a sweep names the node it reads: one per node this identity
-            // holds a session with [restructure step 1, 2026-11-14]
-            val held = call("attachments", { emptyList() }) { p.attachments() }
-            if (held.isEmpty() && why == null) why = "no node is attached"
-            for (node in held) {
-                call("browse", { if (why == null) why = it.reason }) { p.browse(node) }
-            }
-        }
+        call("browse", { why = it.reason }) { p.browse(unhex(node)) }
         return why
     }
 

@@ -350,3 +350,25 @@ fn every_ask_in_the_sequence_is_one_the_kernel_reads() {
     tokens.dedup();
     assert_eq!(before, tokens.len(), "two steps share a token");
 }
+
+// functional: CAT-029
+#[test]
+fn its_icon_is_one_a_launcher_keeps_and_asking_for_it_is_no_step() {
+    let mut a = app();
+    let first = get(&mut a, WHO);
+    let icon = a.handle(
+        format!(
+            "GET {} HTTP/1.1\r\nhost: testapp.internal\r\nrhtn-principal: {WHO}\r\nrhtn-secret: {}\r\n\r\n",
+            rhtn_testapp::ICON_PATH,
+            host_secret()
+        )
+        .as_bytes(),
+    );
+    let read = rhtn_client::resource::answer(&icon).unwrap();
+    assert_eq!(
+        (read.http_status, read.media.as_deref()),
+        (200, Some("image/png"))
+    );
+    assert!(read.body.starts_with(b"\x89PNG\r\n\x1a\n") && read.body.len() <= 65_536);
+    assert_eq!(get(&mut a, WHO), first, "the walk did not move");
+}

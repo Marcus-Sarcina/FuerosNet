@@ -3,6 +3,7 @@ package com.comptus.fueros
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -178,6 +179,8 @@ class ChromeTest {
             truncated = false,
             stale = false,
             waiting = waiting.toUInt(),
+            iconFormat = null,
+            icon = null,
         )
 
     // functional: UX-018
@@ -202,5 +205,19 @@ class ChromeTest {
         assertEquals("the resources' asks roll up", 2, Chrome.unseen(false, launched))
         assertEquals("and a move of the node besides", 3, Chrome.unseen(true, launched))
         assertEquals(0, Chrome.unseen(false, emptyList()))
+    }
+
+    // functional: CAT-029
+    @Test
+    fun a_card_wears_the_icon_its_resource_served() {
+        val ours = "aa".repeat(32)
+        val png = byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47)
+        val held = listOf(
+            offered(ours, "11".repeat(32), "testapp.internal", 0).copy(iconFormat = 1uL, icon = png),
+            offered(ours, "22".repeat(32), "Board", 0),
+        )
+        val launched = Chrome.launchers(held, ours)
+        assertSame(png, launched.first { it.name == "testapp.internal" }.icon)
+        assertNull("its mark stands in", launched.first { it.name == "Board" }.icon)
     }
 }

@@ -97,6 +97,9 @@ pub enum Act {
         /// Where it answers, `host:port`.
         address: String,
     },
+    /// **Back**, as the phone's `‹` and its platform's back are: the place
+    /// before, else the one this is reached from.
+    Back,
     /// Go to a place.
     Go {
         /// Where.
@@ -148,6 +151,7 @@ pub fn act(message: &str) -> Result<Act, String> {
                 .ok_or_else(|| "`yes` is missing".into());
         }
         "launch" => return Ok(Act::Launch),
+        "back" => return Ok(Act::Back),
         "go" => {
             let named = s("place")?;
             return screens::Place::parse(&named)
@@ -506,6 +510,7 @@ mod tests {
             Act::Answer { yes: true }
         );
         assert_eq!(act(r#"{"act":"launch"}"#).unwrap(), Act::Launch);
+        assert_eq!(act(r#"{"act":"back"}"#).unwrap(), Act::Back);
         assert_eq!(
             act(r#"{"act":"backup","data":"00Ff"}"#).unwrap(),
             Act::Backup {

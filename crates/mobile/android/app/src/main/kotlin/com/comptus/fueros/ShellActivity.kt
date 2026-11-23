@@ -351,6 +351,7 @@ class ShellActivity : Activity() {
         }
         is Chrome.Rung.Subnet -> orb(rung, Chrome.mark(rung.alias, rung.id)) {
             go(Chrome.Place.Subnet(rung.id))
+            sweep(rung.id)
         }
     }
 
@@ -432,8 +433,25 @@ class ShellActivity : Activity() {
         return Chrome.launchers(Gateway.resourcesHeld().filter { it.by == o.by }.map { it.row }, node)
     }
 
-    /** **One launcher card**: the resource's name, its count above its
-     *  corner where something waits, and opening it on a tap. */
+    /**
+     * **Opening a subnet sweeps the node serving it** [author, 2026-11-23:
+     * *"Sweep when the user opens the subnet"*], as the identity that holds
+     * it; what that found reaches the page through the model. A refusal
+     * goes to the diagnostics, since the person's attention is not drawn
+     * to the node.
+     */
+    private fun sweep(id: String) {
+        val o = scopes.firstOrNull { it.row.id.hex() == id } ?: return
+        val node = o.row.patron?.hex() ?: Gateway.keyhash(o.by) ?: return
+        Thread({
+            Gateway.browse(o.by, node)
+            Model.refresh(setOf(uniffi.rhtn_model.Noun.RESOURCES))
+        }, "fueros-sweep").start()
+    }
+
+    /** **One launcher card**: the resource's icon, else its mark, its
+     *  name, its count above its corner where something waits, and
+     *  opening it on a tap. */
     private fun launcher(by: String, l: Chrome.Launcher): View {
         val c = Palette.now
         val card = FrameLayout(this).apply {
@@ -454,20 +472,49 @@ class ShellActivity : Activity() {
                 )
             }
         }
-        card.addView(
+        val face = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(14), dp(12), dp(16), dp(12))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(c.sunken)
+                setStroke(dp(1), c.rule)
+                cornerRadius = dp(10).toFloat()
+            }
+        }
+        // **badged with the icon the resource serves** [author, 2026-11-23],
+        // decoded by the platform from the format the kernel took; its
+        // mark where it served none, as an orb's
+        val bitmap = l.icon?.let { android.graphics.BitmapFactory.decodeByteArray(it, 0, it.size) }
+        face.addView(
+            if (bitmap != null) {
+                android.widget.ImageView(this).apply {
+                    setImageBitmap(bitmap)
+                    scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                    layoutParams = LinearLayout.LayoutParams(dp(40), dp(40))
+                }
+            } else {
+                TextView(this).apply {
+                    text = Chrome.mark(l.name, l.resource)
+                    textSize = 15f
+                    typeface = Type.bold
+                    setTextColor(Palette.RAIL_INK)
+                    gravity = Gravity.CENTER
+                    background = Crowns.rounded(Palette.RAIL_ORB, dp(10))
+                    layoutParams = LinearLayout.LayoutParams(dp(40), dp(40))
+                }
+            },
+        )
+        face.addView(
             TextView(this).apply {
                 text = l.name
                 textSize = 17f
                 typeface = Type.bold
                 setTextColor(c.ink)
-                setPadding(dp(16), dp(20), dp(16), dp(20))
-                background = android.graphics.drawable.GradientDrawable().apply {
-                    setColor(c.sunken)
-                    setStroke(dp(1), c.rule)
-                    cornerRadius = dp(10).toFloat()
-                }
+                setPadding(dp(14), 0, 0, 0)
             },
         )
+        card.addView(face)
         Chrome.badge(l.unseen)?.let { n ->
             card.addView(
                 TextView(this).apply {
@@ -843,7 +890,8 @@ class ShellActivity : Activity() {
                 )
                 // **what this subnet's node offers, one card each**
                 // [author, 2026-11-23]: swept when the node was connected
-                // to, and opened as the identity that holds the subnet
+                // to and when the subnet was opened, and opened as the
+                // identity that holds the subnet
                 owned?.let { o -> launchersOf(o).forEach { column.addView(launcher(o.by, it)) } }
             }
             is Chrome.Place.Direct -> {

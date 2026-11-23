@@ -21,7 +21,9 @@ use rhtn_cli::launch::TlsTransport;
 use rhtn_desktop::custody::Keyring;
 use rhtn_desktop::participant::{self, Device, Held, hex};
 use rhtn_desktop::platform::{self, Desk};
-use rhtn_desktop::screens::{self, Body, Person, Place, ResourceRow, Snapshot, SubnetRow};
+use rhtn_desktop::screens::{
+    self, Body, Crown, History, Person, Place, ResourceRow, Snapshot, SubnetRow,
+};
 use rhtn_desktop::threads::{self, Delivery, Record, Sealer, Threads};
 use rhtn_desktop::{Act, act, code, directory, frame, pairing, phrase, said, verify_and_keep};
 use rhtn_ffi::client::{PageShape, Participant, ResourceAnswer, UtilityOutcome};
@@ -153,7 +155,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let up = Arc::new(Up {
         running: Mutex::new(None),
         device: Mutex::new(None),
-        place: Mutex::new(Place::Home),
+        place: Mutex::new(History::default()),
         threads: Mutex::new(None),
         closing: AtomicBool::new(false),
     });
@@ -254,7 +256,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let _ = ours.load_url(INDEX);
             }
             Event::UserEvent(Said::Redraw(place, script)) => {
-                if *up.place.lock().unwrap() == place {
+                if *up.place.lock().unwrap().here() == place {
                     let _ = ours.evaluate_script(&script);
                 }
             }
@@ -308,7 +310,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let _ = ours.load_url(INDEX);
                 }
                 Ok(Act::Go { place }) => {
-                    *up.place.lock().unwrap() = place;
+                    up.place.lock().unwrap().go(place.clone());
+                    let (back, up) = (worker.clone(), up.clone());
+                    std::thread::spawn(move || {
+                        draw(&up, &back, true);
+                        if let Place::Subnet(id) = place {
+                            opened(&up, &back, &id);
+                        }
+                    });
+                }
+                Ok(Act::Back) => {
+                    up.place.lock().unwrap().back();
                     let (back, up) = (worker.clone(), up.clone());
                     std::thread::spawn(move || draw(&up, &back, true));
                 }
@@ -585,7 +597,7 @@ fn finish_paired(
 struct Up {
     running: Mutex<Option<Arc<Participant>>>,
     device: Mutex<Option<Device>>,
-    place: Mutex<Place>,
+    place: Mutex<History>,
     threads: Mutex<Option<Arc<Threads>>>,
     closing: AtomicBool,
 }
@@ -611,7 +623,7 @@ fn draw(up: &Up, back: &EventLoopProxy<Said>, whole: bool) {
     let (Some(p), Some(d)) = (p, d) else {
         return;
     };
-    let place = up.place.lock().unwrap().clone();
+    let place = up.place.lock().unwrap().here().clone();
     let threads = up.threads.lock().unwrap().clone();
     let snap = snapshot(&p, d, threads.as_deref());
     let body = match &place {
@@ -638,6 +650,7 @@ fn draw(up: &Up, back: &EventLoopProxy<Said>, whole: bool) {
                         node: hex(&r.node),
                         resource: hex(&r.resource),
                         unseen: r.waiting,
+                        icon: r.icon_format.zip(r.icon),
                     })
                     .collect(),
             )
@@ -698,6 +711,7 @@ fn snapshot(p: &Participant, device: Device, threads: Option<&Threads>) -> Snaps
                     id: hex(&s.id),
                     name: s.alias.or(s.own_alias),
                     rank: rank(&s.rank),
+                    crown: Crown::of(s.rank.root, s.rank.operator, s.rank.subordinates),
                     node: hex(&node),
                     unseen: u32::from(moved) + asked,
                 }
@@ -929,6 +943,30 @@ fn sweep(up: &Up) -> Option<String> {
     p.request_profiles()
         .err()
         .map(|e| format!("no profiles were asked for: {e}"))
+}
+
+/// **Opening a subnet sweeps the node serving it** [author, 2026-11-23:
+/// *"Sweep when the user opens the subnet"*], and its page is drawn again
+/// with what that found. What could not be reached goes to the
+/// diagnostics and not to the person, whose attention is not drawn to the
+/// node.
+fn opened(up: &Up, back: &EventLoopProxy<Said>, id: &str) {
+    let Some(p) = up.running.lock().unwrap().clone() else {
+        return;
+    };
+    let me = p.me();
+    let Some(node) = p
+        .subnets()
+        .into_iter()
+        .find(|s| hex(&s.id) == id)
+        .map(|s| s.patron.map_or_else(|| me.clone(), |k| k.to_vec()))
+    else {
+        return;
+    };
+    if let Err(why) = p.browse(node) {
+        tracing::info!(target: "attach", subnet = &id[..8], why = %why, "subnet.unswept");
+    }
+    draw(up, back, false);
 }
 
 /// The nodes agreed to, in the kernel's order, until one answers.

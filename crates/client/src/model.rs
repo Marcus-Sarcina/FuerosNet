@@ -104,12 +104,14 @@ impl Client {
     pub fn resources_held(&self) -> Vec<Resource> {
         let waiting =
             |r: &crate::Keyhash| self.asks.values().filter(|a| a.resource == *r).count() as u32;
+        let icon = |r: &crate::Keyhash| self.icons.get(r).cloned().flatten().unzip();
         self.catalog
             .portions
             .iter()
             .flat_map(|(node, p)| {
                 let entries = p.entries.values().filter_map(move |b| {
                     let e = rhtn_archive::catalog::CatalogEntry::parse(b).ok()?;
+                    let (icon_format, icon) = icon(&e.resource);
                     Some(Resource {
                         node: *node,
                         resource: e.resource,
@@ -121,6 +123,8 @@ impl Client {
                         truncated: p.truncated,
                         stale: p.stale,
                         waiting: waiting(&e.resource),
+                        icon_format,
+                        icon,
                     })
                 });
                 // **and what the page names that no entry did** [author,
@@ -130,17 +134,22 @@ impl Client {
                     .page
                     .values()
                     .filter(move |i| !p.entries.contains_key(&i.resource))
-                    .map(move |i| Resource {
-                        node: *node,
-                        resource: i.resource,
-                        owner: i.owner,
-                        service_type: String::new(),
-                        instance: i.name.clone(),
-                        endpoint: Vec::new(),
-                        data_practice: None,
-                        truncated: false,
-                        stale: p.stale,
-                        waiting: waiting(&i.resource),
+                    .map(move |i| {
+                        let (icon_format, icon) = icon(&i.resource);
+                        Resource {
+                            node: *node,
+                            resource: i.resource,
+                            owner: i.owner,
+                            service_type: String::new(),
+                            instance: i.name.clone(),
+                            endpoint: Vec::new(),
+                            data_practice: None,
+                            truncated: false,
+                            stale: p.stale,
+                            waiting: waiting(&i.resource),
+                            icon_format,
+                            icon,
+                        }
                     });
                 entries.chain(paged)
             })

@@ -5,7 +5,7 @@
 //! The screens past setup are drawn from made-up rows, the shapes the
 //! kernel answers in, so each place can be looked at with no kernel up.
 use rhtn_desktop::participant::Device;
-use rhtn_desktop::screens::{self, Body, Person, Place, ResourceRow, Snapshot, SubnetRow};
+use rhtn_desktop::screens::{self, Body, Crown, Person, Place, ResourceRow, Snapshot, SubnetRow};
 use rhtn_desktop::threads::{Delivery, Entry, Message};
 use rhtn_desktop::{code, pairing, participant};
 
@@ -22,6 +22,7 @@ fn main() {
                 id: "2e".repeat(32),
                 name: Some("Mirror Manse".into()),
                 rank: "Its root, and its operator. Your downline here: 2 direct lines.".into(),
+                crown: Crown::Full,
                 node: "70".repeat(32),
                 unseen: 2,
             },
@@ -29,6 +30,7 @@ fn main() {
                 id: "9a".repeat(32),
                 name: None,
                 rank: "A member. No line of yours is issued here.".into(),
+                crown: Crown::None,
                 node: "75".repeat(32),
                 unseen: 0,
             },
@@ -79,12 +81,14 @@ fn main() {
             node: "70".repeat(32),
             resource: "71".repeat(32),
             unseen: 0,
+            icon: None,
         },
         ResourceRow {
             instance: "Notices".into(),
             node: "70".repeat(32),
             resource: "72".repeat(32),
             unseen: 2,
+            icon: Some((1, include_bytes!("../../testapp/res/icon.png").to_vec())),
         },
     ]);
     let pages = [
@@ -116,6 +120,14 @@ fn main() {
         (
             "options.html",
             screens::page(&snap, &Place::Options, &Body::Plain),
+        ),
+        (
+            "node.html",
+            screens::page(&snap, &Place::Node, &Body::Plain),
+        ),
+        (
+            "subnet-options.html",
+            screens::page(&snap, &Place::SubnetOptions("2e".repeat(32)), &Body::Plain),
         ),
     ];
     for (name, html) in pages {

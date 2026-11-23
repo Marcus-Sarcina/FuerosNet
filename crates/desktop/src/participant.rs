@@ -264,27 +264,56 @@ const STYLE: &str = "body { background: var(--ground); color: var(--ink);\n\
      pre { background: var(--sunken); border-radius: 4px; padding: .6rem .8rem;\n\
        white-space: pre-wrap; font-size: 13px; min-height: 1.5em }\n\
      pre.bad, .bad { color: var(--warn) }\n\
-     body:has(#rail) { max-width: none; margin: 0; padding: 1.5rem 1.5rem 1.5rem 16rem }\n\
-     body:has(#rail) > :not(#rail) { max-width: 46rem }\n\
-     #rail { position: fixed; top: 0; bottom: 0; left: 0; width: 14rem; box-sizing: border-box;\n\
-       overflow-y: auto; padding: 1rem .75rem; background: var(--chrome);\n\
-       border-right: 1px solid var(--rule); display: flex; flex-direction: column }\n\
-     #rail h3 { font-size: 12px; font-weight: 600; color: var(--sub); margin: 1rem .5rem .25rem;\n\
-       text-transform: uppercase; letter-spacing: .04em }\n\
-     #rail small { color: var(--sub); padding: 0 .5rem }\n\
-     #rail .foot { margin-top: auto; padding-top: 1rem }\n\
-     a[data-go] { display: block; padding: .35rem .5rem; border-radius: 4px; color: var(--ink);\n\
-       cursor: pointer; text-decoration: none; overflow: hidden; text-overflow: ellipsis }\n\
-     a[data-go]:hover { background: var(--control) }\n\
-     a[data-go].here { background: var(--sunken) }\n\
+     body:has(#rail) { max-width: none; margin: 0; padding: 0 1.5rem 76px calc(68px + 1.5rem) }\n\
+     body:has(header.bar):not(:has(#rail)) { max-width: none; margin: 0; padding: 0 1.5rem 1.5rem }\n\
+     #main > p, #main > ul, #main > h2, #main > label, #main > div:not(.cards),\n\
+       body > #ask, body > #said { max-width: 46rem }\n\
+     #rail { position: fixed; top: 0; bottom: 60px; left: 0; width: 68px; box-sizing: border-box;\n\
+       overflow-y: auto; scrollbar-width: none; padding: 10px 0; background: var(--rail);\n\
+       display: flex; flex-direction: column; align-items: center }\n\
+     #rail hr { width: 30px; border: 0; border-top: 1px solid var(--rail-divider); margin: 3px 0 13px }\n\
+     a.orb { position: relative; display: block; flex: none; width: 66px; height: 66px;\n\
+       margin-bottom: 11px; cursor: pointer; text-decoration: none }\n\
+     a.orb svg, a.orb .disc { position: absolute; inset: 0; width: 100%; height: 100% }\n\
+     a.orb .disc { display: flex; align-items: center; justify-content: center; border-radius: 50%;\n\
+       background: var(--rail-orb); color: var(--rail-ink); font-weight: 700; font-size: 21px }\n\
+     a.orb:hover .disc { filter: brightness(1.15) }\n\
+     a.orb.here .disc { box-shadow: 0 0 0 2px var(--rail-ink) }\n\
+     a.orb sup { position: absolute; top: 0; right: 0; margin: 0; background: var(--rail-count);\n\
+       color: var(--rail-ink) }\n\
+     #foot { position: fixed; left: 0; right: 0; bottom: 0; height: 60px; box-sizing: border-box;\n\
+       display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--sunken) }\n\
+     #foot a { cursor: pointer; text-decoration: none; color: var(--rail-ink); background: var(--rail-orb) }\n\
+     #foot a.me { flex: none; width: 40px; height: 40px; border-radius: 13px; display: flex;\n\
+       align-items: center; justify-content: center; font-weight: 700; font-size: 14px }\n\
+     #foot a.plate { flex: 1; display: flex; align-items: center; border-radius: 12px; padding: 10px 12px }\n\
+     #foot a.plate b { flex: 1; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }\n\
+     #foot a.plate small { font-size: 11px }\n\
+     #foot a:hover { filter: brightness(1.15) }\n\
+     header.bar { display: flex; align-items: center; padding: 14px 0 10px }\n\
+     header.bar h1 { margin: 0; font-size: 19px; font-weight: 700 }\n\
+     header.bar h1 a { color: inherit; text-decoration: none; cursor: pointer }\n\
+     button.back { background: none; color: var(--ink); font-size: 26px; line-height: 1;\n\
+       padding: 0 14px 2px 0; margin: 0 }\n\
+     button.row { display: block; width: 100%; max-width: 46rem; text-align: left; background: none;\n\
+       color: var(--ink); border-radius: 0; padding: 14px 0; margin: 0; border-bottom: 1px solid var(--rule) }\n\
+     button.row span { display: block; font-size: 16px }\n\
+     button.row small { display: block; color: var(--sub); font-size: 12px; padding-top: 3px }\n\
      ul.rows { list-style: none; padding: 0; margin: 0 }\n\
-     .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));\n\
-       gap: .75rem; margin: 1.5rem 0 }\n\
-     button.card { position: relative; background: var(--sunken); color: var(--ink);\n\
-       border: 1px solid var(--rule); border-radius: 8px; padding: 1.25rem .9rem;\n\
-       margin: 0; text-align: left; font-weight: 600; cursor: pointer;\n\
-       overflow-wrap: anywhere }\n\
+     ul.rows a[data-go] { display: block; padding: .35rem 0; color: var(--ink); cursor: pointer;\n\
+       text-decoration: none }\n\
+     ul.rows a[data-go]:hover { color: var(--accent) }\n\
+     .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));\n\
+       gap: 1rem; margin: 1rem 0 }\n\
+     button.card { position: relative; display: flex; flex-direction: column; align-items: center;\n\
+       gap: .6rem; background: var(--sunken); color: var(--ink); border: 1px solid var(--rule);\n\
+       border-radius: 10px; padding: 1.1rem .75rem .9rem; margin: 0; font-weight: 600;\n\
+       cursor: pointer; overflow-wrap: anywhere; text-align: center }\n\
      button.card:hover { background: var(--control) }\n\
+     button.card .icon { width: 48px; height: 48px; border-radius: 12px; overflow: hidden;\n\
+       display: flex; align-items: center; justify-content: center; background: var(--rail-orb);\n\
+       color: var(--rail-ink); font-size: 18px }\n\
+     button.card .icon img { width: 100%; height: 100%; object-fit: contain }\n\
      sup { display: inline-block; min-width: 1.1em; margin-left: .35em; padding: 0 .3em;\n\
        border-radius: .6em; background: var(--accent); color: var(--on-accent);\n\
        font-size: 11px; line-height: 1.5; text-align: center; vertical-align: super }\n\

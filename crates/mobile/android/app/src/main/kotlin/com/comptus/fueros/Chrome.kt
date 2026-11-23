@@ -187,20 +187,27 @@ object Chrome {
     fun suggestingSecondPatron(patrons: Int): Boolean = patrons == 1
 
     /** **One launcher on a subnet's page** [author, 2026-11-23]: a resource
-     *  its serving node offered, which the card opens, and what it asks
-     *  that waits, which the card wears. */
-    data class Launcher(val node: String, val resource: String, val name: String, val unseen: Int)
+     *  its serving node offered, which the card opens, what it asks that
+     *  waits, which the card wears, and the icon it serves, which badges it
+     *  — a PNG, JPEG or WebP the kernel took, or null and its mark stands in. */
+    data class Launcher(
+        val node: String,
+        val resource: String,
+        val name: String,
+        val unseen: Int,
+        val icon: ByteArray? = null,
+    )
 
     /**
      * **What a subnet launches**: the resources swept from the node serving
      * its holder there, one card each, named as the node named them. The
-     * person never browses for them; connecting is what sweeps
-     * [author, 2026-11-23].
+     * person never browses for them; connecting sweeps, and so does
+     * opening the subnet [author, 2026-11-23].
      */
     fun launchers(offered: List<uniffi.rhtn_model.Resource>, node: String): List<Launcher> =
         offered
             .filter { it.node.hex() == node }
-            .map { Launcher(it.node.hex(), it.resource.hex(), it.instance, it.waiting.toInt()) }
+            .map { Launcher(it.node.hex(), it.resource.hex(), it.instance, it.waiting.toInt(), it.icon) }
             .sortedBy { it.name.lowercase() }
 
     /**

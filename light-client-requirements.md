@@ -1386,8 +1386,9 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   entry itself**, not a transaction: it enters no archive, chains to nothing, and the
   host answers from it directly.
 - **Build your catalog view by sweeping the horizon, and cache it** (design §11.5).
-  Refresh on joining a subnet, periodically, after a failed connection, and when the
-  user asks. **Do not query per UI interaction.**
+  Refresh at every connection to a node and whenever the person opens a subnet
+  it serves [author, 2026-11-23: *"Sweep when the user opens the subnet"*].
+  **Between those, show the cache and query nothing.**
 - **Treat an unreachable node as staleness in its portion of the view**, not as a
   general catalog failure. The other nodes' answers are unaffected, and telling the
   user which part is unknown is more useful than declaring the whole view suspect.
@@ -1397,9 +1398,10 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   and asking again returns the same page (`wire-format.md` §6.4). Record that
   node's portion as truncated, as you would an unreachable one, and do not follow
   the hint again.
-- **Give the user a refresh control** and let a stale view be stale. A new resource
-  is normally mentioned by the person who added it, so deliberate lookup is the
-  expected path rather than a fallback.
+- **Let a stale view be stale.** A new resource is normally mentioned by the
+  person who added it, and going to look for it is opening its subnet, which
+  sweeps: deliberate lookup is the expected path rather than a fallback, and it
+  needs no control of its own.
 - **Hold one session at a time during a sweep** and close it. Browsing a cached view
   opens nothing.
 
@@ -1434,8 +1436,9 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   losing access to having departed a patron (design §11.5).
 - **Do not present resources the user cannot use.** The serving node filters its
   catalog page by what the viewer holds; the client should not re-expand it.
-- **Sweep each node at every connection, unasked: its catalog and its page**
-  (`wire-format.md` §6.9) [author, 2026-11-23]. A package that node hosts is on
+- **Sweep each node at every connection and whenever the person opens a
+  subnet it serves, unasked: its catalog and its page** (`wire-format.md`
+  §6.9) [author, 2026-11-23]. A package that node hosts is on
   the page of everyone granted it whether or not an entry was registered for
   it, and on no catalog unless one was.
 - **Show what a subnet's node offers as launchers on that subnet's page, and
@@ -1446,6 +1449,18 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   into the subnet's own beside a move of its node to answer. Nothing asks the
   person to sweep, and no screen draws their attention to the node beyond
   their answer to its invitation.
+- **Badge each launcher with the icon its resource serves** [author,
+  2026-11-23: *"Resource cards should be badged with a favicon image
+  determined by the resource"*]. Ask each resource a sweep finds, once in the
+  client's run, for `GET /favicon.ico`, the path the web's own browsers try,
+  so the resource chooses its icon by what it serves there
+  (`resource-requirements.md` §7.4). Keep it where the answer is 200 with a
+  declared `image/png`, `image/jpeg` or `image/webp` of at most 64 KiB — a
+  profile image's formats and bound (`wire-format.md` §7.11) — and nothing
+  else: the declared type decides, as below. An answer that is an ask is not
+  held, since nobody opened anything to be asked. **Keep it in memory alone**,
+  as nothing else a resource answers is kept; a resource that served none
+  wears its mark, as an orb with no picture does.
 - **Access is gated by current membership in the resource owner's trust horizon**
   (design §11.2), so it changes without any action by the user, on joining,
   departing, or crossing a tenure boundary. The departure warning in §6 above is
