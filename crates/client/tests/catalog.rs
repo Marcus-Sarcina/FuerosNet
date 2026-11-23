@@ -278,9 +278,10 @@ fn a_client_browses_its_serving_nodes_catalog_and_follows_the_continuation() {
     c.attach(kh("w1"), &[]);
 
     let posted = c.browse_at(kh("w1"));
-    let [Msg::CatalogQuery(q)] = posted.as_slice() else {
-        panic!("one query posted: {posted:?}")
+    let [Msg::CatalogQuery(q), Msg::CatalogPage { node, .. }] = posted.as_slice() else {
+        panic!("one query posted, and the page asked for beside it: {posted:?}")
     };
+    assert_eq!(*node, kh("w1"), "the page is asked of the node swept");
     let reply = svc
         .answer(&kh("alice"), q, &Open)
         .expect("the node answers a member");
@@ -307,8 +308,8 @@ fn a_client_browses_its_serving_nodes_catalog_and_follows_the_continuation() {
     let mut c2 = fresh("alice");
     c2.attach(kh("w1"), &[]);
     let posted = c2.browse_at(kh("w1"));
-    let [Msg::CatalogQuery(q2)] = posted.as_slice() else {
-        panic!("one query")
+    let [Msg::CatalogQuery(q2), Msg::CatalogPage { .. }] = posted.as_slice() else {
+        panic!("one query, and the page")
     };
     let forged = CatalogReply {
         nonce: [0xee; 16],
@@ -333,4 +334,56 @@ fn fresh(name: &str) -> rhtn_client::ceremony::Client {
     let clock = std::rc::Rc::new(std::cell::Cell::new(1_790_000_000_000u64));
     let (device, _) = common::harness::device(clock, 7, 0);
     rhtn_client::ceremony::Client::new(id(name), ids(), Default::default(), device)
+}
+
+/// **The page beside the catalog** [author, 2026-11-23] (`wire-format.md`
+/// §6.9): asked of the node swept, taken only under the nonce asked, and
+/// what it names that no entry did is a resource held, attributed to that
+/// node and shown by the name the page gave it.
+// functional: CAT-028
+#[test]
+fn the_page_is_asked_beside_the_catalog_and_names_what_no_entry_did() {
+    use rhtn_client::ceremony::Msg;
+    let mut c = fresh("alice");
+    c.attach(kh("w1"), &[]);
+    let posted = c.browse_at(kh("w1"));
+    let [_, Msg::CatalogPage { node, bytes }] = posted.as_slice() else {
+        panic!("the page asked for: {posted:?}")
+    };
+    assert_eq!(*node, kh("w1"));
+    let asked = CatalogPageRequest::decode(bytes).unwrap();
+    let item = PageItem {
+        resource: [0x5a; 32],
+        owner: kh("bob"),
+        name: "testapp.internal".into(),
+        roles: vec!["reader".into()],
+    };
+    let forged = CatalogPage {
+        nonce: [0xee; 16],
+        items: vec![item.clone()],
+    };
+    assert!(
+        c.take_catalog_page(kh("w1"), &forged.encode()).is_err(),
+        "a page under a nonce never sent is not taken"
+    );
+    assert!(c.resources_held().is_empty());
+    let page = CatalogPage {
+        nonce: asked.nonce,
+        items: vec![item],
+    };
+    assert!(
+        c.take_catalog_page(kh("w2"), &page.encode()).is_err(),
+        "nor one from a node it was not asked of"
+    );
+    assert_eq!(c.take_catalog_page(kh("w1"), &page.encode()), Ok(1));
+    let held = c.resources_held();
+    assert_eq!(held.len(), 1);
+    assert_eq!(held[0].node, kh("w1"));
+    assert_eq!(held[0].resource, [0x5a; 32]);
+    assert_eq!(held[0].owner, kh("bob"));
+    assert_eq!(held[0].instance, "testapp.internal");
+    assert!(
+        c.take_catalog_page(kh("w1"), &page.encode()).is_err(),
+        "and not twice"
+    );
 }

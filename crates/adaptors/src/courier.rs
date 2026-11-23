@@ -981,6 +981,24 @@ impl Courier {
                             None => out.refused.push(Msg::CatalogQuery(b)),
                         }
                     }
+                    // the page beside it, over the session held with the
+                    // node it names (`wire-format.md` §6.9)
+                    Msg::CatalogPage { node, bytes } => {
+                        let answered = match me.serving_for(&node) {
+                            Some(s) => s.page(me.me(), &bytes).await,
+                            None => None,
+                        };
+                        match answered {
+                            Some(reply) => {
+                                let took = me
+                                    .handle
+                                    .with(move |c| c.take_catalog_page(node, &reply))
+                                    .await;
+                                tracing::debug!(target: "pay", node = %hex4(&node), took = ?took, "pay.catalog.page");
+                            }
+                            None => out.refused.push(Msg::CatalogPage { node, bytes }),
+                        }
+                    }
                     // **a client originates and does not forward.** The
                     // records it makes are its own, and the one party that
                     // can put them into the flood is the node serving it

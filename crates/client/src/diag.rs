@@ -266,6 +266,7 @@ pub fn msg(m: &crate::ceremony::Msg) -> &'static str {
         Seal(_) => "Seal",
         NodeKeyRequest(_) => "NodeKeyRequest",
         CatalogQuery(_) => "CatalogQuery",
+        CatalogPage { .. } => "CatalogPage",
         ResourceRequest { .. } => "ResourceRequest",
         PublishProfile(_) => "PublishProfile",
         AssertHorizon { .. } => "AssertHorizon",

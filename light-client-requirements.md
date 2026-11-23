@@ -1434,6 +1434,10 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   losing access to having departed a patron (design §11.5).
 - **Do not present resources the user cannot use.** The serving node filters its
   catalog page by what the viewer holds; the client should not re-expand it.
+- **Ask each node you attach to for its page beside its catalog**
+  (`wire-format.md` §6.9) [author, 2026-11-23], and list what either names: a
+  package that node hosts is on the page of everyone granted it whether or not
+  an entry was registered for it, and on no catalog unless one was.
 - **Access is gated by current membership in the resource owner's trust horizon**
   (design §11.2), so it changes without any action by the user, on joining,
   departing, or crossing a tenure boundary. The departure warning in §6 above is

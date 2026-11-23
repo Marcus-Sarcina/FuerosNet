@@ -58,6 +58,14 @@ pub enum T {
     /// An array of catalog entries, each held to the `CatalogEntry` kind
     /// and to §1.3's byte bound.
     CatalogEntries,
+    /// A catalog page's items (§6.9), at most
+    /// [`CATALOG_REPLY_ENTRIES`](crate::bounds::CATALOG_REPLY_ENTRIES), each
+    /// a `PageItem` map.
+    PageItems,
+    /// The application roles a page item names (§6.9): at most
+    /// [`PAGE_ROLES`](crate::bounds::PAGE_ROLES), each 1 to
+    /// [`ROLE_BYTES`](crate::bounds::ROLE_BYTES) bytes.
+    Roles,
     /// An array of transaction envelopes (§3).
     Envelopes,
     /// One transaction envelope (§3); its signatures are the verifier's.
@@ -143,6 +151,10 @@ pub enum Family {
     /// node serving it (§7.12). Not a transaction, carries no signature,
     /// and is authorised by the connection it arrives on.
     HorizonAssertion,
+    /// Request frame 16: the asker's catalog page at this node (§6.9).
+    CatalogPageRequest,
+    /// The answer to a [`CatalogPageRequest`](Family::CatalogPageRequest).
+    CatalogPage,
     /// The answer to a submission: accepted, over bound, or refused.
     SubmissionReply,
     /// Request frame 8: a currency attestation requested (§7.1).
@@ -302,6 +314,15 @@ const CATALOG_REPLY: Fields = &[
     (3, false, Tstr(64)),
 ];
 const RESOURCE_RESPONSE: Fields = &[(1, true, Uint), (2, false, Bstr)];
+// §6.9: the page a node serves the asker, unsigned
+const CATALOG_PAGE_REQUEST: Fields = &[(1, true, Nonce16)];
+const CATALOG_PAGE: Fields = &[(1, true, Nonce16), (2, true, PageItems)];
+const PAGE_ITEM: Fields = &[
+    (1, true, Keyhash),
+    (2, true, Keyhash),
+    (3, true, Tstr(crate::bounds::PAGE_NAME_BYTES)),
+    (4, true, Roles),
+];
 const ARCHIVE_REPLY: Fields = &[
     (1, true, Nonce16),
     (2, true, ArchiveEntries),
@@ -423,6 +444,8 @@ pub fn fields(f: Family) -> Option<Fields> {
         CurrencyRequest => CURRENCY_REQUEST,
         ResolveReply => RESOLVE_REPLY,
         CatalogReply => CATALOG_REPLY,
+        CatalogPageRequest => CATALOG_PAGE_REQUEST,
+        CatalogPage => CATALOG_PAGE,
         ResourceResponse => RESOURCE_RESPONSE,
         ArchiveReply => ARCHIVE_REPLY,
         NodeKeyReply => NODE_KEY_REPLY,
@@ -757,6 +780,29 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
             for r in entries {
                 let es = &b[r];
                 check_kind(es, "CatalogEntry", &parse_all(es)?)?;
+            }
+        }
+        PageItems => {
+            let items = array_item_ranges(b, at).ok_or(Error("page items not array"))?;
+            if items.len() > CATALOG_REPLY_ENTRIES {
+                return Err(Error("catalog page over 111 items"));
+            }
+            for r in items {
+                check_map(b, r.start, PAGE_ITEM)?;
+            }
+        }
+        Roles => {
+            let Item::Array(ref a) = v else {
+                return Err(Error("roles not array"));
+            };
+            if a.len() > crate::bounds::PAGE_ROLES {
+                return Err(Error("over 64 roles"));
+            }
+            for r in a {
+                match r {
+                    Item::Text(t) if !t.is_empty() && t.len() <= crate::bounds::ROLE_BYTES => {}
+                    _ => return Err(Error("role shape")),
+                }
             }
         }
         Envelope => {
@@ -2360,6 +2406,8 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             Ok(())
         }
         "CatalogReply" => check_unsigned(Family::CatalogReply, b, 0),
+        "CatalogPageRequest" => check_unsigned(Family::CatalogPageRequest, b, 0),
+        "CatalogPage" => check_unsigned(Family::CatalogPage, b, 0),
         "SubtreeAck" => {
             let Item::Map(m) = item else {
                 return Err(Error("not map"));

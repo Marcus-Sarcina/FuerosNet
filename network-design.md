@@ -4569,7 +4569,10 @@ roles the viewer holds.** For locally-hosted resources it is also the front door
 interaction. A node does not list what the viewer cannot use, which makes
 `discover_scope` filtering redundant for the catalog page, but the field remains
 load-bearing for the query path below, where the hosting node composes an answer from
-entries it holds.
+entries it holds. **The page lists what the viewer holds a grant on whether or not
+an entry was registered for it** [author, 2026-11-23], so a package the node hosts
+is on the page of everyone granted it from the moment of the grant
+(`wire-format.md` §6.9).
 
 **Role names are visible strings.** A role called `clinical-records-write` says
 something about the service and about whoever holds it: P15's shape one level

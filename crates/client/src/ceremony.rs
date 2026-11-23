@@ -304,6 +304,15 @@ pub enum Msg {
     NodeKeyRequest(Vec<Keyhash>),
     /// A `CatalogQuery` (`wire-format.md` §6.4), to the serving node.
     CatalogQuery(Vec<u8>),
+    /// A `CatalogPageRequest` (`wire-format.md` §6.9), to the node named:
+    /// what this client holds a grant on there, the reply taken by
+    /// [`Client::take_catalog_page`].
+    CatalogPage {
+        /// The node asked.
+        node: Keyhash,
+        /// The encoded request.
+        bytes: Vec<u8>,
+    },
     /// A `ResourceRequest` (`wire-format.md` §11.1), to the node hosting
     /// the resource it names.
     ResourceRequest {
@@ -410,7 +419,8 @@ impl Msg {
             | Msg::ProfileRequest(b) => b.clone(),
             Msg::Payload { bytes, .. }
             | Msg::Sealed { sealed: bytes, .. }
-            | Msg::ResourceRequest { bytes, .. } => bytes.clone(),
+            | Msg::ResourceRequest { bytes, .. }
+            | Msg::CatalogPage { bytes, .. } => bytes.clone(),
             Msg::NodeKeyRequest(v) => v.concat(),
             Msg::RecoveryProposal { block, .. } => block.clone(),
             Msg::Consent { consent, .. } => consent.clone(),
@@ -6509,7 +6519,34 @@ impl Client {
         let mut sweep = crate::catalog::Sweep::default();
         let q = sweep.query(None, self.nonce());
         self.browsing = Some((node, sweep));
-        vec![Msg::CatalogQuery(q.encode())]
+        // **and the page beside it** [author, 2026-11-23]: what is granted
+        // here whether or not an entry was registered for it
+        // (`wire-format.md` §6.9)
+        let nonce = self.nonce();
+        self.catalog.paging.insert(node, nonce);
+        vec![
+            Msg::CatalogQuery(q.encode()),
+            Msg::CatalogPage {
+                node,
+                bytes: rhtn_archive::catalog::CatalogPageRequest { nonce }.encode(),
+            },
+        ]
+    }
+
+    /// **Take `node`'s catalog page** (`wire-format.md` §6.9): it replaces
+    /// what that node's portion held of its page, whole. **A page this
+    /// client did not ask that node for is not taken**: the echoed nonce
+    /// ties the two, as a catalog reply's does.
+    pub fn take_catalog_page(&mut self, node: Keyhash, bytes: &[u8]) -> Result<usize, String> {
+        let page = rhtn_archive::catalog::CatalogPage::decode(bytes)?;
+        if self.catalog.paging.get(&node) != Some(&page.nonce) {
+            return Err("a page this client did not ask that node for".into());
+        }
+        self.catalog.paging.remove(&node);
+        self.changed.insert(rhtn_model::Noun::Resources);
+        let n = page.items.len();
+        self.catalog.portion(node).page = page.items.into_iter().map(|i| (i.resource, i)).collect();
+        Ok(n)
     }
 
     /// The node the sweep under way is reading, which is where its

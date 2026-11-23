@@ -18,6 +18,8 @@ pub const REQUEST_CATALOG_QUERY: u64 = 5;
 pub const REQUEST_RESOURCE: u64 = 6;
 /// Request frame 7: registering a resource.
 pub const REQUEST_REGISTRATION: u64 = 7;
+/// Request type 16: the asker's catalog page (`wire-format.md` §6.9).
+pub const REQUEST_CATALOG_PAGE: u64 = 16;
 
 /// `ResourceRegistrationReply` field 2.
 pub const REGISTRATION_RECORDED: u64 = 0;
@@ -420,6 +422,136 @@ impl CatalogQuery {
         Ok(CatalogQuery {
             service_type,
             nonce: nonce_at(b, m, 2)?,
+        })
+    }
+}
+
+/// A `CatalogPageRequest` (`wire-format.md` §6.9): the asker's page.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CatalogPageRequest {
+    /// The nonce the page must echo.
+    pub nonce: [u8; 16],
+}
+
+impl CatalogPageRequest {
+    /// The request's bytes.
+    pub fn encode(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        emit_map_head(&mut out, 1);
+        emit_uint(&mut out, 1);
+        emit_bstr(&mut out, &self.nonce);
+        out
+    }
+
+    /// A request from its bytes.
+    pub fn decode(b: &[u8]) -> Result<Self, String> {
+        schema::check_unsigned(Family::CatalogPageRequest, b, 0).map_err(|e| e.0.to_string())?;
+        let item = parse_all(b).map_err(|e| e.0)?;
+        let Item::Map(m) = &item else {
+            return Err("not a map".into());
+        };
+        Ok(CatalogPageRequest {
+            nonce: nonce_at(b, m, 1)?,
+        })
+    }
+}
+
+/// One resource on a catalog page (`wire-format.md` §6.9).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PageItem {
+    /// The resource.
+    pub resource: Keyhash,
+    /// Its owner.
+    pub owner: Keyhash,
+    /// A name to show it by.
+    pub name: String,
+    /// The application roles the asker holds on it.
+    pub roles: Vec<String>,
+}
+
+/// A `CatalogPage` (`wire-format.md` §6.9): what the asker holds a grant on
+/// at the answering node, in resource keyhash order.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CatalogPage {
+    /// The nonce, echoed from the request.
+    pub nonce: [u8; 16],
+    /// The items.
+    pub items: Vec<PageItem>,
+}
+
+impl CatalogPage {
+    /// The page's bytes.
+    pub fn encode(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        emit_map_head(&mut out, 2);
+        emit_uint(&mut out, 1);
+        emit_bstr(&mut out, &self.nonce);
+        emit_uint(&mut out, 2);
+        emit_array_head(&mut out, self.items.len());
+        for i in &self.items {
+            emit_map_head(&mut out, 4);
+            emit_uint(&mut out, 1);
+            emit_bstr(&mut out, &i.resource);
+            emit_uint(&mut out, 2);
+            emit_bstr(&mut out, &i.owner);
+            emit_uint(&mut out, 3);
+            emit_tstr(&mut out, &i.name);
+            emit_uint(&mut out, 4);
+            emit_array_head(&mut out, i.roles.len());
+            for r in &i.roles {
+                emit_tstr(&mut out, r);
+            }
+        }
+        out
+    }
+
+    /// A page from its bytes.
+    pub fn decode(b: &[u8]) -> Result<Self, String> {
+        schema::check_unsigned(Family::CatalogPage, b, 0).map_err(|e| e.0.to_string())?;
+        let item = parse_all(b).map_err(|e| e.0)?;
+        let Item::Map(m) = &item else {
+            return Err("not a map".into());
+        };
+        let text = |r: &std::ops::Range<usize>| {
+            String::from_utf8(b[r.clone()].to_vec()).map_err(|_| "utf-8".to_string())
+        };
+        let key = |it: Option<&Item>| -> Result<Keyhash, String> {
+            match it {
+                Some(Item::Bytes(r)) => b[r.clone()].try_into().map_err(|_| "keyhash".to_string()),
+                _ => Err("keyhash".into()),
+            }
+        };
+        let Some(Item::Array(rows)) = map_get(m, 2) else {
+            return Err("field 2".into());
+        };
+        let mut items = Vec::with_capacity(rows.len());
+        for row in rows {
+            let Item::Map(f) = row else {
+                return Err("an item is not a map".into());
+            };
+            let Some(Item::Text(n)) = map_get(f, 3) else {
+                return Err("an item's name".into());
+            };
+            let Some(Item::Array(rs)) = map_get(f, 4) else {
+                return Err("an item's roles".into());
+            };
+            let roles = rs
+                .iter()
+                .map(|r| match r {
+                    Item::Text(t) => text(t),
+                    _ => Err("a role".into()),
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            items.push(PageItem {
+                resource: key(map_get(f, 1))?,
+                owner: key(map_get(f, 2))?,
+                name: text(n)?,
+                roles,
+            });
+        }
+        Ok(CatalogPage {
+            nonce: nonce_at(b, m, 1)?,
+            items,
         })
     }
 }

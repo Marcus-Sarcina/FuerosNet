@@ -199,6 +199,13 @@ impl Serving for AttachedNode {
         })
     }
 
+    fn page<'a>(&'a self, _from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
+        Box::pin(async move {
+            self.ask(rhtn_archive::catalog::REQUEST_CATALOG_PAGE, body.to_vec())
+                .await
+        })
+    }
+
     /// Frame 5 on stream 0, which is the one channel a transaction
     /// travels on (`wire-format.md` §10.1).  Not a request: §10.1.3
     /// defines no acknowledgement and the answer here is only whether the

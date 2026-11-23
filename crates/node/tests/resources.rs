@@ -1258,9 +1258,52 @@ fn the_catalog_page_shows_what_the_viewer_holds_with_the_roles_held() {
     let page = g.page(&kh("carol"), &svc);
     assert_eq!(
         page,
-        vec![(e1.clone(), vec!["reader".to_string()])],
-        "R2, with no connect, is not listed"
+        vec![PageItem {
+            resource: R1,
+            owner: kh("alice"),
+            name: "An Instance".into(),
+            roles: vec!["reader".to_string()],
+        }],
+        "R1 by its entry's name; R2, with no connect, is not listed"
     );
+    let _ = e1;
+}
+
+/// **A hosted package with no entry is on the page of everyone granted it**
+/// [author, 2026-11-23] (`wire-format.md` §6.9): named by the authority it
+/// is bound under, with the roles held, and on nobody else's.
+// functional: CAT-028
+#[test]
+fn a_hosted_package_with_no_entry_is_on_the_page_of_those_granted_it() {
+    let sc = scene();
+    let backend = Arc::new(Fake::new());
+    let mut g = gateway_with(&sc, backend);
+    let svc = CatalogService::default();
+    g.set_row(
+        R1,
+        kh("carol"),
+        Row {
+            roles: BTreeSet::from(["writer".to_string()]),
+            connect: true,
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        g.page(&kh("carol"), &svc),
+        vec![PageItem {
+            resource: R1,
+            owner: kh("alice"),
+            name: "r1.internal".into(),
+            roles: vec!["writer".to_string()],
+        }]
+    );
+    assert!(g.page(&kh("bob"), &svc).is_empty(), "nobody else's page");
+    // and the page crosses the wire whole
+    let page = CatalogPage {
+        nonce: [9; 16],
+        items: g.page(&kh("carol"), &svc),
+    };
+    assert_eq!(CatalogPage::decode(&page.encode()).unwrap(), page);
 }
 
 // acceptance: RSC-25

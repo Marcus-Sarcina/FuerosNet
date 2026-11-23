@@ -118,6 +118,12 @@ pub trait Serving: Send + Sync {
     /// A `CatalogQuery` from `from` (`wire-format.md` §6.4): the node's
     /// reply, or nothing where it answers none.
     fn catalog<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>>;
+    /// A `CatalogPageRequest` from `from` (`wire-format.md` §6.9): the
+    /// node's page for it, or nothing where it answers none, which is what
+    /// a node that serves no page answers.
+    fn page<'a>(&'a self, _from: Keyhash, _body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
+        Box::pin(async { None })
+    }
     /// A `ResourceRequest` from `from` (`wire-format.md` §11.1): the
     /// node's `ResourceResponse`, or nothing where it answers none.
     fn resource<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>>;
@@ -363,6 +369,24 @@ impl Serving for LocalNode {
                 me,
             };
             view.catalog.answer(&from, body, &scopes)
+        })
+    }
+
+    fn page<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
+        Box::pin(async move {
+            let req = rhtn_archive::catalog::CatalogPageRequest::decode(body).ok()?;
+            let view = self.node.view.lock().unwrap();
+            let me = view.me();
+            if !view.table.horizon(&me, 2).contains(&from) {
+                return None;
+            }
+            Some(
+                rhtn_archive::catalog::CatalogPage {
+                    nonce: req.nonce,
+                    items: view.resources.page(&from, &view.catalog),
+                }
+                .encode(),
+            )
         })
     }
 

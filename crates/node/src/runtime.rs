@@ -751,6 +751,26 @@ impl LiveNode {
                         let i = ids_for_requests.lock().unwrap();
                         view.catalog.register(&*i, &peer, &body)
                     }
+                    // **the asker's page** (`wire-format.md` §6.9): what it
+                    // holds a grant on here, entry or none; an asker outside
+                    // the horizon closes the stream, as a catalog query does
+                    Family::CatalogPageRequest => {
+                        let req = rhtn_archive::catalog::CatalogPageRequest::decode(&body).ok()?;
+                        let view = v.lock().unwrap();
+                        let me = view.me();
+                        if !view.table.horizon(&me, 2).contains(&peer) {
+                            return None;
+                        }
+                        let items = view.resources.page(&peer, &view.catalog);
+                        tracing::debug!(target: "node", peer8 = %crate::diag::id8(&peer), items = items.len(), "node.catalog.page");
+                        Some(
+                            rhtn_archive::catalog::CatalogPage {
+                                nonce: req.nonce,
+                                items,
+                            }
+                            .encode(),
+                        )
+                    }
                     Family::ResourceRequest => {
                         // never in early data: the transport defers every
                         // request stream past the handshake; one request

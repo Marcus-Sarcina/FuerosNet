@@ -708,18 +708,43 @@ impl Gateway {
         }
     }
 
-    /// The catalog page for `viewer` (design §11.5): the entries this node
-    /// holds whose resource the viewer holds connect on, each with the
-    /// roles the viewer holds, and nothing the viewer cannot use.
-    pub fn page(&self, viewer: &Keyhash, catalog: &CatalogService) -> Vec<(Vec<u8>, Vec<String>)> {
+    /// **The catalog page for `viewer`** (design §11.5, `wire-format.md`
+    /// §6.9): every resource here the viewer holds `connect` on, with the
+    /// roles it holds, and nothing it cannot use. **No entry is needed**
+    /// [author, 2026-11-23]: a resource is named by the instance name of
+    /// the entry held for it, and otherwise by the authority it is bound
+    /// under; one with neither is nothing this node can name and is left
+    /// out. In resource keyhash order, at most
+    /// [`CATALOG_REPLY_ENTRIES`](rhtn_codec::bounds::CATALOG_REPLY_ENTRIES).
+    pub fn page(&self, viewer: &Keyhash, catalog: &CatalogService) -> Vec<PageItem> {
+        let name_bytes = rhtn_codec::bounds::PAGE_NAME_BYTES;
         self.rows
             .iter()
             .filter(|((_, m), r)| m == viewer && r.connect)
             .filter_map(|((res, _), r)| {
-                catalog
+                let entry = catalog
                     .held(res)
-                    .map(|h| (h.bytes.clone(), r.roles.iter().cloned().collect()))
+                    .and_then(|h| CatalogEntry::parse(&h.bytes).ok());
+                let binding = self.bindings.get(res);
+                let (owner, name) = match (&entry, binding) {
+                    (Some(e), _) => (e.owner, e.instance.clone()),
+                    (None, Some(b)) if !b.authority.is_empty() => (b.owner, b.authority.clone()),
+                    _ => return None,
+                };
+                // a name past the bound is cut at a character boundary,
+                // since it is shown and never matched
+                let mut name = name;
+                while name.len() > name_bytes {
+                    name.pop();
+                }
+                Some(PageItem {
+                    resource: *res,
+                    owner,
+                    name,
+                    roles: r.roles.iter().cloned().collect(),
+                })
             })
+            .take(rhtn_codec::bounds::CATALOG_REPLY_ENTRIES)
             .collect()
     }
 }

@@ -106,7 +106,7 @@ impl Client {
             .portions
             .iter()
             .flat_map(|(node, p)| {
-                p.entries.values().filter_map(move |b| {
+                let entries = p.entries.values().filter_map(move |b| {
                     let e = rhtn_archive::catalog::CatalogEntry::parse(b).ok()?;
                     Some(Resource {
                         node: *node,
@@ -119,7 +119,26 @@ impl Client {
                         truncated: p.truncated,
                         stale: p.stale,
                     })
-                })
+                });
+                // **and what the page names that no entry did** [author,
+                // 2026-11-23]: a hosted package granted here, which has no
+                // type, endpoint or declared practice to show
+                let paged = p
+                    .page
+                    .values()
+                    .filter(move |i| !p.entries.contains_key(&i.resource))
+                    .map(move |i| Resource {
+                        node: *node,
+                        resource: i.resource,
+                        owner: i.owner,
+                        service_type: String::new(),
+                        instance: i.name.clone(),
+                        endpoint: Vec::new(),
+                        data_practice: None,
+                        truncated: false,
+                        stale: p.stale,
+                    });
+                entries.chain(paged)
             })
             .collect()
     }

@@ -88,6 +88,7 @@ pub fn family_of(stream: Stream, frame_type: u64) -> Option<Family> {
         (Stream::Request, 13) => ProfilePublication,
         (Stream::Request, 14) => ProfileRequest,
         (Stream::Request, 15) => HorizonAssertion,
+        (Stream::Request, 16) => CatalogPageRequest,
         _ => return None,
     })
 }

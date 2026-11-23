@@ -627,8 +627,15 @@ impl Net {
             let msgs = handle.with(move |c| c.browse_at(node)).await;
             courier.carry(msgs).await
         });
-        if !carried.refused.is_empty() {
+        if carried
+            .refused
+            .iter()
+            .any(|m| matches!(m, rhtn_client::ceremony::Msg::CatalogQuery(_)))
+        {
             return Err(Refused::new("that node answered no catalog query"));
+        }
+        if !carried.refused.is_empty() {
+            return Err(Refused::new("that node served no catalog page"));
         }
         Ok(())
     }

@@ -67,6 +67,17 @@ pub const CATALOG_ENTRY_BYTES: usize = 2048;
 /// here, the bound being per answering node.  The frame bound caps it at
 /// 127 regardless.
 pub const CATALOG_REPLY_ENTRIES: usize = 111;
+
+/// A catalog page item's name, in bytes (`wire-format.md` §6.9): the same
+/// as an entry's instance name, which it is where one is held.
+pub const PAGE_NAME_BYTES: usize = 128;
+
+/// The application roles one page item names (`wire-format.md` §6.9,
+/// `resource-requirements.md` §3): what a principal may hold.
+pub const PAGE_ROLES: usize = 64;
+
+/// A role name's length in bytes (`resource-requirements.md` §3).
+pub const ROLE_BYTES: usize = 32;
 /// Unknown extension keys per map (§1.3).
 pub const UNKNOWN_KEYS_PER_MAP: usize = 16;
 /// An unknown extension value, in **bytes of encoded CBOR** (§1.3): the

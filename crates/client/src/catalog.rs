@@ -7,7 +7,7 @@
 
 use crate::Keyhash;
 use crate::notice::{Notice, Notifier};
-use rhtn_archive::catalog::{CatalogEntry, CatalogQuery, CatalogReply};
+use rhtn_archive::catalog::{CatalogEntry, CatalogQuery, CatalogReply, PageItem};
 use rhtn_crypto::verify::Lookup;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -16,6 +16,9 @@ use std::collections::{BTreeMap, BTreeSet};
 pub struct Portion {
     /// Entries by resource keyhash, as the node served them.
     pub entries: BTreeMap<Keyhash, Vec<u8>>,
+    /// The node's page for this client (`wire-format.md` §6.9), by
+    /// resource keyhash: what it holds a grant on there.
+    pub page: BTreeMap<Keyhash, PageItem>,
     /// The node held more than the bound for some type: this portion is
     /// known incomplete.
     pub truncated: bool,
@@ -118,6 +121,8 @@ impl Sweep {
 pub struct View {
     /// What each node asked has served, by node.
     pub portions: BTreeMap<Keyhash, Portion>,
+    /// The nonce of the page request outstanding at each node.
+    pub paging: BTreeMap<Keyhash, [u8; 16]>,
 }
 
 impl View {

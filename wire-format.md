@@ -2726,6 +2726,48 @@ and grant nothing from it.**
 A scope naming a position outside it is not an error; it simply matches nobody the
 evaluator can see.
 
+### 6.9 The catalog page
+
+**What the asker may use at this node, as the node says it** [author, 2026-11-23]:
+design §11.5's personalised page, served over the session, unsigned, and naming the
+roles the asker holds. **A resource needs no `CatalogEntry` to be on it**: a package
+the node hosts reaches the people granted it by being granted, which is what makes
+the page the front door to a locally-hosted resource (`resource-requirements.md`
+§3). It answers a different question from §6.4's query — what the asker holds a
+grant on here, rather than which entries the asker may see — so the two are asked
+side by side and neither stands in for the other.
+
+```
+CatalogPageRequest = {
+  1: bstr .size 16     ; nonce, echoed in the reply
+}
+
+CatalogPage = {
+  1: bstr .size 16,    ; echoes the request nonce
+  2: [ * PageItem ]    ; at most 111, in resource keyhash order: one per
+                       ;   resource the asker holds `connect` on here, and
+                       ;   none it does not
+}
+
+PageItem = {
+  1: keyhash,          ; the resource
+  2: keyhash,          ; its owner
+  3: tstr .size (1..128),  ; a name to show it by: the instance name of the
+                       ;   entry this node holds for it (§6.1 field 4), and
+                       ;   otherwise the authority it is hosted under.
+                       ;   Display only, as an instance name is
+  4: [ * tstr .size (1..32) ]  ; the application roles the asker holds on
+                       ;   it, at most 64 (`resource-requirements.md` §3):
+                       ;   the node's own `connect` and `discover` are never
+                       ;   among them
+}
+```
+
+**Carried on a bidirectional stream** (§9.2) tagged request type 16, one request
+per stream, the reply closing it. **An asker outside the answering node's horizon
+is refused as §6.4's is**: the stream closes, and no empty page is returned, an
+empty page being the true statement that nothing here is granted to the asker.
+
 ---
 
 ## 7. Attestations and records: currency, anchors, key grants, acknowledgements, endpoints, resolution, node keys, archive fetch
@@ -4810,6 +4852,7 @@ no continuation to preserve.
 | 13 | `ProfilePublication` (§7.10) |
 | 14 | `ProfileRequest` (§7.11), read-only |
 | 15 | `HorizonAssertion` (§7.12) |
+| 16 | `CatalogPageRequest` (§6.9) |
 
 **The reply carries no type tag and is framed identically otherwise**: the same
 `u32-be` length prefix and CBOR body. It answers a request whose type the requester
