@@ -630,10 +630,11 @@ fn a_greeting_with_no_path_waits_for_a_node_key_and_the_next_one_replaces_it() {
     );
 }
 
-/// **What waits on a node key is asked for again by routine maintenance**
-/// [author, 2026-11-23], with nothing sent in between: a fetch that met
-/// nobody leaves the message with the client, and the next round retries
-/// it while it still waits.
+/// **What waits on a node key is asked for again by routine maintenance,
+/// less often the longer it waits** [author, 2026-11-23], with nothing
+/// sent in between: a fetch that met nobody leaves the message with the
+/// client, and maintenance retries it at doubling intervals up to a
+/// ceiling while it still waits.
 // functional: PAY-025
 #[test]
 fn maintenance_asks_again_for_the_node_key_a_message_waits_on() {
@@ -654,8 +655,36 @@ fn maintenance_asks_again_for_the_node_key_a_message_waits_on() {
     let _ = c.outbox();
     let waiting = c.payload.pending.get(&kh("bob")).map_or(0, Vec::len);
     assert!(waiting > 0, "the greeting waits on bob's node key");
-    assert_eq!(asks(&c.maintain()), 1, "asked again");
-    assert_eq!(asks(&c.maintain()), 1, "and at the next round");
+    let first = rhtn_client::ceremony::Client::NODE_KEY_RETRY_FIRST_S;
+    let ceiling = rhtn_client::ceremony::Client::NODE_KEY_RETRY_CEILING_S;
+    // seen waiting: due one interval from now, and not before
+    assert_eq!(asks(&c.maintain()), 0, "not at once");
+    s.clock.set(s.clock.get() + first * 1000);
+    let c = s.client("alice");
+    assert_eq!(
+        asks(&c.maintain()),
+        1,
+        "asked again after the first interval"
+    );
+    // then at doubling intervals
+    let mut interval = first * 2;
+    for _ in 0..3 {
+        s.clock.set(s.clock.get() + (interval - 1) * 1000);
+        assert_eq!(
+            asks(&s.client("alice").maintain()),
+            0,
+            "not before {interval}s"
+        );
+        s.clock.set(s.clock.get() + 1000);
+        assert_eq!(asks(&s.client("alice").maintain()), 1, "at {interval}s");
+        interval *= 2;
+    }
+    // and never further apart than the ceiling
+    for _ in 0..8 {
+        s.clock.set(s.clock.get() + ceiling * 1000);
+        assert_eq!(asks(&s.client("alice").maintain()), 1, "within the ceiling");
+    }
+    let c = s.client("alice");
     assert_eq!(
         c.payload.pending.get(&kh("bob")).map_or(0, Vec::len),
         waiting,

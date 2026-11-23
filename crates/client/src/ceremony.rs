@@ -763,6 +763,11 @@ pub struct Client {
     /// head asked for.  One at a time per subject, which is what lets a
     /// reply be tied to a request (design §15).
     fetching: BTreeMap<Keyhash, Fetch>,
+    /// **When a node key a message waits on is asked for again**, by
+    /// recipient: the second it is next due and the interval that led to
+    /// it, which doubles after each ask (`Client::maintain`). Held in
+    /// memory alone: a restart asks again from the first interval.
+    key_retry: BTreeMap<Keyhash, (u64, u64)>,
     /// As a recovering subject: the rotation from the prior key, holding
     /// that key until the lines are sealed.
     pub rotation: Option<Box<Rotation>>,
@@ -1107,6 +1112,7 @@ impl Client {
             catalog: crate::catalog::View::default(),
             browsing: None,
             fetching: BTreeMap::new(),
+            key_retry: BTreeMap::new(),
             rotation: None,
             asks: BTreeMap::new(),
             asked: 0,
@@ -6721,32 +6727,52 @@ impl Client {
         // traffic, so a record whose own carry was missed is not stranded
         let mut out = self.outbox();
         out.extend(self.resend_unanswered(now));
-        // **a message waiting on a node key is retried** [author,
-        // 2026-11-23]: a fetch nobody answered leaves it here, and nothing
-        // else asks again until the next send to the same recipient
-        let waiting: Vec<Keyhash> = self
+        out.extend(self.retry_node_keys(now));
+        out
+    }
+
+    /// The interval before a node key a message waits on is first asked
+    /// for again, in seconds; it doubles after each ask.
+    pub const NODE_KEY_RETRY_FIRST_S: u64 = 10;
+    /// The longest that interval grows to, in seconds.
+    pub const NODE_KEY_RETRY_CEILING_S: u64 = 15 * 60;
+
+    /// **A message waiting on a node key is retried, less often the longer
+    /// it waits** [author, 2026-11-23]: a fetch nobody answered leaves it
+    /// here, and nothing else asks again until the next send to the same
+    /// recipient. First due [`Self::NODE_KEY_RETRY_FIRST_S`] after it is
+    /// seen waiting, then at doubling intervals up to
+    /// [`Self::NODE_KEY_RETRY_CEILING_S`]; a recipient nothing waits for
+    /// any more is forgotten.
+    fn retry_node_keys(&mut self, now: u64) -> Vec<Msg> {
+        let waiting: BTreeSet<Keyhash> = self
             .payload
             .pending
             .iter()
             .filter(|(_, w)| !w.is_empty())
             .map(|(to, _)| *to)
             .collect();
-        let asked: BTreeSet<Keyhash> = out
-            .iter()
-            .filter_map(|m| match m {
-                Msg::NodeKeyRequest(r) => Some(r.clone()),
-                _ => None,
-            })
-            .flatten()
-            .collect();
-        let again: Vec<Keyhash> = waiting
-            .into_iter()
-            .filter(|to| !asked.contains(to))
-            .collect();
-        if !again.is_empty() {
-            out.push(Msg::NodeKeyRequest(again));
+        self.key_retry.retain(|to, _| waiting.contains(to));
+        let mut again = Vec::new();
+        for to in waiting {
+            match self.key_retry.get_mut(&to) {
+                None => {
+                    let first = Self::NODE_KEY_RETRY_FIRST_S;
+                    self.key_retry.insert(to, (now + first, first));
+                }
+                Some((due, interval)) if now >= *due => {
+                    *interval = (*interval * 2).min(Self::NODE_KEY_RETRY_CEILING_S);
+                    *due = now + *interval;
+                    again.push(to);
+                }
+                Some(_) => {}
+            }
         }
-        out
+        if again.is_empty() {
+            Vec::new()
+        } else {
+            vec![Msg::NodeKeyRequest(again)]
+        }
     }
 
     /// Everything addressing `to` needs that this client can answer from

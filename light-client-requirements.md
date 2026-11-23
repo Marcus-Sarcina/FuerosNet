@@ -765,7 +765,8 @@ does not reinvent its parts.
   your patron (design §19.4, P26).
 - **Keep a message that waits on a node key, and ask for the key again while
   a session is held** [author, 2026-11-23]. A fetch nobody answered leaves the
-  message unsent and with you, not lost, and routine maintenance asks again.
+  message unsent and with you, not lost, and routine maintenance asks again,
+  **less often the longer it waits** [author, 2026-11-23].
   **A message that did not go never undoes an attach** [author, 2026-11-23]:
   *"An undelivered message should not affect the attach. Once attached, it
   should retry, but there should be no dropped sessions."*
