@@ -561,8 +561,13 @@ async fn a_signer_whose_root_check_fails_answers_and_the_proposer_records_it() {
     // kept back, so bob and w1 never see a body that verifies. **The
     // bearer stops first**: her proposal's leg to bob crosses the local
     // interface, and two paths keep no order between them, so the one
-    // that would carry a body that verifies carries nothing from here
+    // that would carry a body that verifies carries nothing from here.
+    // **Stopped, not only asked to**: an abort lands at the bearer's next
+    // await, and a bearer still running would take her kept-back body
+    // off her outbox; once it has ended, whatever it asked of her client
+    // was asked before her proposal, and the client answers in order
     bearer.abort();
+    let _ = bearer.await;
     let sent = alice
         .with(|c| {
             let flags = c
