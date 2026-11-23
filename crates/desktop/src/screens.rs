@@ -33,6 +33,11 @@ pub enum Place {
     /// The node serving this desktop: where it is connected, and a node
     /// to connect to, reached from the options as the phone's is.
     Node,
+    /// **Who this key is under, and what leaving costs**, reached from a
+    /// subnet's options: every line the key holds, not that subnet's alone.
+    Authority,
+    /// The colour of the identity in focus, chosen from the palette.
+    Colour,
 }
 
 impl Place {
@@ -48,6 +53,8 @@ impl Place {
                 "direct" => Some(Place::Direct),
                 "options" => Some(Place::Options),
                 "node" => Some(Place::Node),
+                "authority" => Some(Place::Authority),
+                "colour" => Some(Place::Colour),
                 _ => None,
             },
             Some(("thread", h)) => hex64(h).map(Place::Thread),
@@ -64,6 +71,8 @@ impl Place {
             Place::Direct => "direct".into(),
             Place::Options => "options".into(),
             Place::Node => "node".into(),
+            Place::Authority => "authority".into(),
+            Place::Colour => "colour".into(),
             Place::Thread(h) => format!("thread:{h}"),
             Place::Subnet(h) => format!("subnet:{h}"),
             Place::SubnetOptions(h) => format!("subnet-options:{h}"),
@@ -83,7 +92,7 @@ impl Place {
     /// reached from.
     fn parent(&self) -> Place {
         match self {
-            Place::Node => Place::Options,
+            Place::Node | Place::Colour => Place::Options,
             Place::SubnetOptions(h) => Place::Subnet(h.clone()),
             Place::Thread(_) => Place::Direct,
             _ => Place::Home,
@@ -246,6 +255,9 @@ pub struct Snapshot {
     pub name: Option<String>,
     /// What this desktop is to it.
     pub device: Device,
+    /// **The identity's colour**, by its palette name: what the foot and
+    /// each subnet's orb wear [author, 2026-11-12].
+    pub colour: String,
     /// Where it is connected, in one line.
     pub connection: String,
     /// Every subnet this key is in.
@@ -293,6 +305,40 @@ pub enum Body {
     /// [author, 2026-11-23]: swept at every connection and whenever the
     /// subnet is opened, never browsed.
     Launchers(Vec<ResourceRow>),
+    /// **The lines this key holds**, each with its patron's alias where one
+    /// is held.
+    Authority(Vec<LineRow>),
+}
+
+/// One line of authority this key holds, as the authority screen rolls it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LineRow {
+    /// The line, as the kernel holds it.
+    pub line: rhtn_model::Line,
+    /// The patron's alias, where one has been received.
+    pub alias: Option<String>,
+}
+
+/// **The identity colours** [author, 2026-11-12], by the names the phone
+/// offers, each with the token it is drawn in (`ui/tokens.css`).
+pub const PALETTE: [(&str, &str); 8] = [
+    ("Red", "--identity-red"),
+    ("Green", "--identity-green"),
+    ("Purple", "--identity-purple"),
+    ("Blue", "--identity-blue"),
+    ("Orange", "--identity-orange"),
+    ("Teal", "--identity-teal"),
+    ("Pink", "--identity-pink"),
+    ("Slate", "--identity-slate"),
+];
+
+/// The token a palette name is drawn in; the orb's own where the name is
+/// none of the palette's.
+pub fn token(name: &str) -> &'static str {
+    PALETTE
+        .iter()
+        .find(|(n, _)| *n == name)
+        .map_or("--rail-orb", |(_, t)| t)
 }
 
 /// **A place drawn whole**: the page the window loads when it is gone to.
@@ -350,6 +396,7 @@ pub fn rail(snap: &Snapshot, place: &Place) -> String {
         "Direct messages",
         Crown::None,
         0,
+        None,
     );
     if !snap.subnets.is_empty() {
         out.push_str("<hr>\n");
@@ -369,22 +416,37 @@ pub fn rail(snap: &Snapshot, place: &Place) -> String {
             &format!("{}{standing}{}", subnet_name(s), said(s.unseen)),
             s.crown,
             s.unseen,
+            // **a subnet's orb wears the colour of the identity holding it**
+            // [author, 2026-11-12]
+            Some(&snap.colour),
         ));
     }
     out
 }
 
-/// One orb: the crown's back, the disc and its mark, the crown's front
-/// sweep, and the count above its corner.
-fn orb(to: &Place, here: bool, mark: &str, said: &str, crown: Crown, unseen: u32) -> String {
+/// One orb: the crown's back, the disc in its colour with its mark, the
+/// crown's front sweep, and the count above its corner.
+#[allow(clippy::too_many_arguments)]
+fn orb(
+    to: &Place,
+    here: bool,
+    mark: &str,
+    said: &str,
+    crown: Crown,
+    unseen: u32,
+    colour: Option<&str>,
+) -> String {
     format!(
         "<a class=\"orb{}\" data-go=\"{}\" title=\"{}\" aria-label=\"{}\">{}\
-         <span class=\"disc\">{}</span>{}{}</a>\n",
+         <span class=\"disc\"{}>{}</span>{}{}</a>\n",
         if here { " here" } else { "" },
         to.token(),
         escape(said),
         escape(said),
         band(crown, false),
+        colour
+            .map(|c| format!(" style=\"background: var({})\"", token(c)))
+            .unwrap_or_default(),
         escape(mark),
         band(crown, true),
         count(unseen)
@@ -424,10 +486,13 @@ fn band(crown: Crown, front: bool) -> String {
 /// **The foot**: the options orb, marked as this person, and the
 /// nameplate, which is home.
 pub fn foot(snap: &Snapshot) -> String {
+    // **the options orb and the nameplate wear the colour of the identity
+    // in focus** [author, 2026-11-12]
+    let wears = format!(" style=\"background: var({})\"", token(&snap.colour));
     format!(
-        "<a class=\"me\" data-go=\"options\" title=\"You, and this desktop's options\" \
+        "<a class=\"me\" data-go=\"options\"{wears} title=\"You, and this desktop's options\" \
          aria-label=\"You, and this desktop's options\">{}</a>\
-         <a class=\"plate\" data-go=\"home\"><b{}>{}</b><small>home</small></a>",
+         <a class=\"plate\" data-go=\"home\"{wears}><b{}>{}</b><small>home</small></a>",
         escape(&mark(snap.name.as_deref(), &hex(&snap.me))),
         if snap.name.is_some() {
             ""
@@ -485,6 +550,11 @@ fn main(snap: &Snapshot, place: &Place, body: &Body) -> String {
         Place::SubnetOptions(id) => subnet_options(snap, id),
         Place::Options => options(snap),
         Place::Node => node(snap),
+        Place::Colour => colour(snap),
+        Place::Authority => match body {
+            Body::Authority(lines) => authority(lines),
+            _ => authority(&[]),
+        },
     }
 }
 
@@ -616,15 +686,122 @@ fn subnet(snap: &Snapshot, id: &str, rows: &[ResourceRow]) -> String {
 }
 
 /// **A subnet's options**: what this key is there, as the phone's say it.
+///
+/// **As the phone's** [author, 2026-11-23: *"Subnet authority screen and
+/// renaming should carry over"*]: the authority row, the downline, and for
+/// the root the subnet's name. **A paired desktop shows what it cannot
+/// sign** and leaves the act to the phone, since it signs nothing (design
+/// §23.3).
 fn subnet_options(snap: &Snapshot, id: &str) -> String {
     let s = snap.subnets.iter().find(|s| s.id == id);
-    format!(
-        "{}<p>{}</p>",
-        bar(&s.map(subnet_name).unwrap_or_else(|| short(id)), true, None),
+    let mut out = bar(&s.map(subnet_name).unwrap_or_else(|| short(id)), true, None);
+    out.push_str(&row(
+        "Authority — who you are under, and what leaving costs",
+        "every line this key holds, not this subnet's alone; choose one for the cost of ending it",
+        "data-go=\"authority\"",
+    ));
+    out.push_str(&format!(
+        "<p>{}</p>\n",
         escape(
             &s.map(|s| s.rank.clone())
                 .unwrap_or_else(|| "Your standing here has not been read yet.".into())
         )
+    ));
+    if s.is_some_and(|s| s.crown == Crown::Full) {
+        out.push_str(&match snap.device {
+            Device::Restored => format!(
+                "<h2>The subnet's name</h2>\n<p class=\"sub\">You are its root, so its name is \
+                 yours to set — by convention; nothing enforces it.</p>\n\
+                 <label>Name<input id=\"rename\" data-subnet=\"{id}\" value=\"{}\" \
+                 autocomplete=\"off\"></label>\n<p><button id=\"name\">{}</button></p>",
+                escape(s.and_then(|s| s.name.as_deref()).unwrap_or("")),
+                if s.and_then(|s| s.name.as_ref()).is_some() {
+                    "Rename the subnet"
+                } else {
+                    "Name the subnet"
+                }
+            ),
+            Device::Paired { .. } => "<h2>The subnet's name</h2>\n<p class=\"sub\">You are its \
+                 root, so its name is yours to set. Naming it is signed as the identity, and \
+                 this desktop signs nothing: name it on the phone.</p>"
+                .to_string(),
+        });
+    }
+    out
+}
+
+/// **The colour of the identity in focus**, chosen from the palette by
+/// name, as the phone's options offer it.
+fn colour(snap: &Snapshot) -> String {
+    let mut out = bar("Colour", true, None);
+    for (name, token) in PALETTE {
+        out.push_str(&format!(
+            "<button class=\"row\" data-colour=\"{name}\"><span><i class=\"swatch\" \
+             style=\"background: var({token})\"></i>{}{name}</span></button>\n",
+            if snap.colour == name { "● " } else { "" }
+        ));
+    }
+    out
+}
+
+/// **Who this key is under, and what leaving costs** (`light-client-
+/// requirements.md` §6; the phone's authority screen): every line held,
+/// each chosen for the cost of ending it, which arrives below.
+fn authority(lines: &[LineRow]) -> String {
+    let mut out = bar("Authority", true, None);
+    out.push_str(&format!(
+        "<p class=\"sub\">{}</p>\n",
+        escape(crate::authority::WHY)
+    ));
+    if lines.is_empty() {
+        out.push_str(&format!("<p>{}</p>\n", escape(crate::authority::NONE)));
+    }
+    for l in lines {
+        out.push_str(&format!(
+            "<button class=\"row\" data-cost=\"{}\"><span class=\"mono\">{}</span></button>\n",
+            hex(&l.line.patron),
+            escape(&crate::authority::line(&l.line, l.alias.as_deref()))
+        ));
+    }
+    out.push_str("<div id=\"cost\"></div>");
+    out
+}
+
+/// **What ending one line costs, put where the authority screen keeps it**:
+/// the words, and the act — two presses, since it cannot be undone — or,
+/// on a desktop that signs nothing, where the act is done instead.
+pub fn cost_script(
+    device: &Device,
+    patron: &str,
+    alias: Option<&str>,
+    cost: Result<&rhtn_model::Cost, &str>,
+    names: &std::collections::HashMap<String, String>,
+) -> String {
+    let html = match cost {
+        Err(why) => format!(
+            "<p class=\"bad\">No cost for {}: {}</p>",
+            escape(&crate::authority::party(patron, alias)),
+            escape(why)
+        ),
+        Ok(c) => format!(
+            "<pre>{}</pre>{}",
+            crate::authority::words(c, names),
+            match device {
+                Device::Restored => format!(
+                    "<p><button data-leave=\"{patron}\" data-again=\"{}\">{}</button></p>",
+                    escape(&crate::authority::button(patron, alias, true)),
+                    escape(&crate::authority::button(patron, alias, false))
+                ),
+                Device::Paired { .. } => format!(
+                    "<p class=\"sub\">{}</p>",
+                    escape(crate::authority::ON_THE_PHONE)
+                ),
+            }
+        ),
+    };
+    format!(
+        "(() => {{ const c = document.getElementById('cost'); if (c) c.innerHTML = {}; }})();",
+        js(&html)
     )
 }
 
@@ -709,7 +886,7 @@ fn options(snap: &Snapshot) -> String {
         ),
     };
     format!(
-        "{}{}{}<h2>This desktop</h2>\n<p class=\"sub\">{}</p>\n{dataset}\n\
+        "{}{}{}{}<h2>This desktop</h2>\n<p class=\"sub\">{}</p>\n{dataset}\n\
          <p class=\"sub mono\">{}</p>\n{}",
         bar("Options", true, None),
         row("Serving node", &snap.connection, "data-go=\"node\""),
@@ -718,6 +895,7 @@ fn options(snap: &Snapshot) -> String {
             "launch one at a provider",
             "data-act=\"launch\""
         ),
+        row("Colour", &snap.colour, "data-go=\"colour\""),
         escape(&said),
         hex(&snap.me),
         if snap.device == Device::Restored {
@@ -801,6 +979,7 @@ mod tests {
             me: vec![0xab; 32],
             name: Some("Ann <A>".into()),
             device: Device::Restored,
+            colour: "Teal".into(),
             connection: "Connected to 1111111111111111…".into(),
             subnets: vec![SubnetRow {
                 id: "22".repeat(32),
@@ -912,7 +1091,7 @@ mod tests {
         // **orbs only, as narrow as one** [author, 2026-11-23]
         assert!(r.contains(&format!("class=\"orb here\" data-go=\"subnet:{id}\"")));
         assert!(
-            r.contains("<span class=\"disc\">M&lt;</span>"),
+            r.contains("style=\"background: var(--identity-teal)\">M&lt;</span>"),
             "the mark, not the name"
         );
         assert!(r.contains("aria-label=\"Mirror &lt;Manse&gt;, you run a node here, 3 unseen\""));
@@ -926,7 +1105,7 @@ mod tests {
         );
         let f = foot(&s);
         assert!(f.contains("data-go=\"options\"") && f.contains(">A&lt;</a>"));
-        assert!(f.contains("data-go=\"home\"><b>Ann &lt;A&gt;</b><small>home</small>"));
+        assert!(f.contains("data-go=\"home\" style=\"background: var(--identity-teal)\"><b>Ann &lt;A&gt;</b><small>home</small>"));
         let unnamed = Snapshot {
             name: None,
             ..s.clone()
@@ -1097,6 +1276,99 @@ mod tests {
         assert!(
             !po.contains("id=\"import\"") && po.contains("90 days") && po.contains("came across")
         );
+    }
+
+    // **the authority screen and the subnet's name carry over** [author,
+    // 2026-11-23], and a paired desktop leaves the signed acts to the phone
+    #[test]
+    fn a_subnets_options_lead_to_authority_and_its_root_names_it_where_this_desktop_signs() {
+        let s = snap();
+        let id = "22".repeat(32);
+        let root = Snapshot {
+            subnets: vec![SubnetRow {
+                crown: Crown::Full,
+                ..s.subnets[0].clone()
+            }],
+            ..s.clone()
+        };
+        let o = page(&root, &Place::SubnetOptions(id.clone()), &Body::Plain);
+        assert!(o.contains("data-go=\"authority\"") && o.contains("Its operator."));
+        assert!(o.contains(&format!(
+            "id=\"rename\" data-subnet=\"{id}\" value=\"Mirror &lt;Manse&gt;\""
+        )));
+        assert!(o.contains(">Rename the subnet<"));
+        let paired = Snapshot {
+            device: Device::Paired {
+                days: 90,
+                dataset: None,
+            },
+            ..root.clone()
+        };
+        let po = page(&paired, &Place::SubnetOptions(id.clone()), &Body::Plain);
+        assert!(!po.contains("id=\"rename\"") && po.contains("name it on the phone"));
+        // not the root: no name to set at all
+        assert!(!page(&s, &Place::SubnetOptions(id), &Body::Plain).contains("The subnet's name"));
+
+        let line = rhtn_model::Line {
+            patron: [0x33; 32],
+            series: 2,
+            anchor: [0; 32],
+            nibbles: 0,
+        };
+        let a = page(
+            &s,
+            &Place::Authority,
+            &Body::Authority(vec![LineRow {
+                line,
+                alias: Some("Carol".into()),
+            }]),
+        );
+        assert!(a.contains(&format!("data-cost=\"{}\"", "33".repeat(32))));
+        assert!(a.contains("Carol, 333333333333…   series 2") && a.contains("id=\"cost\""));
+        assert!(page(&s, &Place::Authority, &Body::Authority(vec![])).contains("under no patron"));
+
+        let cost = rhtn_model::Cost {
+            losing: vec![],
+            keeping: 2,
+            leaving: vec![],
+            limits: vec![rhtn_model::Limit::PredicateNotHeld],
+        };
+        let names = std::collections::HashMap::new();
+        let who = "33".repeat(32);
+        let restored = cost_script(&Device::Restored, &who, Some("Carol"), Ok(&cost), &names);
+        assert!(restored.contains("Nothing this device can see goes with it."));
+        assert!(restored.contains("2 resources stay within reach."));
+        assert!(
+            restored.contains(&format!("data-leave=\\\"{who}\\\"")),
+            "{restored}"
+        );
+        assert!(
+            restored.contains("Press again to leave Carol") && restored.contains(">Leave Carol<")
+        );
+        let on_phone = cost_script(&paired.device, &who, Some("Carol"), Ok(&cost), &names);
+        assert!(!on_phone.contains("data-leave") && on_phone.contains("leave on the phone"));
+        let refused = cost_script(&Device::Restored, &who, None, Err("no such line"), &names);
+        assert!(refused.contains("No cost for 333333333333…: no such line"));
+    }
+
+    #[test]
+    fn the_identitys_colour_is_chosen_from_the_palette_and_worn_by_its_orbs_and_foot() {
+        let s = snap();
+        let c = page(&s, &Place::Colour, &Body::Plain);
+        assert_eq!(c.matches("data-colour=").count(), PALETTE.len());
+        assert!(c.contains("● Teal") && !c.contains("● Red"));
+        assert!(
+            rail(&s, &Place::Home)
+                .contains("class=\"disc\" style=\"background: var(--identity-teal)\"")
+        );
+        assert!(foot(&s).matches("background: var(--identity-teal)").count() == 2);
+        assert!(
+            page(&s, &Place::Options, &Body::Plain)
+                .contains("data-go=\"colour\"><span>Colour</span><small>Teal</small>")
+        );
+        assert_eq!(token("Nonesuch"), "--rail-orb");
+        assert_eq!(Place::parse("colour"), Some(Place::Colour));
+        assert_eq!(Place::parse("authority"), Some(Place::Authority));
     }
 
     #[test]

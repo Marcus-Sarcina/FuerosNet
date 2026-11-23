@@ -87,7 +87,13 @@ class ShellActivity : Activity() {
                     it == uniffi.rhtn_model.Noun.CONNECTION || it == uniffi.rhtn_model.Noun.RESOURCES
             }
         ) {
-            runOnUiThread { if (!isFinishing) drawFromModel() }
+            runOnUiThread {
+                if (isFinishing) return@runOnUiThread
+                drawFromModel()
+                // **and a subnet's page with its cards**, whose counts are
+                // the resources' and move under it [author, 2026-11-23]
+                if (place is Chrome.Place.Subnet && uniffi.rhtn_model.Noun.RESOURCES in nouns) show(place)
+            }
         }
     }
 

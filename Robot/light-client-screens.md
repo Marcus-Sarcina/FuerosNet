@@ -864,3 +864,27 @@ to the screen's width. The provision's peer stays the payload demo's.
 Not yet: design §12.3 has the locator travel with the key; the first code
 carries no `SignedLocator`, the phones having none. Reading a 177-module
 code on the selfie camera at arm's length is untested on hardware.
+
+## The desktop takes the phone's layout [author, 2026-11-23]
+
+*"The desktop will need a redesign to match the layout conventions of the
+mobile app - narrow side navigation wide enough for orbs only (preserve as
+much space as possible for the main content), same navigation of options
+and subnet content, just without the meeting or other mobile-only
+features."* Built 2026-11-23 (`crates/desktop/src/screens.rs`): the orb
+rail, the foot, the chrome rule and back by the phone's `History` rules.
+
+- **Identity colour carries over** [author, 2026-11-23], chosen under
+  Options › Colour and kept per identity in `colours.json`; worn by the foot
+  and each subnet's orb. Built.
+- **Every identity comes across at pairing, removals never** [author,
+  2026-11-23: *"Sync all identities at the time of initiation, but do not
+  carry over removals"*], with the phone's identity list as the picker —
+  **opened by a double click on the nameplate** rather than press and hold
+  [author, 2026-11-23]; the focus is for starting a direct message, there
+  being no meeting on a desktop. **Not built**: blocked on how a second
+  identity is introduced on one pairing session (asked 2026-11-23).
+- **A subnet's authority screen and its renaming carry over** [author,
+  2026-11-23]; on a paired desktop, which signs nothing, both are shown and
+  the act is left to the phone [author, 2026-11-23: "Show, act on phone"].
+  Built.

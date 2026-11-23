@@ -16,6 +16,7 @@ fn main() {
         me: vec![0x70; 32],
         name: Some("Marcus".into()),
         device: Device::Restored,
+        colour: "Teal".into(),
         connection: "Connected to 703a82c269ea77ad… at 157.245.85.18:7431".into(),
         subnets: vec![
             SubnetRow {
@@ -124,6 +125,26 @@ fn main() {
         (
             "node.html",
             screens::page(&snap, &Place::Node, &Body::Plain),
+        ),
+        (
+            "colour.html",
+            screens::page(&snap, &Place::Colour, &Body::Plain),
+        ),
+        (
+            "authority.html",
+            screens::page(
+                &snap,
+                &Place::Authority,
+                &Body::Authority(vec![screens::LineRow {
+                    line: rhtn_model::Line {
+                        patron: [0x33; 32],
+                        series: 0,
+                        anchor: [0; 32],
+                        nibbles: 2,
+                    },
+                    alias: Some("Carol".into()),
+                }]),
+            ),
         ),
         (
             "subnet-options.html",

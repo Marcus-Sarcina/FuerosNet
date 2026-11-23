@@ -22,7 +22,7 @@ use rhtn_desktop::custody::Keyring;
 use rhtn_desktop::participant::{self, Device, Held, hex};
 use rhtn_desktop::platform::{self, Desk};
 use rhtn_desktop::screens::{
-    self, Body, Crown, History, Person, Place, ResourceRow, Snapshot, SubnetRow,
+    self, Body, Crown, History, LineRow, Person, Place, ResourceRow, Snapshot, SubnetRow,
 };
 use rhtn_desktop::threads::{self, Delivery, Record, Sealer, Threads};
 use rhtn_desktop::{Act, act, code, directory, frame, pairing, phrase, said, verify_and_keep};
@@ -158,6 +158,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         place: Mutex::new(History::default()),
         threads: Mutex::new(None),
         closing: AtomicBool::new(false),
+        dir: dir.clone(),
     });
     // where a phrase typed on the first start goes, while one is wanted
     let phrases: Arc<Mutex<Option<Sender<First>>>> = Arc::new(Mutex::new(None));
@@ -317,6 +318,55 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         if let Place::Subnet(id) = place {
                             opened(&up, &back, &id);
                         }
+                    });
+                }
+                Ok(Act::Cost { patron }) => {
+                    let (back, up) = (worker.clone(), up.clone());
+                    std::thread::spawn(move || cost(&up, &back, patron));
+                }
+                // **leaving is the person's right, and signed**: a paired
+                // desktop is never offered it, and the kernel refuses a
+                // departure from a key it holds no seed for in any case
+                Ok(Act::Leave { patron }) => {
+                    let (back, up) = (worker.clone(), up.clone());
+                    std::thread::spawn(move || {
+                        let Some(p) = up.running.lock().unwrap().clone() else {
+                            return;
+                        };
+                        let said = match p.depart(patron, None) {
+                            Ok(_) => (true, "Left. The line is ended.".to_string()),
+                            Err(why) => (false, format!("not left: {why}")),
+                        };
+                        let _ = back.send_event(Said::ToPage(said.0, said.1));
+                        draw(&up, &back, true);
+                    });
+                }
+                Ok(Act::Rename { subnet, name }) => {
+                    let (back, up) = (worker.clone(), up.clone());
+                    std::thread::spawn(move || {
+                        let Some(p) = up.running.lock().unwrap().clone() else {
+                            return;
+                        };
+                        let said = match p.publish_profile(subnet, 1, name.clone(), None, None) {
+                            Ok(()) => (true, format!("Named {name}; published to your node.")),
+                            Err(why) => (false, format!("not published: {why}")),
+                        };
+                        let _ = back.send_event(Said::ToPage(said.0, said.1));
+                        draw(&up, &back, false);
+                    });
+                }
+                Ok(Act::Colour { name }) => {
+                    let (back, up) = (worker.clone(), up.clone());
+                    std::thread::spawn(move || {
+                        let me = up.running.lock().unwrap().as_ref().map(|p| p.me());
+                        if let Some(me) = me
+                            && let Err(why) = participant::keep_colour(&up.dir, &me, &name)
+                        {
+                            let _ =
+                                back.send_event(Said::ToPage(false, format!("not kept: {why}")));
+                        }
+                        up.place.lock().unwrap().back();
+                        draw(&up, &back, true);
                     });
                 }
                 Ok(Act::Back) => {
@@ -598,6 +648,8 @@ struct Up {
     running: Mutex<Option<Arc<Participant>>>,
     device: Mutex<Option<Device>>,
     place: Mutex<History>,
+    /// Where this desktop keeps what it keeps, its colours among it.
+    dir: PathBuf,
     threads: Mutex<Option<Arc<Threads>>>,
     closing: AtomicBool,
 }
@@ -625,7 +677,8 @@ fn draw(up: &Up, back: &EventLoopProxy<Said>, whole: bool) {
     };
     let place = up.place.lock().unwrap().here().clone();
     let threads = up.threads.lock().unwrap().clone();
-    let snap = snapshot(&p, d, threads.as_deref());
+    let mut snap = snapshot(&p, d, threads.as_deref());
+    snap.colour = participant::colour_of(&up.dir, &snap.me);
     let body = match &place {
         Place::Thread(peer) => {
             let page = threads
@@ -655,6 +708,19 @@ fn draw(up: &Up, back: &EventLoopProxy<Said>, whole: bool) {
                     .collect(),
             )
         }
+        // **every line this key holds**, each patron by the alias held
+        Place::Authority => {
+            let names = aliases(&p);
+            Body::Authority(
+                p.lines()
+                    .into_iter()
+                    .map(|line| LineRow {
+                        alias: names.get(&hex(&line.patron)).cloned(),
+                        line,
+                    })
+                    .collect(),
+            )
+        }
         _ => Body::Plain,
     };
     let _ = back.send_event(if whole {
@@ -663,6 +729,37 @@ fn draw(up: &Up, back: &EventLoopProxy<Said>, whole: bool) {
         let script = screens::refresh(&snap, &place, &body);
         Said::Redraw(place, script)
     });
+}
+
+/// **The names this key holds for the parties it knows**, by keyhash in
+/// hex: what the authority screen names a patron by.
+fn aliases(p: &Participant) -> HashMap<String, String> {
+    p.contacts()
+        .into_iter()
+        .filter_map(|c| c.alias.map(|a| (hex(&c.keyhash), a)))
+        .collect()
+}
+
+/// **What leaving `patron` costs, put on the authority screen** where it
+/// still stands: worked out off the drawing thread, since it walks the
+/// topology this key holds.
+fn cost(up: &Up, back: &EventLoopProxy<Said>, patron: Vec<u8>) {
+    let p = up.running.lock().unwrap().clone();
+    let d = up.device.lock().unwrap().clone();
+    let (Some(p), Some(d)) = (p, d) else {
+        return;
+    };
+    let names = aliases(&p);
+    let who = hex(&patron);
+    let c = p.cost_of_leaving(patron).map_err(|e| e.to_string());
+    let script = screens::cost_script(
+        &d,
+        &who,
+        names.get(&who).map(String::as_str),
+        c.as_ref().map_err(String::as_str),
+        &names,
+    );
+    let _ = back.send_event(Said::Redraw(Place::Authority, script));
 }
 
 /// **The kernel's answers as the screens' rows**: where it is connected,
@@ -683,6 +780,7 @@ fn snapshot(p: &Participant, device: Device, threads: Option<&Threads>) -> Snaps
         .find_map(|s| s.own_alias.clone().filter(|a| !a.trim().is_empty()))
         .or_else(|| p.default_alias().filter(|a| !a.trim().is_empty()));
     Snapshot {
+        colour: String::new(),
         me: p.me(),
         name,
         device,

@@ -85,6 +85,34 @@ impl Held {
     }
 }
 
+/// **Where each identity's colour is kept** [author, 2026-11-12], by its
+/// keyhash in hex: a choice of this device's, beside what it keeps to start.
+pub const COLOURS: &str = "colours.json";
+
+/// **The colour `me` wears here**: the one chosen on this device, else the
+/// palette's first, which is what the phone gives a device's first
+/// identity.
+pub fn colour_of(dir: &Path, me: &[u8]) -> String {
+    std::fs::read(dir.join(COLOURS))
+        .ok()
+        .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+        .and_then(|v| v.get(hex(me)).and_then(|c| c.as_str().map(String::from)))
+        .filter(|c| crate::screens::PALETTE.iter().any(|(n, _)| n == c))
+        .unwrap_or_else(|| crate::screens::PALETTE[0].0.to_string())
+}
+
+/// Keep `name` as the colour `me` wears here, whole or not at all.
+pub fn keep_colour(dir: &Path, me: &[u8], name: &str) -> Result<(), String> {
+    let mut v: serde_json::Value = std::fs::read(dir.join(COLOURS))
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .filter(serde_json::Value::is_object)
+        .unwrap_or_else(|| serde_json::json!({}));
+    v[hex(me)] = serde_json::Value::String(name.to_string());
+    crate::platform::write_whole(&dir.join(COLOURS), v.to_string().as_bytes())
+        .map_err(|e| format!("{COLOURS}: {e}"))
+}
+
 /// **How many days a run covers**: each window is 48 hours and the run
 /// is contiguous (`wire-format.md` §8.2).
 pub fn run_days(run: &[Vec<u8>]) -> u64 {
@@ -300,6 +328,9 @@ const STYLE: &str = "body { background: var(--ground); color: var(--ink);\n\
      button.row span { display: block; font-size: 16px }\n\
      button.row small { display: block; color: var(--sub); font-size: 12px; padding-top: 3px }\n\
      ul.rows { list-style: none; padding: 0; margin: 0 }\n\
+     i.swatch { display: inline-block; width: 1em; height: 1em; border-radius: 50%;\n\
+       vertical-align: -.15em; margin-right: .6em }\n\
+     #cost pre { white-space: pre-wrap }\n\
      ul.rows a[data-go] { display: block; padding: .35rem 0; color: var(--ink); cursor: pointer;\n\
        text-decoration: none }\n\
      ul.rows a[data-go]:hover { color: var(--accent) }\n\
@@ -339,6 +370,29 @@ document.addEventListener('click', e => {
     return post({ act: 'answer', yes: b.dataset.yes === '1' });
   }
   if (b.dataset.act) return post({ act: b.dataset.act });
+  if (b.dataset.cost) {
+    post({ act: 'cost', patron: b.dataset.cost });
+    return say('working out what leaving costs…');
+  }
+  // **two presses, since it cannot be undone**: the first arms, and the
+  // cost on the page is the one the second acts on
+  if (b.dataset.leave) {
+    if (!b.dataset.armed) {
+      b.dataset.armed = '1';
+      b.textContent = b.dataset.again;
+      return say('This cannot be taken back.');
+    }
+    b.disabled = true;
+    post({ act: 'leave', patron: b.dataset.leave });
+    return say('leaving…');
+  }
+  if (b.dataset.colour) return post({ act: 'colour', name: b.dataset.colour });
+  if (b.id === 'name') {
+    const f = document.getElementById('rename');
+    if (!f.value.trim()) return say('type the name first');
+    post({ act: 'rename', subnet: f.dataset.subnet, name: f.value });
+    return say('publishing…');
+  }
   if (b.dataset.open) {
     post({ act: 'open', resource: b.dataset.open, node: b.dataset.node, name: b.dataset.name });
     return say('opening ' + b.dataset.name + '…');

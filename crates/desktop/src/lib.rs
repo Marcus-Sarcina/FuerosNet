@@ -33,6 +33,8 @@ compile_error!(
      build the field-test flavour with `--no-default-features --features fieldtest`"
 );
 
+/// What the authority screen says: the lines held, and what ending one costs.
+pub mod authority;
 /// The code this desktop shows, drawn as the phone reads one.
 pub mod code;
 /// Custody of the storage key and the transport seed: the desktop keyring.
@@ -128,6 +130,29 @@ pub enum Act {
         /// What, as typed.
         text: String,
     },
+    /// **What leaving a patron would cost**, worked out and shown.
+    Cost {
+        /// The patron's keyhash.
+        patron: Vec<u8>,
+    },
+    /// **Leave a patron**, on the second press (`light-client-requirements.md` §6).
+    Leave {
+        /// The patron's keyhash.
+        patron: Vec<u8>,
+    },
+    /// **Name a subnet**, as its root, by convention (`light-client-requirements.md` §4.4).
+    Rename {
+        /// The subnet's id.
+        subnet: Vec<u8>,
+        /// The name, as typed.
+        name: String,
+    },
+    /// **The colour of the identity in focus** [author, 2026-11-12], by
+    /// its name in the palette.
+    Colour {
+        /// The palette's name for it.
+        name: String,
+    },
 }
 
 /// Read one message from the page, or say why it is not one.
@@ -184,6 +209,30 @@ pub fn act(message: &str) -> Result<Act, String> {
             });
         }
         "restore" => return s("phrase").map(|phrase| Act::Restore { phrase }),
+        "cost" | "leave" => {
+            let patron =
+                node_key(&s("patron")?).map_err(|_| "a patron's key is 64 hex characters")?;
+            return Ok(if s("act")? == "cost" {
+                Act::Cost { patron }
+            } else {
+                Act::Leave { patron }
+            });
+        }
+        "rename" => {
+            return Ok(Act::Rename {
+                subnet: node_key(&s("subnet")?)
+                    .map_err(|_| "a subnet's id is 64 hex characters")?,
+                name: s("name")?,
+            });
+        }
+        "colour" => {
+            let name = s("name")?;
+            return screens::PALETTE
+                .iter()
+                .any(|(n, _)| *n == name)
+                .then_some(Act::Colour { name: name.clone() })
+                .ok_or_else(|| format!("{name} is not a colour of the palette"));
+        }
         "open" => {
             return Ok(Act::Open {
                 node: node_key(&s("node")?)?,
@@ -511,6 +560,39 @@ mod tests {
         );
         assert_eq!(act(r#"{"act":"launch"}"#).unwrap(), Act::Launch);
         assert_eq!(act(r#"{"act":"back"}"#).unwrap(), Act::Back);
+        let k = "ab".repeat(32);
+        assert_eq!(
+            act(&format!(r#"{{"act":"cost","patron":"{k}"}}"#)).unwrap(),
+            Act::Cost {
+                patron: vec![0xab; 32]
+            }
+        );
+        assert_eq!(
+            act(&format!(r#"{{"act":"leave","patron":"{k}"}}"#)).unwrap(),
+            Act::Leave {
+                patron: vec![0xab; 32]
+            }
+        );
+        assert_eq!(
+            act(&format!(
+                r#"{{"act":"rename","subnet":"{k}","name":"Manse"}}"#
+            ))
+            .unwrap(),
+            Act::Rename {
+                subnet: vec![0xab; 32],
+                name: "Manse".into()
+            }
+        );
+        assert_eq!(
+            act(r#"{"act":"colour","name":"Teal"}"#).unwrap(),
+            Act::Colour {
+                name: "Teal".into()
+            }
+        );
+        assert!(
+            act(r#"{"act":"colour","name":"Mauve"}"#).is_err(),
+            "not the palette's"
+        );
         assert_eq!(
             act(r#"{"act":"backup","data":"00Ff"}"#).unwrap(),
             Act::Backup {

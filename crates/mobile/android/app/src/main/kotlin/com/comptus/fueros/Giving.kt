@@ -182,8 +182,7 @@ object Giving {
             "notify" -> Plan(
                 Way.NOTIFY,
                 if (has.notifyNeedsPermission) listOf(NOTIFICATIONS) else listOf(),
-                "This resource may show you notifications from now on, when this app " +
-                    "begins collecting them. You can take it back here.",
+                "This resource may show you notifications from now on. You can take it back here.",
             )
             "export" -> Plan(
                 Way.RECEIVE,
