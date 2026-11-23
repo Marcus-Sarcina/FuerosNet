@@ -299,6 +299,10 @@ document.addEventListener('click', e => {
     return post({ act: 'answer', yes: b.dataset.yes === '1' });
   }
   if (b.dataset.act) return post({ act: b.dataset.act });
+  if (b.dataset.open) {
+    post({ act: 'open', resource: b.dataset.open, node: b.dataset.node, name: b.dataset.name });
+    return say('opening ' + b.dataset.name + '…');
+  }
   if (b.id === 'restore') {
     const phrase = document.getElementById('phrase');
     if (!phrase.value.trim()) return say('type the phrase first');

@@ -73,12 +73,14 @@ fn main() {
             service: "_files._tcp".into(),
             instance: "Shared drive".into(),
             node: "70".repeat(32),
+            resource: "71".repeat(32),
             stale: false,
         },
         ResourceRow {
             service: "_board._tcp".into(),
             instance: "Notices".into(),
             node: "70".repeat(32),
+            resource: "72".repeat(32),
             stale: true,
         },
     ]);

@@ -103,6 +103,8 @@ pub struct ResourceRow {
     pub instance: String,
     /// The node holding it, in hex.
     pub node: String,
+    /// The resource's own keyhash, in hex, which is what opens it.
+    pub resource: String,
     /// Whether the node's word on it is older than its refresh.
     pub stale: bool,
 }
@@ -399,11 +401,15 @@ fn catalog(rows: &[ResourceRow]) -> String {
     let mut out = String::from("<ul class=\"rows\">\n");
     for r in rows {
         out.push_str(&format!(
-            "<li>{} <small>{} · at {}…{}</small></li>\n",
+            "<li>{} <small>{} · at {}…{}</small> <button data-open=\"{}\" data-node=\"{}\" \
+             data-name=\"{}\">Open</button></li>\n",
             escape(&r.instance),
             escape(&r.service),
             short(&r.node),
-            if r.stale { " · stale" } else { "" }
+            if r.stale { " · stale" } else { "" },
+            escape(&r.resource),
+            escape(&r.node),
+            escape(&r.instance),
         ));
     }
     out.push_str("</ul>");
@@ -590,6 +596,7 @@ mod tests {
             service: "_files._tcp".into(),
             instance: "Shared drive".into(),
             node: "55".repeat(32),
+            resource: "66".repeat(32),
             stale: true,
         }];
         let p = page(&s, &Place::Subnet(id), &Body::Catalog(rows));
@@ -601,10 +608,16 @@ mod tests {
                 service: "_board._tcp".into(),
                 instance: "Notices".into(),
                 node: "55".repeat(32),
+                resource: "66".repeat(32),
                 stale: false,
             }]),
         );
         assert!(all.contains("Notices") && all.contains("data-act=\"sweep\""));
+        assert!(all.contains(&format!(
+            "data-open=\"{}\" data-node=\"{}\" data-name=\"Notices\"",
+            "66".repeat(32),
+            "55".repeat(32)
+        )));
         assert!(all.contains("data-go=\"resources\" class=\"here\""));
         let o = page(&s, &Place::Options, &Body::Plain);
         assert!(o.contains("id=\"connect\"") && o.contains(&"ab".repeat(32)));

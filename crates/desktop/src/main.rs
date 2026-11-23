@@ -23,8 +23,8 @@ use rhtn_desktop::participant::{self, Device, Held, hex};
 use rhtn_desktop::platform::{self, Desk};
 use rhtn_desktop::screens::{self, Body, Person, Place, ResourceRow, Snapshot, SubnetRow};
 use rhtn_desktop::threads::{self, Delivery, Record, Sealer, Threads};
-use rhtn_desktop::{Act, act, code, directory, pairing, phrase, said, verify_and_keep};
-use rhtn_ffi::client::Participant;
+use rhtn_desktop::{Act, act, code, directory, frame, pairing, phrase, said, verify_and_keep};
+use rhtn_ffi::client::{PageShape, Participant, ResourceAnswer, UtilityOutcome};
 use rhtn_ffi::net::Event as Kernel;
 use rhtn_ffi::types::kind_application;
 use std::collections::HashMap;
@@ -57,6 +57,29 @@ enum Said {
     Redraw(Place, String),
     /// The kernel's question for the person, and where the answer goes.
     Ask(String, Sender<bool>),
+    /// A resource's first answer, to be framed in a window of its own.
+    Frame(Framed),
+}
+
+/// **What opening a resource came to**, for the window to frame.
+struct Framed {
+    node: Vec<u8>,
+    resource: Vec<u8>,
+    name: String,
+    /// The answer to `GET /`, as the engine is to be given it.
+    first: frame::Served,
+    /// Whether the person allowed this resource's code.
+    allowed: bool,
+}
+
+/// **One resource's window**: the window, its web view, and the web
+/// context its storage lives in, held together since dropping any of them
+/// is the window gone.
+struct FrameWindow {
+    resource: Vec<u8>,
+    window: tao::window::Window,
+    _view: wry::WebView,
+    _context: wry::WebContext,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -169,7 +192,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut consoles: Vec<(tao::window::Window, wry::WebView)> = Vec::new();
     // the question the kernel is waiting on, one at a time
     let mut asking: Option<Sender<bool>> = None;
+    // every resource's window, one per resource
+    let mut frames: Vec<FrameWindow> = Vec::new();
     let worker = event_loop.create_proxy();
+    let root = dir.clone();
     let tokens = Arc::new(dir);
 
     event_loop.run(move |event, target, control_flow| {
@@ -193,8 +219,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     *control_flow = ControlFlow::Exit;
                 } else {
-                    // a provider's console closed: let it go, keep ours
+                    // a provider's console or a resource's window closed:
+                    // let it go, keep ours
                     consoles.retain(|(w, _)| w.id() != window_id);
+                    frames.retain(|f| f.window.id() != window_id);
                 }
             }
             Event::UserEvent(Said::Show(page)) => {
@@ -204,6 +232,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Event::UserEvent(Said::Redraw(place, script)) => {
                 if *up.place.lock().unwrap() == place {
                     let _ = ours.evaluate_script(&script);
+                }
+            }
+            Event::UserEvent(Said::Frame(framed)) => {
+                let Some(p) = up.running.lock().unwrap().clone() else {
+                    return;
+                };
+                match open_frame(target, &root, framed, p, worker.clone()) {
+                    Ok(f) => frames.push(f),
+                    Err(e) => {
+                        let _ = ours.evaluate_script(&said(false, &e.to_string()));
+                    }
                 }
             }
             Event::UserEvent(Said::Ask(question, answer)) => {
@@ -253,6 +292,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Ok(Act::Backup { bytes }) => {
                     let (back, up) = (worker.clone(), up.clone());
                     std::thread::spawn(move || import(&up, &back, bytes));
+                }
+                Ok(Act::Open {
+                    node,
+                    resource,
+                    name,
+                }) => {
+                    // **one window per resource**: one already open is
+                    // brought forward rather than opened twice
+                    if let Some(f) = frames.iter().find(|f| f.resource == resource) {
+                        f.window.set_focus();
+                        return;
+                    }
+                    let (back, up, root) = (worker.clone(), up.clone(), root.clone());
+                    std::thread::spawn(move || open(&up, &back, &root, node, resource, name));
                 }
                 Ok(Act::Send { to, text }) => {
                     let (back, up) = (worker.clone(), up.clone());
@@ -552,6 +605,7 @@ fn draw(up: &Up, back: &EventLoopProxy<Said>, whole: bool) {
                     service: r.service_type,
                     instance: r.instance,
                     node: hex(&r.node),
+                    resource: hex(&r.resource),
                     stale: r.stale,
                 })
                 .collect(),
@@ -928,4 +982,181 @@ fn open_console(
         .build(target)?;
     let v = web_view(WebViewBuilder::new().with_url(url), &w)?;
     Ok((w, v))
+}
+
+/// **Open a resource** (`light-client-requirements.md` §8): its `GET /`
+/// carried first, off the drawing thread, so what is not delivered or not
+/// a page is said in the main window and no window opens for it; then the
+/// question about its code where its page declares code and the person has
+/// not answered; then the window.
+fn open(
+    up: &Up,
+    back: &EventLoopProxy<Said>,
+    root: &Path,
+    node: Vec<u8>,
+    resource: Vec<u8>,
+    name: String,
+) {
+    let Some(p) = up.running.lock().unwrap().clone() else {
+        let _ = back.send_event(Said::ToPage(false, "this desktop is not set up yet".into()));
+        return;
+    };
+    let first = frame::compose("GET", "/", None, b"");
+    let answer = match carry(&p, &node, &resource, first, &name, back) {
+        Ok(a) => a,
+        Err(why) => {
+            let _ = back.send_event(Said::ToPage(false, format!("{name}: {why}")));
+            return;
+        }
+    };
+    let shown = frame::served(&answer, false);
+    let page = match &answer.page {
+        Some(page) if answer.status == 0 && answer.unreadable.is_none() => page,
+        _ => {
+            let why = shown
+                .headers
+                .iter()
+                .find(|(n, _)| n == frame::CARRIED)
+                .map(|_| String::from_utf8_lossy(&shown.body).trim().to_string())
+                .unwrap_or_default();
+            let _ = back.send_event(Said::ToPage(false, format!("{name}: {why}")));
+            return;
+        }
+    };
+    if page.shape == PageShape::Other {
+        let _ = back.send_event(Said::ToPage(
+            true,
+            format!("{name} answered with {}", frame::named(page)),
+        ));
+        return;
+    }
+    let key = hex(&resource);
+    let kept = frame::script_allowed(root, &key);
+    let allowed = match kept {
+        Some(a) => a,
+        None if page.runs_script => {
+            let (tx, rx) = channel();
+            let yes = back
+                .send_event(Said::Ask(format!("{name}: {}", frame::SCRIPT_ASKS), tx))
+                .is_ok()
+                && rx.recv().unwrap_or(false);
+            if let Err(why) = frame::keep_script(root, &key, yes) {
+                let _ = back.send_event(Said::ToPage(false, format!("not remembered: {why}")));
+            }
+            yes
+        }
+        None => false,
+    };
+    let _ = back.send_event(Said::Frame(Framed {
+        node,
+        resource,
+        name,
+        first: frame::served(&answer, allowed),
+        allowed,
+    }));
+}
+
+/// **One request carried to a resource**, and every ask it answers with
+/// answered (§8.1): this desktop offers none of the device utilities yet,
+/// so each is declined with that as its reason — an answer the resource
+/// sees, never a silence — and the person is told what was asked.
+fn carry(
+    p: &Participant,
+    node: &[u8],
+    resource: &[u8],
+    message: Vec<u8>,
+    name: &str,
+    back: &EventLoopProxy<Said>,
+) -> Result<ResourceAnswer, String> {
+    let mut a = p
+        .request_resource(node.to_vec(), resource.to_vec(), message)
+        .map_err(|e| e.to_string())?;
+    // the kernel holds at most eight unanswered, so eight in a row is a
+    // resource asking in a loop rather than one with a question
+    for _ in 0..8 {
+        let Some(ask) = a.ask.take() else {
+            return Ok(a);
+        };
+        let _ = back.send_event(Said::ToPage(
+            false,
+            format!(
+                "{name} asked for `{}`, which this desktop has not got; it was told so",
+                ask.utility
+            ),
+        ));
+        a = p
+            .answer_utility(
+                ask.id,
+                UtilityOutcome::Declined {
+                    reason: frame::NO_UTILITY.into(),
+                },
+            )
+            .map_err(|e| e.to_string())?;
+    }
+    Err("it asked eight times running, and nothing was shown".into())
+}
+
+/// **A resource's window** (`frame`): a web context of its own under the
+/// desktop's directory, so its storage is its own and kept; its origin's
+/// scheme carried through the kernel; a navigation anywhere else not
+/// followed and said; no window it could open, no download it could
+/// start; and `rhtn.request` only where the person allowed its code.
+fn open_frame(
+    target: &tao::event_loop::EventLoopWindowTarget<Said>,
+    root: &Path,
+    framed: Framed,
+    p: Arc<Participant>,
+    back: EventLoopProxy<Said>,
+) -> Result<FrameWindow, Box<dyn std::error::Error>> {
+    let Framed {
+        node,
+        resource,
+        name,
+        first,
+        allowed,
+    } = framed;
+    let key = hex(&resource);
+    let held = resource.clone();
+    let origin = frame::origin(&key)?;
+    let storage = frame::dir(root, &key).join("web");
+    platform::create_private(&storage)?;
+    let mut context = wry::WebContext::new(Some(storage));
+    let w = WindowBuilder::new()
+        .with_title(format!("{name} — a resource, in a frame of its own"))
+        .with_inner_size(LogicalSize::new(1000.0, 820.0))
+        .build(target)?;
+
+    let carry: rhtn_desktop::window::Carrier = {
+        let back = Mutex::new(back.clone());
+        Arc::new(move |method, path, media, body| {
+            let message = frame::compose(method, path, media, body);
+            let back = back.lock().unwrap().clone();
+            match carry(&p, &node, &resource, message, &name, &back) {
+                Ok(a) => frame::served(&a, allowed),
+                Err(why) => frame::not_carried(&why),
+            }
+        })
+    };
+    let builder = rhtn_desktop::window::builder(
+        &mut context,
+        &origin,
+        Some(first),
+        allowed,
+        carry,
+        move || {
+            let _ = back.send_event(Said::ToPage(
+                false,
+                "a resource's page reaches its own resource and nothing else: its window did \
+                 not follow that"
+                    .into(),
+            ));
+        },
+    );
+    let view = web_view(builder, &w)?;
+    Ok(FrameWindow {
+        resource: held,
+        window: w,
+        _view: view,
+        _context: context,
+    })
 }

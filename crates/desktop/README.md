@@ -61,6 +61,42 @@ workspace.
   built and withdrawn on 2026-10-25: a secret shipped in a client is
   public).
 
+## A resource's window
+
+The catalog's **Open** frames a resource's page in a window of its own,
+under the policy `light-client-requirements.md` §8 sets and the phone
+already keeps (`src/frame.rs` says how each rule is met here):
+
+- an origin per resource (`rhtnr://<keyhash in two labels>.rhtn.invalid`)
+  and a web context per resource under `frames/<keyhash>/` in the
+  desktop's directory, so a resource's storage is its own and is kept;
+- every load inside that origin carried by the kernel through the node
+  that served the catalog entry, bodies included; a navigation anywhere
+  else not followed, and anything fetched from anywhere else refused by
+  the policy put on every answer;
+- script only where the page's own policy names `script-src` and the
+  person allowed it for that resource, asked once in the main window and
+  remembered; `rhtn.request` is published into a page that runs, with the
+  phone's answers, so a page written for the phone runs here unchanged;
+- in a field-test build, the web inspector, for whoever is writing the
+  page.
+
+**What the engine then does with it is checked in the engine**, since no
+unit test can see it:
+
+```sh
+cargo run -p rhtn-desktop --features gui --example frame_check
+```
+
+opens two canned resources on the display — one allowed to run code and
+trying everything a page might, one whose code was refused — and prints a
+line per rule and exits non-zero where one did not hold. It opens windows,
+so it is run by hand and not by the gate.
+
+**A typed ask (§8.1) is declined** with *this device has no such
+utility*, which is an answer the resource sees, and the person is told
+what was asked: this desktop offers none of the device's utilities yet.
+
 ## What is not built yet
 
 The launch itself: choosing a region and a size, minting the enrolment

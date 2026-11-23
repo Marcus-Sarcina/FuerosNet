@@ -1,0 +1,547 @@
+//! **A resource's page, framed** (`light-client-requirements.md` §8)
+//! [author, 2026-11-15]: the phone's frame (`ResourcePage.kt`,
+//! `ResourceActivity.kt`), drawn the same way in a window of the desktop's
+//! own — the pure part, so a test can hold it with no window present.
+//!
+//! **The policy is the phone's, and the engine is the one that differs.**
+//!
+//!  - **An origin of its own**: [`origin`] mints one per resource under a
+//!    scheme the window registers and a name no network resolves, and each
+//!    resource's window has a web context of its own under [`dir`], so its
+//!    storage is its own, kept, and gone when the directory is.
+//!  - **The same resource, and nothing else**: every load inside that
+//!    origin is composed here ([`compose`]) and carried by the kernel to the
+//!    resource by the node that served it; a navigation anywhere else is
+//!    not followed, and what a page fetches from anywhere else is refused
+//!    by the policy [`served`] puts on every answer, which the engine
+//!    enforces beside the page's own.
+//!  - **Script by declaration and consent**: a page runs code only where
+//!    its own policy names `script-src` and the person allowed it for that
+//!    resource, asked once ([`SCRIPT_ASKS`]) and remembered
+//!    ([`script_allowed`]). Otherwise the policy here says `script-src
+//!    'none'`, which the engine holds whatever the markup carries.
+//!  - **One object, no bridge**: a page that runs is given `rhtn.request`
+//!    ([`bridge`]), the phone's object with the phone's answers, carried
+//!    over the same scheme. Nothing of this client is published into the
+//!    page, and the window has no message handler a page could reach.
+//!
+//! **Where the engine gives more than the phone's**: WebKitGTK hands the
+//! scheme a request's body, so a form that posts, and a page's own `fetch`
+//! with a body, are carried as they are; `rhtn.request` is there so a page
+//! written for the phone runs here unchanged.
+
+use rhtn_ffi::client::{PageShape, ResourceAnswer, ResourcePage};
+use std::path::{Path, PathBuf};
+
+/// The scheme every resource's origin is under.
+pub const SCHEME: &str = "rhtnr";
+
+/// The methods a frame carries: the phone's five.
+pub const METHODS: [&str; 5] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+
+/// **The reason a declined ask carries** (§8.1): a capability this device
+/// has not got is a refusal saying so, never a silence.
+pub const NO_UTILITY: &str = "this device has no such utility";
+
+/// **The origin minted for a resource**: its keyhash in two labels, under
+/// a name no network resolves, as the phone mints one (`Frames.origin`).
+pub fn origin(resource: &str) -> Result<String, String> {
+    let hex = resource.to_ascii_lowercase();
+    if hex.len() != 64 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err("a resource is 64 hex digits".into());
+    }
+    Ok(format!(
+        "{SCHEME}://{}.{}.rhtn.invalid",
+        &hex[..32],
+        &hex[32..]
+    ))
+}
+
+/// **Whether `url` is inside `origin`**: the origin itself, or a path
+/// rooted under it. A prefix of the host is not inside.
+pub fn inside(origin: &str, url: &str) -> bool {
+    url == origin
+        || url
+            .strip_prefix(origin)
+            .is_some_and(|rest| rest.starts_with(['/', '?', '#']))
+}
+
+/// **What a frame carries, or why it does not**: one of [`METHODS`], to a
+/// path rooted on the resource and not under `/.rhtn/`, which is the
+/// node's own and never a page's (`resource-requirements.md` §3.3).
+pub fn carried(method: &str, path: &str) -> Result<(), String> {
+    if !METHODS.contains(&method) {
+        return Err(format!("a method this frame does not carry: {method}"));
+    }
+    if !path.starts_with('/') || path.starts_with("/.rhtn/") {
+        return Err("a path is rooted on this resource and not under /.rhtn/".into());
+    }
+    Ok(())
+}
+
+/// **The application's own HTTP/1.1 request**, as the phone composes one
+/// (`Gateway.requestAs`): the method and path, a host the node rewrites,
+/// and a body's type and length where there is a body.
+pub fn compose(method: &str, path: &str, media: Option<&str>, body: &[u8]) -> Vec<u8> {
+    let mut head = format!("{method} {path} HTTP/1.1\r\nhost: resource\r\n");
+    if !body.is_empty() || method != "GET" {
+        if let Some(t) = media.filter(|t| !t.is_empty()) {
+            head.push_str(&format!("content-type: {t}\r\n"));
+        }
+        head.push_str(&format!("content-length: {}\r\n", body.len()));
+    }
+    head.push_str("\r\n");
+    let mut out = head.into_bytes();
+    out.extend_from_slice(body);
+    out
+}
+
+/// What the delivery status of `wire-format.md` §11.1 says, in the
+/// phone's words.
+pub fn delivery(status: u64) -> String {
+    match status {
+        0 => "delivered".into(),
+        1 => "refused".into(),
+        2 => "the resource is unavailable".into(),
+        3 => "the request was malformed".into(),
+        4 => "no subtree acknowledgement covers you".into(),
+        5 => "no role of yours matches".into(),
+        n => format!("status {n}"),
+    }
+}
+
+/// **This client's sheet, which the page's own rules override**: the
+/// phone's, rule for rule. Every selector is a bare element, so anything
+/// the resource styles for itself wins on specificity alone.
+pub const SHEET: &str = "html{background:#1C1F24;color:#E8EAED;-webkit-text-size-adjust:100%}\
+body{margin:0;padding:16px;font:15px/1.5 -apple-system,Roboto,'Helvetica Neue',Arial,sans-serif}\
+h1{font-size:21px;margin:0 0 10px}\
+h2{font-size:17px;margin:18px 0 8px}\
+h3{font-size:15px;margin:16px 0 6px}\
+p,ul,ol,dl,blockquote,pre,table{margin:0 0 12px}\
+a{color:#5FB3A1}\
+small,figcaption{color:#9AA1AA}\
+hr{border:0;border-top:1px solid #23272E;margin:16px 0}\
+table{border-collapse:collapse;width:100%}\
+th,td{border-bottom:1px solid #23272E;padding:8px 6px;text-align:left}\
+th{color:#9AA1AA;font-weight:600;font-size:13px}\
+pre,code,kbd{font-family:'Roboto Mono',monospace;font-size:13px}\
+pre{overflow-x:auto;background:#15171A;padding:10px;border-radius:8px}\
+img,video,canvas,svg{max-width:100%;height:auto}\
+input,select,textarea,button{font:inherit;color:#E8EAED;background:#15171A;border:1px solid #3A3F47;border-radius:8px;padding:9px 10px}\
+button{background:#2E3540;min-height:44px}\
+blockquote{border-left:2px solid #23272E;padding-left:11px;color:#9AA1AA}";
+
+/// **The page as the frame loads it**: this client's sheet, then the
+/// resource's own markup unaltered — the phone's `styled`. The markup is
+/// not rewritten: a client that edited somebody else's document to make it
+/// safe would be asserting it understood the document.
+pub fn styled(markup: &str) -> String {
+    format!(
+        "<!doctype html><html><head><meta name=\"viewport\" \
+         content=\"width=device-width,initial-scale=1\"><style>{SHEET}</style></head>\
+         <body>{markup}</body></html>"
+    )
+}
+
+/// **The policy this client puts on every answer**, beside the page's
+/// own: the engine holds both, so a page can narrow it and never widen
+/// it. Everything is fetched from the page's own origin or from what it
+/// made itself; script runs only where `script` says it may.
+pub fn policy(script: bool) -> String {
+    let scripts = if script {
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:"
+    } else {
+        "script-src 'none'"
+    };
+    format!(
+        "default-src 'self' data: blob:; {scripts}; style-src 'self' 'unsafe-inline'; \
+         form-action 'self'; base-uri 'self'; frame-ancestors 'self'"
+    )
+}
+
+/// **One answer as the frame's engine receives it**: a status, the
+/// headers, and the body.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Served {
+    /// The HTTP status the engine is given.
+    pub status: u16,
+    /// Every header, in order; a name may repeat.
+    pub headers: Vec<(String, String)>,
+    /// The body.
+    pub body: Vec<u8>,
+}
+
+/// The header a frame's answer carries where the kernel carried nothing,
+/// saying why in the phone's words: `rhtn.request` reads it as its
+/// `error`, percent-encoded, since a reason is not always ASCII.
+pub const CARRIED: &str = "rhtn-carried";
+
+/// The header marking an answer whose type was not declared, so
+/// `rhtn.request` says `media: null` as the phone's does.
+pub const UNDECLARED: &str = "rhtn-undeclared";
+
+/// **An answer that carried nothing**, said as text and named in
+/// [`CARRIED`].
+pub fn not_carried(why: &str) -> Served {
+    Served {
+        status: 502,
+        headers: vec![
+            ("content-type".into(), "text/plain; charset=utf-8".into()),
+            ("x-content-type-options".into(), "nosniff".into()),
+            ("content-security-policy".into(), policy(false)),
+            (CARRIED.into(), escape(why)),
+        ],
+        body: format!("{why}\n").into_bytes(),
+    }
+}
+
+/// **Answered with nothing**: what a load outside the origin gets — an
+/// empty body rather than an error the page could time.
+pub fn nothing() -> Served {
+    Served {
+        status: 200,
+        headers: vec![("content-type".into(), "text/plain".into())],
+        body: Vec::new(),
+    }
+}
+
+/// **What the engine is given for one answer**, `allowed` being whether
+/// the person allowed this resource's code. The page's own type is the one
+/// declared and nothing else; an undeclared one is octet-stream with
+/// sniffing off, so the engine renders nothing it guessed at.
+pub fn served(answer: &ResourceAnswer, allowed: bool) -> Served {
+    if answer.status != 0 {
+        return not_carried(&format!("not delivered: {}", delivery(answer.status)));
+    }
+    if let Some(why) = &answer.unreadable {
+        return not_carried(&format!("the answer could not be read: {why}"));
+    }
+    let Some(page) = &answer.page else {
+        return not_carried("the resource answered with nothing");
+    };
+    page_served(page, allowed)
+}
+
+fn page_served(page: &ResourcePage, allowed: bool) -> Served {
+    let script = allowed && page.runs_script;
+    let mut headers = Vec::new();
+    let utf8 = page.charset.as_deref().is_none_or(|c| c == "utf-8");
+    match &page.media {
+        Some(m) => headers.push((
+            "content-type".into(),
+            match &page.charset {
+                Some(c) => format!("{m}; charset={c}"),
+                None => m.clone(),
+            },
+        )),
+        None => {
+            headers.push(("content-type".into(), "application/octet-stream".into()));
+            headers.push((UNDECLARED.into(), "1".into()));
+        }
+    }
+    headers.push(("x-content-type-options".into(), "nosniff".into()));
+    headers.push(("content-security-policy".into(), policy(script)));
+    if let Some(p) = &page.policy {
+        headers.push(("content-security-policy".into(), p.clone()));
+    }
+    let body = match (&page.shape, std::str::from_utf8(&page.body)) {
+        (PageShape::Page, Ok(markup)) if utf8 => styled(markup).into_bytes(),
+        _ => page.body.clone(),
+    };
+    Served {
+        status: u16::try_from(page.http_status)
+            .ok()
+            .filter(|s| (100..=599).contains(s))
+            .unwrap_or(502),
+        headers,
+        body,
+    }
+}
+
+/// **What a first answer that is not shown is, said to the person**: its
+/// declared type and its size, since *this is a PDF of 40 kB* tells them
+/// what happened where *could not display* does not (§8).
+pub fn named(page: &ResourcePage) -> String {
+    let what = page
+        .media
+        .as_deref()
+        .map_or("nothing declared".to_string(), |m| format!("`{m}`"));
+    let n = page.body.len();
+    let size = if n < 1024 {
+        format!("{n} bytes")
+    } else {
+        format!("{} kB", n.div_ceil(1024))
+    };
+    format!("an answer of {what}, {size}, which this desktop does not show")
+}
+
+/// **The question, once per resource**, where a page declares that it
+/// runs code and the person has not answered yet: the phone's words.
+pub const SCRIPT_ASKS: &str = "This resource's pages run their own code. In its window, code \
+     reaches the resource it came from and nothing else — not this desktop, not your files, \
+     not another resource — and keeps storage of its own on this computer. Allow it for this \
+     resource?";
+
+/// **Where one resource's frame keeps what it keeps**: its web storage and
+/// the person's answer about its code, in a directory of its own, so
+/// forgetting the resource is removing one directory.
+pub fn dir(state: &Path, resource: &str) -> PathBuf {
+    state.join("frames").join(resource.to_ascii_lowercase())
+}
+
+/// **Whether the person allowed this resource's pages to run their
+/// code**: their answer once they gave one, `None` before — and `None` is
+/// what puts the question.
+pub fn script_allowed(state: &Path, resource: &str) -> Option<bool> {
+    match std::fs::read_to_string(dir(state, resource).join("script"))
+        .ok()?
+        .trim()
+    {
+        "allowed" => Some(true),
+        "refused" => Some(false),
+        _ => None,
+    }
+}
+
+/// The person's answer, kept for the resource.
+pub fn keep_script(state: &Path, resource: &str, allowed: bool) -> Result<(), String> {
+    let d = dir(state, resource);
+    crate::platform::create_private(&d)?;
+    std::fs::write(
+        d.join("script"),
+        if allowed { "allowed\n" } else { "refused\n" },
+    )
+    .map_err(|e| format!("{}: {e}", d.display()))
+}
+
+/// **`rhtn.request`, as the phone publishes it** (`ResourceBridge.kt`):
+/// `request(method, path, type, body)` answers with one JSON string —
+/// `status`, `media` and `body` as base64, or `error` where the kernel
+/// carried nothing. Synchronous, as the phone's is, and carried over the
+/// frame's own scheme to its own origin, so the kernel is still the only
+/// network. Installed only where the page may run.
+pub fn bridge(origin: &str) -> String {
+    format!(
+        r#"(() => {{
+  const ORIGIN = {origin:?};
+  const METHODS = {methods};
+  const fail = error => JSON.stringify({{ error }});
+  const b64 = s => {{
+    let bin = '';
+    for (let i = 0; i < s.length; i++) bin += String.fromCharCode(s.charCodeAt(i) & 0xff);
+    return btoa(bin);
+  }};
+  const request = (method, path, type, body) => {{
+    const m = String(method).toUpperCase();
+    if (!METHODS.includes(m)) return fail('a method this frame does not carry: ' + method);
+    const p = String(path);
+    if (!p.startsWith('/') || p.startsWith('/.rhtn/'))
+      return fail('a path is rooted on this resource and not under /.rhtn/');
+    const x = new XMLHttpRequest();
+    x.open(m, ORIGIN + p, false);
+    x.overrideMimeType('text/plain; charset=x-user-defined');
+    if (body != null && type != null) x.setRequestHeader('content-type', String(type));
+    try {{ x.send(body == null ? null : String(body)); }}
+    catch (e) {{ return fail('the kernel did not carry the request'); }}
+    const carried = x.getResponseHeader('{carried}');
+    if (carried) return fail(decodeURIComponent(carried));
+    const media = x.getResponseHeader('{undeclared}') ? null
+      : (x.getResponseHeader('content-type') || '').split(';')[0].trim().toLowerCase() || null;
+    return JSON.stringify({{ status: x.status, media, body: b64(x.responseText) }});
+  }};
+  Object.defineProperty(window, 'rhtn', {{ value: Object.freeze({{ request }}) }});
+}})();"#,
+        methods = serde_json::to_string(&METHODS).expect("five strings"),
+        carried = CARRIED,
+        undeclared = UNDECLARED,
+    )
+}
+
+/// Percent-encoding for a header value, as `decodeURIComponent` reads it.
+fn escape(s: &str) -> String {
+    s.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b' ' | b':' => {
+                (b as char).to_string()
+            }
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const R: &str = "AB00000000000000000000000000000000000000000000000000000000000001";
+
+    fn page(
+        media: Option<&str>,
+        shape: PageShape,
+        body: &str,
+        policy: Option<&str>,
+    ) -> ResourceAnswer {
+        ResourceAnswer {
+            status: 0,
+            page: Some(ResourcePage {
+                http_status: 200,
+                media: media.map(String::from),
+                charset: None,
+                shape,
+                runs_script: policy.is_some_and(|p| p.contains("script-src")),
+                policy: policy.map(String::from),
+                body: body.as_bytes().to_vec(),
+            }),
+            unreadable: None,
+            ask: None,
+        }
+    }
+
+    fn header<'a>(s: &'a Served, name: &str) -> Vec<&'a str> {
+        s.headers
+            .iter()
+            .filter(|(n, _)| n == name)
+            .map(|(_, v)| v.as_str())
+            .collect()
+    }
+
+    #[test]
+    fn a_resource_has_an_origin_of_its_own_and_a_prefix_of_it_is_outside() {
+        let o = origin(R).unwrap();
+        assert_eq!(
+            o,
+            "rhtnr://ab000000000000000000000000000000.00000000000000000000000000000001.rhtn.invalid"
+        );
+        assert!(inside(&o, &o));
+        assert!(inside(&o, &format!("{o}/a?b")));
+        assert!(!inside(&o, &format!("{o}.evil/")));
+        assert!(!inside(&o, "https://example.com/"));
+        assert!(origin("ab").is_err());
+        assert!(origin(&"g".repeat(64)).is_err());
+    }
+
+    #[test]
+    fn a_frame_carries_the_five_methods_to_rooted_paths_and_never_under_rhtn() {
+        assert!(carried("GET", "/").is_ok());
+        assert!(carried("DELETE", "/x?y=1").is_ok());
+        assert!(carried("HEAD", "/").is_err());
+        assert!(carried("GET", "x").is_err());
+        assert!(carried("POST", "/.rhtn/federation").is_err());
+    }
+
+    #[test]
+    fn a_request_is_composed_as_the_phone_composes_one() {
+        assert_eq!(
+            compose("GET", "/a", None, b""),
+            b"GET /a HTTP/1.1\r\nhost: resource\r\n\r\n"
+        );
+        assert_eq!(
+            compose(
+                "POST",
+                "/f",
+                Some("application/x-www-form-urlencoded"),
+                b"a=1"
+            ),
+            b"POST /f HTTP/1.1\r\nhost: resource\r\ncontent-type: \
+              application/x-www-form-urlencoded\r\ncontent-length: 3\r\n\r\na=1"
+                .to_vec()
+        );
+        assert_eq!(
+            compose("DELETE", "/d", None, b""),
+            b"DELETE /d HTTP/1.1\r\nhost: resource\r\ncontent-length: 0\r\n\r\n"
+        );
+    }
+
+    #[test]
+    fn a_page_that_declares_no_script_runs_none_whatever_the_person_allowed() {
+        let s = served(
+            &page(Some("text/html"), PageShape::Page, "<p>hi</p>", None),
+            true,
+        );
+        assert_eq!(header(&s, "content-security-policy").len(), 1);
+        assert!(header(&s, "content-security-policy")[0].contains("script-src 'none'"));
+        let body = String::from_utf8(s.body).unwrap();
+        assert!(body.starts_with("<!doctype html>") && body.ends_with("<p>hi</p></body></html>"));
+    }
+
+    #[test]
+    fn a_page_that_declares_script_runs_only_where_allowed_and_under_its_own_policy_too() {
+        let a = page(
+            Some("text/html"),
+            PageShape::Page,
+            "<p>hi</p>",
+            Some("script-src 'self'"),
+        );
+        let refused = served(&a, false);
+        assert!(header(&refused, "content-security-policy")[0].contains("script-src 'none'"));
+        let allowed = served(&a, true);
+        let policies = header(&allowed, "content-security-policy");
+        assert_eq!(policies.len(), 2, "ours beside the page's own");
+        assert!(policies[0].contains("script-src 'self'"));
+        assert_eq!(policies[1], "script-src 'self'");
+    }
+
+    #[test]
+    fn an_undeclared_type_is_never_guessed_at() {
+        let s = served(&page(None, PageShape::Other, "<p>hi</p>", None), true);
+        assert_eq!(header(&s, "content-type"), ["application/octet-stream"]);
+        assert_eq!(header(&s, "x-content-type-options"), ["nosniff"]);
+        assert_eq!(header(&s, UNDECLARED), ["1"]);
+        assert_eq!(s.body, b"<p>hi</p>", "not styled, not touched");
+    }
+
+    #[test]
+    fn what_the_kernel_did_not_carry_is_said_in_the_phones_words() {
+        let mut a = page(Some("text/html"), PageShape::Page, "", None);
+        a.status = 5;
+        let s = served(&a, true);
+        assert_eq!(s.status, 502);
+        assert_eq!(
+            header(&s, CARRIED),
+            ["not delivered: no role of yours matches"]
+        );
+        a.status = 0;
+        a.page = None;
+        a.unreadable = Some("a folded header — refused".into());
+        assert_eq!(
+            header(&served(&a, true), CARRIED),
+            ["the answer could not be read: a folded header %E2%80%94 refused"]
+        );
+    }
+
+    #[test]
+    fn an_answer_not_shown_is_named_with_its_type_and_size() {
+        let a = page(
+            Some("application/pdf"),
+            PageShape::Other,
+            &"x".repeat(40_000),
+            None,
+        );
+        assert_eq!(
+            named(a.page.as_ref().unwrap()),
+            "an answer of `application/pdf`, 40 kB, which this desktop does not show"
+        );
+    }
+
+    #[test]
+    fn the_answer_about_code_is_kept_per_resource() {
+        let t = std::env::temp_dir().join(format!("rhtn-frame-{}", std::process::id()));
+        assert_eq!(script_allowed(&t, R), None);
+        keep_script(&t, R, true).unwrap();
+        assert_eq!(script_allowed(&t, R), Some(true));
+        assert_eq!(script_allowed(&t, &R.to_ascii_lowercase()), Some(true));
+        keep_script(&t, R, false).unwrap();
+        assert_eq!(script_allowed(&t, R), Some(false));
+        std::fs::remove_dir_all(&t).unwrap();
+    }
+
+    #[test]
+    fn the_bridge_names_the_origin_and_publishes_one_object() {
+        let o = origin(R).unwrap();
+        let js = bridge(&o);
+        assert!(js.contains(&format!("const ORIGIN = \"{o}\"")));
+        assert!(js.contains(r#"["GET","POST","PUT","PATCH","DELETE"]"#));
+        assert_eq!(js.matches("defineProperty").count(), 1);
+    }
+}

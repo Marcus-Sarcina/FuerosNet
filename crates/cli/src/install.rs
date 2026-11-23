@@ -65,6 +65,15 @@ pub struct Ask {
     /// the authority, the port and the manifest, and what it cannot say
     /// is still named here — the resource, its owner, and which instance.
     pub offering: Option<String>,
+    /// The roles a grant carries, comma-separated, as the package
+    /// declared them.
+    pub roles: Option<String>,
+    /// Who a grant reaches: a clause of the vocabulary, or `everyone`.
+    pub of: Option<String>,
+    /// That clause's parameter, where it takes one.
+    pub with: Option<String>,
+    /// When a grant lapses, in seconds since the epoch.
+    pub until: Option<String>,
 }
 
 /// Install the package `ask` describes, and say what the node and its
@@ -196,6 +205,45 @@ pub fn remove(ask: &Ask) -> Result<String, String> {
         .ok_or("`node remove` names --resource")?;
     let body = form(&[("resource", &resource), ("key", &key)]);
     act(ask, "/node/package/remove", &body, SLOW)
+}
+
+/// **Grant a role on a resource** (`infra-client-requirements.md` §10.4):
+/// the node's own table, written by its operator, so nobody reaches a
+/// package until this is made. `everyone` is the absence of a clause,
+/// which is every member of the owner's horizon and nothing further.
+pub fn grant(ask: &Ask) -> Result<String, String> {
+    let resource = ask
+        .resource
+        .clone()
+        .ok_or("`node grant` names --resource")?;
+    let roles = ask
+        .roles
+        .clone()
+        .ok_or("`node grant` names --roles, as the package declared them")?;
+    let none = String::new();
+    let body = form(&[
+        ("resource", &resource),
+        ("roles", &roles),
+        ("of", ask.of.as_ref().unwrap_or(&"everyone".to_string())),
+        ("with", ask.with.as_ref().unwrap_or(&none)),
+        ("until", ask.until.as_ref().unwrap_or(&none)),
+    ]);
+    act(ask, "/node/grant", &body, QUICK)
+}
+
+/// **Take a grant the package offers**, by its name: offered by the
+/// package, taken by the operator (§10.4).
+pub fn template(ask: &Ask) -> Result<String, String> {
+    let resource = ask
+        .resource
+        .clone()
+        .ok_or("`node grant-template` names --resource")?;
+    let name = ask
+        .name
+        .clone()
+        .ok_or("`node grant-template` names --name, the grant the package offers")?;
+    let body = form(&[("resource", &resource), ("name", &name)]);
+    act(ask, "/node/grant/template", &body, QUICK)
 }
 
 /// What the node's record says it installed, which needs no key.

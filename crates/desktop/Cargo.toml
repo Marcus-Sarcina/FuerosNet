@@ -19,7 +19,9 @@ releasable = [
     "log/max_level_off",
     "log/release_max_level_off",
 ]
-fieldtest = ["rhtn-ffi/fieldtest"]
+# and the inspector in a resource's window, for whoever is writing its
+# pages: a field-test build's alone
+fieldtest = ["rhtn-ffi/fieldtest", "wry?/devtools"]
 # **The window and its web view are the system's** (`main.rs`), which on
 # this platform means WebKitGTK and GTK 3 with their development files
 # present.  Off by default so that the gate, and a continuous-integration
@@ -61,7 +63,9 @@ log = { version = "0.4", default-features = false }
 
 # Apache-2.0 OR MIT, both; the web view and the window, each the system's
 # own rather than a browser shipped with this binary
-wry = { version = "0.57", optional = true }
+# **`linux-body`**: WebKitGTK hands a custom scheme a request's body from
+# 2.40, so a resource's form that posts is carried as it is (`frame`)
+wry = { version = "0.57", optional = true, features = ["linux-body"] }
 tao = { version = "0.37", optional = true }
 # MIT OR Apache-2.0; **custody of the storage key is the desktop keyring**
 # [author, 2026-11-18]: the Secret Service (GNOME Keyring, KWallet) over
@@ -72,6 +76,12 @@ keyring = { version = "3.6", optional = true, default-features = false, features
 [[bin]]
 name = "rhtn-desktop"
 path = "src/main.rs"
+required-features = ["gui"]
+
+# **what the engine does with a resource's frame**, in the engine itself:
+# it opens windows, so it is run by hand and not by the gate
+[[example]]
+name = "frame_check"
 required-features = ["gui"]
 
 [dev-dependencies]

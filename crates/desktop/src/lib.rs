@@ -38,6 +38,8 @@ pub mod code;
 /// Custody of the storage key and the transport seed: the desktop keyring.
 #[cfg(feature = "gui")]
 pub mod custody;
+/// A resource's page, framed in a window of its own.
+pub mod frame;
 /// Paired from the phone, over the code this desktop shows.
 pub mod pairing;
 /// The participant client's pages and what it keeps between runs.
@@ -50,6 +52,9 @@ pub mod platform;
 pub mod screens;
 /// An identity's conversations at rest, sealed through the kernel.
 pub mod threads;
+/// A resource's web view, as the engine is told to build it.
+#[cfg(feature = "gui")]
+pub mod window;
 
 use rhtn_launch::Transport;
 use std::path::{Path, PathBuf};
@@ -103,6 +108,17 @@ pub enum Act {
     Backup {
         /// The file, as read.
         bytes: Vec<u8>,
+    },
+    /// **Open a resource's page in a window of its own**
+    /// (`light-client-requirements.md` §8), through the node that served
+    /// its catalog entry.
+    Open {
+        /// The node.
+        node: Vec<u8>,
+        /// The resource.
+        resource: Vec<u8>,
+        /// Its instance name, as the catalog has it: the window's title.
+        name: String,
     },
     /// Say something to a party.
     Send {
@@ -167,6 +183,15 @@ pub fn act(message: &str) -> Result<Act, String> {
             });
         }
         "restore" => return s("phrase").map(|phrase| Act::Restore { phrase }),
+        "open" => {
+            return Ok(Act::Open {
+                node: node_key(&s("node")?)?,
+                resource: node_key(&s("resource")?)
+                    .map_err(|_| "a resource's key is 64 hex characters")?,
+                // the catalog's own words, bounded so a title stays one
+                name: s("name")?.chars().take(120).collect(),
+            });
+        }
         _ => {}
     }
     let provider = s("provider")?;
@@ -524,6 +549,18 @@ mod tests {
                 address: "203.0.113.7:7431".into()
             }
         );
+        assert_eq!(
+            act(&format!(
+                r#"{{"act":"open","node":"{k}","resource":"{}","name":" Notices "}}"#,
+                "cd".repeat(32)
+            ))
+            .unwrap(),
+            Act::Open {
+                node: vec![0xab; 32],
+                resource: vec![0xcd; 32],
+                name: "Notices".into()
+            }
+        );
         assert_eq!(node_address("[::1]:9").unwrap(), "[::1]:9");
         assert_eq!(node_address("::1").unwrap(), "[::1]:7431");
         for (message, why) in [
@@ -532,6 +569,14 @@ mod tests {
                 "64 hex",
             ),
             (r#"{"act":"go","place":"meet"}"#, "not a place"),
+            (
+                &*format!(r#"{{"act":"open","node":"{k}","resource":"ab","name":"x"}}"#),
+                "resource's key",
+            ),
+            (
+                &*format!(r#"{{"act":"open","node":"{k}","resource":"{k}"}}"#),
+                "name",
+            ),
             (r#"{"act":"backup","data":"zz"}"#, "hex"),
             (r#"{"act":"backup","data":""}"#, "data"),
             (r#"{"act":"send","to":"ab","text":"x"}"#, "64 hex"),

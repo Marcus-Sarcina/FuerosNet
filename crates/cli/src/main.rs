@@ -236,6 +236,8 @@ fn do_node(rest: &[&str]) -> Result<String, String> {
         Some("offer") => return do_package(&rest[1..], Package::Offer),
         Some("install") => return do_package(&rest[1..], Package::Install),
         Some("remove") => return do_package(&rest[1..], Package::Remove),
+        Some("grant") => return do_package(&rest[1..], Package::Grant),
+        Some("grant-template") => return do_package(&rest[1..], Package::Template),
         Some("packages") => return do_package(&rest[1..], Package::Listed),
         Some("running") => return do_package(&rest[1..], Package::Running),
         Some("logs") => return do_package(&rest[1..], Package::Logs),
@@ -247,7 +249,8 @@ fn do_node(rest: &[&str]) -> Result<String, String> {
     if *sub != "enrol" && *sub != "renew" {
         return Err(format!(
             "`node {sub}` is not a command; there are `node launch`, `node offers`,              `node credential`, `node destroy`, `node enrol`, `node renew`,              `node acts`, `node offer`, `node install`, `node remove`, \
-             `node packages`, `node running` and `node logs`"
+             `node grant`, `node grant-template`, `node packages`, `node running` and \
+             `node logs`"
         ));
     }
     let (mut token, mut credentials, mut endpoint) = (None, 7usize, None);
@@ -436,12 +439,15 @@ enum Package {
     Offer,
     Install,
     Remove,
+    Grant,
+    Template,
     Listed,
     Running,
     Logs,
 }
 
-/// **`node install|remove|packages|running|logs`**: the acts an operator
+/// **`node install|remove|grant|grant-template|packages|running|logs`**:
+/// the acts an operator
 /// makes on the packages their own instance hosts ([`install`];
 /// `infra-client-requirements.md` §9.4).
 ///
@@ -465,6 +471,10 @@ fn do_package(opts: &[&str], which: Package) -> Result<String, String> {
             "lines",
             "name",
             "offering",
+            "roles",
+            "of",
+            "with",
+            "until",
         ],
     )?;
     let number = |k: &str| -> Result<Option<u16>, String> {
@@ -495,12 +505,18 @@ fn do_package(opts: &[&str], which: Package) -> Result<String, String> {
         name: o.get("name").cloned(),
         lines: number("lines")?.map(usize::from),
         offering: o.get("offering").cloned(),
+        roles: o.get("roles").cloned(),
+        of: o.get("of").cloned(),
+        with: o.get("with").cloned(),
+        until: o.get("until").cloned(),
     };
     match which {
         Package::Acts => install::acts(&ask),
         Package::Offer => install::offer(&ask),
         Package::Install => install::install(&ask),
         Package::Remove => install::remove(&ask),
+        Package::Grant => install::grant(&ask),
+        Package::Template => install::template(&ask),
         Package::Listed => install::packages(&ask),
         Package::Running => install::running(&ask, false),
         Package::Logs => install::running(&ask, true),
