@@ -628,12 +628,19 @@ fn snapshot(p: &Participant, device: Device, threads: Option<&Threads>) -> Snaps
         .into_iter()
         .map(|a| (a.serving, a.addresses))
         .collect();
+    let subnets = p.subnets();
+    // **a subnet's own name for this person, then the default**, as the
+    // phone's foot picks it (`Gateway.ownAlias`)
+    let name = subnets
+        .iter()
+        .find_map(|s| s.own_alias.clone().filter(|a| !a.trim().is_empty()))
+        .or_else(|| p.default_alias().filter(|a| !a.trim().is_empty()));
     Snapshot {
         me: p.me(),
+        name,
         device,
         connection: participant::connection(&p.attachments(), &agreed),
-        subnets: p
-            .subnets()
+        subnets: subnets
             .into_iter()
             .map(|s| SubnetRow {
                 id: hex(&s.id),
@@ -1071,9 +1078,11 @@ fn carry(
     let mut a = p
         .request_resource(node.to_vec(), resource.to_vec(), message)
         .map_err(|e| e.to_string())?;
-    // the kernel holds at most eight unanswered, so eight in a row is a
-    // resource asking in a loop rather than one with a question
-    for _ in 0..8 {
+    // **a bound on a resource asking in a loop**, and only that: each ask
+    // here is answered before the next, so §8.1's eight unanswered is not
+    // it. The test resource asks eleven in a row; this client's own
+    // number, not the protocol's
+    for _ in 0..ASKS_RUNNING {
         let Some(ask) = a.ask.take() else {
             return Ok(a);
         };
@@ -1093,8 +1102,14 @@ fn carry(
             )
             .map_err(|e| e.to_string())?;
     }
-    Err("it asked eight times running, and nothing was shown".into())
+    Err(format!(
+        "it asked {ASKS_RUNNING} times running, and nothing was shown"
+    ))
 }
+
+/// How many asks in a row one request may meet before the desktop stops
+/// answering them ([`carry`]).
+const ASKS_RUNNING: usize = 32;
 
 /// **A resource's window** (`frame`): a web context of its own under the
 /// desktop's directory, so its storage is its own and kept; its origin's

@@ -115,6 +115,10 @@ pub struct ResourceRow {
 pub struct Snapshot {
     /// This identity's keyhash.
     pub me: Vec<u8>,
+    /// **What this person is called**, as the phone's foot has it: a
+    /// subnet's own name for them first, then the default the kernel
+    /// keeps [author, 2026-10-27]; none where they have published neither.
+    pub name: Option<String>,
     /// What this desktop is to it.
     pub device: Device,
     /// Where it is connected, in one line.
@@ -128,6 +132,13 @@ pub struct Snapshot {
 }
 
 impl Snapshot {
+    /// This person's name, else the start of their key.
+    pub fn who(&self) -> String {
+        self.name
+            .clone()
+            .unwrap_or_else(|| format!("{}…", short(&hex(&self.me))))
+    }
+
     /// What the screens call the party with key `peer`: a thread's name,
     /// a contact's alias, else the start of the key.
     pub fn name_of(&self, peer: &str) -> String {
@@ -194,11 +205,16 @@ pub fn refresh(snap: &Snapshot, place: &Place, body: &Body) -> String {
 pub fn rail(snap: &Snapshot, place: &Place) -> String {
     let here = |p: &Place| if p == place { " class=\"here\"" } else { "" };
     let mut out = format!(
-        "<a data-go=\"home\"{}><b class=\"mono\">{}…</b><br><small>{}</small></a>\n\
+        "<a data-go=\"home\"{}><b{}>{}</b><br><small>{}</small></a>\n\
          <a data-go=\"direct\"{}>Direct messages</a>\n\
          <a data-go=\"resources\"{}>Resources</a>\n<h3>Subnets</h3>\n",
         here(&Place::Home),
-        short(&hex(&snap.me)),
+        if snap.name.is_some() {
+            ""
+        } else {
+            " class=\"mono\""
+        },
+        escape(&snap.who()),
         match snap.device {
             Device::Paired { .. } => "paired from the phone",
             Device::Restored => "restored from the phrase",
@@ -290,9 +306,10 @@ fn home(snap: &Snapshot) -> String {
         "<p><button data-go=\"options\">Connect to a node</button></p>".to_string()
     };
     format!(
-        "<h1>A device of <span class=\"mono\">{}…</span></h1>\n\
+        "<h1>A device of {}</h1>\n<p class=\"sub mono\">{}</p>\n\
          <p class=\"sub\">{said}</p>\n{dataset}\n<p>{}</p>\n{next}\n{archive}",
-        short(&hex(&snap.me)),
+        escape(&snap.who()),
+        hex(&snap.me),
         escape(&snap.connection)
     )
 }
@@ -472,6 +489,7 @@ mod tests {
     fn snap() -> Snapshot {
         Snapshot {
             me: vec![0xab; 32],
+            name: Some("Ann <A>".into()),
             device: Device::Restored,
             connection: "Connected to 1111111111111111…".into(),
             subnets: vec![SubnetRow {
@@ -536,7 +554,8 @@ mod tests {
             "data-go=\"subnet:{}\" class=\"here\"",
             "22".repeat(32)
         )));
-        assert!(r.contains("restored from the phrase") && r.contains("abababababababab…"));
+        assert!(r.contains("restored from the phrase") && r.contains("Ann &lt;A&gt;"));
+        assert!(!r.contains("abababababababab…"), "the name, not the key");
         assert!(
             rail(&s, &Place::Thread("33".repeat(32))).contains("data-go=\"direct\" class=\"here\"")
         );
@@ -624,6 +643,16 @@ mod tests {
         assert!(o.contains("data-act=\"launch\""));
         let h = page(&s, &Place::Home, &Body::Plain);
         assert!(h.contains("1 subnets, 2 people, 1 conversations"));
+        assert!(h.contains("<h1>A device of Ann &lt;A&gt;</h1>") && h.contains(&"ab".repeat(32)));
+        assert!(rail(&s, &Place::Home).contains("<b>Ann &lt;A&gt;</b>"));
+        let unnamed = Snapshot {
+            name: None,
+            ..s.clone()
+        };
+        assert!(rail(&unnamed, &Place::Home).contains(&format!(
+            "<b class=\"mono\">{}…</b>",
+            short(&"ab".repeat(32))
+        )));
         assert!(!h.contains("id=\"import\""), "the archive is in");
         assert!(
             o.contains("id=\"import\""),

@@ -14,6 +14,7 @@ fn main() {
     let offer = pairing::Offer::new(pairing::fresh_seed(), "127.0.0.1".parse().unwrap()).unwrap();
     let snap = Snapshot {
         me: vec![0x70; 32],
+        name: Some("Marcus".into()),
         device: Device::Restored,
         connection: "Connected to 703a82c269ea77ad… at 157.245.85.18:7431".into(),
         subnets: vec![
