@@ -34,6 +34,7 @@ const REFUSED: &str = "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b
 
 /// The page whose code runs: every attempt recorded on `window.seen`.
 const TRYING: &str = r#"<h1>trying</h1>
+<iframe src="/doc" hidden></iframe>
 <script>
 window.seen = {};
 const note = (k, v) => { window.seen[k] = v; };
@@ -125,15 +126,17 @@ fn main() {
             .build(&event_loop)
             .unwrap();
         let log = carried.clone();
-        let carry: rhtn_desktop::window::Carrier = Arc::new(move |method, path, media, body| {
-            log.lock()
-                .unwrap()
-                .push(format!("{method} {path} {media:?} {}", body.len()));
-            match path {
-                "/echo" => text(body.to_vec()),
-                _ => frame::nothing(),
-            }
-        });
+        let carry: rhtn_desktop::window::Carrier =
+            Arc::new(move |method, path, media, body, document| {
+                log.lock().unwrap().push(format!(
+                    "{method} {path} {media:?} {} doc={document}",
+                    body.len()
+                ));
+                match path {
+                    "/echo" => text(body.to_vec()),
+                    _ => frame::nothing(),
+                }
+            });
         let r = refusals.clone();
         let b = rhtn_desktop::window::builder(
             &mut context,
@@ -247,6 +250,18 @@ fn verdict(got: &[(String, String)], refusals: usize, carried: &[String]) -> boo
         );
     }
     check("the navigation away was not followed", refusals >= 1);
+    check(
+        "a frame's own navigation is told as one",
+        carried
+            .iter()
+            .any(|c| c.starts_with("GET /doc ") && c.ends_with("doc=true")),
+    );
+    check(
+        "a script's request is not",
+        carried
+            .iter()
+            .any(|c| c.starts_with("POST /echo ") && c.ends_with("doc=false")),
+    );
     println!("carried: {carried:?}");
     ok
 }

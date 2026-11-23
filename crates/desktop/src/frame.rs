@@ -206,6 +206,74 @@ pub fn nothing() -> Served {
     }
 }
 
+/// **Whether a request is the page moving to its answer** rather than its
+/// script or its markup asking for one: a navigation is the one request
+/// whose `accept` leads with `text/html`, and only a navigation shows its
+/// answer as the page.
+pub fn navigating(accept: Option<&str>) -> bool {
+    accept.is_some_and(|a| a.trim_start().starts_with("text/html"))
+}
+
+/// **What the frame shows in place of an answer this desktop does not
+/// show** (`light-client-requirements.md` §8): its declared type and its
+/// size, never a guess, and where it went — offered for saving in the
+/// desktop's own window, since nothing in the frame reaches a file.
+pub fn not_shown(page: &ResourcePage) -> Served {
+    let said = format!(
+        "<p>The resource answered with {}. It is offered for saving in this desktop's own \
+         window.</p>",
+        escape_html(&named(page))
+    );
+    Served {
+        status: 200,
+        headers: vec![
+            ("content-type".into(), "text/html; charset=utf-8".into()),
+            ("x-content-type-options".into(), "nosniff".into()),
+            ("content-security-policy".into(), policy(false)),
+        ],
+        body: styled(&said).into_bytes(),
+    }
+}
+
+/// **The name a save dialog suggests** for what `name` answered with: the
+/// resource's name with only letters, digits, dots, dashes and
+/// underscores kept, and an extension from the declared type's subtype
+/// where that is a short word — `text/csv` gives `.csv` — and none where
+/// nothing useful is declared.
+pub fn suggested(name: &str, media: Option<&str>) -> String {
+    let stem: String = name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    let stem = stem.trim_matches(|c| c == '-' || c == '.');
+    let stem = if stem.is_empty() { "resource" } else { stem };
+    let ext = media
+        .and_then(|m| m.split(';').next())
+        .and_then(|m| m.trim().split('/').nth(1))
+        .map(|s| s.split('+').next().unwrap_or(s).to_ascii_lowercase())
+        .filter(|s| (1..=8).contains(&s.len()) && s.chars().all(|c| c.is_ascii_alphanumeric()))
+        .filter(|s| s != "octet")
+        .map(|s| if s == "plain" { "txt".to_string() } else { s });
+    match ext {
+        Some(e) if !stem.ends_with(&format!(".{e}")) => format!("{stem}.{e}"),
+        _ => stem.to_string(),
+    }
+}
+
+/// Markup-safe text.
+fn escape_html(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
 /// **What the engine is given for one answer**, `allowed` being whether
 /// the person allowed this resource's code. The page's own type is the one
 /// declared and nothing else; an undeclared one is octet-stream with
@@ -372,6 +440,55 @@ fn escape(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_navigation_is_told_by_what_it_accepts() {
+        assert!(navigating(Some(
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        )));
+        assert!(!navigating(Some("*/*")), "a script's request");
+        assert!(!navigating(None));
+    }
+
+    #[test]
+    fn a_save_suggests_the_name_and_the_declared_kind() {
+        assert_eq!(
+            suggested("testapp.internal", Some("text/csv")),
+            "testapp.internal.csv"
+        );
+        assert_eq!(
+            suggested("A shop / ledger", Some("text/plain; charset=utf-8")),
+            "A-shop---ledger.txt"
+        );
+        assert_eq!(suggested("x", Some("application/octet-stream")), "x");
+        assert_eq!(suggested("x", Some("image/svg+xml")), "x.svg");
+        assert_eq!(
+            suggested("report.pdf", Some("application/pdf")),
+            "report.pdf"
+        );
+        assert_eq!(suggested("///", None), "resource");
+    }
+
+    #[test]
+    fn what_is_not_shown_is_named_and_runs_nothing() {
+        let p = ResourcePage {
+            http_status: 200,
+            media: Some("text/csv".into()),
+            charset: None,
+            shape: PageShape::Other,
+            policy: None,
+            runs_script: false,
+            body: vec![b'a'; 812],
+        };
+        let s = not_shown(&p);
+        let body = String::from_utf8(s.body).unwrap();
+        assert!(body.contains("`text/csv`, 812 bytes"), "{body}");
+        assert!(
+            s.headers
+                .iter()
+                .any(|(n, v)| n == "content-security-policy" && v.contains("script-src 'none'"))
+        );
+    }
+
     use super::*;
 
     const R: &str = "AB00000000000000000000000000000000000000000000000000000000000001";

@@ -97,6 +97,14 @@ so it is run by hand and not by the gate.
 utility*, which is an answer the resource sees, and the person is told
 what was asked: this desktop offers none of the device's utilities yet.
 
+**An answer the desktop does not show is offered for saving**, as the
+phone's *Save to a file* does: where the page moves to one (a navigation,
+told by an `accept` leading with `text/html`), the frame names its
+declared type and size, and the main window asks whether to save it; a
+yes opens the toolkit's save dialog with a name suggested from the
+resource and the declared type. A script's own request gets the bytes,
+which are its to read.
+
 ## What is not built yet
 
 The launch itself: choosing a region and a size, minting the enrolment

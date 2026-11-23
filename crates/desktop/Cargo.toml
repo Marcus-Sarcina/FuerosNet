@@ -28,7 +28,7 @@ fieldtest = ["rhtn-ffi/fieldtest", "wry?/devtools"]
 # container with no desktop libraries at all, build and test everything
 # below the window: `cargo build -p rhtn-desktop --features gui` is the
 # build that opens one.
-gui = ["dep:wry", "dep:tao", "dep:keyring"]
+gui = ["dep:wry", "dep:tao", "dep:keyring", "dep:gtk"]
 
 [dependencies]
 rhtn-launch = { path = "../launch" }
@@ -88,3 +88,9 @@ required-features = ["gui"]
 # the identity root a phone derives its encryption secrets from, so a test
 # can hold the credential's secrets to what the phone holds
 rhtn-crypto = { path = "../crypto" }
+
+# **the save dialog** for what a resource answered with and the desktop does
+# not show: the toolkit tao already draws with on Linux, at its version, so
+# nothing new is built
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = { version = "0.18", optional = true }

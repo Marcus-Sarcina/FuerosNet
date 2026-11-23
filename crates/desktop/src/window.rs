@@ -13,9 +13,11 @@ use wry::WebViewBuilder;
 use wry::http::{Response, StatusCode};
 
 /// **What carries one request to the resource**: its method, its rooted
-/// path, its body's declared type and the body, to the answer the engine
+/// path, its body's declared type, the body, and whether it is the page
+/// moving to its answer ([`frame::navigating`]), to the answer the engine
 /// is given. Called off the drawing thread, and may wait.
-pub type Carrier = Arc<dyn Fn(&str, &str, Option<&str>, &[u8]) -> frame::Served + Send + Sync>;
+pub type Carrier =
+    Arc<dyn Fn(&str, &str, Option<&str>, &[u8], bool) -> frame::Served + Send + Sync>;
 
 /// **A resource's web view**, in `context`: its origin's scheme answered
 /// by `carry` and nothing else, `first` served to the first `GET /` where
@@ -56,12 +58,24 @@ pub fn builder<'a>(
                 .get("content-type")
                 .and_then(|v| v.to_str().ok())
                 .map(String::from);
+            let document = frame::navigating(
+                request
+                    .headers()
+                    .get("accept")
+                    .and_then(|v| v.to_str().ok()),
+            );
             let body = request.body().clone();
             let carry = carry.clone();
             // **off the drawing thread**: the kernel and the network are
             // never on it, and the engine waits for its answer meanwhile
             std::thread::spawn(move || {
-                responder.respond(response(carry(&method, &path, media.as_deref(), &body)));
+                responder.respond(response(carry(
+                    &method,
+                    &path,
+                    media.as_deref(),
+                    &body,
+                    document,
+                )));
             });
         })
         .with_navigation_handler(move |url| {

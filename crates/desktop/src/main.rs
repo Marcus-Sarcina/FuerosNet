@@ -59,6 +59,15 @@ enum Said {
     Ask(String, Sender<bool>),
     /// A resource's first answer, to be framed in a window of its own.
     Frame(Framed),
+    /// What a resource answered with that this desktop does not show, the
+    /// person having said to keep it: a save dialog for it.
+    Save(Offered),
+}
+
+/// **An answer offered for saving**: the name to suggest and the bytes.
+struct Offered {
+    suggested: String,
+    body: Vec<u8>,
 }
 
 /// **What opening a resource came to**, for the window to frame.
@@ -259,6 +268,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let _ = ours.evaluate_script(&said(false, &e.to_string()));
                     }
                 }
+            }
+            Event::UserEvent(Said::Save(offered)) => {
+                let line = match save(offered) {
+                    Ok(Some(path)) => (true, format!("saved to {}", path.display())),
+                    Ok(None) => (true, "not saved".to_string()),
+                    Err(why) => (false, format!("not saved: {why}")),
+                };
+                let _ = ours.evaluate_script(&said(line.0, &line.1));
             }
             Event::UserEvent(Said::Ask(question, answer)) => {
                 if let Some(a) = asking.replace(answer) {
@@ -1046,10 +1063,7 @@ fn open(
         }
     };
     if page.shape == PageShape::Other {
-        let _ = back.send_event(Said::ToPage(
-            true,
-            format!("{name} answered with {}", frame::named(page)),
-        ));
+        offer(back, &name, page);
         return;
     }
     let key = hex(&resource);
@@ -1122,6 +1136,67 @@ fn carry(
     ))
 }
 
+/// **Offer what a resource answered with for saving** (the phone's "Save
+/// to a file"): named in the main window with its declared type and size,
+/// and kept only on the person's yes, through a save dialog. Asked off
+/// the thread that carried the answer, which does not wait for it.
+fn offer(back: &EventLoopProxy<Said>, name: &str, page: &rhtn_ffi::client::ResourcePage) {
+    if page.body.is_empty() {
+        let _ = back.send_event(Said::ToPage(
+            true,
+            format!("{name} answered with {}", frame::named(page)),
+        ));
+        return;
+    }
+    let back = back.clone();
+    let question = format!(
+        "{name} answered with {}. Save it to a file?",
+        frame::named(page)
+    );
+    let offered = Offered {
+        suggested: frame::suggested(name, page.media.as_deref()),
+        body: page.body.clone(),
+    };
+    std::thread::spawn(move || {
+        let (tx, rx) = channel();
+        if back.send_event(Said::Ask(question, tx)).is_ok() && rx.recv().unwrap_or(false) {
+            let _ = back.send_event(Said::Save(offered));
+        }
+    });
+}
+
+/// **The save dialog**, on the drawing thread where the toolkit lives:
+/// the place is the person's to choose, a file already there is replaced
+/// only on their word, and what came of it is said.
+#[cfg(target_os = "linux")]
+fn save(offered: Offered) -> Result<Option<PathBuf>, String> {
+    use gtk::prelude::*;
+    let dialog = gtk::FileChooserNative::new(
+        Some("Save what the resource answered with"),
+        None::<&gtk::Window>,
+        gtk::FileChooserAction::Save,
+        Some("Save"),
+        Some("Cancel"),
+    );
+    dialog.set_current_name(&offered.suggested);
+    dialog.set_do_overwrite_confirmation(true);
+    let chosen = (dialog.run() == gtk::ResponseType::Accept)
+        .then(|| dialog.filename())
+        .flatten();
+    dialog.destroy();
+    let Some(path) = chosen else {
+        return Ok(None);
+    };
+    std::fs::write(&path, &offered.body).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(Some(path))
+}
+
+/// Elsewhere there is no dialog yet, and nothing is written.
+#[cfg(not(target_os = "linux"))]
+fn save(_: Offered) -> Result<Option<PathBuf>, String> {
+    Err("this desktop has no save dialog on this platform yet".into())
+}
+
 /// How many asks in a row one request may meet before the desktop stops
 /// answering them ([`carry`]).
 const ASKS_RUNNING: usize = 32;
@@ -1158,11 +1233,26 @@ fn open_frame(
 
     let carry: rhtn_desktop::window::Carrier = {
         let back = Mutex::new(back.clone());
-        Arc::new(move |method, path, media, body| {
+        Arc::new(move |method, path, media, body, document| {
             let message = frame::compose(method, path, media, body);
             let back = back.lock().unwrap().clone();
             match carry(&p, &node, &resource, message, &name, &back) {
-                Ok(a) => frame::served(&a, allowed),
+                // **the page moving to something it cannot show** is
+                // named there, and the bytes offered for keeping here,
+                // as the phone's save does; a script's own request gets
+                // the bytes, which are its to read
+                Ok(a) => match &a.page {
+                    Some(page)
+                        if document
+                            && a.status == 0
+                            && a.unreadable.is_none()
+                            && page.shape == PageShape::Other =>
+                    {
+                        offer(&back, &name, page);
+                        frame::not_shown(page)
+                    }
+                    _ => frame::served(&a, allowed),
+                },
                 Err(why) => frame::not_carried(&why),
             }
         })
