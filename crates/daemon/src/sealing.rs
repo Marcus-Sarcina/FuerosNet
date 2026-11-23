@@ -19,7 +19,6 @@
 
 use rhtn_archive::Keyhash;
 use std::path::{Path, PathBuf};
-use zeroize::Zeroizing;
 
 /// The key's length, as the client derives it (`rhtn_crypto::package_seal`).
 pub const KEY_LEN: usize = 64;
@@ -99,18 +98,43 @@ pub fn open(state: &Path, resource: &Keyhash, key: &[u8; KEY_LEN]) -> Result<(),
     Ok(())
 }
 
-/// Decode the key an act carried: 128 hex digits, held no longer than the
-/// act.
-pub fn key_from_hex(s: &str) -> Option<Zeroizing<[u8; KEY_LEN]>> {
-    let s = s.trim();
-    if s.len() != KEY_LEN * 2 || !s.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return None;
+/// **The sealed packages that are closed**, as the node tells its own
+/// operator at each attach (`wire-format.md` §8.2 field 8): installed
+/// sealed, and either never given their key or closed by the machine's
+/// restart.
+pub fn closed(state: &Path, hosting: &Path) -> Vec<Keyhash> {
+    crate::packages::read(hosting)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|p| p.sealed && !is_open(state, &p.resource))
+        .map(|p| p.resource)
+        .collect()
+}
+
+/// **Take a key the operator brought on their session** for a package
+/// installed sealed: its storage sealed under it where it never was, and
+/// opened where the machine's restart closed it. A resource not installed
+/// sealed is refused, so nothing is sealed that the operator did not
+/// choose to.
+pub fn take(
+    state: &Path,
+    hosting: &Path,
+    resource: &Keyhash,
+    key: &[u8; KEY_LEN],
+) -> Result<(), String> {
+    let installed = crate::packages::read(hosting)?
+        .into_iter()
+        .any(|p| p.sealed && p.resource == *resource);
+    if !installed {
+        return Err(format!("{} is not installed sealed here", hex(resource)));
     }
-    let mut out = Zeroizing::new([0u8; KEY_LEN]);
-    for (i, b) in out.iter_mut().enumerate() {
-        *b = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).ok()?;
+    if !is_sealed(state, resource) {
+        seal(state, resource, key)
+    } else if !is_open(state, resource) {
+        open(state, resource, key)
+    } else {
+        Ok(())
     }
-    Some(out)
 }
 
 /// **Link the paths the node keeps for an open sealed resource** into its
@@ -169,6 +193,14 @@ pub fn link(state: &Path, federation: Option<&Path>, resource: &Keyhash) -> Resu
             .map_err(|e| format!("{}: {e}", path.display()))?;
     }
     Ok(())
+}
+
+/// **Storage a resource already has unsealed**, where any: the first path
+/// it occupies, which sealing it now would have to go over.
+pub fn unsealed_storage(state: &Path, resource: &Keyhash) -> Option<PathBuf> {
+    plain_paths(state, resource)
+        .into_iter()
+        .find(|p| std::fs::symlink_metadata(p).is_ok() && std::fs::read_link(p).is_err())
 }
 
 /// The paths an unsealed resource's storage would occupy.
@@ -284,16 +316,6 @@ mod tests {
     }
 
     #[test]
-    fn a_key_is_128_hex_digits_and_nothing_else() {
-        let k = "ab".repeat(KEY_LEN);
-        assert_eq!(*key_from_hex(&k).expect("a key"), [0xab; KEY_LEN]);
-        assert!(key_from_hex(&k[2..]).is_none(), "short");
-        assert!(key_from_hex(&format!("{k}ab")).is_none(), "long");
-        assert!(key_from_hex(&format!("zz{}", &k[2..])).is_none(), "not hex");
-        assert!(key_from_hex("").is_none());
-    }
-
-    #[test]
     fn a_directory_is_open_only_while_its_mark_is_found() {
         let d = Dir::new("mark");
         let r = [7u8; 32];
@@ -332,6 +354,46 @@ mod tests {
         let why = seal(&d.0, &r, &[1; KEY_LEN]).expect_err("refused");
         assert!(why.contains("provisioned unsealed"), "{why}");
         assert!(!dir(&d.0, &r).exists());
+    }
+
+    fn hosting(d: &Dir, sealed: bool, r: &Keyhash) -> PathBuf {
+        let h = d.0.join("hosting");
+        let p = crate::packages::Package {
+            resource: *r,
+            owner: [1; 32],
+            authority: "shop.internal".into(),
+            image: "reg.example/x/pkg:abc".into(),
+            port: 9,
+            block: None,
+            sealed,
+        };
+        crate::packages::write(&h, &[p]).expect("written");
+        h
+    }
+
+    // functional: OPS-033
+    #[test]
+    fn only_a_package_installed_sealed_is_told_closed_or_given_a_key() {
+        let d = Dir::new("closed");
+        let r = [7u8; 32];
+        let plain = hosting(&d, false, &r);
+        assert!(
+            closed(&d.0, &plain).is_empty(),
+            "an unsealed package is never closed"
+        );
+        let why = take(&d.0, &plain, &r, &[1; KEY_LEN]).expect_err("refused");
+        assert!(why.contains("not installed sealed"), "{why}");
+        assert!(
+            !dir(&d.0, &r).exists(),
+            "nothing sealed the operator did not choose"
+        );
+
+        let sealed = hosting(&d, true, &r);
+        assert_eq!(closed(&d.0, &sealed), vec![r], "closed until its key comes");
+        std::fs::create_dir_all(dir(&d.0, &r)).expect("a directory");
+        std::fs::write(dir(&d.0, &r).join(OPEN_MARK), b"").expect("the mark");
+        assert!(closed(&d.0, &sealed).is_empty(), "and not once it is open");
+        take(&d.0, &sealed, &r, &[1; KEY_LEN]).expect("an open one takes nothing more");
     }
 
     /// **The kernel's half**, where the filesystem under the temporary

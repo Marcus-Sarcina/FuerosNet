@@ -617,12 +617,20 @@ pub fn apply_in(
                         ),
                     ));
                 }
-                if !crate::sealing::is_sealed(root, &res) {
+                // **installed sealed and not yet given its key**, which its
+                // operator's client brings when it next attaches: closed
+                // until then, unless storage it was never sealed over is
+                // already there
+                if !crate::sealing::is_sealed(root, &res)
+                    && let Some(plain) = crate::sealing::unsealed_storage(root, &res)
+                {
                     return Err(at(
                         0,
                         format!(
-                            "`{}` is sealed and its storage was never sealed here",
-                            h.resource
+                            "`{}` is sealed and {} was provisioned unsealed: storage is \
+                             sealed when it is provisioned",
+                            h.resource,
+                            plain.display()
                         ),
                     ));
                 }

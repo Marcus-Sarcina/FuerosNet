@@ -1475,11 +1475,25 @@ fn an_open_sealed_package_keeps_its_storage_through_links_into_its_directory() {
 
 // functional: OPS-033
 #[test]
-fn a_sealed_entry_is_refused_with_a_mounted_block_unsealed_storage_or_no_directory() {
-    let d = Dir::new("sealed-refused");
+fn a_sealed_entry_not_yet_given_its_key_is_closed_with_nothing_provisioned() {
+    let d = Dir::new("sealed-awaiting");
     let f = sealed_entry(&d, "");
-    let (_, never) = apply_sealed(&d, &f);
-    assert!(refused(never).contains("never sealed here"));
+    let (_, applied) = apply_sealed(&d, &f);
+    assert_eq!(
+        applied.expect("bound").closed,
+        vec![res()],
+        "closed until its key comes"
+    );
+    assert!(
+        !d.0.join("state").join("blocks").exists(),
+        "and nothing provisioned"
+    );
+}
+
+// functional: OPS-033
+#[test]
+fn a_sealed_entry_is_refused_with_a_mounted_block_or_over_unsealed_storage() {
+    let d = Dir::new("sealed-refused");
 
     let sealed = d.0.join("state").join("sealed").join(RES);
     std::fs::create_dir_all(&sealed).expect("a directory");
@@ -1492,4 +1506,11 @@ fn a_sealed_entry_is_refused_with_a_mounted_block_unsealed_storage_or_no_directo
     let f = sealed_entry(&d, "");
     let (_, plain) = apply_sealed(&d, &f);
     assert!(refused(plain).contains("unsealed storage"));
+
+    // and storage provisioned unsealed is not sealed over later
+    let e = Dir::new("sealed-over-plain");
+    std::fs::create_dir_all(e.0.join("state").join("jobs").join(RES)).expect("plain jobs");
+    let f = sealed_entry(&e, "");
+    let (_, over) = apply_sealed(&e, &f);
+    assert!(refused(over).contains("provisioned unsealed"));
 }

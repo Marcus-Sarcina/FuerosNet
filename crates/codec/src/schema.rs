@@ -13,6 +13,9 @@ pub enum T {
     Keyhash,
     /// A 16-byte nonce.
     Nonce16,
+    /// Exactly 64 bytes: a sealed package's key (§8.2 `Reopen`), sized so
+    /// that no request of the same type number reads as one.
+    Key64,
     /// A 32-byte string with no further meaning fixed here.
     Bytes32,
     /// An unsigned integer.
@@ -61,6 +64,9 @@ pub enum T {
     Envelope,
     /// An array of keyhashes.
     Keyhashes,
+    /// One to [`MAX_CLOSED`] resource keyhashes, ascending and distinct:
+    /// the sealed packages a node tells its operator are closed (§8.2).
+    Resources,
     /// A currency attestation (§7.1), checked as its own kind.
     CurrencyAttestation,
     /// A node's key for one recipient (§7.8), checked as its own kind.
@@ -168,6 +174,10 @@ pub enum Family {
     /// Control frame 7: a delegated peer's first frame on a connection that
     /// opens no session (`wire-format.md` §8.0, §8.2).
     Delegation,
+    /// Control frame 8: a node's operator reopening a package whose
+    /// storage is sealed, with its key (`wire-format.md` §8.2) [author,
+    /// 2026-11-22].
+    Reopen,
 }
 
 use T::*;
@@ -188,7 +198,15 @@ const ATTACH_ACK: Fields = &[
     (6, false, Delegation),
     // the adoption that placed the attaching identity under this node
     (7, false, Envelope),
+    // the sealed packages that are closed, to this node's own operator
+    (8, false, Resources),
 ];
+
+/// The most closed sealed packages one acknowledgement names (§8.2 field
+/// 8); a node with more names the first of them in order and the rest at
+/// the next attach.
+pub const MAX_CLOSED: usize = 256;
+const REOPEN: Fields = &[(1, true, Keyhash), (2, true, Key64)];
 const HEARTBEAT: Fields = &[(1, true, Uint), (2, true, Uint)];
 const SIBLING_UPDATE: Fields = &[(1, false, SiblingRefs)];
 const TOPOLOGY_PUSH: Fields = &[(1, true, Uint), (2, true, Bstr)];
@@ -389,6 +407,7 @@ pub fn fields(f: Family) -> Option<Fields> {
         SiblingUpdate => SIBLING_UPDATE,
         TopologyPush => TOPOLOGY_PUSH,
         TopologyMemo => TOPOLOGY_MEMO,
+        Reopen => REOPEN,
         ResolveRequest => RESOLVE_REQUEST,
         ArchiveRequest => ARCHIVE_REQUEST,
         CatalogQuery => CATALOG_QUERY,
@@ -638,6 +657,11 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
                 return Err(Error("nonce width"));
             }
         }
+        Key64 => {
+            if bs(b, &v).map(|s| s.len()) != Some(64) {
+                return Err(Error("key width"));
+            }
+        }
         Uint => {
             as_uint(&v).ok_or(Error("not uint"))?;
         }
@@ -763,6 +787,24 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
                 }
                 if prev.is_some_and(|q| s <= q) {
                     return Err(Error("population unsorted"));
+                }
+                prev = Some(s);
+            }
+        }
+        Resources => {
+            let Item::Array(ref a) = v else {
+                return Err(Error("resources not array"));
+            };
+            if a.is_empty() || a.len() > MAX_CLOSED {
+                return Err(Error("resources out of range"));
+            }
+            let mut prev: Option<&[u8]> = None;
+            for k in a {
+                let Some(s) = bs(b, k).filter(|s| s.len() == 32) else {
+                    return Err(Error("resource entry"));
+                };
+                if prev.is_some_and(|q| s <= q) {
+                    return Err(Error("resources unsorted"));
                 }
                 prev = Some(s);
             }

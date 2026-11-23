@@ -193,18 +193,6 @@ class OperatorActivity : Activity() {
             val t = tokenFor(i.at) ?: continue
             Thread { readdressIfMoved(i, t) }.start()
         }
-        // **and its sealed packages reopened** [author, 2026-11-22]: the
-        // operator chose the seal at installation, so a package its
-        // machine's restart closed is reopened here unasked, and named
-        // only where it fails
-        for (i in held) {
-            val t = tokenFor(i.at) ?: continue
-            Thread {
-                Sealed.reopen(this, by, i.at, t)?.let { why ->
-                    runOnUiThread { narration.text = "${narration.text}\n$why" }
-                }
-            }.start()
-        }
         // **and the invitations the same way**, for the same reason the
         // horizon is caught up here rather than hung off a button. The one
         // difference is that a message is outward and costs its reader

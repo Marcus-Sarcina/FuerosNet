@@ -136,6 +136,7 @@ fn ack_body(interval: u64) -> Vec<u8> {
         capabilities: BTreeMap::new(),
         delegation: None,
         placement: None,
+        closed: Vec::new(),
     }
     .encode()
 }
@@ -607,6 +608,7 @@ async fn trn_09_malformed_sibling_update_is_discarded_whole_and_the_next_one_app
             capabilities: BTreeMap::new(),
             delegation: None,
             placement: None,
+            closed: Vec::new(),
         };
         s.write_all(&control_frame(FRAME_ATTACH_ACK, &ack.encode()))
             .await
@@ -721,6 +723,7 @@ async fn trn_10_unrecognised_capability_id_is_tolerated_in_both_roles() {
         capabilities: unknown.clone(),
         delegation: None,
         placement: None,
+        closed: Vec::new(),
     })
     .await;
     assert!(s.conn.close_reason().is_none());
@@ -739,6 +742,7 @@ async fn trn_11_empty_capabilities_and_no_grease_still_attach_in_both_roles() {
         capabilities: BTreeMap::new(),
         delegation: None,
         placement: None,
+        closed: Vec::new(),
     })
     .await;
     assert!(s.conn.close_reason().is_none());
@@ -1417,4 +1421,87 @@ async fn an_endpoint_that_accepts_and_never_answers_does_not_hold_the_attach_for
         waited >= ATTACH_ACK_TIMEOUT && waited < ATTACH_ACK_TIMEOUT + Duration::from_secs(5),
         "returned at the deadline, not before and not long after: {waited:?}"
     );
+}
+
+// functional: OPS-034
+// **The closed sealed packages are told to the node's operator alone, and
+// a reopening on that session reaches the node with who sent it**
+// (`wire-format.md` §8.2 field 8, control frame 8) [author, 2026-11-22].
+#[tokio::test]
+async fn the_operator_is_told_what_is_closed_and_its_reopening_arrives_on_the_session() {
+    let operator = test_identity("alice").public.keyhash;
+    let resource = [9u8; 32];
+    let mut cfg = node_cfg("bob", 7);
+    cfg.sealed = Some(Arc::new(move |who| {
+        if *who == operator {
+            vec![resource]
+        } else {
+            Vec::new()
+        }
+    }));
+    type Taken = Vec<([u8; 32], [u8; 32], [u8; 64])>;
+    let taken: Arc<Mutex<Taken>> = Arc::default();
+    let t = taken.clone();
+    cfg.on_reopen = Some(Arc::new(move |who, r, key| {
+        t.lock().unwrap().push((who, r, *key));
+    }));
+    let (node, addr) = spawn_node(cfg);
+
+    // a member that is not the operator is told nothing
+    let other = match attach(
+        &client_cfg("carol"),
+        &client_ep(),
+        node.cfg.me.keyhash,
+        addr,
+        false,
+    )
+    .await
+    {
+        AttachOutcome::Attached(s) => s,
+        AttachOutcome::Refused => panic!("carol refused"),
+        AttachOutcome::Unbound(why) => panic!("carol unbound: {why}"),
+        AttachOutcome::EndpointFailure(e) => panic!("carol endpoint: {e}"),
+    };
+    assert!(other.ack.closed.is_empty(), "nothing told to anyone else");
+
+    let s = match attach(
+        &client_cfg("alice"),
+        &client_ep(),
+        node.cfg.me.keyhash,
+        addr,
+        false,
+    )
+    .await
+    {
+        AttachOutcome::Attached(s) => s,
+        AttachOutcome::Refused => panic!("alice refused"),
+        AttachOutcome::Unbound(why) => panic!("alice unbound: {why}"),
+        AttachOutcome::EndpointFailure(e) => panic!("alice endpoint: {e}"),
+    };
+    assert_eq!(s.ack.closed, vec![resource], "the operator is told");
+    assert!(s.send_control(REOPEN, &reopen_body(&resource, &[5u8; 64])));
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while taken.lock().unwrap().is_empty() && Instant::now() < deadline {
+        sleep(Duration::from_millis(20)).await;
+    }
+    assert_eq!(
+        taken.lock().unwrap().as_slice(),
+        &[(operator, resource, [5u8; 64])],
+        "the reopening arrives with the identity the handshake authenticated"
+    );
+}
+
+#[test]
+fn a_reopening_with_a_short_key_or_no_resource_is_none() {
+    let body = reopen_body(&[1; 32], &[2; 64]);
+    let (it, _) = Parser { b: &body }.item(0).expect("an item");
+    assert!(reopen_of(&body, &it).is_some_and(|(r, k)| r == [1; 32] && *k == [2; 64]));
+    let mut short = Vec::new();
+    emit_map_head(&mut short, 2);
+    emit_uint(&mut short, 1);
+    emit_bstr(&mut short, &[1; 32]);
+    emit_uint(&mut short, 2);
+    emit_bstr(&mut short, &[2; 63]);
+    let (it, _) = Parser { b: &short }.item(0).expect("an item");
+    assert!(reopen_of(&short, &it).is_none());
 }

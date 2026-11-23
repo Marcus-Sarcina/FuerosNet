@@ -331,6 +331,9 @@ impl Service {
     /// its topology store replays a forwarding wave into every cycle in
     /// its horizon (`infra-client-requirements.md` §4.3).
     pub async fn start(cfg: &Config, peers: &Path) -> Result<Service, Startup> {
+        // the surface re-reads the hosting file when a sealed package is
+        // reopened on its operator's session (`sealing`)
+        let reopened = Arc::new(tokio::sync::Notify::new());
         tracing::info!(
             target: "daemon",
             step = "start",
@@ -444,6 +447,7 @@ impl Service {
                             host_shell: a.host_shell,
                             bound: Arc::new(std::sync::Mutex::new(None)),
                             stopping: stopping.clone(),
+                            reopened: reopened.clone(),
                         }
                         .serve(),
                     )
@@ -851,6 +855,33 @@ impl Service {
                 refused,
                 "daemon.lifecycle"
             );
+        }
+        // **a sealed package is reopened on its operator's own session**
+        // (`infra-client-requirements.md` §9.4) [author, 2026-11-22]: the
+        // closed ones are told to the operator at each attach and to
+        // nobody else, and the key comes back on the session whose
+        // handshake authenticated them, never over the surface
+        if let (Some(root), Some(hosting)) = (cfg.state.clone(), cfg.resources.clone()) {
+            let me = public.keyhash;
+            let (r, h) = (root.clone(), hosting.clone());
+            node_cfg.sealed = Some(Arc::new(move |who| {
+                if *who == me {
+                    crate::sealing::closed(&r, &h)
+                } else {
+                    Vec::new()
+                }
+            }));
+            let reopened = reopened.clone();
+            node_cfg.on_reopen = Some(Arc::new(move |who, resource, key| {
+                if who != me {
+                    tracing::info!(target: "daemon", step = "reopen", refused = "not the operator", "daemon.lifecycle");
+                    return;
+                }
+                match crate::sealing::take(&root, &hosting, &resource, &key) {
+                    Ok(()) => reopened.notify_one(),
+                    Err(why) => crate::say!("rhtnd: a sealed package was not reopened: {why}"),
+                }
+            }));
         }
         let node = LiveNode::start_with(node_cfg, view, known.clone(), anchors, limits);
         // **the record against the address served on** [2026-10-10].  This

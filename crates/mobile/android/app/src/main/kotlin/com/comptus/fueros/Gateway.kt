@@ -684,17 +684,6 @@ object Gateway {
         return call("hostRunnerPrivateKey", { null }) { p.hostRunnerPrivateKey() }
     }
 
-    /**
-     * **The key one package's storage is sealed under on a node `by`
-     * operates** (`infra-client-requirements.md` §9.4): derived from the
-     * signing seed and the resource, handed over with the act and kept by
-     * nothing here.
-     */
-    fun packageSealKey(by: String, resource: String): String? {
-        val p = loaded[by] ?: return null
-        return call("packageSealKey", { null }) { p.packageSealKey(resource) }
-    }
-
     /** Sweep the serving node's catalog (`wire-format.md` §6.4). */
     fun browse(): String? {
         // **every held identity sweeps its own** [author, 2026-11-07]: a

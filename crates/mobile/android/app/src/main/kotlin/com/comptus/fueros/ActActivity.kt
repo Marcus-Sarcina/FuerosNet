@@ -161,32 +161,12 @@ class ActActivity : Activity() {
                 ),
             )
         }
-        if (a.brings == Acts.Brings.HOST_KEY || a.brings == Acts.Brings.HOST_KEY_SEALING) {
+        if (a.brings == Acts.Brings.HOST_KEY) {
             fields.addView(
                 label(
                     "This act asks the machine itself. Making it hands the instance the " +
                         "restricted key for its host, derived here for this one act and bound " +
                         "on the machine to one program.",
-                ),
-            )
-        }
-        if (a.brings == Acts.Brings.HOST_KEY_SEALING) {
-            fields.addView(
-                label(
-                    "Sealed, this package's storage is ciphertext to an image, snapshot or " +
-                        "backup of the machine. The cost: this package alone is unavailable after " +
-                        "the machine restarts or is restored from a backup, until a device of " +
-                        "yours reaches this node; the node and its other packages are not. Its key " +
-                        "is derived here from your identity, so a device restored from your " +
-                        "phrase reopens it, and this app does so by itself.",
-                ),
-            )
-        }
-        if (a.brings == Acts.Brings.PACKAGE_KEY) {
-            fields.addView(
-                label(
-                    "This act gives the machine this package's own key, derived here. This app " +
-                        "does it by itself whenever it reaches this node.",
                 ),
             )
         }
@@ -326,12 +306,11 @@ class ActActivity : Activity() {
             // **a machine behind this app is brought up first** [author,
             // 2026-11-17], unasked and unnamed: why it was not is said only
             // if the act fails too
-            val asksHost = a.brings == Acts.Brings.HOST_KEY || a.brings == Acts.Brings.HOST_KEY_SEALING
-            val brought = if (asksHost) Runner.bring(this, by, at, token) else null
+            val brought = if (a.brings == Acts.Brings.HOST_KEY) Runner.bring(this, by, at, token) else null
             // **the credential, derived for this act and held no longer**:
             // the kernel holds the seed, and nothing of the key is written
             // down here or there
-            if (asksHost || a.brings == Acts.Brings.SIGNED_RUNNER) {
+            if (a.brings == Acts.Brings.HOST_KEY || a.brings == Acts.Brings.SIGNED_RUNNER) {
                 val key = Gateway.hostRunnerPrivateKey(by)
                 if (key == null) {
                     runOnUiThread {
@@ -342,23 +321,6 @@ class ActActivity : Activity() {
                     return@Thread
                 }
                 fields.add("key" to key)
-            }
-            // **the package's own key, where it is sealed**: derived for the
-            // resource the act names, and held no longer than the act
-            val sealing = a.brings == Acts.Brings.PACKAGE_KEY ||
-                (a.brings == Acts.Brings.HOST_KEY_SEALING && answers["sealed"] == "on")
-            if (sealing) {
-                val seal = Gateway.packageSealKey(by, answers["resource"] ?: "")
-                if (seal == null) {
-                    runOnUiThread {
-                        answer.text = "this device could not derive the package's key; is the " +
-                            "resource 64 hex digits, and the kernel running under the identity " +
-                            "that launched the machine?"
-                        button.isEnabled = true
-                    }
-                    return@Thread
-                }
-                fields.add("seal" to seal)
             }
             if (a.brings == Acts.Brings.SIGNED_RUNNER) {
                 val signed = Gateway.hostRunnerRefresh(by)

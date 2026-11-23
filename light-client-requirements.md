@@ -1817,18 +1817,22 @@ one that is true.
   package's roles start bound to nobody, and an operator who has just
   installed something will otherwise look for why it refuses them.
 - **Offer to seal a package's storage when it is installed, and reopen it
-  unasked** [author, 2026-11-22]. Offer the choice on the install screen
-  with what it costs: **that package — not the instance, and not its other
-  packages — is unavailable after the machine restarts or is restored from
-  a backup, until a device of this identity reaches the instance**
-  (`infra-client-requirements.md` §9.4). Derive the key from the signing
-  seed under its own label and the resource's identity, so the phrase that
-  restores the identity reopens what it sealed, and hand it over with the
-  act; keep none of it. **Then, whenever you reach an
-  instance you run and it has proved itself** (`infra-client-requirements.md`
-  §8.2), read which of its packages are sealed and closed and make the act
-  that reopens them, without asking: the operator chose this at
-  installation. Name it to them only where it fails.
+  on every attach** [author, 2026-11-22: *"every ordinary connection to the
+  node"*]. Offer the choice on the install screen with what it costs:
+  **that package — not the instance, and not its other packages — is
+  unavailable after the machine restarts or is restored from a backup,
+  until this identity next attaches to the instance**
+  (`infra-client-requirements.md` §9.4). The install act carries the
+  choice and no key. **Whenever you attach to an instance you run**, which
+  is every new network connection, the acknowledgement names the sealed
+  packages that are closed (`wire-format.md` §8.2 field 8); answer each, on
+  that session and without asking, with its key (control frame 8), derived
+  from the signing seed under its own label and the resource's identity, so
+  the phrase that restores the identity reopens what it sealed. **Never on
+  the administration surface**: its requests cross the network in the
+  clear, and the session is the one whose handshake pinned the node's key
+  at the address your records name, so an image served anywhere else is
+  never given one. Keep none of it.
 - **Upgrade an instance in place, and give its machine a newer runner when
   you carry one** [author, 2026-11-04; 2026-11-16; 2026-11-17]. An operator does not own
   the address their instance answers at, so a new node image goes onto the

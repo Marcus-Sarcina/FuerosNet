@@ -4159,6 +4159,7 @@ through the very ceiling that exists to bound the receiver's buffer.
 | 5 | `TopologyPush` (§10.1) |
 | 6 | `TopologyMemo` (§10.2) |
 | 7 | `Delegation` (§8.2): a delegated peer's first frame on a connection that opens no session [author, 2026-09-21] |
+| 8 | `Reopen` (§8.2): a node's operator giving a sealed package its key [author, 2026-11-22] |
 
 **Topology framing belongs on stream 0 and not on a bidirectional stream.** Both are unsolicited pushes with no reply, so neither is a request; and
 the extension posture decides it. An unknown control frame is **skipped** and the
@@ -4361,6 +4362,30 @@ AttachAck = {
                        ;   in that relationship. PRESENT where this node is
                        ;   that identity's patron and the slot is still its
                        ;   own [author, 2026-11-20]
+  8: ? [ 1*256 keyhash ]
+                       ; the packages this node hosts whose storage is
+                       ;   sealed and closed (`infra-client-requirements.md`
+                       ;   §9.4), ascending and distinct, at most 256 named
+                       ;   at a time. PRESENT only where `Attach` field 1
+                       ;   names this node's own operator and one is closed
+                       ;   [author, 2026-11-22]; nobody else is told which
+                       ;   packages are sealed
+}
+
+Reopen = {             ; control frame 8, from the operator's client on the
+                       ;   session `AttachAck` field 8 was sent on: once per
+                       ;   package named there, unanswered
+  1: keyhash,          ; the resource
+  2: bstr .size 64     ; its key, derived from the operator's signing seed
+                       ;   and the resource. On this session and nowhere
+                       ;   else: its handshake pinned the node's key under
+                       ;   the operator's delegation at the address their
+                       ;   records name, so an image served at any other is
+                       ;   never given one [author, 2026-11-22: "to prevent
+                       ;   the replay of resource data from an image not
+                       ;   served at the designated endpoint"]. A node takes
+                       ;   it only from its operator and only for a package
+                       ;   installed sealed, and discards it otherwise
 }
 
 device = bstr .size 32 ; the raw public key a device presents in a handshake

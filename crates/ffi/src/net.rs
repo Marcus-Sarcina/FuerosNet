@@ -1042,6 +1042,7 @@ impl Net {
                 },
             };
             let (deliveries, frames) = take_readers(&mut session);
+            reopen_sealed(&handle_for_task, serving_node, &session).await;
             socket.set_stun(Some(session.conn.remote_address()));
             // the address the session landed on is the one the client
             // certainly holds for this node (`wire-format.md` §7.7.1)
@@ -1688,6 +1689,7 @@ async fn watch(
             }
         };
         let (deliveries, frames) = take_readers(&mut sess);
+        reopen_sealed(&handle, to, &sess).await;
         let mode = sess.ack.mode;
         let sess = Arc::new(sess);
         *current.lock().unwrap() = Some(sess.clone());
@@ -1708,6 +1710,47 @@ async fn watch(
         });
         session = sess;
         peer = to;
+    }
+}
+
+/// **Reopen what the node says is sealed and closed** (`wire-format.md`
+/// §8.2 field 8, control frame 8) [author, 2026-11-22]: a node tells its own
+/// operator alone which of its packages' storage is closed, and this
+/// client answers each with the package's key, derived from the signing
+/// seed and the resource, **on this session**: its handshake pinned the
+/// node's key under the operator's own delegation at the address their
+/// records name, so an image run anywhere else is never given one, and
+/// nothing of it crosses the network in the clear. Every attach and every
+/// reattach asks, which is every new network connection.
+async fn reopen_sealed(handle: &Handle, node: Keyhash, session: &Session) {
+    if session.ack.closed.is_empty() {
+        return;
+    }
+    let closed = session.ack.closed.clone();
+    let keys = handle
+        .with(move |c| match c.signer() {
+            Ok(id) => closed
+                .iter()
+                .map(|r| (*r, id.package_seal_key(r)))
+                .collect::<Vec<_>>(),
+            Err(_) => Vec::new(),
+        })
+        .await;
+    if keys.is_empty() {
+        tracing::info!(target: "attach", node = %rhtn_client::diag::id8(&node), why = "this device holds no seed", "attach.reopen_skipped");
+    }
+    for (resource, key) in keys {
+        let sent = session.send_control(
+            rhtn_transport::session::REOPEN,
+            &rhtn_transport::session::reopen_body(&resource, &key),
+        );
+        tracing::info!(
+            target: "attach",
+            node = %rhtn_client::diag::id8(&node),
+            resource = %rhtn_client::diag::id8(&resource),
+            sent,
+            "attach.reopened"
+        );
     }
 }
 

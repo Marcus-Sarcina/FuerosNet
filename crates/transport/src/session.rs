@@ -477,6 +477,40 @@ pub struct AttachAck {
     /// Field 7: the adoption that placed the attaching identity under
     /// this node, where this node is its patron and holds it.
     pub placement: Option<Vec<u8>>,
+    /// Field 8: **the packages whose storage is sealed and closed**, told
+    /// to this node's own operator and nobody else (`wire-format.md` §8.2)
+    /// [author, 2026-11-22], each answered with a [`REOPEN`] frame.
+    pub closed: Vec<[u8; 32]>,
+}
+
+/// Control frame 8: a node's operator reopening one sealed package
+/// (`wire-format.md` §8.2), its resource and its key.
+pub const REOPEN: u64 = 8;
+
+/// **A reopening's body**: the resource and the 64-byte key, on the
+/// session whose handshake already authenticated the operator to this
+/// node and pinned this node's key to them.
+pub fn reopen_body(resource: &[u8; 32], key: &[u8; 64]) -> zeroize::Zeroizing<Vec<u8>> {
+    let mut out = zeroize::Zeroizing::new(Vec::with_capacity(104));
+    emit_map_head(&mut out, 2);
+    emit_uint(&mut out, 1);
+    emit_bstr(&mut out, resource);
+    emit_uint(&mut out, 2);
+    emit_bstr(&mut out, key);
+    out
+}
+
+/// A reopening's resource and key, where the body is one.
+pub fn reopen_of(b: &[u8], it: &Item) -> Option<([u8; 32], zeroize::Zeroizing<[u8; 64]>)> {
+    let Item::Map(m) = it else { return None };
+    let bytes = |k| match map_get(m, k) {
+        Some(Item::Bytes(r)) => Some(&b[r.clone()]),
+        _ => None,
+    };
+    let resource: [u8; 32] = bytes(1)?.try_into().ok()?;
+    let mut key = zeroize::Zeroizing::new([0u8; 64]);
+    key.copy_from_slice(bytes(2).filter(|k| k.len() == 64)?);
+    Some((resource, key))
 }
 
 impl AttachAck {
@@ -487,7 +521,8 @@ impl AttachAck {
             &mut out,
             4 + !self.siblings.is_empty() as usize
                 + self.delegation.is_some() as usize
-                + self.placement.is_some() as usize,
+                + self.placement.is_some() as usize
+                + !self.closed.is_empty() as usize,
         );
         emit_uint(&mut out, 1);
         emit_uint(&mut out, self.mode);
@@ -505,6 +540,13 @@ impl AttachAck {
         if let Some(p) = &self.placement {
             emit_uint(&mut out, 7);
             out.extend_from_slice(p);
+        }
+        if !self.closed.is_empty() {
+            emit_uint(&mut out, 8);
+            emit_array_head(&mut out, self.closed.len());
+            for r in &self.closed {
+                emit_bstr(&mut out, r);
+            }
         }
         out
     }
@@ -526,6 +568,17 @@ impl AttachAck {
             capabilities: decode_capabilities(b, map_get(m, 5)?),
             delegation: field_bytes(b, at, 6),
             placement: field_bytes(b, at, 7),
+            closed: match map_get(m, 8) {
+                None => Vec::new(),
+                Some(Item::Array(a)) => a
+                    .iter()
+                    .map(|r| match r {
+                        Item::Bytes(r) => b[r.clone()].try_into().ok(),
+                        _ => None,
+                    })
+                    .collect::<Option<Vec<[u8; 32]>>>()?,
+                Some(_) => return None,
+            },
         })
     }
 }
@@ -1056,6 +1109,12 @@ pub type Predicate = Arc<dyn Fn(&[u8; 32]) -> bool + Send + Sync>;
 /// The bytes a node answers an attaching identity with, where it has any:
 /// the adoption that placed it here (`wire-format.md` §8.2 field 7).
 pub type PlacementHook = Arc<dyn Fn(&[u8; 32]) -> Option<Vec<u8>> + Send + Sync>;
+/// [`NodeConfig::sealed`]: the closed sealed packages to tell an attaching
+/// identity, none for any but this node's operator.
+pub type SealedHook = Arc<dyn Fn(&[u8; 32]) -> Vec<[u8; 32]> + Send + Sync>;
+/// [`NodeConfig::on_reopen`]: an attached identity's reopening of one
+/// resource with its key, which the hook refuses for any but the operator.
+pub type ReopenHook = Arc<dyn Fn([u8; 32], [u8; 32], zeroize::Zeroizing<[u8; 64]>) + Send + Sync>;
 
 /// Where a client's reachability goes when the detector settles it.
 pub type ReplicateHook = Arc<dyn Fn([u8; 32], Reachability) + Send + Sync>;
@@ -1161,6 +1220,14 @@ pub struct NodeConfig {
     /// identity signed itself, so the device believes it on its own key.
     /// Absent, or None for a keyhash, the field is left out.
     pub placement: Option<PlacementHook>,
+    /// **The sealed packages that are closed** (`wire-format.md` §8.2
+    /// field 8) [author, 2026-11-22], asked at each attach and told only
+    /// to this node's own operator, whose client answers each with the
+    /// package's key on this session.
+    pub sealed: Option<SealedHook>,
+    /// **A reopening from an attached identity** (control frame 8): the
+    /// hook decides whether it is the operator's and what it opens.
+    pub on_reopen: Option<ReopenHook>,
     /// What this node will not send outward, where it has a rule.
     pub filter: Option<OutboundFilter>,
     /// The mailbox (design §14.1.6).
@@ -1242,6 +1309,8 @@ impl NodeConfig {
             policy: Arc::new(|_| true),
             in_subtree: Arc::new(|_| true),
             placement: None,
+            sealed: None,
+            on_reopen: None,
             filter: None,
             serves: Arc::new(|_| true),
             accepts_direct: Arc::new(|_| true),
@@ -1908,6 +1977,18 @@ impl Node {
             capabilities: caps,
             delegation: self.cfg.bind.own_delegation(),
             placement: self.cfg.placement.as_ref().and_then(|p| p(&claimed)),
+            closed: {
+                let mut c = self
+                    .cfg
+                    .sealed
+                    .as_ref()
+                    .map(|s| s(&claimed))
+                    .unwrap_or_default();
+                c.sort_unstable();
+                c.dedup();
+                c.truncate(rhtn_codec::schema::MAX_CLOSED);
+                c
+            },
         };
         sender
             .frame(FRAME_ATTACH_ACK, &ack.encode())
@@ -1962,6 +2043,7 @@ impl Node {
             }
         });
         let on_control = self.cfg.on_control.clone();
+        let on_reopen = self.cfg.on_reopen.clone();
         let _ = control_loop(
             sender,
             recv,
@@ -1972,7 +2054,7 @@ impl Node {
                 on_change: Some(on_change),
                 outbound: orx,
             },
-            move |fam, b, body, _| match fam {
+            move |fam, b, body, item| match fam {
                 Family::Attach | Family::AttachAck => false,
                 Family::TopologyPush | Family::TopologyMemo => {
                     if let Some(h) = &on_control {
@@ -1981,6 +2063,17 @@ impl Node {
                             if fam == Family::TopologyPush { 5 } else { 6 },
                             b[body].to_vec(),
                         );
+                    }
+                    true
+                }
+                // **a reopening rides the session the operator attached
+                // on** (§8.2): the handshake authenticated them to this
+                // node, and nothing of the key is anywhere but here
+                Family::Reopen => {
+                    if let Some(h) = &on_reopen
+                        && let Some((resource, key)) = reopen_of(b, item)
+                    {
+                        h(claimed, resource, key);
                     }
                     true
                 }
@@ -3362,6 +3455,7 @@ mod bounds_and_validity {
             capabilities: BTreeMap::new(),
             delegation: None,
             placement: None,
+            closed: Vec::new(),
         };
         let me = [9u8; 32];
         let ok = ack(vec![sib(1), sib(2)]).encode();

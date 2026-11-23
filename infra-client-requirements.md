@@ -561,8 +561,8 @@ it. That node is you.
   obligation wherever it runs (`light-client-requirements.md` §9). **The
   one store sealed against an image is a package's whose operator chose it**
   (§9.4) [author, 2026-11-22], and it is because its key is not on the disk
-  that it waits for its operator after the machine restarts, where you and
-  your other packages do not.
+  that it waits for its operator's next attach after the machine restarts,
+  where you and your other packages do not.
 - **Sign what you emit unattended under that same key, and push the credential
   so your horizon can check it** [author, 2026-09-21]. A subtree acknowledgement
   (`wire-format.md` §7.5) and a currency attestation (`wire-format.md` §7.1)
@@ -1153,10 +1153,12 @@ judgment about access and that judgment is what the manifest states.
 
 **Your operator may seal a package's storage when they install it**
 [author, 2026-11-22], so that an image of the machine, a snapshot or a
-backup holds that package's data as ciphertext. The cost is the package's
-alone: **after the machine restarts, or comes back from an image or a
-backup, that package is unavailable until a device of its operator's
-reaches you**, and you and every other package you host serve as before.
+backup holds that package's data as ciphertext [author, 2026-11-22: *"to
+prevent the replay of resource data from an image not served at the
+designated endpoint"*]. The cost is the package's alone: **after the machine
+restarts, or comes back from an image or a backup, that package is
+unavailable until its operator's client next attaches to you**, and you and
+every other package you host serve as before.
 
 - **What is sealed is everything you keep for that package alone**: its
   block, its log, its jobs and the envelopes you hold for it (§9.3,
@@ -1169,9 +1171,13 @@ reaches you**, and you and every other package you host serve as before.
   contradiction; and what a package on a socket of its own keeps inside its
   own container is its own and not storage you keep.
 - **The key is your operator's, and it is never on the disk.** Their client
-  derives it for that one package and hands it over with the act; you give
-  it to your host's kernel for that directory, which an ordinary user may
-  do on a filesystem set up to allow it, and keep it nowhere else. The
+  derives it for that one package and gives it you **on the session it
+  attached on**, never on your surface, whose requests cross the network in
+  the clear (§8.2): that handshake pinned your key under their delegation at
+  the address their records name, so an image served anywhere else is
+  never given one (`wire-format.md` §8.2). You give it to your host's
+  kernel for that directory, which an ordinary user may do on a filesystem
+  set up to allow it, and keep it nowhere else. The
   kernel holds it for as long as the machine runs, so **your own restart
   leaves it open, and the machine's closes it**, which is the line between
   the two that an image draws.
@@ -1180,17 +1186,25 @@ reaches you**, and you and every other package you host serve as before.
   for it, which its sender keeps as it keeps any its far side has not
   taken; run none of its jobs; start nothing of it. Show it on your surface
   as sealed and waiting for its operator.
-- **Reopening is an act on your surface bringing that package's key and
-  nothing else**: your host's kernel refuses a key that is not that
-  directory's, so a wrong key changes nothing, and a right one has you serve
-  the package as you did before the machine restarted. Your operator's
-  client makes it unasked whenever it reaches you
-  (`light-client-requirements.md` §10), so the act is not a control on your
-  page.
+- **Your operator's client reopens it whenever it attaches to you**
+  [author, 2026-11-22: *"every ordinary connection to the node"*], which is
+  every new network connection it makes (`light-client-requirements.md`
+  §10). Tell them, and nobody else, which sealed packages are closed, in
+  your acknowledgement (`wire-format.md` §8.2 field 8), and take each key
+  they answer with (control frame 8) for a package installed sealed and for
+  nothing else. **The first key a package is given seals its storage**,
+  and every later one reopens it: your host's kernel refuses a key that is
+  not that directory's, so a wrong key changes nothing, and a right one has
+  you re-read your hosting and serve the package as you did before. The
+  frame has no answer, so a key you refuse is yours to say in your own
+  log, and the package stays closed for the next attach to try.
 - **The choice is made when the storage is provisioned and lasts as long as
-  it does.** A removal and an install of the same package — an upgrade —
-  keeps it sealed under the same key; storage destroyed by your operator's
-  act and provisioned again may be chosen either way.
+  it does.** The install act names it and carries no key: until the
+  operator's client attaches and gives one, the package is closed and
+  nothing of it is provisioned. A removal and an install of the same
+  package — an upgrade — keeps it sealed under the same key; storage
+  destroyed by your operator's act and provisioned again may be chosen
+  either way, and storage provisioned unsealed is never sealed over.
 - **A host whose filesystem cannot seal a directory installs no sealed
   package**, and says why at installation: that is ordinary capacity (§9),
   and an install that quietly went ahead unsealed would be the worse answer.
@@ -1199,8 +1213,8 @@ reaches you**, and you and every other package you host serve as before.
 - **Moving to another machine carries a sealed package open**, over the
   stream pinned to the receiving machine (below), so a closed one is
   reopened before it can go. On the receiving machine it is closed until
-  your operator's client reaches you there, which it does as the move
-  completes, and that reopening seals it again. What landed on that disk
+  your operator's client attaches to you there, which it does as the move
+  completes, and that key seals it again. What landed on that disk
   before is not erased by the seal, which is the price of a move against
   one of a fresh launch.
 

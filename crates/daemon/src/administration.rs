@@ -284,6 +284,11 @@ pub struct Surface {
     /// waiting on it, so the act triggers the shutdown that exists rather
     /// than inventing one.
     pub stopping: Arc<tokio::sync::Notify>,
+    /// **Told when a sealed package was reopened on its operator's
+    /// session** (`infra-client-requirements.md` §9.4), so the hosting
+    /// file is re-read and the package served as before the machine
+    /// restarted.
+    pub reopened: Arc<tokio::sync::Notify>,
 }
 
 /// **The node once it is up, and the one fact about it the node itself
@@ -362,7 +367,17 @@ impl Surface {
              to /node/endpoint-record and /node/anchor-entry"
         );
         loop {
-            let Ok((stream, from)) = listener.accept().await else {
+            let accepted = tokio::select! {
+                a = listener.accept() => a,
+                () = self.reopened.notified() => {
+                    let (code, said) = self.reload();
+                    if code != 200 {
+                        crate::say!("rhtnd: a sealed package reopened and the node did not take it: {said}");
+                    }
+                    continue;
+                }
+            };
+            let Ok((stream, from)) = accepted else {
                 continue;
             };
             // a caller that stalls holds nothing: the exchange is bounded
@@ -819,8 +834,6 @@ impl Surface {
             "upgrade" => self.node_upgrade(body),
             "runner-refresh" => self.runner_refresh(body),
             "move" => self.node_move(body),
-            "sealed" => self.package_sealed(),
-            "reopen" => self.package_reopen(body),
             other => (
                 404,
                 format!(
@@ -830,79 +843,6 @@ impl Surface {
                 ),
             ),
         }
-    }
-
-    /// **Which packages' storage was sealed at installation, and which are
-    /// open** (`infra-client-requirements.md` §9.4): one line each, the
-    /// resource and `open` or `closed`, which is what a client reaching
-    /// this node reads to reopen what the machine's restart closed.
-    fn package_sealed(&self) -> (u16, String) {
-        let Some(root) = self.state.as_deref() else {
-            return (200, String::new());
-        };
-        let Some((hosting, _)) = self.hosting.clone() else {
-            return (200, String::new());
-        };
-        let was = match crate::packages::read(&hosting) {
-            Ok(w) => w,
-            Err(why) => return (500, format!("{why}\n")),
-        };
-        let mut out = String::new();
-        for p in was.iter().filter(|p| p.sealed) {
-            let state = if crate::sealing::is_open(root, &p.resource) {
-                "open"
-            } else {
-                "closed"
-            };
-            out.push_str(&format!("{} {state}\n", hex(&p.resource)));
-        }
-        (200, out)
-    }
-
-    /// **Reopen a sealed package with the key its operator's client
-    /// brought** (`infra-client-requirements.md` §9.4) [author,
-    /// 2026-11-22]: given to the host's kernel and taken back where it is
-    /// not that directory's, so a wrong key changes nothing; then the
-    /// hosting file is re-read, so the package serves as it did before the
-    /// machine restarted.
-    fn package_reopen(&self, body: &[u8]) -> (u16, String) {
-        if self.acting().is_err() {
-            return (409, "this node is not serving yet\n".into());
-        }
-        let Some(root) = self.state.clone() else {
-            return (
-                409,
-                "this node keeps no state directory, so nothing here is sealed\n".into(),
-            );
-        };
-        let f = form(body);
-        let Some(resource) = key32(field(&f, "resource")) else {
-            return (400, "`resource` is 64 lower-case hex digits\n".into());
-        };
-        let Some(key) = crate::sealing::key_from_hex(field(&f, "seal")) else {
-            return (400, "`seal` is the package's key, 128 hex digits\n".into());
-        };
-        if crate::sealing::is_open(&root, &resource) {
-            return (200, format!("{} is open\n", hex(&resource)));
-        }
-        if let Err(why) = crate::sealing::open(&root, &resource, &key) {
-            return (400, format!("{why}\nnothing changed\n"));
-        }
-        tracing::info!(
-            target: "daemon",
-            step = "surface_act",
-            act = "reopen",
-            resource = %hex(&resource),
-            "daemon.lifecycle"
-        );
-        let (code, said) = self.reload();
-        if code != 200 {
-            return (
-                500,
-                format!("its key is in the kernel and the node did not take it: {said}"),
-            );
-        }
-        (200, format!("{} is open\n{said}", hex(&resource)))
     }
 
     /// **The host's shell, where this instance's operator gave it one.**
@@ -988,35 +928,18 @@ impl Surface {
             Ok(w) => w,
             Err(why) => return (400, format!("{why}\n")),
         };
-        // **sealed against an image where the act brings the package's
-        // key** (`infra-client-requirements.md` §9.4) [author,
-        // 2026-11-22]: chosen when its storage is provisioned, and kept by
-        // an install of the same resource that brings none
-        let seal = match field(&f, "seal") {
-            // ticked and not brought: an install that went ahead unsealed
-            // would be the worse answer
-            "" if field(&f, "sealed") == "on" => {
-                return (
-                    400,
-                    "`sealed` is on and the act brings no `seal`: the package's key is \
-                     derived by your client\n"
-                        .into(),
-                );
-            }
-            "" => None,
-            s => match crate::sealing::key_from_hex(s) {
-                Some(k) => Some(k),
-                None => {
-                    return (400, "`seal` is the package's key, 128 hex digits\n".into());
-                }
-            },
-        };
+        // **sealed where the person ticked it** (`infra-client-requirements.md`
+        // §9.4) [author, 2026-11-22], and kept by an install of a resource
+        // sealed before. **Its key never comes this way**: this surface's
+        // requests cross the network in the clear, so the storage is sealed
+        // under the key the operator's client brings on its own session
+        // when it next attaches, and until then the package is closed
         let was_sealed = self
             .state
             .as_deref()
             .is_some_and(|root| crate::sealing::is_sealed(root, &want.resource));
-        want.sealed = seal.is_some() || was_sealed;
-        if seal.is_some() && self.state.is_none() {
+        want.sealed = field(&f, "sealed") == "on" || was_sealed;
+        if want.sealed && self.state.is_none() {
             return (
                 400,
                 "this node keeps no state directory (`state` in the configuration), so it can \
@@ -1073,21 +996,8 @@ impl Surface {
             Err(why) => return (502, format!("the image was not pulled: {why}\n")),
         };
 
-        // **the storage sealed before anything names it**: a key that
-        // does not seal or reopen it changes nothing
-        let mut sealed_here = false;
-        if let (Some(key), Some(root)) = (&seal, self.state.as_deref()) {
-            let done = if !was_sealed {
-                sealed_here = true;
-                crate::sealing::seal(root, &want.resource, key)
-            } else if crate::sealing::is_open(root, &want.resource) {
-                Ok(())
-            } else {
-                crate::sealing::open(root, &want.resource, key)
-            };
-            if let Err(why) = done {
-                return (400, format!("{why}\nnothing changed\n"));
-            }
+        if was.iter().any(|p| p.resource == want.resource && p.sealed) {
+            want.sealed = true;
         }
         let manifest_at = crate::packages::manifest_at(&hosting, &want.resource);
         let held_manifest = std::fs::read(&manifest_at).ok();
@@ -1111,10 +1021,6 @@ impl Surface {
             }
             let _ = crate::packages::write(&hosting, &was);
             let _ = self.reload();
-            // a directory this act sealed holds nothing yet but its mark
-            if sealed_here && let Some(root) = self.state.as_deref() {
-                let _ = std::fs::remove_dir_all(crate::sealing::dir(root, &want.resource));
-            }
         };
 
         if let Some(dir) = manifest_at.parent()

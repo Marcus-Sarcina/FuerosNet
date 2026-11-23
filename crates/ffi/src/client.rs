@@ -3219,37 +3219,6 @@ impl Participant {
         })
     }
 
-    /// **The key one package's storage is sealed under on a node this
-    /// identity operates** (`infra-client-requirements.md` §9.4,
-    /// `light-client-requirements.md` §10) [author, 2026-11-22]: 128 hex
-    /// digits, derived from the signing seed and the resource at every
-    /// call, so a device restored from the phrase reopens what another
-    /// sealed. Handed to the instance with the act and kept by nothing.
-    pub fn package_seal_key(&self, resource: String) -> Result<String, Refused> {
-        self.call("package_seal_key", || {
-            let r = resource.trim();
-            let res: [u8; 32] = (r.len() == 64)
-                .then(|| {
-                    (0..32)
-                        .map(|i| u8::from_str_radix(&r[i * 2..i * 2 + 2], 16).ok())
-                        .collect::<Option<Vec<u8>>>()
-                })
-                .flatten()
-                .and_then(|v| v.try_into().ok())
-                .ok_or_else(|| Refused::new("a resource is 64 hex digits"))?;
-            self.handle.with_blocking(move |c| {
-                c.signer()
-                    .map(|id| {
-                        id.package_seal_key(&res)
-                            .iter()
-                            .map(|b| format!("{b:02x}"))
-                            .collect()
-                    })
-                    .map_err(|_| Refused::new("this device holds no seed, so it derives no key"))
-            })
-        })
-    }
-
     /// **This client's own runner, signed by the operator's host key**
     /// (`infra-client-requirements.md` §9.4) [author, 2026-11-16]: what the
     /// runner-refresh act carries to a machine through its instance, which
