@@ -1224,6 +1224,11 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   more is held. Keep that number per node: it is the node's own counter and
   means nothing at another. A post arriving on the session carries its number
   too, and moves yours once you have caught up.
+- **Attached to a sibling's node in failover, expect less of the board and
+  say nothing of it** [author, 2026-11-24]: that node carries what reaches it
+  for you and sends your posts on as far as it can (`wire-format.md` §10.3),
+  with no promise of either. Post and ask as you would; what was missed is at
+  your own node when it returns, or has fallen out of its queue.
 
 ---
 

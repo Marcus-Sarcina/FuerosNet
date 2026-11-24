@@ -367,3 +367,38 @@ file); the node-actual memo dated when the node began to say so this run,
 there being no transaction to copy a time from; closing a node is encodable
 (occupant absent) and nothing sends it yet, there being no act of closing a
 node in the code.
+
+## Answered 2026-11-24 [author]
+
+- **The memo carries only that a node runs there.** *"The locator format was
+  designed in such a way that the anchor and the endpoint do not need to hold
+  the addresses of the intervening nodes. you walk down by relative position
+  reference."*
+- **A node closing is not sent, and need not be.** *"There are expected to be
+  false paths and blindspots."* The table is a working picture, not an exact
+  one; design section 15.2.2 now says so.
+- **Failover.** *"The sibling node should support such traffic as arrives for
+  the temporarily attached member (messages which would have reached it
+  anyway and posts it is able to forward) on a best-effort basis, with no
+  gaurantee of service or reliability for message board content."*
+  - *How I wrote it* (wire-format section 10.3, BRD-014): a sibling's member
+    standing j levels below its own node is delivered the copies arriving
+    from upstream whose down count is at least j, the two nodes standing
+    side by side; its own posts go upstream as (up - j, 1) with up lowered
+    to 2 first. Nothing inside the absent node's subtree is reached. A
+    subordinate node's member attached here is in this node's table and is
+    served by position.
+
+## Built 2026-11-24: who a copy is for, and the queue
+
+`crates/node/src/board.rs`, pure and wired to nothing yet: `plan` (a copy's
+band here, the count to send upstream, the downline nodes to send to) for the
+four sources (a member, a node beneath, the upstream, a sibling's member in
+failover), `Band` (kept with each post so catch-up is answered against where
+the asker stands when it asks), and `Queue` (numbered, storage-bounded in
+4 KiB blocks, oldest out first, one copy per hash, paged catch-up).
+
+**Next**: the three wire objects in the codec's schema (frame 10, request 17
+and its reply), carriage in the transport session, the node view holding the
+queue and the lists and acting on a plan, the queue on disk, then the client
+kernel's pool and both shells.

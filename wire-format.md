@@ -5422,8 +5422,9 @@ go below zero to say so.
 **A frame that does not fit the session it arrived on is discarded** (§8.0): a
 copy from below whose field 1 is 0 or whose field 2 is not 1, a copy from
 above whose field 1 is not 0, a count over 24, field 4 from anyone but the
-node serving the receiver, and any `BoardPost` from a party that is none of
-the four rows.
+node the receiver is attached to, and any `BoardPost` from a party that is
+none of the four rows, a member attached in failover being a member for this
+purpose.
 
 **What a node does with one**, where *serves* is design §12.6.1's (the node's
 own position, and every position beneath it with no node at or above it short
@@ -5456,6 +5457,25 @@ none between it and this one, which stands one, two or three levels down
 **In each case the node delivers the post once to every session of every
 member it serves whose position is in the band**, the session it arrived on
 excepted, and the writer's other devices included.
+
+**A member attached in failover is carried as far as what reaches this node
+allows** [author, 2026-11-24], with no promise of service or of completeness.
+Where the member's position is beneath this node, a subordinate node's member
+attached here while that node is away, it is in this node's table and is
+served by position as any member is. Where it is not, the member of a sibling
+node (§8.2), this node cannot work out its band and does two things it can:
+
+- **a copy from this node's upstream is delivered to that member** where the
+  member stands no more levels below its own node than field 2. The two nodes
+  stand side by side under one patron, so what this node is sent is what the
+  member's own would have been;
+- **a post the member hands in is sent on upstream** as `(field 1 - j, 1)`,
+  where it exceeds `j`, the levels the member stands below its own node,
+  field 1 first lowered to what every member may post, this node's table
+  showing nothing of that member's downline. This node's own operator is in
+  that band and is delivered it.
+
+What lies inside the member's own node's subtree is not reached from here.
 
 **Which downline nodes a count reaches is worked out when the downline
 changes, not per post** (design §14.4): a list for one level, for two and for
@@ -5500,8 +5520,9 @@ when it asks. Field 3 may exceed the last number in field 2, later posts
 having been for somebody else. **A number the node no longer holds, or never
 gave out, is answered as its absence is**, from the oldest post held: a queue
 that has moved on, or a node rebuilt, costs the asker a gap or a repeat and
-no error. **An asker this node does not serve is refused as §6.9's is**, the
-stream closing with no reply. The request changes nothing at the node and is
+no error. **An asker holding no session attached to this node is refused as §6.9's
+is**, the stream closing with no reply, and one attached in failover is
+answered by the rule above for it. The request changes nothing at the node and is
 in §9.2's read-only class.
 
 **No acknowledgement and no retry**, on §10.1.3's reasoning: a frame that does

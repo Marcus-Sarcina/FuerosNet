@@ -1617,5 +1617,10 @@ not who answers for it (design §11.5), and that asker may see. Nothing floods, 
   **What falls out is removed as §2 removes a message**, leaving nothing
   recoverable.
 - **Answer a member's asking for what it missed with the posts in its own
-  band and no others**, and refuse an asker you do not serve
+  band and no others**, and refuse an asker with no session attached to you
   (`wire-format.md` §10.3).
+- **Carry a sibling's member attached to you in failover as far as you can**
+  [author, 2026-11-24] (`wire-format.md` §10.3): what reaches you from above
+  that would have reached them at their own node, and their own posts sent on
+  upstream. You promise them nothing, and you do not hold a queue on their
+  node's behalf (§2).

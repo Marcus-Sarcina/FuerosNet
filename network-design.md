@@ -6839,7 +6839,11 @@ a node never learns that a post was read.
 
 **Delivery is best-effort**, as topology's is (`wire-format.md` §10.1.3): no
 acknowledgement and no retry, and a post a member missed is in its node's
-queue at the next asking or has fallen out of it.
+queue at the next asking or has fallen out of it. **A member attached to a
+sibling's node while their own is away is carried by it as far as it can**
+[author, 2026-11-24]: the posts that reach that node anyway and are theirs,
+and their own posts as far as that node is able to send them on, with no
+promise of service or of reliability for a board's content.
 
 **A post is not a transaction and enters no archive** [author, 2026-10-28]. A
 board persists what is not a record of anything, and the protocol's
@@ -7046,8 +7050,10 @@ naming the patron's own position in place of a slot, says the member there is
 served from a node of their own, and its withdrawal says the node has closed.
 The memos that detect a cycle are also what tell a subnet how its routable shape
 has changed, and one table serves both (§15.2.2). **It still carries no
-address**: where the node answers is its endpoint record's to say, which stays
-in the horizon (`wire-format.md` §7.6).
+address** [author, 2026-11-24]: where the node answers is its endpoint record's
+to say, which stays in the horizon (`wire-format.md` §7.6). The locator was
+designed so that neither an anchor nor an endpoint holds the addresses of the
+nodes between them, and a path is walked down by relative position (§12.6.1).
 
 **Every field is one the patron has authority over.** Nothing in a memo comes from a
 party that did not sign the transaction behind it, which is what lets a disavowal
@@ -7158,10 +7164,14 @@ of their own, the node that serves them sending the memos their changes are
 owed. So the table shows a node actual for every node and an empty entry for
 every light member with nobody beneath them.
 
-**Where it is wrong it reads shallow.** Memos are best-effort, and a subtree
+**Where it is wrong it mostly reads shallow.** Memos are best-effort, and a subtree
 carried in whole by a re-adoption sends none until it next changes [author,
 2026-11-18]. What reads it is priced for that: a board's cap comes out lower
 than was earned (§14.4), and a post still reaches everyone the table shows.
+**False paths and blind spots are expected** [author, 2026-11-24]: a node that
+closed without saying so stays marked until its position empties, and a post
+sent toward it reaches nobody there. The table is a working picture of a
+downline and is not kept exact.
 **And it is built from hints**: a memo is unsigned (`wire-format.md` §10.2.3),
 so a node below can make its own branch look deeper than it is, which buys
 that branch a longer reach up a board and nothing else. Nothing is cut,

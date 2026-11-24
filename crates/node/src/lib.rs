@@ -18,6 +18,9 @@
 
 #![warn(missing_docs)]
 
+/// The subnet's board at a node: who a copy of a post is for, where it
+/// goes on, and the queue the node keeps (design §14.4).
+pub mod board;
 /// The catalog a node answers from, and the abuse reports it holds for
 /// an owner (`wire-format.md` §6; design §11.5, §11.6).
 pub mod catalog;
