@@ -679,3 +679,41 @@ fn a_number_is_kept_with_the_contact_and_is_not_handed_on_with_it() {
         );
     }
 }
+
+/// **A contact met before an adoption is placed by the adoption** [author,
+/// 2026-11-24]: the locator each handed the other at the meeting names no
+/// subnet the two share, and the card says the subnet and where they stand
+/// all the same, from the record of the adoption this client holds.
+#[test]
+fn a_contact_adopted_after_the_meeting_is_placed_in_the_subnet_by_the_adoption() {
+    let mut s = common::harness::setup(&["alice", "bob", "carol", "w1"]);
+    s.adopted("bob", "alice", "w1", 1);
+    // carol is met and not adopted
+    let _ = s.met_in_person("carol", "alice", "w1");
+    let subnet = s.client("alice").subnets()[0];
+    let row = |s: &mut common::harness::Setup, who: &str, whom: &str| {
+        s.client(who)
+            .contacts_held()
+            .into_iter()
+            .find(|c| c.keyhash == common::kh(whom))
+            .unwrap_or_else(|| panic!("{who} holds {whom}"))
+    };
+    // the patron reads its subordinate one level below, in its line
+    let bob = row(&mut s, "alice", "bob");
+    assert_eq!(
+        (bob.subnet, bob.offset, bob.in_line),
+        (Some(subnet), Some(-1), true)
+    );
+    // and the subordinate reads its patron one level above
+    let alice = row(&mut s, "bob", "alice");
+    assert_eq!(
+        (alice.subnet, alice.offset, alice.in_line),
+        (Some(subnet), Some(1), true)
+    );
+    // someone met and in no subnet of alice's is placed nowhere
+    let carol = row(&mut s, "alice", "carol");
+    assert_eq!(
+        (carol.subnet, carol.offset, carol.in_line),
+        (None, None, false)
+    );
+}

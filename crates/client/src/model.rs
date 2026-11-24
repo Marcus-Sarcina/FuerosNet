@@ -22,17 +22,27 @@ impl Client {
             .iter()
             .map(|(k, v)| {
                 // **the subnet both are in, and where they stand from here
-                // there** [author, 2026-11-23]: by the locator they handed
-                // and this client's own position in its subnet
-                let mine = v
-                    .subnet()
-                    .and_then(|s| self.position_in(&s).map(|l| (s, l)));
-                let (offset, in_line) = mine
-                    .as_ref()
-                    .and_then(|(_, l)| {
-                        let (anchor, theirs) = v.position()?;
-                        (anchor == l.anchor).then(|| standing(&nibbles(l), &theirs))
-                    })
+                // there** [author, 2026-11-23]. **By this client's own
+                // records first** [author, 2026-11-24], the locator they
+                // handed at a meeting saying nothing of an adoption made
+                // since; and where those say nothing, by that locator and
+                // this client's own position in the subnet it names
+                let handed = || {
+                    let s = v.subnet()?;
+                    let l = self.position_in(&s)?;
+                    let at = v.position().and_then(|(anchor, theirs)| {
+                        (anchor == l.anchor)
+                            .then(|| standing(&nibbles(&l.path, l.nibbles), &theirs))
+                    });
+                    Some((s, at))
+                };
+                let (subnet, at) = self
+                    .placed(k)
+                    .map(|(s, at)| (s, Some(at)))
+                    .or_else(handed)
+                    .unzip();
+                let (offset, in_line) = at
+                    .flatten()
                     .map_or((None, false), |(o, line)| (Some(o), line));
                 Contact {
                     keyhash: *k,
@@ -44,7 +54,7 @@ impl Client {
                     last_at: v.last_at,
                     image_format: v.image.as_ref().map(|(f, _)| *f),
                     image: v.image.as_ref().map(|(_, b)| b.clone()),
-                    subnet: mine.map(|(s, _)| s),
+                    subnet,
                     offset,
                     in_line,
                 }
@@ -52,6 +62,61 @@ impl Client {
             .collect();
         rows.sort_by_key(|r| std::cmp::Reverse(r.last_at));
         rows
+    }
+
+    /// **Where `who` stands from here in a subnet this client is in, by
+    /// this client's own records**: the adoptions propagated to it within
+    /// its horizon, then the lines in its own archive, which it holds
+    /// whether or not anything propagated them back: the patron it holds
+    /// its position from, and each party it adopted whose line nothing it
+    /// has been told has ended.
+    fn placed(&self, who: &crate::Keyhash) -> Option<(Txid, (i32, bool))> {
+        use rhtn_archive::tx::TYPE_ADOPTION;
+        let subnets = self.subnets();
+        let mine = |s: &Txid| {
+            self.position_in(s)
+                .map(|l| (l.anchor, nibbles(&l.path, l.nibbles)))
+        };
+        let seen = subnets.iter().find_map(|s| {
+            let (anchor, here) = mine(s)?;
+            let p = self.horizon.place_in(who, &anchor)?;
+            Some((*s, standing(&here, &nibbles(&p.path, p.nibbles))))
+        });
+        let patron = || {
+            subnets
+                .iter()
+                .find(|s| self.patron_in(s) == Some(*who))
+                .map(|s| (*s, (1, true)))
+        };
+        let adopted = || {
+            let me = self.keyhash();
+            let ended: std::collections::BTreeSet<Txid> = self
+                .horizon
+                .table
+                .bindings()
+                .iter()
+                .filter(|b| !b.open())
+                .map(|b| b.adoption)
+                .collect();
+            self.archive
+                .records()
+                .filter(|r| {
+                    r.tx_type == TYPE_ADOPTION
+                        && r.field_hash(2) == Some(me)
+                        && r.field_hash(1) == Some(*who)
+                        && !ended.contains(&r.txid)
+                })
+                .filter_map(|r| {
+                    let l = r.locator()?;
+                    // a root's first adoption names no subnet and is the
+                    // subnet (design §13.8)
+                    let s = l.subnet.unwrap_or(r.txid);
+                    let (anchor, here) = mine(&s)?;
+                    (anchor == l.anchor).then(|| (s, standing(&here, &nibbles(&l.path, l.nibbles))))
+                })
+                .last()
+        };
+        seen.or_else(patron).or_else(adopted)
     }
 
     /// Every subnet this client holds a position in, with what it is
@@ -413,12 +478,12 @@ impl Client {
     }
 }
 
-/// A locator's significant nibbles, one hop each.
-fn nibbles(l: &rhtn_archive::tx::Locator) -> Vec<u8> {
-    let n = usize::try_from(l.nibbles).unwrap_or(0);
+/// A packed path's significant nibbles, one hop each.
+fn nibbles(path: &[u8], nibbles: u64) -> Vec<u8> {
+    let n = usize::try_from(nibbles).unwrap_or(0);
     (0..n)
         .filter_map(|i| {
-            let b = *l.path.get(i / 2)?;
+            let b = *path.get(i / 2)?;
             Some(if i % 2 == 0 { b >> 4 } else { b & 0x0f })
         })
         .collect()
