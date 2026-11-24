@@ -553,7 +553,7 @@ pub fn refresh(snap: &Snapshot, place: &Place, body: &Body) -> String {
     format!(
         "(() => {{ const put = (id, h) => {{ const e = document.getElementById(id); \
          if (e) e.innerHTML = h; }}; put('rail', {}); put('foot', {}); put('main', {}); }})();\
-         if (document.getElementById('messages')) window.scrollTo(0, document.body.scrollHeight);",
+         newest();",
         js(&rail(snap, place)),
         js(&foot(snap)),
         js(&main(snap, place, body))

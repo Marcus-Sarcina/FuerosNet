@@ -536,9 +536,13 @@ apps (`ConversationsActivity`, `ConversationActivity`, `People.kt`;
   colour, or the picture their profile carries where one was received;
   their alias in bold; the mutual subnet in normal type, then their
   relative position, bold where they are in the direct line. The kernel
-  composes the last three (`Contact.subnet`, `offset`, `in_line`) from the
-  contact's locator and this client's position in that subnet, and only
-  where both are stated from one anchor.
+  composes the last three (`Contact.subnet`, `offset`, `in_line`) from
+  this client's own records first (2026-11-24: the line was missing for
+  anyone met before being adopted, the locator handed at the meeting
+  naming no shared subnet): an adoption held within the horizon, then the
+  lines in its own archive (its patron; each party it adopted whose line
+  nothing says has ended), and only then the contact's handed locator.
+  `Client::placed` in `crates/client/src/model.rs`.
 - **The orb's options**, by press and hold (phone) or double click
   (desktop): the person's colour, mute, block, mute notifications.
   - A colour not chosen is the palette entry at the key's first byte, so
@@ -550,6 +554,10 @@ apps (`ConversationsActivity`, `ConversationActivity`, `People.kt`;
   - **Confirmed**: someone a level across is shown as `0`, not bold.
   - **Confirmed**: what is chosen is per identity and per device; nothing
     carries it to the other device.
+- **Desktop, ruled 2026-11-24**: in a direct thread and a board thread
+  the bar with the way back is pinned to the top and the box to the foot,
+  and the sequence of messages is the only thing that scrolls
+  (`body:has(#messages)` in `participant.rs`).
 - **C2**: the box at the foot, the chat stacked up from it, both lifted
   over the keyboard. The user's bubbles are right-justified, grey and
   outlined in the colour of the identity they speak as. The other party's

@@ -387,8 +387,16 @@ const STYLE: &str = "body { background: var(--ground); color: var(--ink);\n\
        font-size: 11px; line-height: 1.5; text-align: center; vertical-align: super }\n\
      button.card sup { position: absolute; top: -.5em; right: -.5em; margin: 0 }\n\
      ul.rows small { color: var(--sub) }\n\
-     #messages { display: flex; flex-direction: column; justify-content: flex-end;\n\
-       min-height: calc(100vh - 16rem) }\n\
+     #messages { display: flex; flex-direction: column }\n\
+     #messages > :first-child { margin-top: auto }\n\
+     body:has(#messages) { height: 100vh; box-sizing: border-box; display: flex;\n\
+       flex-direction: column; overflow: hidden; padding-bottom: 1rem }\n\
+     body:has(#messages) > * { flex: none }\n\
+     body:has(#messages) > #main { flex: 1 1 auto; min-height: 0; display: flex;\n\
+       flex-direction: column }\n\
+     body:has(#messages) > #main > * { flex: none }\n\
+     body:has(#messages) > #main > #messages { flex: 1 1 auto; min-height: 0; overflow-y: auto;\n\
+       max-width: none; padding-right: max(0px, calc(100% - 46rem)) }\n\
      .said { align-self: flex-start; margin: .3rem 0; padding: .5rem .75rem; border-radius: 14px;\n\
        background: var(--sunken); max-width: 78%; width: fit-content; box-sizing: border-box }\n\
      .said p { margin: 0; white-space: pre-wrap }\n\
@@ -412,7 +420,7 @@ const STYLE: &str = "body { background: var(--ground); color: var(--ink);\n\
        font-weight: 700; font-size: 18px; cursor: pointer; user-select: none }\n\
      header.bar .who { width: 40px; height: 40px; margin-right: 12px; font-size: 16px }\n\
      .who img { width: 100%; height: 100%; object-fit: cover }\n\
-     #compose { position: sticky; bottom: 0; background: var(--ground); padding-top: .5rem }";
+     #compose { background: var(--ground); padding-top: .5rem }";
 
 const SCRIPT: &str = r#"const post = m => window.ipc.postMessage(JSON.stringify(m));
 const say = t => { document.getElementById('said').textContent = t; };
@@ -537,12 +545,34 @@ document.addEventListener('keydown', e => {
   if (e.target.id === 'text' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
   if (e.target.id === 'board-reply' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); boardReply(); }
 });
-if (document.getElementById('messages')) window.scrollTo(0, document.body.scrollHeight);
+// a conversation is the one thing on its page that scrolls, and opens at its newest
+const newest = () => { const m = document.getElementById('messages'); if (m) m.scrollTop = m.scrollHeight; };
+newest();
 if (document.getElementById('text')) document.getElementById('text').focus();"#;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **A conversation is the one thing on its page that scrolls**
+    /// [author, 2026-11-24]: the bar with the way back stays at the top
+    /// and the box at the foot, in a direct thread and a board's alike,
+    /// both of which draw their bubbles in `#messages`.
+    #[test]
+    fn a_conversation_alone_scrolls_between_a_pinned_bar_and_a_pinned_box() {
+        let page = shell("t", "<main id=\"main\"><div id=\"messages\"></div></main>");
+        // the window does not scroll, and the conversation does
+        assert!(page.contains("body:has(#messages) { height: 100vh;"));
+        assert!(page.contains("overflow: hidden"));
+        assert!(
+            page.contains("#main > #messages { flex: 1 1 auto; min-height: 0; overflow-y: auto")
+        );
+        // the box is laid out beneath it and not floated over it
+        assert!(!page.contains("position: sticky"));
+        // and it opens at its newest by its own scroll, not the window's
+        assert!(page.contains("m.scrollTop = m.scrollHeight"));
+        assert!(!page.contains("window.scrollTo"));
+    }
 
     #[test]
     fn what_a_desktop_keeps_reads_back_and_nothing_kept_is_none() {

@@ -91,6 +91,39 @@ fn main() {
         ],
         true,
     );
+    // long enough to run off the window: the bar and the box stay put and
+    // the conversation alone scrolls
+    let long = Body::Thread(
+        (0..40u64)
+            .map(|i| {
+                said(
+                    i * 60,
+                    i % 3 == 0,
+                    &format!("Message {} of a long conversation.", i + 1),
+                    Delivery::Sent,
+                )
+            })
+            .collect(),
+        true,
+    );
+    let board = Body::Board {
+        title: Some("A long thread".into()),
+        posts: (0..40u8)
+            .map(|i| rhtn_model::BoardPost {
+                hash: [i; 32],
+                thread: [0; 32],
+                writer: if i % 3 == 0 { [0x70; 32] } else { [0x33; 32] },
+                alias: Some(if i % 3 == 0 { "Marcus" } else { "Ada" }.into()),
+                mine: i % 3 == 0,
+                text: format!("Post {} of a long thread.", i + 1),
+                written_at: 1_000 + u64::from(i) * 600,
+                up: 2,
+                down: 2,
+                read: true,
+            })
+            .collect(),
+        now: 30_000,
+    };
     let catalog = Body::Launchers(
         vec![
             ResourceRow {
@@ -131,6 +164,18 @@ fn main() {
         (
             "thread.html",
             screens::page(&snap, &Place::Thread("33".repeat(32)), &thread),
+        ),
+        (
+            "thread-long.html",
+            screens::page(&snap, &Place::Thread("33".repeat(32)), &long),
+        ),
+        (
+            "board.html",
+            screens::page(
+                &snap,
+                &Place::Board("2e".repeat(32), "00".repeat(32)),
+                &board,
+            ),
         ),
         (
             "subnet.html",
