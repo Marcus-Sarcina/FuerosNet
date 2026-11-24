@@ -486,6 +486,19 @@ document.addEventListener('click', e => {
     return say('connecting to ' + address + '…');
   }
   if (b.id === 'send') send();
+  if (b.id === 'board-send') boardReply();
+  // **a thread begins with a title, the words, and how far it travels**
+  if (b.id === 'board-post') {
+    const title = document.getElementById('board-title');
+    const text = document.getElementById('board-text');
+    if (!title.value.trim() || !text.value.trim()) return say('a title and something to say, both');
+    post({
+      act: 'board-post', subnet: b.dataset.subnet, title: title.value, text: text.value,
+      up: Number(document.getElementById('board-up').value),
+      down: Number(document.getElementById('board-down').value),
+    });
+    return say('posting…');
+  }
   if (b.id === 'import') {
     const f = document.getElementById('backup').files[0];
     if (!f) return say('choose the backup file first');
@@ -502,6 +515,12 @@ function send() {
   post({ act: 'send', to: t.dataset.peer, text: t.value });
   t.value = '';
 }
+function boardReply() {
+  const t = document.getElementById('board-reply');
+  if (!t.value.trim()) return;
+  post({ act: 'board-reply', subnet: t.dataset.subnet, thread: t.dataset.thread, text: t.value });
+  t.value = '';
+}
 // **a double click on the nameplate opens which identity acts** [author,
 // 2026-11-23], where the phone presses and holds
 // and on a person's orb opens their options
@@ -516,6 +535,7 @@ document.addEventListener('dblclick', e => {
 // Enter sends, as a chat's box does; Shift and Enter is a new line
 document.addEventListener('keydown', e => {
   if (e.target.id === 'text' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  if (e.target.id === 'board-reply' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); boardReply(); }
 });
 if (document.getElementById('messages')) window.scrollTo(0, document.body.scrollHeight);
 if (document.getElementById('text')) document.getElementById('text').focus();"#;

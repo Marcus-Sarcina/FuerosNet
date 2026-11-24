@@ -212,10 +212,54 @@ object Chrome {
 
     /**
      * **A subnet's orb count, rolled up** [author, 2026-11-23]: a move of its
-     * node to answer, and what waits for the person at each of its resources.
+     * node to answer, what waits for the person at each of its resources,
+     * and what is unread on its board, which is this client's own count.
      */
-    fun unseen(moved: Boolean, launchers: List<Launcher>): Int =
-        (if (moved) 1 else 0) + launchers.sumOf { it.unseen }
+    fun unseen(moved: Boolean, launchers: List<Launcher>, board: Int = 0): Int =
+        (if (moved) 1 else 0) + launchers.sumOf { it.unseen } + board
+
+    /** What names one identity's board in one subnet. */
+    fun boardKey(by: String, subnet: String): String = "$by:$subnet"
+
+    /** How many posts of a board the person has not been shown. */
+    fun boardUnread(threads: List<uniffi.rhtn_model.BoardThread>): Int =
+        threads.sumOf { it.unread.toInt() }
+
+    /** **A reach as a post says it** [author, 2026-10-27]: `+2/-2`. */
+    fun reach(up: Int, down: Int): String = "+$up/-$down"
+
+    /** The reach a new thread is offered before the writer changes it [author, 2026-10-27]. */
+    const val DEFAULT_REACH = 2
+
+    /** The furthest a reach goes either way: the path bound (`wire-format.md` §10.3). */
+    const val MAX_REACH = 24
+
+    /** A reach moved a level, kept within what a post may carry. */
+    fun step(level: Int, by: Int): Int = (level + by).coerceIn(0, MAX_REACH)
+
+    /** How long ago `then` was, in seconds, said shortly. */
+    fun ago(now: Long, then: Long): String {
+        val s = (now - then).coerceAtLeast(0)
+        return when {
+            s < 90 -> "just now"
+            s < 5400 -> "${(s + 59) / 60} min ago"
+            s < 129_600 -> "${s / 3600} h ago"
+            else -> "${s / 86_400} d ago"
+        }
+    }
+
+    /** A thread's row on its subnet's page: its title, and what stands under it. */
+    fun threadRow(t: uniffi.rhtn_model.BoardThread, beganBy: String?, now: Long): Pair<String, String> {
+        val title = (t.title ?: "A thread begun out of your reach") +
+            if (t.unread > 0u) " (${t.unread} unread)" else ""
+        val posts = if (t.posts == 1u) "1 post" else "${t.posts} posts"
+        val by = beganBy?.let { "began by $it, " } ?: ""
+        return title to "$by$posts, ${ago(now, t.latest.toLong())}"
+    }
+
+    /** Who a post is by: the name held for them, else the one the post carried, else their key. */
+    fun writer(held: String?, carried: String?, key: String): String =
+        held ?: carried ?: "${key.take(8)}…"
 
     fun badge(n: Int): String? = when {
         n <= 0 -> null

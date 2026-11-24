@@ -91,22 +91,25 @@ fn main() {
         ],
         true,
     );
-    let catalog = Body::Launchers(vec![
-        ResourceRow {
-            instance: "Shared drive".into(),
-            node: "70".repeat(32),
-            resource: "71".repeat(32),
-            unseen: 0,
-            icon: None,
-        },
-        ResourceRow {
-            instance: "Notices".into(),
-            node: "70".repeat(32),
-            resource: "72".repeat(32),
-            unseen: 2,
-            icon: Some((1, include_bytes!("../../testapp/res/icon.png").to_vec())),
-        },
-    ]);
+    let catalog = Body::Launchers(
+        vec![
+            ResourceRow {
+                instance: "Shared drive".into(),
+                node: "70".repeat(32),
+                resource: "71".repeat(32),
+                unseen: 0,
+                icon: None,
+            },
+            ResourceRow {
+                instance: "Notices".into(),
+                node: "70".repeat(32),
+                resource: "72".repeat(32),
+                unseen: 2,
+                icon: Some((1, include_bytes!("../../testapp/res/icon.png").to_vec())),
+            },
+        ],
+        rhtn_desktop::screens::BoardList::default(),
+    );
     let pages = [
         (
             "pair.html",

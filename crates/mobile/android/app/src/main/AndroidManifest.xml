@@ -125,6 +125,7 @@
             android:screenOrientation="portrait"
             tools:ignore="LockedOrientationActivity,DiscouragedApi" />
         <activity android:name=".ConversationActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".BoardActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
         <!-- F's catalog, reached from inside a subnet, and the device's own
              attach, reached from Options. An Activity a screen names and a
              manifest does not declare throws where it is opened, and the

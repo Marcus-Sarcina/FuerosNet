@@ -22,7 +22,8 @@ use rhtn_desktop::custody::Keyring;
 use rhtn_desktop::participant::{self, Device, Held, PairedIdentity, hex};
 use rhtn_desktop::platform::{self, Desk};
 use rhtn_desktop::screens::{
-    self, Body, Crown, History, Holder, LineRow, Person, Place, ResourceRow, Snapshot, SubnetRow,
+    self, BoardList, Body, Crown, History, Holder, LineRow, Person, Place, ResourceRow, Snapshot,
+    SubnetRow,
 };
 use rhtn_desktop::threads::{self, Delivery, Record, Sealer, Threads};
 use rhtn_desktop::{
@@ -457,6 +458,50 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let (back, up) = (worker.clone(), up.clone());
                     std::thread::spawn(move || send(&up, &back, to, text));
                 }
+                // **a thread begun on a subnet's board**, as the identity
+                // that holds the subnet: posted, the way back is the
+                // subnet's page, where it now heads the list
+                Ok(Act::BoardPost {
+                    subnet,
+                    up: levels_up,
+                    down,
+                    title,
+                    text,
+                }) => {
+                    let (back, up) = (worker.clone(), up.clone());
+                    std::thread::spawn(move || {
+                        let Some(i) = up.for_subnet(&hex(&subnet)) else {
+                            return;
+                        };
+                        match i.p.board_post(subnet, levels_up, down, title, text) {
+                            Ok(()) => {
+                                up.place.lock().unwrap().back();
+                                draw(&up, &back, true);
+                            }
+                            Err(why) => {
+                                let _ = back
+                                    .send_event(Said::ToPage(false, format!("not posted: {why}")));
+                            }
+                        }
+                    });
+                }
+                Ok(Act::BoardReply {
+                    subnet,
+                    thread,
+                    text,
+                }) => {
+                    let (back, up) = (worker.clone(), up.clone());
+                    std::thread::spawn(move || {
+                        let Some(i) = up.for_subnet(&hex(&subnet)) else {
+                            return;
+                        };
+                        if let Err(why) = i.p.board_reply(subnet, thread, text) {
+                            let _ =
+                                back.send_event(Said::ToPage(false, format!("not posted: {why}")));
+                        }
+                        draw(&up, &back, false);
+                    });
+                }
                 Ok(Act::Attach { node, address }) => {
                     let p = up.running.lock().unwrap().clone();
                     let Some(p) = p else {
@@ -872,7 +917,38 @@ fn draw(up: &Up, back: &EventLoopProxy<Said>, whole: bool) {
                         icon: r.icon_format.zip(r.icon),
                     })
                     .collect(),
+                // **and its board**, from this key's own pool
+                BoardList {
+                    threads: participant::unhex(id)
+                        .zip(up.for_subnet(id))
+                        .map(|(s, i)| i.p.board_threads(s))
+                        .unwrap_or_default(),
+                    now: now_s(),
+                },
             )
+        }
+        // **one thread of the board**, as the identity holding the subnet
+        // reads it; on screen, what it holds of it is read
+        Place::Board(subnet, thread) => {
+            let held = participant::unhex(subnet)
+                .zip(participant::unhex(thread))
+                .zip(up.for_subnet(subnet));
+            let (title, posts) = held
+                .map(|((s, t), i)| {
+                    let _ = i.p.board_read(s.clone(), t.clone());
+                    let title =
+                        i.p.board_threads(s.clone())
+                            .into_iter()
+                            .find(|x| x.id[..] == t[..])
+                            .and_then(|x| x.title);
+                    (title, i.p.board_thread(s, t))
+                })
+                .unwrap_or_default();
+            Body::Board {
+                title,
+                posts,
+                now: now_s(),
+            }
         }
         // **every line every identity holds** [author, 2026-11-07], each
         // patron by the alias held, each left by the identity holding it
@@ -993,6 +1069,9 @@ fn snapshot(idents: &[Ident], focus: &Participant, device: Device, dir: &Path) -
                 .filter(|r| r.node[..] == node[..])
                 .map(|r| r.waiting)
                 .sum();
+            // **and what is unread on its board** [author, 2026-11-23]:
+            // this key's own count, rolled in beside them
+            let asked = asked.saturating_add(p.board_unread(s.id.to_vec()));
             SubnetRow {
                 id: hex(&s.id),
                 name: s.alias.or(s.own_alias),
@@ -1140,6 +1219,13 @@ fn pump(up: &Up, back: &EventLoopProxy<Said>, i: &Ident) {
             _ => {}
         }
     }
+}
+
+/// Now, in seconds: what a post's age is said against.
+fn now_s() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
 }
 
 /// **Open a backup and install its archive** (`light-client-requirements.md`

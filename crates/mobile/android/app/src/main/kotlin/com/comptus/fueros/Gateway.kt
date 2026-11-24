@@ -1116,6 +1116,55 @@ object Gateway {
     fun resourcesHeld(): List<Identities.Owned<Resource>> =
         acrossHeld("resources") { it.resources() }
 
+    /**
+     * **Every identity's boards**, a subnet each, by [Chrome.boardKey]
+     * (`light-client-requirements.md` §4.5): the threads its own pool
+     * holds, the one with the newest post first.
+     */
+    fun boardsHeld(): Map<String, List<uniffi.rhtn_model.BoardThread>> {
+        val out = HashMap<String, List<uniffi.rhtn_model.BoardThread>>()
+        for (o in subnetsHeld()) {
+            val p = loaded[o.by] ?: continue
+            out[Chrome.boardKey(o.by, o.row.id.hex())] =
+                call("boardThreads", { emptyList() }) { p.boardThreads(o.row.id) }
+        }
+        return out
+    }
+
+    /** One thread's posts, oldest first, as the identity holding the subnet reads them. */
+    fun boardThread(by: String, subnet: String, thread: String): List<uniffi.rhtn_model.BoardPost> {
+        val p = loaded[by] ?: return emptyList()
+        return call("boardThread", { emptyList() }) { p.boardThread(unhex(subnet), unhex(thread)) }
+    }
+
+    /** The person has been shown a thread. */
+    fun boardRead(by: String, subnet: String, thread: String) {
+        val p = loaded[by] ?: return
+        call("boardRead", { }) { p.boardRead(unhex(subnet), unhex(thread)) }
+    }
+
+    /**
+     * **Begin a thread on a subnet's board**, as the identity holding the
+     * subnet: a title, the words and how far it travels. The refusal's
+     * words, or null where the node took it.
+     */
+    fun boardPost(by: String, subnet: String, up: Int, down: Int, title: String, text: String): String? {
+        val p = loaded[by] ?: return "that identity is not open on this device"
+        var why: String? = null
+        call("boardPost", { why = it.reason }) {
+            p.boardPost(unhex(subnet), up.toUInt(), down.toUInt(), title, text)
+        }
+        return why
+    }
+
+    /** **Continue a thread**: the words alone, a reply carrying its thread's reach. */
+    fun boardReply(by: String, subnet: String, thread: String, text: String): String? {
+        val p = loaded[by] ?: return "that identity is not open on this device"
+        var why: String? = null
+        call("boardReply", { why = it.reason }) { p.boardReply(unhex(subnet), unhex(thread), text) }
+        return why
+    }
+
     /** Every identity's meetings, each saying whose it is. */
     fun meetingsHeld(): List<Identities.Owned<Meeting>> =
         acrossHeld("meetings") { it.meetings() }

@@ -270,4 +270,56 @@ class ChromeTest {
             }
         }
     }
+
+    private fun thread(title: String?, posts: Int, unread: Int, latest: Long) =
+        uniffi.rhtn_model.BoardThread(
+            id = ByteArray(32) { 0x44 },
+            title = title,
+            beganBy = null,
+            posts = posts.toUInt(),
+            unread = unread.toUInt(),
+            latest = latest.toULong(),
+        )
+
+    @Test
+    fun a_subnets_count_rolls_in_what_is_unread_on_its_board() {
+        val threads = listOf(thread("One", 3, 2, 100), thread("Two", 1, 0, 50), thread(null, 4, 4, 10))
+        assertEquals(6, Chrome.boardUnread(threads))
+        assertEquals(0, Chrome.boardUnread(emptyList()))
+        assertEquals("beside a move of its node", 7, Chrome.unseen(true, emptyList(), 6))
+        assertEquals("a board is one identity's in one subnet", "ab:22", Chrome.boardKey("ab", "22"))
+    }
+
+    @Test
+    fun a_reach_is_said_as_written_and_moves_a_level_at_a_time_within_its_bound() {
+        assertEquals("+2/-2", Chrome.reach(Chrome.DEFAULT_REACH, Chrome.DEFAULT_REACH))
+        assertEquals("+0/-24", Chrome.reach(0, 24))
+        assertEquals(3, Chrome.step(2, 1))
+        assertEquals(0, Chrome.step(0, -1))
+        assertEquals(Chrome.MAX_REACH, Chrome.step(Chrome.MAX_REACH, 1))
+    }
+
+    @Test
+    fun a_threads_row_says_its_title_what_is_unread_and_how_it_stands() {
+        val now = 10_000L
+        assertEquals(
+            "Meeting notes (2 unread)" to "began by Cy, 3 posts, 2 h ago",
+            Chrome.threadRow(thread("Meeting notes", 3, 2, now - 7_200), "Cy", now),
+        )
+        assertEquals(
+            "A thread begun out of your reach" to "1 post, just now",
+            Chrome.threadRow(thread(null, 1, 0, now), null, now),
+        )
+        assertEquals("10 min ago", Chrome.ago(700, 100))
+        assertEquals("3 d ago", Chrome.ago(100 + 3 * 86_400, 100))
+        assertEquals("a clock behind the writer's", "just now", Chrome.ago(100, 900))
+    }
+
+    @Test
+    fun a_post_is_by_the_name_held_else_the_one_it_carried_else_its_key() {
+        val key = "ab".repeat(32)
+        assertEquals("Held", Chrome.writer("Held", "Carried", key))
+        assertEquals("Carried", Chrome.writer(null, "Carried", key))
+        assertEquals("abababab…", Chrome.writer(null, null, key))
+    }
 }

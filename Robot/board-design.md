@@ -449,3 +449,23 @@ title, words (8,192 bytes), alias, a classical signature under
   nothing but a post on a subnet's board". The other options: a paired
   desktop reads the board and cannot post; or its posts go by way of the
   phone.
+
+## Built 2026-11-24: the client, and both shells
+
+- **Kernel** (`crates/client/src/board.rs`): a pool a subnet, `board_post`
+  (new thread or reply; a reply takes its thread's reach from any held post
+  of it, read from where the writer stands), `board_arrived`, `board_ask`
+  and `take_board_reply` (asked at every attach from `attached::follow`,
+  again while the node says more), the model's `BoardThread` and
+  `BoardPost`, and the pools kept as one relation, `board`, apart from the
+  six a start needs.
+- **Facade**: `board_threads`, `board_thread`, `board_unread`, `board_read`,
+  `board_post`, `board_reply`. A post the node did not take is forgotten.
+- **Desktop**: the thread list under a subnet's launchers, a thread's own
+  place (`board:<subnet>:<thread>`), a new-thread place, counts rolled into
+  the orb.
+- **Phone**: the same on the subnet's page, and `BoardActivity` for a thread
+  or a new one.
+- **Known limits, to raise as they bite**: the whole of an identity's pools
+  is one stored blob, rewritten when a post arrives; a post shows its age
+  and not its date; no notification is raised for a board post.

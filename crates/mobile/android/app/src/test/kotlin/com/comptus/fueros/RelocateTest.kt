@@ -68,7 +68,7 @@ class RelocateTest {
         val shell = File("src/main/kotlin/com/comptus/fueros/ShellActivity.kt").readText()
         assertTrue(
             "the subnet's orb is not marked by its move",
-            shell.contains("unseen = Chrome.unseen(Relocate.blocks(o.row.relocation), launchersOf(o))"),
+            shell.contains("unseen = Chrome.unseen(Relocate.blocks(o.row.relocation), launchersOf(o), unreadOn(o))"),
         )
         assertTrue(
             "the subnet's page is not put behind the question",

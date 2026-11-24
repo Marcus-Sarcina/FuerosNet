@@ -45,6 +45,12 @@ pub enum Place {
     /// hex, opened by a double click on their orb: their colour, mute,
     /// notifications, block.
     Person(String),
+    /// **One thread of a subnet's board** [author, 2026-10-27: a thread
+    /// takes the whole screen], by the subnet's id and the thread's, both
+    /// in hex.
+    Board(String, String),
+    /// A thread being begun on a subnet's board, by the subnet's id in hex.
+    BoardNew(String),
 }
 
 impl Place {
@@ -69,6 +75,11 @@ impl Place {
             Some(("subnet", h)) => hex64(h).map(Place::Subnet),
             Some(("subnet-options", h)) => hex64(h).map(Place::SubnetOptions),
             Some(("person", h)) => hex64(h).map(Place::Person),
+            Some(("board-new", h)) => hex64(h).map(Place::BoardNew),
+            Some(("board", both)) => {
+                let (subnet, thread) = both.split_once(':')?;
+                Some(Place::Board(hex64(subnet)?, hex64(thread)?))
+            }
             Some(_) => None,
         }
     }
@@ -87,6 +98,8 @@ impl Place {
             Place::Subnet(h) => format!("subnet:{h}"),
             Place::SubnetOptions(h) => format!("subnet-options:{h}"),
             Place::Person(h) => format!("person:{h}"),
+            Place::Board(s, t) => format!("board:{s}:{t}"),
+            Place::BoardNew(s) => format!("board-new:{s}"),
         }
     }
 
@@ -104,7 +117,9 @@ impl Place {
     fn parent(&self) -> Place {
         match self {
             Place::Node | Place::Colour => Place::Options,
-            Place::SubnetOptions(h) => Place::Subnet(h.clone()),
+            Place::SubnetOptions(h) | Place::Board(h, _) | Place::BoardNew(h) => {
+                Place::Subnet(h.clone())
+            }
             Place::Thread(_) | Place::Person(_) => Place::Direct,
             _ => Place::Home,
         }
@@ -378,11 +393,33 @@ pub enum Body {
     Thread(Vec<Message>, bool),
     /// **What a subnet's node offers this key**, one launcher each
     /// [author, 2026-11-23]: swept at every connection and whenever the
-    /// subnet is opened, never browsed.
-    Launchers(Vec<ResourceRow>),
+    /// subnet is opened, never browsed. **And its board beside them**
+    /// [author, 2026-10-27]: the threads this key's pool holds.
+    Launchers(Vec<ResourceRow>, BoardList),
+    /// **One thread of a subnet's board**: its title where the post that
+    /// began it is held, its posts oldest first, and the time they are
+    /// read at.
+    Board {
+        /// The thread's title.
+        title: Option<String>,
+        /// Its posts, oldest first.
+        posts: Vec<rhtn_model::BoardPost>,
+        /// Now, in seconds: what a post's age is said against.
+        now: u64,
+    },
     /// **The lines this key holds**, each with its patron's alias where one
     /// is held.
     Authority(Vec<LineRow>),
+}
+
+/// **A subnet's board as its page lists it**: the threads held, the one
+/// with the newest post first, and the time they are read at.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct BoardList {
+    /// The threads.
+    pub threads: Vec<rhtn_model::BoardThread>,
+    /// Now, in seconds.
+    pub now: u64,
 }
 
 /// One line of authority this key holds, as the authority screen rolls it.
@@ -463,6 +500,34 @@ pub fn page(snap: &Snapshot, place: &Place, body: &Body) -> String {
              placeholder=\"Say something to {}\"></textarea>\
              <p><button id=\"send\">Send</button></p></div>",
             escape(&snap.name_of(peer))
+        ),
+        // **a reply states its thread's reach and offers none** [author,
+        // 2026-10-27]: read from where this key stands, as each post's is
+        Place::Board(subnet, thread) => {
+            let reach = match body {
+                Body::Board { posts, .. } => posts.first().map(|p| reach(p.up, p.down)),
+                _ => None,
+            };
+            format!(
+                "<div id=\"compose\"><textarea id=\"board-reply\" rows=\"3\" \
+                 data-subnet=\"{subnet}\" data-thread=\"{thread}\" \
+                 placeholder=\"Reply to the thread\"></textarea>\
+                 <p><button id=\"board-send\">Reply</button> <small class=\"sub\">{}</small></p></div>",
+                reach.map_or(String::new(), |r| format!(
+                    "It travels as the thread does: {r}"
+                ))
+            )
+        }
+        // **a new thread says how far it travels**, `+2/-2` until changed
+        // [author, 2026-10-27], a level at a time either way
+        Place::BoardNew(subnet) => format!(
+            "<div id=\"compose\">\
+             <p><input id=\"board-title\" maxlength=\"128\" placeholder=\"Title\"></p>\
+             <textarea id=\"board-text\" rows=\"6\" placeholder=\"What you want to say\"></textarea>\
+             <p><label>Levels up <input id=\"board-up\" type=\"number\" min=\"0\" max=\"24\" \
+             value=\"2\"></label> <label>Levels down <input id=\"board-down\" type=\"number\" \
+             min=\"0\" max=\"24\" value=\"2\"></label></p>\
+             <p><button id=\"board-post\" data-subnet=\"{subnet}\">Post</button></p></div>"
         ),
         _ => String::new(),
     };
@@ -655,9 +720,16 @@ fn main(snap: &Snapshot, place: &Place, body: &Body) -> String {
             _ => thread(snap, peer, &[], false),
         },
         Place::Subnet(id) => match body {
-            Body::Launchers(rows) => subnet(snap, id, rows),
-            _ => subnet(snap, id, &[]),
+            Body::Launchers(rows, board) => subnet(snap, id, rows, board),
+            _ => subnet(snap, id, &[], &BoardList::default()),
         },
+        Place::Board(subnet, _) => match body {
+            Body::Board { title, posts, now } => {
+                board_thread(snap, subnet, title.as_deref(), posts, *now)
+            }
+            _ => board_thread(snap, subnet, None, &[], 0),
+        },
+        Place::BoardNew(subnet) => board_new(snap, subnet),
         Place::SubnetOptions(id) => subnet_options(snap, id),
         Place::Options => options(snap),
         Place::Node => node(snap),
@@ -961,16 +1033,133 @@ fn thread(snap: &Snapshot, peer: &str, messages: &[Message], more: bool) -> Stri
 
 /// **A subnet's page**: its name, which leads to its options, and its
 /// launchers.
-fn subnet(snap: &Snapshot, id: &str, rows: &[ResourceRow]) -> String {
+fn subnet(snap: &Snapshot, id: &str, rows: &[ResourceRow], board: &BoardList) -> String {
     let s = snap.subnets.iter().find(|s| s.id == id);
     format!(
-        "{}{}",
+        "{}{}{}",
         bar(
             &s.map(subnet_name).unwrap_or_else(|| short(id)),
             false,
             Some(&Place::SubnetOptions(id.to_string()))
         ),
-        launchers(rows, s.map_or("", |s| s.by.as_str()))
+        launchers(rows, s.map_or("", |s| s.by.as_str())),
+        board_list(snap, id, board)
+    )
+}
+
+/// A reach as a post says it: `+2/-2`.
+fn reach(up: u32, down: u32) -> String {
+    format!("+{up}/-{down}")
+}
+
+/// How long ago `then` was, said shortly.
+fn ago(now: u64, then: u64) -> String {
+    match now.saturating_sub(then) {
+        s if s < 90 => "just now".into(),
+        s if s < 5400 => format!("{} min ago", s.div_ceil(60)),
+        s if s < 129_600 => format!("{} h ago", s / 3600),
+        s => format!("{} d ago", s / 86_400),
+    }
+}
+
+/// **A subnet's board on its page** [author, 2026-10-27: beside the
+/// launchers, a single board]: each thread a row leading to it, the one
+/// with the newest post first, wearing what is unread; and the way to
+/// begin one.
+fn board_list(snap: &Snapshot, subnet: &str, board: &BoardList) -> String {
+    let mut out = format!(
+        "<h2>Board</h2>\n<p><a class=\"row\" data-go=\"{}\">New thread</a></p>\n",
+        Place::BoardNew(subnet.to_string()).token()
+    );
+    if board.threads.is_empty() {
+        out.push_str("<p class=\"sub\">Nothing posted yet that reaches you here.</p>\n");
+        return out;
+    }
+    out.push_str("<div class=\"talks\">\n");
+    for t in &board.threads {
+        let by = t
+            .began_by
+            .map(|k| format!("began by {}, ", escape(&snap.name_of(&hex(&k)))))
+            .unwrap_or_default();
+        out.push_str(&format!(
+            "<a class=\"talk\" data-go=\"{}\"><span class=\"lines\"><span><b>{}</b>{}</span>\
+             <small>{by}{} post{}, {}</small></span></a>\n",
+            Place::Board(subnet.to_string(), hex(&t.id)).token(),
+            escape(
+                t.title
+                    .as_deref()
+                    .unwrap_or("A thread begun out of your reach")
+            ),
+            count(t.unread),
+            t.posts,
+            if t.posts == 1 { "" } else { "s" },
+            ago(board.now, t.latest)
+        ));
+    }
+    out.push_str("</div>");
+    out
+}
+
+/// **One thread of the board, taking the window**: its posts as a chat's
+/// are laid out, this key's to the right in the colour it speaks as, each
+/// saying who wrote it, how far it travels as read from here, and when.
+fn board_thread(
+    snap: &Snapshot,
+    subnet: &str,
+    title: Option<&str>,
+    posts: &[rhtn_model::BoardPost],
+    now: u64,
+) -> String {
+    let s = snap.subnets.iter().find(|s| s.id == subnet);
+    let mine = s.map_or("--rule", |s| token(&s.colour));
+    let mut out = format!(
+        "<header class=\"bar\"><button class=\"back\" data-act=\"back\" aria-label=\"Back\">‹\
+         </button><h1>{}</h1></header>\n<p class=\"sub\">{}</p>\n<div id=\"messages\">\n",
+        escape(title.unwrap_or("A thread begun out of your reach")),
+        escape(&s.map(subnet_name).unwrap_or_else(|| short(subnet)))
+    );
+    if posts.is_empty() {
+        out.push_str("<p class=\"sub\">Nothing of this thread is held.</p>\n");
+    }
+    for p in posts {
+        let writer = hex(&p.writer);
+        // the name this key holds for them, else the one the post carried
+        let known = snap.name_of(&writer);
+        let name = match &p.alias {
+            Some(a) if known == short(&writer) => a.clone(),
+            _ => known,
+        };
+        let style = if p.mine {
+            format!("border-color: var({mine})")
+        } else {
+            format!(
+                "background: color-mix(in srgb, var({}) {BUBBLE_SHARE}%, var(--ground))",
+                token(person_colour(None, &writer))
+            )
+        };
+        out.push_str(&format!(
+            "<div class=\"said{}\" style=\"{style}\"><small><b>{}</b> · {} · {}</small>\
+             <p>{}</p></div>\n",
+            if p.mine { " mine" } else { "" },
+            escape(&name),
+            reach(p.up, p.down),
+            ago(now, p.written_at),
+            escape(&p.text)
+        ));
+    }
+    out.push_str("</div>");
+    out
+}
+
+/// A thread being begun: where, and what the window's box is for.
+fn board_new(snap: &Snapshot, subnet: &str) -> String {
+    let s = snap.subnets.iter().find(|s| s.id == subnet);
+    format!(
+        "<header class=\"bar\"><button class=\"back\" data-act=\"back\" aria-label=\"Back\">‹\
+         </button><h1>New thread</h1></header>\n<p class=\"sub\">On the board of {}. It reaches \
+         the levels you set above you, with each one's direct subordinates, and the levels you \
+         set below you.</p>",
+        escape(&s.map(subnet_name).unwrap_or_else(|| short(subnet)))
     )
 }
 
@@ -1604,7 +1793,11 @@ mod tests {
                 icon: Some((1, b"\x89PNG".to_vec())),
             },
         ];
-        let p = page(&s, &Place::Subnet(id.clone()), &Body::Launchers(rows));
+        let p = page(
+            &s,
+            &Place::Subnet(id.clone()),
+            &Body::Launchers(rows, BoardList::default()),
+        );
         // **a card each, which is what opens it** [author, 2026-11-23], and
         // **badged with the icon the resource serves**
         assert!(p.contains(&format!(
@@ -1843,5 +2036,128 @@ mod tests {
         ] {
             assert_eq!(base64(i), o);
         }
+    }
+
+    fn a_post(mine: bool, alias: Option<&str>, text: &str, at: u64) -> rhtn_model::BoardPost {
+        rhtn_model::BoardPost {
+            hash: [1; 32],
+            thread: [0x44; 32],
+            writer: if mine { [0xab; 32] } else { [0x66; 32] },
+            alias: alias.map(String::from),
+            mine,
+            text: text.into(),
+            written_at: at,
+            up: 2,
+            down: 3,
+            read: true,
+        }
+    }
+
+    #[test]
+    fn a_subnets_page_lists_its_board_beside_its_launchers() {
+        let s = snap();
+        let id = "22".repeat(32);
+        // nothing held yet: the way to begin a thread, and that it is empty
+        let empty = page(
+            &s,
+            &Place::Subnet(id.clone()),
+            &Body::Launchers(Vec::new(), BoardList::default()),
+        );
+        assert!(empty.contains("<h2>Board</h2>"));
+        assert!(empty.contains(&format!("data-go=\"board-new:{id}\"")));
+        assert!(empty.contains("Nothing posted yet"));
+        // a thread heads the list by its title, wearing what is unread and
+        // leading to itself
+        let board = BoardList {
+            threads: vec![
+                rhtn_model::BoardThread {
+                    id: [0x44; 32],
+                    title: Some("Meeting <notes>".into()),
+                    began_by: Some([0x66; 32]),
+                    posts: 3,
+                    unread: 2,
+                    latest: 1_000,
+                },
+                rhtn_model::BoardThread {
+                    id: [0x45; 32],
+                    title: None,
+                    began_by: None,
+                    posts: 1,
+                    unread: 0,
+                    latest: 400,
+                },
+            ],
+            now: 1_000 + 7_200,
+        };
+        let p = page(
+            &s,
+            &Place::Subnet(id.clone()),
+            &Body::Launchers(Vec::new(), board),
+        );
+        let thread = format!("board:{id}:{}", "44".repeat(32));
+        assert!(p.contains(&format!("data-go=\"{thread}\"")));
+        assert!(
+            p.contains("<b>Meeting &lt;notes&gt;</b><sup>2</sup>"),
+            "escaped, and counted"
+        );
+        assert!(p.contains("3 posts, 2 h ago") && p.contains("1 post, "));
+        assert!(p.contains("A thread begun out of your reach"));
+        // the places read back as they are named, and a thread takes the
+        // window while the subnet's page keeps the rail
+        for place in [
+            Place::Board(id.clone(), "44".repeat(32)),
+            Place::BoardNew(id.clone()),
+        ] {
+            assert_eq!(Place::parse(&place.token()), Some(place.clone()));
+            assert!(!place.chrome());
+        }
+        assert_eq!(Place::parse("board:22:44"), None);
+        assert_eq!(Place::parse(&format!("board:{id}")), None);
+    }
+
+    #[test]
+    fn a_thread_takes_the_window_with_each_post_saying_who_how_far_and_when() {
+        let s = snap();
+        let id = "22".repeat(32);
+        let place = Place::Board(id.clone(), "44".repeat(32));
+        let body = Body::Board {
+            title: Some("Meeting notes".into()),
+            posts: vec![
+                a_post(false, Some("Cy <the writer>"), "First <b>post</b>", 1_000),
+                a_post(true, None, "My reply", 1_030),
+            ],
+            now: 1_060,
+        };
+        let p = page(&s, &place, &body);
+        assert!(p.contains("<h1>Meeting notes</h1>") && p.contains("data-act=\"back\""));
+        assert!(!p.contains("id=\"rail\""), "the rail went with the chrome");
+        // the alias the post carried, where this key holds no name for them
+        assert!(p.contains("<b>Cy &lt;the writer&gt;</b> · +2/-3 · just now"));
+        assert!(
+            p.contains("First &lt;b&gt;post&lt;/b&gt;"),
+            "what was written is text"
+        );
+        // this key's own to the right, outlined in the colour it speaks as
+        assert!(p.contains("class=\"said mine\" style=\"border-color: var(--identity-teal)\""));
+        // the reply box states the thread's reach and offers none
+        assert!(p.contains(&format!(
+            "id=\"board-reply\" rows=\"3\" data-subnet=\"{id}\""
+        )));
+        assert!(p.contains("It travels as the thread does: +2/-3"));
+        assert!(!p.contains("id=\"board-up\""));
+        // a refresh leaves what is being typed where it is
+        let r = refresh(&s, &place, &body);
+        assert!(r.contains("put('main'") && !r.contains("board-reply"));
+        // a new thread offers its reach, two each way until changed
+        let n = page(&s, &Place::BoardNew(id.clone()), &Body::Plain);
+        assert!(n.contains("id=\"board-title\"") && n.contains("id=\"board-text\""));
+        assert!(n.contains("id=\"board-up\" type=\"number\" min=\"0\" max=\"24\" value=\"2\""));
+        assert!(n.contains(&format!("id=\"board-post\" data-subnet=\"{id}\"")));
+        // an age is said shortly
+        assert_eq!(ago(100, 100), "just now");
+        assert_eq!(ago(700, 100), "10 min ago");
+        assert_eq!(ago(100 + 7_200, 100), "2 h ago");
+        assert_eq!(ago(100 + 3 * 86_400, 100), "3 d ago");
+        assert_eq!(ago(100, 900), "just now", "a clock behind the writer's");
     }
 }

@@ -48,6 +48,12 @@ object Model {
     /** The meetings this device took part in, newest first: outcomes, not the ceremony's state. */
     @Volatile var meetings: List<Identities.Owned<Meeting>> = emptyList(); private set
 
+    /**
+     * **Each subnet's board**, by [Chrome.boardKey]: the threads the pool
+     * of the identity holding it keeps, the one with the newest post first.
+     */
+    @Volatile var boards: Map<String, List<uniffi.rhtn_model.BoardThread>> = emptyMap(); private set
+
     /** The aliases held, by keyhash in hex, which is how a screen names a party. */
     @Volatile var aliases: Map<String, String> = emptyMap(); private set
 
@@ -90,6 +96,8 @@ object Model {
         if (Noun.INSTANCES in nouns) instances = Gateway.instances(Identities.focused())
         if (Noun.RESOURCES in nouns) resources = Gateway.resourcesHeld()
         if (Noun.MEETINGS in nouns) meetings = Gateway.meetingsHeld()
+        // a board is a subnet's, so the subnets moving moves which are read
+        if (Noun.BOARD in nouns || Noun.SUBNETS in nouns) boards = Gateway.boardsHeld()
         Diag.event("model.refreshed", "nouns" to nouns.joinToString(",") { it.name.lowercase() })
         tell(nouns)
     }

@@ -84,15 +84,17 @@ class ShellActivity : Activity() {
     private val watcher = Model.Watcher { nouns ->
         if (nouns.any {
                 it == uniffi.rhtn_model.Noun.SUBNETS || it == uniffi.rhtn_model.Noun.PROFILES ||
-                    it == uniffi.rhtn_model.Noun.CONNECTION || it == uniffi.rhtn_model.Noun.RESOURCES
+                    it == uniffi.rhtn_model.Noun.CONNECTION || it == uniffi.rhtn_model.Noun.RESOURCES ||
+                    it == uniffi.rhtn_model.Noun.BOARD
             }
         ) {
             runOnUiThread {
                 if (isFinishing) return@runOnUiThread
                 drawFromModel()
-                // **and a subnet's page with its cards**, whose counts are
-                // the resources' and move under it [author, 2026-11-23]
-                if (place is Chrome.Place.Subnet && uniffi.rhtn_model.Noun.RESOURCES in nouns) show(place)
+                // **and a subnet's page with its cards and its board**,
+                // whose counts move under it [author, 2026-11-23]
+                val moved = uniffi.rhtn_model.Noun.RESOURCES in nouns || uniffi.rhtn_model.Noun.BOARD in nouns
+                if (place is Chrome.Place.Subnet && moved) show(place)
             }
         }
     }
@@ -336,7 +338,8 @@ class ShellActivity : Activity() {
                     // **a move of its node to answer marks the orb**
                     // [author, 2026-11-16], and what its resources ask
                     // that waits rolls up into it [author, 2026-11-23]
-                    unseen = Chrome.unseen(Relocate.blocks(o.row.relocation), launchersOf(o)),
+                    // and what is unread on its board, the client's own count
+                    unseen = Chrome.unseen(Relocate.blocks(o.row.relocation), launchersOf(o), unreadOn(o)),
                     by = o.by,
                     crown = Chrome.crown(
                         root = o.row.rank.root,
@@ -464,6 +467,44 @@ class ShellActivity : Activity() {
             Gateway.browse(o.by, node)
             Model.refresh(setOf(uniffi.rhtn_model.Noun.RESOURCES))
         }, "fueros-sweep").start()
+    }
+
+    /** How many posts of a subnet's board its holder has not been shown. */
+    private fun unreadOn(o: Identities.Owned<uniffi.rhtn_model.Subnet>): Int =
+        Chrome.boardUnread(Model.boards[Chrome.boardKey(o.by, o.row.id.hex())].orEmpty())
+
+    /**
+     * **A subnet's board on its page**: a heading, the way to begin a
+     * thread, and the threads the holder's pool keeps.
+     */
+    private fun board(o: Identities.Owned<uniffi.rhtn_model.Subnet>): List<View> {
+        val subnet = o.row.id.hex()
+        val open = { thread: String? ->
+            startActivity(
+                Intent(this, BoardActivity::class.java)
+                    .putExtra("by", o.by)
+                    .putExtra("subnet", subnet)
+                    .putExtra("thread", thread),
+            )
+        }
+        val threads = Model.boards[Chrome.boardKey(o.by, subnet)].orEmpty()
+        val now = System.currentTimeMillis() / 1000
+        val out = mutableListOf<View>(
+            TextView(this).apply {
+                text = "Board"
+                textSize = 18f
+                typeface = Type.bold
+                setTextColor(Palette.now.ink)
+                setPadding(dp(16), dp(20), dp(16), dp(4))
+            },
+            row("New thread", "say how far it travels, then post it") { open(null) },
+        )
+        if (threads.isEmpty()) out += owed("Nothing posted yet that reaches you here.")
+        threads.forEach { t ->
+            val (title, under) = Chrome.threadRow(t, t.beganBy?.let { Model.aliases[it.hex()] }, now)
+            out += row(title, under) { open(t.id.hex()) }
+        }
+        return out
     }
 
     /** **One launcher card**: the resource's icon, else its mark, its
@@ -910,6 +951,10 @@ class ShellActivity : Activity() {
                 // to and when the subnet was opened, and opened as the
                 // identity that holds the subnet
                 owned?.let { o -> launchersOf(o).forEach { column.addView(launcher(o.by, it)) } }
+                // **and its board beside them** [author, 2026-10-27]: one
+                // board a subnet, each thread a row leading to it, the one
+                // with the newest post first, and the way to begin one
+                owned?.let { o -> board(o).forEach { column.addView(it) } }
             }
             is Chrome.Place.Direct -> {
                 // not reached: the rail's orb opens the conversations

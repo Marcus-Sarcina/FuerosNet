@@ -151,6 +151,30 @@ pub enum Act {
         /// Its keyhash.
         by: Vec<u8>,
     },
+    /// **Begin a thread on a subnet's board** (`light-client-requirements.md`
+    /// §4.5): a title, the words, and how far it travels.
+    BoardPost {
+        /// The subnet's id.
+        subnet: Vec<u8>,
+        /// Levels up.
+        up: u32,
+        /// Levels down.
+        down: u32,
+        /// The thread's title, as typed.
+        title: String,
+        /// The words, as typed.
+        text: String,
+    },
+    /// **Continue a thread**: the words alone, a reply carrying its
+    /// thread's reach.
+    BoardReply {
+        /// The subnet's id.
+        subnet: Vec<u8>,
+        /// The thread's id.
+        thread: Vec<u8>,
+        /// The words, as typed.
+        text: String,
+    },
     /// **Name a subnet**, as its root, by convention (`light-client-requirements.md` §4.4).
     Rename {
         /// The subnet's id.
@@ -256,6 +280,41 @@ pub fn act(message: &str) -> Result<Act, String> {
         "focus" => {
             return Ok(Act::Focus {
                 by: node_key(&s("by")?).map_err(|_| "an identity is 64 hex characters")?,
+            });
+        }
+        kind @ ("board-post" | "board-reply") => {
+            let subnet =
+                node_key(&s("subnet")?).map_err(|_| "a subnet's id is 64 hex characters")?;
+            // what was typed is kept as typed; only nothing is refused
+            let typed = |k: &str| -> Result<String, String> {
+                v.get(k)
+                    .and_then(serde_json::Value::as_str)
+                    .filter(|t| !t.trim().is_empty())
+                    .map(str::to_string)
+                    .ok_or_else(|| format!("`{k}` is missing"))
+            };
+            if kind == "board-reply" {
+                return Ok(Act::BoardReply {
+                    subnet,
+                    thread: node_key(&s("thread")?)
+                        .map_err(|_| "a thread's id is 64 hex characters")?,
+                    text: typed("text")?,
+                });
+            }
+            // a reach is 0 to 24 each way (`wire-format.md` §10.3)
+            let level = |k: &str| -> Result<u32, String> {
+                v.get(k)
+                    .and_then(serde_json::Value::as_u64)
+                    .filter(|n| *n <= 24)
+                    .map(|n| n as u32)
+                    .ok_or_else(|| format!("`{k}` is a number of levels, 0 to 24"))
+            };
+            return Ok(Act::BoardPost {
+                subnet,
+                up: level("up")?,
+                down: level("down")?,
+                title: typed("title")?,
+                text: typed("text")?,
             });
         }
         "rename" => {
@@ -853,5 +912,56 @@ mod tests {
         assert!(s.contains("\\\"no\\\""), "a quote is escaped: {s}");
         assert!(s.contains("\\n"), "and a newline: {s}");
         assert!(!s.contains("\nand stopped"), "nothing breaks the script");
+    }
+
+    #[test]
+    fn the_boards_acts_keep_what_was_typed_and_bound_the_reach() {
+        let subnet = "22".repeat(32);
+        let thread = "44".repeat(32);
+        let begun = format!(
+            r#"{{"act":"board-post","subnet":"{subnet}","up":3,"down":0,"title":" A title ","text":"two\nlines "}}"#
+        );
+        assert_eq!(
+            act(&begun),
+            Ok(Act::BoardPost {
+                subnet: vec![0x22; 32],
+                up: 3,
+                down: 0,
+                title: " A title ".into(),
+                text: "two\nlines ".into(),
+            })
+        );
+        let reply = format!(
+            r#"{{"act":"board-reply","subnet":"{subnet}","thread":"{thread}","text":"yes"}}"#
+        );
+        assert_eq!(
+            act(&reply),
+            Ok(Act::BoardReply {
+                subnet: vec![0x22; 32],
+                thread: vec![0x44; 32],
+                text: "yes".into(),
+            })
+        );
+        // nothing typed, a reach past the path bound, and ids that are not ids
+        for bad in [
+            format!(
+                r#"{{"act":"board-post","subnet":"{subnet}","up":2,"down":2,"title":" ","text":"x"}}"#
+            ),
+            format!(
+                r#"{{"act":"board-post","subnet":"{subnet}","up":2,"down":2,"title":"t","text":""}}"#
+            ),
+            format!(
+                r#"{{"act":"board-post","subnet":"{subnet}","up":25,"down":2,"title":"t","text":"x"}}"#
+            ),
+            format!(r#"{{"act":"board-post","subnet":"{subnet}","up":2,"title":"t","text":"x"}}"#),
+            r#"{"act":"board-post","subnet":"22","up":2,"down":2,"title":"t","text":"x"}"#
+                .to_string(),
+            format!(r#"{{"act":"board-reply","subnet":"{subnet}","thread":"44","text":"x"}}"#),
+            format!(
+                r#"{{"act":"board-reply","subnet":"{subnet}","thread":"{thread}","text":"  "}}"#
+            ),
+        ] {
+            assert!(act(&bad).is_err(), "{bad}");
+        }
     }
 }
