@@ -28,8 +28,8 @@ package com.comptus.fueros
  * flow's, so this sends none.
  *
  * **The frames are this shell's own**, as [Adoption]'s are and for the
- * same reason, riding the end-to-end channel the prekey handover left
- * between the two devices under [KIND], a number outside the registry.
+ * same reason, riding the payload path between the two parties under
+ * [KIND], a number outside the registry.
  */
 class Peering(
     /** This device's keyhash, hex: which side builds turns on it. */

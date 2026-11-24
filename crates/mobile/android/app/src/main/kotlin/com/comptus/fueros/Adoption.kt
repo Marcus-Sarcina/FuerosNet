@@ -21,8 +21,9 @@ package com.comptus.fueros
  * `take_adoption` is where a record is.
  *
  * **The frames are this shell's own**, as the bootstrap object at D1 is,
- * and they ride the end-to-end channel the prekey handover left between
- * the two devices (`wire-format.md` §14.3.4) under [KIND], a number
+ * and they ride the payload path between the two parties, the direct one
+ * where the meeting's candidates opened it (`wire-format.md` §14.3.2),
+ * under [KIND], a number
  * outside the registry: to a client that does not know it, it is
  * application payload, which is §7.10.1's own rule for an unknown kind.
  *

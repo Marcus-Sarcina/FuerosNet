@@ -985,7 +985,7 @@ class ShellActivity : Activity() {
                     },
                 )
                 column.addView(
-                    row("A desktop of this identity", "pair it from the code it shows; it reads everything and signs nothing") {
+                    row("A desktop of this identity", "pair it from the code it shows; it reads everything and signs nothing but a board post") {
                         startActivity(Intent(this, DesktopActivity::class.java).putExtra("by", Identities.focused()))
                     },
                 )

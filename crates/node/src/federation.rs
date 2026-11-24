@@ -63,8 +63,8 @@
 //! stays pending, readable from the operator's surface and deliverable by
 //! hand at the other node's. Relationships are configured in the hosting
 //! file; the "established by directive" path is not built. No body is
-//! pulled on acceptance: an envelope carries its body, bounded. The
-//! signature is carried, canonical bytes fixed, and not yet verified.
+//! pulled on acceptance: an envelope carries its body, bounded, and no
+//! signature (above).
 
 use crate::Keyhash;
 use crate::http::base64url;

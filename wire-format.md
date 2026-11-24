@@ -133,7 +133,7 @@ either be structurally disjoint from every language above, or carry its own
 **Why it matters more than it did.** Exploiting cross-context confusion requires a
 byte string valid in two roles, which the differing CBOR structures argue against without ruling out
 — and unproven non-confusability is precisely what domain separation exists to
-replace. **Sixteen roles carry a tag**, and the risk domain separation
+replace. **Seventeen roles carry a tag**, and the risk domain separation
 answers grows with every one of them: each new signed context is another
 chance for a byte string to be valid in two places at once. A verifier that derives the tag from
 context rather than content also makes the check free.

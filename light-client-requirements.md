@@ -473,11 +473,12 @@ job.
   identity derives, the capture keys that unlock your likeness on other
   people's devices among them (design §7.5.2.6); what it does not restore is
   the archive, which comes from the backup or not at all (design §10.2; §6).
-  Say both. **Ask each node you attach to for where you sit under it**
-  [author, 2026-11-19]: it answers in records you check yourself — your
-  adoption under it, its line up to the subnet's root, the subnet's profile —
-  and your positions there are compiled from them, which is standing and not
-  history (design §23.3).
+  Say both. **Take where you sit under a node from the record it hands you
+  at attach** [author, 2026-11-19, 2026-11-20]: the adoption that placed you
+  under it, sent unasked where its operator is your patron and the slot is
+  still yours (`wire-format.md` §8.2). Check both signatures yourself and
+  compile your position from its locator, which is standing and not history
+  (design §23.3); the subnet's profile reaches you as it reaches any member.
 
 - **A seed phrase, if you offer one, is a feature of its own and nothing
   depends on it** [author, 2026-10-17]. It encodes the identity's key material
@@ -1067,9 +1068,10 @@ nothing below reaches across them.
 
 **[author, 2026-10-11]** A client keeps **contacts**: for every party it
 has learned a locator for, the most recent `SignedLocator` it holds for
-them and the key material that verifies it — the two halves of an
-introduction (`wire-format.md` §2.3) — with when it last dealt with
-them. This is the "local table" design §12.3 Case 1 has you look an
+them, the key material that verifies it and the encryption key a message
+to them is sealed to [author, 2026-11-20] — the parts of an introduction
+(`wire-format.md` §2.3) — with when it last dealt with them. This is the
+"local table" design §12.3 Case 1 has you look an
 anchor up in, and it is what you hand onward in a bundle (§1.1,
 `wire-format.md` §5.4).
 
@@ -1198,7 +1200,8 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   (`wire-format.md` §10.3): who wrote it and from what position, the reach as
   written, the thread it continues or the title it starts, when, and the
   words. The nodes that carry it read none of that, so nothing outside the
-  signature can be relied on by whoever reads it.
+  signature can be relied on by whoever reads it, the count it was carried
+  with excepted, which can only lower what was written (below).
 - **Hand a post to your serving node with its reach, `+2/-2` unless the
   person changes it** [author, 2026-10-27], either count moving a level at a
   time. **A reply carries its thread's reach**, stated and not offered. Your

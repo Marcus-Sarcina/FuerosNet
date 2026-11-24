@@ -43,7 +43,7 @@ if [ ! -f "$CONF" ]; then
   say "(infra-client-requirements.md §1), and the pages that compose it ship"
   say "with the client (§8.3). An instance's configuration names:"
   say "  operator, transport-key, delegations   -- design §23.3: no seed here"
-  say "  listen, queue, prekeys, topology, archive"
+  say "  listen, queue, keys, topology, archive"
   say "  heartbeat, ingestion, [allowance]"
   say "and, once the operator's client has signed them, endpoint-record and"
   say "anchor-entry (infra-client-requirements.md §4.4)."

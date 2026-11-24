@@ -206,7 +206,8 @@ pub struct Sender<'a> {
     pub secret: &'a EncryptionSecret,
     /// The alias shown with it, display only.
     pub alias: &'a str,
-    /// Its own introduction, on a first message to this recipient.
+    /// Its own introduction, on a message to a recipient it has had no
+    /// reply from.
     pub introduction: Option<&'a [u8]>,
 }
 
@@ -350,9 +351,10 @@ pub struct PayloadState {
     /// Whether [`PayloadState::secret`] came in a pairing, and so is
     /// written.
     pub secret_handed: bool,
-    /// **This device's own introduction**, carried in the seal on a first
-    /// message to a recipient (`wire-format.md` §7.8.1): refreshed at
-    /// attach and whenever the positions move, and never written.
+    /// **This device's own introduction**, carried in the seal on its
+    /// messages to a recipient until one replies (`wire-format.md` §7.8.1):
+    /// refreshed at attach and whenever the positions move, and never
+    /// written.
     pub card: Option<Vec<u8>>,
     /// **Node keys fetched to seal with**, by recipient: never written and
     /// never on the contact [author, 2026-11-20]. A refusal for a stale

@@ -89,7 +89,7 @@ conf() {  # conf <dir> <head lines...>
     cat <<'TAIL'
 listen = "0.0.0.0:7447"
 queue = "/var/lib/rhtn/queue"
-prekeys = "/var/lib/rhtn/prekeys"
+keys = "/var/lib/rhtn/keys"
 topology = "/var/lib/rhtn/topology"
 archive = "/var/lib/rhtn/archive"
 heartbeat = 30

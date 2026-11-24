@@ -1,8 +1,8 @@
 //! **A package's storage, sealed against an image of its machine**
 //! [author, 2026-11-22] (`infra-client-requirements.md` §9.4,
 //! `light-client-requirements.md` §10): the key the operator's client
-//! hands its instance with an install, and again with every reopening
-//! after the machine restarts.
+//! hands its instance at attach, whenever the instance names the package
+//! as closed; an install carries the choice and no key.
 //!
 //! **Derived from the signing seed and never stored** [author, 2026-11-22:
 //! the phrase reopens the package]: a device restored from the phrase

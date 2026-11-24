@@ -22,6 +22,7 @@ fn carried(up: u64, down: u64, bytes: &[u8], number: Option<u64>, carried: u64) 
     }
 }
 
+// functional: BRD-001
 #[test]
 fn a_post_is_frame_ten_and_the_asking_request_seventeen() {
     assert_eq!((FRAME_BOARD_POST, REQUEST_BOARD), (10, 17));
@@ -62,6 +63,7 @@ fn a_post_out_of_bounds_does_not_decode() {
     assert!(BoardPost::decode(&short).is_err());
 }
 
+// functional: BRD-010
 #[test]
 fn the_asking_and_its_answer_round_trip() {
     for r in [
@@ -205,6 +207,7 @@ fn a_post_changed_or_carrying_another_key_is_not_its_writers() {
     assert_ne!(Post::parse(&hers).unwrap().writer, bob.public.keyhash);
 }
 
+// functional: BRD-015
 #[test]
 fn a_post_begins_a_thread_or_continues_one_and_stays_within_its_bounds() {
     let bob = test_identity("bob");

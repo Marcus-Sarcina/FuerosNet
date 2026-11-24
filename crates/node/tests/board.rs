@@ -119,7 +119,7 @@ fn copy(up: u64, down: u64, carried: u64, post: &[u8]) -> BoardPost {
     }
 }
 
-// functional_tests.md: BRD-003
+// functional: BRD-003
 #[test]
 fn a_light_members_post_reaches_its_ancestors_and_their_direct_subordinates() {
     let mut s = scene();
@@ -170,7 +170,7 @@ fn a_light_members_post_reaches_its_ancestors_and_their_direct_subordinates() {
     assert!(got(&cfab, "w3").is_empty());
 }
 
-// functional_tests.md: BRD-005
+// functional: BRD-005
 #[test]
 fn a_post_goes_up_as_far_as_its_writer_has_earned_and_no_further() {
     let mut s = scene();
@@ -209,7 +209,7 @@ fn a_post_goes_up_as_far_as_its_writer_has_earned_and_no_further() {
     assert_eq!(got(&s.fab, "alice")[1], copy(3, 1, 3, b"mine"));
 }
 
-// functional_tests.md: BRD-006
+// functional: BRD-006
 #[test]
 fn a_post_goes_down_through_the_nearest_nodes_with_what_is_left_of_its_count() {
     let mut s = scene();
@@ -249,7 +249,8 @@ fn a_post_goes_down_through_the_nearest_nodes_with_what_is_left_of_its_count() {
     assert_eq!(got(&s.fab, "bob")[1], delivery(b"top", 2, 4));
 }
 
-// functional_tests.md: BRD-002, BRD-007
+// functional: BRD-002
+// functional: BRD-007
 #[test]
 fn a_copy_that_is_a_repeat_or_fits_no_session_is_discarded_whole() {
     let mut s = scene();
@@ -319,7 +320,7 @@ fn a_copy_that_is_a_repeat_or_fits_no_session_is_discarded_whole() {
     assert_eq!(s.n.board.len(), 1, "and nothing more kept");
 }
 
-// functional_tests.md: BRD-008
+// functional: BRD-008
 #[test]
 fn a_node_carries_bytes_it_does_not_read() {
     let mut s = scene();
@@ -349,7 +350,7 @@ fn ask(n: &NodeView, who: &str, after: Option<u64>) -> Option<BoardReply> {
         .map(|b| BoardReply::decode(&b).expect("a reply"))
 }
 
-// functional_tests.md: BRD-011
+// functional: BRD-011
 #[test]
 fn a_member_that_was_away_is_handed_its_own_band_after_the_number_it_holds() {
     let mut s = scene();
@@ -383,7 +384,7 @@ fn a_member_that_was_away_is_handed_its_own_band_after_the_number_it_holds() {
     assert!(s.n.answer_board(&kh("w1"), b"\xa0").is_none());
 }
 
-// functional_tests.md: BRD-014
+// functional: BRD-014
 #[test]
 fn a_siblings_member_in_failover_is_carried_as_far_as_this_node_can() {
     let mut s = scene();
@@ -422,7 +423,7 @@ fn a_siblings_member_in_failover_is_carried_as_far_as_this_node_can() {
     assert_eq!(r.posts, vec![(1, b"one down".to_vec(), 2)]);
 }
 
-// functional_tests.md: BRD-009
+// functional: BRD-009
 #[test]
 fn the_queue_is_kept_a_file_a_post_and_taken_up_where_it_was_left() {
     let dir = std::env::temp_dir().join(format!("rhtn-board-{}", std::process::id()));

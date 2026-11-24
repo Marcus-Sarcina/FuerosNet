@@ -5,7 +5,7 @@
 //! and it is not a matter of granting narrow scopes carefully — *the hooks
 //! do not exist*.  A package receives its credential and its own request
 //! traffic and nothing else: no topology, no liveness state, no queue
-//! contents, no prekey requests, no role-evaluation inputs.  The credential
+//! contents, no node-key requests, no role-evaluation inputs.  The credential
 //! reaches it inside that traffic, as the headers `resource-requirements.md`
 //! §3 lists, so both halves of what it may see arrive through one door.
 //!

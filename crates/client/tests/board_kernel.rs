@@ -155,7 +155,7 @@ fn a_delivery_is_taken_and_a_reply_carries_its_threads_reach_from_where_it_is_wr
     );
 }
 
-// functional_tests.md: BRD-016
+// functional: BRD-016
 #[test]
 fn a_post_asked_further_up_than_its_writer_earned_reads_as_it_was_carried() {
     let mut s = setup(&PARTIES);

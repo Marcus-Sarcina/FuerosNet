@@ -158,7 +158,7 @@ pub struct Service {
     bell: crate::doorbell::Bell,
     /// The running node.
     pub node: Arc<LiveNode>,
-    /// Where the prekey pools and the topology store are kept.  Held so
+    /// Where the node keys and the topology store are kept.  Held so
     /// shutdown writes them to the same places startup read them from.
     keys: std::path::PathBuf,
     topology: std::path::PathBuf,

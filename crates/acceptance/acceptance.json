@@ -4858,7 +4858,7 @@
     "text": "**Push the sibling list at attach.**"
    }
   ],
-  "given": "A configuration naming an identity file, a peers file, a queue, a prekey directory and a topology directory, and an address to serve on.",
+  "given": "A configuration naming an identity file, a peers file, a queue, a key directory and a topology directory, and an address to serve on.",
   "when": "The daemon is started, then started again with the identity file absent, and again with it readable beyond its owner.",
   "then": "The first serves a real session at the address it reports. The other two refuse, naming what they could not read, and exit non-zero. No identity is generated in any case.",
   "oracle": "behaviour",
@@ -15182,7 +15182,7 @@
    },
    {
     "where": "light-client-requirements.md §4.3",
-    "text": "for every party it\nhas learned a locator for, the most recent `SignedLocator` it holds for\nthem and the key material that verifies it"
+    "text": "for every party it\nhas learned a locator for, the most recent `SignedLocator` it holds for\nthem, the key material that verifies it"
    }
   ],
   "given": "A client that learned a party after it started — by an introduction, a cold call or a ceremony — and holds that party as a contact; the party presents its own classical member when it dials.",
@@ -18072,7 +18072,7 @@
    },
    {
     "where": "design §23.3",
-    "text": "It reads every message and still signs nothing, and no sender learns that it exists."
+    "text": "It reads every message and still signs nothing under the identity's keys, and no sender learns that it exists."
    }
   ],
   "given": "Alice's phone holding her seed, and a desktop holding no seed, introduced to it across the local interface; bob holds alice's card.",
@@ -18085,7 +18085,7 @@
   "id": "PAY-31",
   "area": "payload",
   "gap": "payload",
-  "title": "Fetch a node key and submit under a transport key minted for the connection, never the identity's, even when attached to that node, with the introduction inside the seal on a first message",
+  "title": "Fetch a node key and submit under a transport key minted for the connection, never the identity's, even when attached to that node, with the introduction inside the seal until the sender has had a reply",
   "milestone": "after-5",
   "kind": "negative",
   "spec": [

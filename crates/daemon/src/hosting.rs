@@ -17,10 +17,6 @@
 //! owner     = "<keyhash>"
 //! authority = "shop.internal"
 //! manifest  = "packages/shop/manifest"
-//!
-//! [[host.grant]]
-//! member = "<keyhash>"
-//! roles  = ["connect", "reader", "writer"]
 //! ```
 //!
 //! **An instance's federation relationships are configured here too**
@@ -52,9 +48,9 @@
 //! "<a related instance>" = { address = "203.0.113.9:7452", key = "<64 hex>" }
 //! ```
 //!
-//! **A grant sits inside the package it grants on**, which is what the
-//! nesting buys: a grant naming a resource nothing hosts was an error the
-//! line format could express and this one cannot.
+//! **Who may reach a package is not written here** ([`crate::grants`]): a
+//! grant is a row of the node's own table, which an act on the operator's
+//! surface rewrites, and a hosting file that still carries one is refused.
 //!
 //! **A `host` line names a manifest, not a component.** What a package
 //! declares is the package's, and §9.1 puts the declaration in the

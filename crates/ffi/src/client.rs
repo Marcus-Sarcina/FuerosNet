@@ -275,12 +275,12 @@ impl Drop for SealedStore {
 }
 
 /// **The maintenance contract.**  While the process runs and a session is
-/// held, the kernel rotates a prekey whose interval has elapsed, replenishes
-/// a pool that has fallen low and asks for bindings it wants, every this
-/// often on its own clock; a shell calls [`Participant::maintain`] besides
-/// when the platform grants it background time, since a suspended process
-/// runs no clock.  Sixty seconds is a chosen value: the work is nothing
-/// unless something is due, and a pool at its floor waits at most this long.
+/// held, the kernel signs what a witness's window has matured, sends what
+/// its outbox holds, and asks again for what went unanswered and for a node
+/// key a message still waits on, every this often on its own clock; a shell
+/// calls [`Participant::maintain`] besides when the platform grants it
+/// background time, since a suspended process runs no clock.  Ten seconds is
+/// a chosen value: the work is nothing unless something is due.
 pub const MAINTAIN_EVERY: std::time::Duration = std::time::Duration::from_secs(10);
 
 /// What a restore from a backup did.
@@ -1690,8 +1690,6 @@ impl Participant {
     ///
     /// The identity key is nowhere on this device, so what that key signs
     /// is refused here: consent, a verifier's answer, a body, a departure.
-    /// The device's prekey bundle is signed on the ceremony device through
-    /// [`Participant::bundle_to_sign`] and [`Participant::take_signed_bundle`].
     #[uniffi::constructor]
     pub fn start_delegated(
         key_material: Vec<u8>,
@@ -2333,13 +2331,12 @@ impl Participant {
         })
     }
 
-    /// Attach to a serving node and sweep the population's prekey material
-    /// (`light-client-requirements.md` §3).
+    /// Attach to a serving node (`light-client-requirements.md` §3).
     ///
     /// **The session is this side's**, not the shell's (design §14.1.0).
-    /// The bundle is published, the pool stocked and the sweep run over the
-    /// wire from here; what comes back is what a screen shows, and no byte
-    /// of the protocol crosses outward.
+    /// What the client sends and asks at attach goes over the wire from
+    /// here; what comes back is what a screen shows, and no byte of the
+    /// protocol crosses outward.
     ///
     /// A second attach replaces the first, which is how a client returns to
     /// its patron after a spell on a sibling.
@@ -2408,10 +2405,10 @@ impl Participant {
         })
     }
 
-    /// Routine maintenance: rotate a prekey whose interval has elapsed,
-    /// replenish a pool that has fallen low, and ask for a binding this
-    /// client wants.  What that produces goes to the serving node from
-    /// here.
+    /// Routine maintenance: sign what a witness's window has matured, send
+    /// what the outbox holds, and ask again for what went unanswered and for
+    /// a node key a message still waits on.  What that produces goes to the
+    /// serving node from here.
     ///
     /// Refused where nothing is attached: maintenance is a conversation
     /// with a node, and there is no node.

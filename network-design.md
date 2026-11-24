@@ -6576,8 +6576,9 @@ is sealed under the message key with an AEAD.
 
 **The sender is authenticated inside the seal and not by a signature.** The
 two encapsulations open the message, and inside it are the sender's card and a
-tag keyed by a static Diffie-Hellman between the classical components of the
-sender's encryption key and the recipient's, checked after opening, so a
+tag keyed by a static Diffie-Hellman between the sender's sealing-authentication
+key and the recipient's, an X25519 key of its own that each encryption key
+carries (`wire-format.md` §2.5), checked after opening, so a
 recipient who held nothing of the sender attributes a first message all the
 same. It knows who sealed the message and can prove it to nobody, because it
 could have computed the same tag itself. That is the arrangement the network wants of its two planes:
@@ -9352,8 +9353,8 @@ seed. **A new signing device is brought up by the person and not by another
 device** [author, 2026-10-16]: the seed is restored by its holder, and no
 object carries one over a contact. The delegated devices that hold a transport
 credential acquire none either, so a device given the dataset and not the seed
-can read everything and sign nothing. How the holder keeps it and puts it on a
-new device is the client's and not this document's
+can read everything and sign nothing under the identity's keys. How the holder
+keeps it and puts it on a new device is the client's and not this document's
 (`light-client-requirements.md` §2). **No capture seed crosses either, because
 none is kept**: a capture key is derived from the identity when its subject
 wants it (§7.5.2.6), so the device holding the identity can release for any
@@ -9447,8 +9448,8 @@ identity and not of its own** [author, 2026-11-19]: a message is sealed to the
 person and never to a device (§14.2.2), so a paired desktop receives the
 identity's encryption key with its transport credential, across the same local
 interface, and its serving node hands it what is queued as it hands any device
-proving the identity. It reads every message and still signs nothing, and no
-sender learns that it exists.
+proving the identity. It reads every message and still signs nothing under the
+identity's keys, and no sender learns that it exists.
 
 ### 23.4 Test vectors, and what a test suite would add
 

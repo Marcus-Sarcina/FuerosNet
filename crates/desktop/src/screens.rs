@@ -1201,7 +1201,7 @@ fn subnet_options(snap: &Snapshot, id: &str) -> String {
             ),
             Device::Paired { .. } => "<h2>The subnet's name</h2>\n<p class=\"sub\">You are its \
                  root, so its name is yours to set. Naming it is signed as the identity, and \
-                 this desktop signs nothing: name it on the phone.</p>"
+                 this desktop holds no key of the identity's: name it on the phone.</p>"
                 .to_string(),
         });
     }
@@ -1368,7 +1368,7 @@ fn options(snap: &Snapshot) -> String {
         Device::Paired { days, dataset } => (
             format!(
                 "Paired from the phone: this desktop presents its own key under a run of \
-                 {days} days the phone signed. It reads everything and signs nothing."
+                 {days} days the phone signed. It reads everything and signs nothing but a board post."
             ),
             match dataset {
                 Some(true) => {
@@ -1434,7 +1434,7 @@ fn node(snap: &Snapshot) -> String {
 /// identity, so only a backup of this one takes.
 const BACKUP: &str = "<h2>Bring the archive from a backup</h2>\n\
      <p class=\"sub\">Restoring from the phrase brought back the key and not the archive: \
-     your subnets, contacts and records come from a backup or not at all, and never over the \
+     your contacts and records come from a backup or not at all, and never over the \
      network. Write one on the phone, bring the file here, and open it.</p>\n\
      <label>Backup file<input id=\"backup\" type=\"file\" accept=\".rhtn\"></label>\n\
      <p><button id=\"import\">Open the backup</button></p>";

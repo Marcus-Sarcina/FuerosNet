@@ -828,7 +828,7 @@ impl crate::federation::Addresses for Gateway {
 
 /// The bindings a host offers a package (`infra-client-requirements.md`
 /// §9.2): its credentialled request traffic and nothing else.  There is no
-/// binding for topology, liveness, the queue, prekeys or role inputs, so a
+/// binding for topology, liveness, the queue, node keys or role inputs, so a
 /// manifest importing one cannot be instantiated.
 pub const HOST_EXPORTS: [&str; 8] = [
     "rhtn/1:request",

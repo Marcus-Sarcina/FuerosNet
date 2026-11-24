@@ -47,6 +47,7 @@ fn me() -> [u8; 32] {
     test_identity("bob").public.keyhash
 }
 
+// functional: BRD-012
 #[test]
 fn a_post_is_kept_once_and_only_where_its_signature_makes_it_its_writers() {
     let mut pool = Pool::new(1 << 20);
@@ -160,6 +161,7 @@ fn what_is_unread_is_the_clients_own_count() {
     assert_eq!(pool.unread(), 1);
 }
 
+// functional: BRD-013
 #[test]
 fn the_oldest_go_first_by_the_posts_own_date_read_no_later_than_its_arrival() {
     let a = post("carol", 100, None, "oldest");

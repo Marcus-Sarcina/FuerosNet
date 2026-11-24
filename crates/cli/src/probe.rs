@@ -6,10 +6,10 @@
 //! way however often they are replayed, which is what makes them safe to
 //! send from a tool whose purpose is to look.
 //!
-//! **Nothing else is sent from here.** A prekey fetch consumes a one-time
-//! key and a resource request has an application effect, whatever the HTTP
-//! method inside; neither belongs behind a command that only looks. The
-//! omission is the feature.
+//! **Nothing else is sent from here.** A node-key fetch can make the node
+//! replace a key that is due and a resource request has an application
+//! effect, whatever the HTTP method inside; neither belongs behind a
+//! command that only looks. The omission is the feature.
 //!
 //! **It authenticates as a real identity and pins the node it dials.**
 //! There is no unauthenticated mode to add, the transport having none

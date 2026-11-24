@@ -439,7 +439,7 @@ cat > "$RUN/rhtnd.conf" <<EOF
 identity = "$DAEMON_HOME/identity.key"
 listen = "$ADDR"
 queue = "$DAEMON_HOME/queue"
-prekeys = "$DAEMON_HOME/prekeys"
+keys = "$DAEMON_HOME/keys"
 topology = "$DAEMON_HOME/topology"
 archive = "$DAEMON_HOME/archive"
 heartbeat = 30

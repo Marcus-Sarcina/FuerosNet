@@ -947,6 +947,7 @@ mod tests {
         assert_eq!(plan(&d, &lists, &Source::Above, 0, 25), Err(Discard::Count));
     }
 
+    // functional: BRD-004
     #[test]
     fn an_upward_copy_counts_from_the_node_that_sent_it() {
         let (d, lists) = tree();

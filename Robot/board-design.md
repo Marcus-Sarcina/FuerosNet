@@ -503,4 +503,5 @@ travelling with the post.
   and force a different selection locally. But the reach should be displayed
   honestly for all others."* The documents bind every reader but the writer;
   the reference client still shows its own post as carried once the node
-  hands it back, as its own choice.
+  hands it back, as its own choice. **Confirmed 2026-11-24**: *"Showing the
+  reach as carried for the poster is fine"*. Settled; do not re-ask.

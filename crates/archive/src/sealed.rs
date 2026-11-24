@@ -74,8 +74,8 @@ pub struct SealedBody {
     pub sender: Keyhash,
     /// Its alias: display only, unverified until the tag is checked.
     pub alias: String,
-    /// The sender's own `Introduction`, on its first message to this
-    /// recipient.
+    /// The sender's own `Introduction`, on its messages to this recipient
+    /// until it has had a reply.
     pub introduction: Option<Vec<u8>>,
     /// The kind (§7.10.1).
     pub kind: u64,

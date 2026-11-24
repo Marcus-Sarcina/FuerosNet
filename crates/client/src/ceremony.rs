@@ -740,12 +740,9 @@ pub struct Client {
     /// ([`Client::take_adoption_invited`]).
     adoption_invited: Option<Keyhash>,
     /// Rounds a peer has been greeted without a word back, and the count
-    /// at which the session with it is opened anew: `light-client-
-    /// requirements.md` §3's rule for a verifier that lost its sessions,
-    /// applied to a peer — only the sender can open another, and the
-    /// first message on it carries this side's introduction, which is
-    /// what a peer restored from its phrase needs to bind this side at
-    /// all. Doubling, so a peer that is gone drains no prekey pool.
+    /// at which what was deposited with it is taken as lost and goes
+    /// again: a peer restored from its phrase holds no deposit. Doubling,
+    /// so a peer that is gone costs a deposit ever more rarely.
     peer_silence: BTreeMap<Keyhash, (u32, u32)>,
     /// Its state as a subject.
     pub subject: SubjectState,
