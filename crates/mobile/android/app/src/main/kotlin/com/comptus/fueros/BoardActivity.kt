@@ -97,32 +97,57 @@ class BoardActivity : Activity() {
             setTextColor(Palette.now.sub)
             setPadding(0, px(8), 0, px(8))
         }
-        val reach = TextView(this).apply {
-            textSize = 20f
-            typeface = Type.mono
-            gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        }
+        // **either count a level at a time** [author, 2026-10-27], each on
+        // a row of its own so the figure has room to be read
+        val figures = mutableListOf<() -> Unit>()
         fun say() {
-            reach.text = Chrome.reach(up, down)
-            says.text = "It reaches $up ${levels(up)} above you, with each one's direct " +
-                "subordinates, and $down ${levels(down)} below you."
+            figures.forEach { it() }
+            says.text = "Posted as ${Chrome.reach(up, down)}: it reaches $up ${levels(up)} above " +
+                "you, with each one's direct subordinates, and $down ${levels(down)} below you."
         }
-        fun stepper(label: String, move: () -> Unit) = Button(this).apply {
-            text = label
-            setOnClickListener {
-                move()
-                say()
-            }
-        }
-        val steps = LinearLayout(this).apply {
+        fun stepRow(label: String, read: () -> Int, move: (Int) -> Unit) = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            addView(stepper("up −") { up = Chrome.step(up, -1) })
-            addView(stepper("up +") { up = Chrome.step(up, 1) })
-            addView(reach)
-            addView(stepper("down −") { down = Chrome.step(down, -1) })
-            addView(stepper("down +") { down = Chrome.step(down, 1) })
+            val figure = TextView(this@BoardActivity).apply {
+                textSize = 18f
+                typeface = Type.mono
+                gravity = Gravity.CENTER
+                minWidth = px(48)
+            }
+            figures += { figure.text = read().toString() }
+            addView(
+                TextView(this@BoardActivity).apply {
+                    text = label
+                    textSize = 16f
+                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                },
+            )
+            addView(
+                Button(this@BoardActivity).apply {
+                    text = "−"
+                    contentDescription = "$label, one fewer"
+                    setOnClickListener {
+                        move(-1)
+                        say()
+                    }
+                },
+            )
+            addView(figure)
+            addView(
+                Button(this@BoardActivity).apply {
+                    text = "+"
+                    contentDescription = "$label, one more"
+                    setOnClickListener {
+                        move(1)
+                        say()
+                    }
+                },
+            )
+        }
+        val steps = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(stepRow("Levels up", { up }) { up = Chrome.step(up, it) })
+            addView(stepRow("Levels down", { down }) { down = Chrome.step(down, it) })
         }
         val post = Button(this).apply { text = "Post" }
         post.setOnClickListener {

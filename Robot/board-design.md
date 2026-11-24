@@ -469,3 +469,15 @@ title, words (8,192 bytes), alias, a classical signature under
 - **Known limits, to raise as they bite**: the whole of an identity's pools
   is one stored blob, rewritten when a post arrives; a post shows its age
   and not its date; no notification is raised for a board post.
+
+## On the bench 2026-11-24
+
+Node `docker.io/sarcina/rhtnd:9d68dbf2-bench` on the droplet, the app on all
+four phones, the desktop restarted. GXV began a thread at `+2/-2`; MRK, one
+level below, was delivered it, read it as `+3/-1`, and replied; GXV read the
+reply as `+2/-2`. MRK's orb wore the unread count until the thread was
+opened. ZU8 and 4VC hold no position in a subnet yet and keep empty boards.
+
+- A phone attached before the node was upgraded asked the old node, which
+  rejected request type 17 without a word, and did not ask again until its
+  session was replaced. Relaunch the apps after a node upgrade.
