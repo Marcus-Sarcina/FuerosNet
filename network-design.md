@@ -5017,7 +5017,9 @@ uncontested one. Recorded as unset (§21.1).
 regardless of network size, since a node can answer from its own children and refer
 onward rather than holding a map of who lives beneath it. This is the aggregation
 argument behind §3.2 and §12.2, and it bounds what a node *must* keep rather than
-what it *may*.
+what it *may*. **The downline table of §15.2.2 is required beside it and is not
+such a map** [author, 2026-11-23]: it holds which positions beneath a node are
+filled and holds nobody's identity.
 
 **An infra node publishes its endpoints as a signed record** (`wire-format.md`
 §7.6), carried in the topology class and therefore reaching its patron. A light client's address arrives when it attaches (§14.1.2); an infra
@@ -5057,7 +5059,10 @@ identity is (§12.2).
 
 **Only the infra tier closest to a light-client endpoint relays that client's
 traffic.** The exception is control-plane transactions, which must be visible to
-the local network and therefore travel the tree.
+the local network and therefore travel the tree. **A board post travels the
+tree too** (§14.4), and is not payload: it is signed for a band of positions
+rather than sealed to a party, and the nodes along that band are how it gets
+there.
 
 **Payload takes the direct path where it can, and the relayed path when it
 cannot.** A verification query and its response are payload (§7.3,
@@ -6725,11 +6730,121 @@ recipients.
 it is a **counting** operation over independently produced signatures rather than
 a coordinated one, which is why it works here and a coordinated one would not.
 
+### 14.4 The subnet's board
+
+**Every subnet has one board, and every node serving the subnet carries it**
+[author, 2026-11-23]. It is a standard feature of a node and not a resource:
+it is on no catalog page (§11.5), behind no grant and no role, and reaching it
+takes nothing but a position in the subnet. A node serves one subnet (§3.3),
+so it holds one board.
+
+**It is in the protocol because the nodes carrying a post must agree on who it
+reaches** [author, 2026-11-23]: a post crosses nodes run by different people,
+and the rule that decides where it stops has to be the same at each of them.
+**What a post says and how a board looks are a client's.** A node carries a
+post as bytes it does not read (`wire-format.md` §10.3): it reads the count
+that says how far the post travels and learns who sent it from the session it
+arrived on, and the signature, the thread, the date and the words are inside,
+for the clients to check and show.
+
+**It is not §14.3's fanout, and the difference is who enumerates.** A fanout
+is pairwise deliveries, each sealed to its recipient, to parties the sender
+can name, which bounds it at the sender's horizon. A post is handed to the
+writer's serving node and carried along the tree by nodes, each working out
+its own part from its own downline (§15.2.2), so it reaches members the writer
+could not name. **A post is signed and not sealed** [author, 2026-11-18], so
+a node holds what it carries in the clear, and what §18.1 says of a provider
+beneath a node covers that node's board whole.
+
+**A post says how far it travels, as a count each way** [author, 2026-10-27]:
+`+n/-m` is `n` levels up and `m` levels down along the subnet's tree, measured
+from the writer [author, 2026-11-18].
+
+- **Down to `m`**: the writer's own subtree, to `m` levels.
+- **Up to `n`**: each of the writer's ancestors to the `n`th, and each of
+  those ancestors' direct subordinates, and nothing further down their
+  branches.
+
+So `+0/-0` is a note to oneself, `+0/-1` reaches the writer's direct
+subordinates, and `+1/-0` the patron and the writer's siblings. **It is not the
+`n`th ancestor's subtree** [author, 2026-11-18]: counting down from the highest
+tier reached would fan out drastically, and the board is a practical
+coordinating mechanism of dozens to low hundreds of readers per post, not a
+broadcast. **Wide distribution is a patron's act**: a patron who reads a post
+may post it again from where they stand with a reach of their own, and choosing
+what deserves that is part of their authority and their service to the subnet.
+
+**The band of positions a post reaches never moves; the count is read from
+where the reader stands** [author, 2026-10-27]. A post written `+3/-3` is
+`+2/-4` to the writer's patron and `+4/-2` to the writer's subordinates.
+**Nothing on a board comes from another subnet**: a post from four tiers up is
+the same subnet seen from further away.
+
+**How far up a member may post is earned** [author, 2026-11-18], so that the
+upper levels of a subnet are not filled with posts from members weakly
+attached to it. Everyone may post `+2`. A member whose downline runs nodes may
+post one level higher for each level down that the deepest of those nodes
+stands: **two, plus the depth of the member's node-running downline** [author,
+2026-11-23]. **The first node a post reaches applies it**, from its own
+downline table (§15.2.2), **and a post over the cap is carried with its upward
+count lowered to the cap, not refused**. It is that node's view, and where the
+table reads shallow the cap is lower than the member has earned and never
+higher.
+
+**Only upward reach is capped** [author, 2026-11-23]. A member's own subtree is
+theirs to address at any depth, and a symmetrical cap would never bind: two
+plus the depth of the node-running downline always equals or exceeds the depth
+of the downline itself, no position lying more than two levels below a node
+(§3.3).
+
+**Forwarding is the node's decision, made from its downline and not per post**
+[author, 2026-11-18].
+
+- **Upward, a post always goes on** while its count allows, to the next node
+  up the patron chain: each node's operator is attached to their own node, so
+  every node above within reach has a reader.
+- **Downward, a node sends a post to the downline nodes that serve somebody in
+  reach**, members attaching to their nearest node (§12.6.1). Which nodes
+  those are is the same for every post of a given depth, so a node works it
+  out when its downline changes (an adoption, an ending, a node launched or
+  closed) and keeps **three lists, for one, two and three levels down**. A
+  node's nearest downline nodes stand no further than three levels below it
+  (§3.3), so a post reaching deeper uses the third list and carries its real
+  count on.
+
+**A post travels in two legs, and each copy is on one of them** [author,
+2026-11-23]. The copy going up reaches the writer's ancestors and their direct
+subordinates and nothing below those; the copies going down stay in the
+writer's subtree. One count re-expressed at each step would not keep the two
+apart: `+3/-3` read as `+2/-4` at the patron would send the post four levels
+down the patron's whole subtree, into the siblings' branches. **A node
+delivers a post once to each member it serves whose position is in the band,
+and forwards nothing it has already carried**, which it tells by the hash of
+the post's bytes.
+
+**A node keeps what it carries in a first-in-first-out queue bounded by
+storage and not by time** [author, 2026-11-18], and numbers each post as it
+stores it, so that a client that was away asks for everything after the last
+number it holds [author, 2026-11-23]. **A client keeps a pool per subnet**,
+bounded the same way, and drops the oldest first by the post's own date, since
+it reads posts and a node counts arrivals. **What is unread is the client's to
+know** [author, 2026-11-23]: it holds the pool and knows what it has shown, and
+a node never learns that a post was read.
+
+**Delivery is best-effort**, as topology's is (`wire-format.md` §10.1.3): no
+acknowledgement and no retry, and a post a member missed is in its node's
+queue at the next asking or has fallen out of it.
+
+**A post is not a transaction and enters no archive** [author, 2026-10-28]. A
+board persists what is not a record of anything, and the protocol's
+persistence is archives of records (§10); the queue and the pools are all the
+keeping there is.
+
 ---
 
 ## 15. Propagation, horizons, and the rootward memo
 
-Six message classes with different reach and different persistence — point-to-point
+Seven message classes with different reach and different persistence — point-to-point
 attestation is separated from ordinary attestation because its audience is one party,
 not the usual participants-patrons-witnesses set:
 
@@ -6741,6 +6856,7 @@ not the usual participants-patrons-witnesses set:
 | **Attestation, point-to-point** | abuse reports (§11.6) | delivered to the addressed party only, never broadcast | stored by the resource owner alone. **Not** by patrons or witnesses, an abuse report is a private complaint, and giving it the generic attestation audience would make it the public accusation §6.2.2 declines to build |
 | **Liveness / routing state** | heartbeats, route updates | horizon | **process and discard.** Keep the table, not the update history (as BGP keeps the RIB) |
 | **Payload** | application data | point-to-point | **endpoints only.** Relaying infra nodes carry ciphertext they cannot read (§14.2). A patron sees plaintext only when it is itself the addressed endpoint |
+| **Board** | posts on a subnet's board (§14.4) | **the band each post names**, along the subnet's tree and never out of it, carried node to node | a storage-bounded queue at each node that carried it and a pool at each client that read it; **signed, not sealed**, so a node holds it in the clear |
 
 **Propagation patterns are orthogonal to classes.** A message class says *what
 reach* is appropriate; a pattern says *how* that reach is achieved. Three patterns
@@ -6991,6 +7107,49 @@ That is not authority — nothing in a table lets a root compel anything, and §
 withdrew the mechanism that would have, but it is asymmetric visibility in a design
 whose §1 rests on there being *no one standing above the participants to appeal to*.
 Registered as P35.
+
+#### 15.2.2 The downline table
+
+**A node keeps the shape of its downline: which positions beneath it are
+filled, and which of them run a node** [author, 2026-11-18]. One entry for each
+member below it, keyed by the path of slot indices from the node down to that
+member, holding the slots filled beneath that member and whether the member
+runs a node. **It holds no identities and no memos**: a position is a path, and
+who stands at it is not recorded. It is kept across a restart.
+
+**It is required, and it meets §12.6.1** [author, 2026-11-23]. What §12.6.1
+refuses is requiring a node to hold a map of who lives beneath it, and this
+holds where and not who. §15.2.1's memo table, which holds occupants, stays
+optional.
+
+**It is filled from what the node already receives** [author, 2026-11-23].
+Within the node's own horizon, from the topology it stores (§15.1): the
+adoptions and endings, and the endpoint records that say who runs a node
+(`wire-format.md` §7.6). Deeper, from the memos that pass through it (§15.2):
+a memo filling a slot adds the position, and a memo emptying one removes it
+**and every position beneath it**, the subtree having left with its head. So
+the depth it shows moves both ways, and nothing new travels to build it
+(`wire-format.md` §10.2.5).
+
+**Who runs a node is known exactly only near.** A memo says a slot is filled
+and not that its occupant serves. Beyond its horizon a node knows the nodes
+that dial it as their upstream, and of the rest what §3.3 implies: no position
+lies more than two levels below a node, so a filled position three or more
+levels beneath a member stands for a node in that member's downline no more
+than two levels above it.
+
+**Where it is wrong it reads shallow.** Memos are best-effort, and a subtree
+carried in whole by a re-adoption sends none until it next changes [author,
+2026-11-18]. What reads it is priced for that: a board's cap comes out lower
+than was earned (§14.4), and a post still reaches everyone the table shows.
+**And it is built from hints**: a memo is unsigned (`wire-format.md` §10.2.3),
+so a node below can make its own branch look deeper than it is, which buys
+that branch a longer reach up a board and nothing else. Nothing is cut,
+refused or disavowed on this table's word.
+
+**It is the node's own state and not the board's** [author, 2026-11-23]. The
+board is the first thing to read it, for a member's reach upward and for the
+three lists a post is forwarded by (§14.4).
 
 ---
 
@@ -8832,6 +8991,11 @@ not derived.
 | — | Default transport port | 7431/udp | Overridable per `NetworkPoint` (`wire-format.md` §9.2) |
 | — | Delegated transport credential | 48 h each, a run of 45 | 90 days end to end. The run is what lets an instance serve while its operator's device is asleep, and is the horizon a seized store inherits (§12.6.5). Chosen, not derived |
 | — | Anchor hysteresis | promote at S, demote at S/2 | So a boundary node does not flap (§12.2). The ratio is chosen |
+| — | Board post, largest | 16 KiB | **Provisional** [author, 2026-11-23]. Rides a control frame, which bounds it at 64 KiB (`wire-format.md` §10.3) |
+| — | Board queue per node | 100 MB | **Provisional** [author, 2026-11-18]: about 6,400 posts of the largest size, first in first out, with no time limit (§14.4) |
+| — | Board pool per subnet, on a client | 50 MB | **Provisional** [author, 2026-11-18]: oldest first by the post's own date (§14.4) |
+| — | Board reach, default | `+2/-2` | What a client offers before the writer changes it [author, 2026-10-27] (§14.4) |
+| — | Board reach upward, base | 2 | What every member may post; each level of node-running downline adds one [author, 2026-11-18] (§14.4) |
 | — | Anchor index budget | 25 MB | Sizes the keyhash-only index at ~6 MB for 120,000 anchors and rules out full keys at ~40× that, ~9.5× the budget (§12.2). Chosen |
 | — | Maximum `finalized_at` − `started_at` | **24 hours** | Bounds chronology poisoning: every envelope signer's chain must clear a record's `finalized_at`, so an unbounded one freezes the victim and every witness. Structural, since it compares two fields in the record rather than either against a clock (`wire-format.md` §3.2) |
 

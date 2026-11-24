@@ -254,3 +254,58 @@ two legs, with the upward copy's `down` fixed at 1.
 satisfies 12.6.1; that is what we designed it for."* So section 12.6.1 stands
 as written, and the design says why the downline table meets it: it holds no
 identities, and section 12.6.1 forbids requiring a map of who is where.
+
+## Three more, asked and answered 2026-11-23 [author]
+
+Asked after reading design section 12.6.1 again; two of the three were
+already settled and I had lost them.
+
+1. **How a node learns its downline's shape.** *"You populate the subnet map
+   by a combination of adoptions seen within the trust horizon and
+   annotations based on the rootward and leafward propagating address
+   change/cycle detection messages."* So: the topology the node stores within
+   its own horizon (adoptions, endings, endpoint records, which flood both
+   ways) gives the near part exactly, and the rootward memos give positions
+   at any depth. No new wire field.
+   - *The leafward one* is the downward memo of wire-format section 10.2.4,
+     the same frame sent down the other branch; I had lost that it exists.
+     A memo passing through in either direction updates the table.
+   - *My reading of "address change messages"*: the endpoint records, the
+     topology class's address objects, which flood the horizon both ways.
+     Unconfirmed.
+   - *What that leaves*: beyond the horizon a memo says a slot is filled and
+     not that its occupant runs a node. **Assumed, asked**: the topology rule
+     of design section 3.3 fills it in. No position lies more than two levels
+     below a node, so a filled position at depth k of at least 3 below a
+     writer means a node at depth k-2 or deeper in that writer's downline.
+     The count is the larger of the deepest node the table marks and that
+     floor, and never over-counts.
+2. **Deep forwarding.** There is no such edge: *"there can be no node more
+   than two steps below the nearest infra node by the basic topology
+   rules."* Design section 3.3 (L = 2): a node's nearest downline nodes stand
+   one, two or three levels down and never further, which is why three lists
+   are all of them [2026-11-18: *"propagation for all magnitudes beyond -3
+   will be the same"*].
+3. **Blob bound** 16 KiB, node queue 100 MB (about 6,400 full-size posts):
+   *"These assumptions seem good to start with."*
+
+## The wire shape, as written into the documents 2026-11-23
+
+- **One control frame, type 10, `BoardPost`**: `{up, down, blob, number?}`,
+  no reply, in three directions. Who the counts are measured from is known
+  from the session it arrived on:
+  - from a member: from the writer, as written;
+  - node to its upstream (the upward leg): from the *sending* node's
+    position, `down` fixed at 1. Sender coordinates, because the node above
+    may serve light ancestors that are in the band while its own position is
+    not, which a count from the receiver could only say with a negative
+    number;
+  - node to a downstream node (the downward leg): from the *receiving* node's
+    position, `up` 0;
+  - node to a member it serves: both 0, with the node's number.
+- **Catch-up is request type 17**, `{nonce, after?}`, answered with numbered
+  posts in the asker's band, oldest first, and whether more are held.
+- **Raised with the author, not built**: every node on the way up could apply
+  the cap to the position a copy arrived from, which would make the cap hold
+  against a node that does not apply it for its own members. The ruling is
+  the first node only.

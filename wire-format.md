@@ -206,6 +206,8 @@ malformed, not merely unusual.
 | Witnesses per presence record | 16 |
 | Path length | 24 nibbles (depth 24 at f=10 exceeds any plausible network) |
 | Profile image | 64 KiB, and an alias 64 characters (§7.11): a small picture and a name, fetched per contact, which the horizon multiplies |
+| Board post | 16 KiB — exactly 16,384 bytes of the post itself (§10.3), which a control frame's 64 KiB carries with room |
+| Posts per `BoardReply` (§10.3) | 256, and fewer where the frame bound is met first: fifteen of the largest size fit one reply |
 | Merge back-pointers per signer | 8 |
 | Verifier responses per presence record | 32 — **two subjects × a per-subject threshold capped at 10**, with headroom. Sixteen does not fit: two well-connected participants require ten each |
 | Asserted locations per record | 4 |
@@ -4227,6 +4229,7 @@ through the very ceiling that exists to bound the receiver's buffer.
 | 7 | `Delegation` (§8.2): a delegated peer's first frame on a connection that opens no session [author, 2026-09-21] |
 | 8 | `Reopen` (§8.2): a node's operator giving a sealed package its key [author, 2026-11-22] |
 | 9 | `PageChanged` (§6.9): the member's page at this node has changed [author, 2026-11-23] |
+| 10 | `BoardPost` (§10.3): a post on the subnet's board [author, 2026-11-23] |
 
 **Topology framing belongs on stream 0 and not on a bidirectional stream.** Both are unsolicited pushes with no reply, so neither is a request; and
 the extension posture decides it. An unknown control frame is **skipped** and the
@@ -4878,6 +4881,7 @@ no continuation to preserve.
 | 14 | `ProfileRequest` (§7.11), read-only |
 | 15 | `HorizonAssertion` (§7.12) |
 | 16 | `CatalogPageRequest` (§6.9) |
+| 17 | `BoardRequest` (§10.3), read-only |
 
 **The reply carries no type tag and is framed identically otherwise**: the same
 `u32-be` length prefix and CBOR body. It answers a request whose type the requester
@@ -5318,6 +5322,161 @@ misroutes nobody. What the memo achieves even where a patron declines to act is
 that **the rest of the subnet's view reflects the most recent adoption**, to the
 extent its members run compliant clients. That is a convergence property of compliant
 behaviour, not a rule anyone enforces.
+
+#### 10.2.5 The downline table
+
+**A node keeps which positions beneath it are filled** (design §15.2.2), and a
+memo is what tells it of the ones beyond its horizon. **This table is required
+where §10.2.2's is optional**, and it differs from that one in what it keeps:
+a position is the path of slot indices from the node down to it, and no
+occupant is held.
+
+**A memo passing through, in either direction, that names a slot beneath the
+node is applied to it.** The position is field 2's path below the node's own,
+followed by field 3's slot. Field 5 present fills the position; field 5 absent
+empties it **and removes every position beneath it**. Ordering is §10.2.2's,
+within one patron's one slot and by field 4: the table keeps the timestamp
+that last set each slot, an emptied one included, so that an earlier memo
+arriving late reinstates nothing.
+
+**Within its horizon a node fills the same table from the transactions it
+stores** (§10.1), which are signed where a memo is not, and marks a position
+as running a node where it holds that position's endpoint record (§7.6) or
+that node has dialled it as its upstream.
+
+**§10.2.3 stands, and this table does not strain it.** A memo here is a hint
+as it is everywhere: nothing is confirmed against it and nothing is cut on it.
+What reads the table is how far a post travels (§10.3), where a fabricated
+memo lengthens its fabricator's own reach and an absent one shortens somebody's.
+
+### 10.3 The board post
+
+**A post on a subnet's board (design §14.4) is carried as `BoardPost`, control
+frame type 10 on stream 0 (§8.0)** [author, 2026-11-23], in three directions: a
+member to the node serving it, a node to the next node up or down the tree,
+and a node to a member it serves. It has no reply in any of them.
+
+```
+BoardPost = {
+  1: uint,                   ; up: levels above still to reach, 0 to 24
+  2: uint,                   ; down: levels below still to reach, 0 to 24
+  3: bstr .size (1..16384),  ; the post, which no node reads
+  ? 4: uint                  ; the number the sending node stored it under;
+                             ;   from a node to a member it serves, and
+                             ;   nowhere else
+}
+```
+
+**A node reads fields 1 and 2 and nothing of field 3** [author, 2026-11-23].
+The writer's signature, the thread, the date and the words are inside it and
+are the clients' to check and to show; who sent a frame is known from the
+session it arrived on, which is all the cap below needs. **So a node does not
+check that a post is its sender's own**, and a member handing in a post
+somebody else signed has replayed it and forged nothing.
+
+**The counts are measured from a different place in each direction, and the
+session a frame arrives on says which.**
+
+| Sent by | To | Fields 1 and 2 are measured from | And say |
+|---|---|---|---|
+| a member | the node serving it | the writer | the post as written: `+up/-down` |
+| a node | the next node up | the **sending** node's own position | field 1, at least 1: that position's ancestors to so many levels, **and each one's direct subordinates**. Field 2 is 1 |
+| a node | a node beneath it | the **receiving** node's own position | field 1 is 0: that position and its subtree to field 2 levels |
+| a node | a member it serves | nothing | both 0, the post being for this member; field 4 present |
+
+**The upward copy counts from its sender** because the node above may serve
+members who are in the band while its own position is not: a node's upstream
+is its nearest infrastructure ancestor (design §12.6.1), and the light
+patrons between the two attach there. A count from the receiver would have to
+go below zero to say so.
+
+**A frame that does not fit the session it arrived on is discarded** (§8.0): a
+copy from below whose field 1 is 0 or whose field 2 is not 1, a copy from
+above whose field 1 is not 0, a count over 24, field 4 from anyone but the
+node serving the receiver, and any `BoardPost` from a party that is none of
+the four rows.
+
+**What a node does with one**, where *serves* is design §12.6.1's (the node's
+own position, and every position beneath it with no node at or above it short
+of this one) and a *nearest downline node* is a position running a node with
+none between it and this one, which stands one, two or three levels down
+(design §3.3):
+
+1. **From a member it serves**, standing `w` levels beneath the node (0 for
+   its own operator, else 1 or 2): field 1 is lowered to that member's reach
+   (design §14.4) where it exceeds it. Then:
+   - **below**, every position at or beneath the writer to field 2 levels is
+     in the band, and each nearest downline node beneath the writer, `d`
+     levels below them with `d` no more than field 2, is sent `(0, field 2 -
+     d)`;
+   - **above**, for each `i` from 1 to the lesser of field 1 and `w`, the
+     writer's ancestor `i` levels up and that ancestor's direct subordinates
+     are in the band, and each of those subordinates that runs a node is sent
+     `(0, 0)`;
+   - **and on**, where field 1 exceeds `w`, the node's upstream is sent
+     `(field 1 - w, 1)`.
+2. **From a node beneath it**, standing `d` levels down: for each `i` from 1
+   to the lesser of field 1 and `d`, that node's ancestor `i` levels up and
+   the ancestor's direct subordinates are in the band, each of those that
+   runs a node being sent `(0, 0)`; and where field 1 exceeds `d`, the node's
+   upstream is sent `(field 1 - d, 1)`.
+3. **From its upstream**: its own position and every position beneath it to
+   field 2 levels are in the band, and each nearest downline node `d` levels
+   down, with `d` no more than field 2, is sent `(0, field 2 - d)`.
+
+**In each case the node delivers the post once to every session of every
+member it serves whose position is in the band**, the session it arrived on
+excepted, and the writer's other devices included.
+
+**Which downline nodes a count reaches is worked out when the downline
+changes, not per post** (design §14.4): a list for one level, for two and for
+three, the third serving every count above it.
+
+**A post is known by the SHA-256 of field 3, and a node that holds one of
+that hash discards another** [author, 2026-11-23]: it is neither delivered nor
+forwarded again. A tree has one path between two nodes, so a second copy is a
+replay or a fault and never a wider band arriving late.
+
+**A node stores each post it has delivered or would have delivered**, with the
+counts and the direction it came from, in a queue bounded by storage and
+emptied oldest first (design §14.4), **and numbers it**: a counter of the
+node's own that rises by one for each post stored, is kept across a restart
+and is never reused. The hash above is remembered for as long as the post is
+held.
+
+**A member that was away asks for what it missed** on a bidirectional stream
+(§9.2) tagged request type 17, one request per stream, the reply closing it.
+
+```
+BoardRequest = {
+  1: bstr .size 16,          ; nonce, echoed in the reply
+  ? 2: uint                  ; the last number the asker holds from this
+                             ;   node; absent for everything held
+}
+
+BoardReply = {
+  1: bstr .size 16,          ; echoes the request nonce
+  2: [ * [ uint, bstr .size (1..16384) ] ],
+                             ; number and post, ascending by number: at most
+                             ;   256, and no more than the frame bound takes
+  3: uint,                   ; the number this reply read through: ask from
+                             ;   here next
+  4: bool                    ; whether posts numbered above field 3 are held
+}
+```
+
+**The reply holds the posts numbered above the request's field 2 whose band
+holds the asker's position**, the band read against where the asker stands
+when it asks. Field 3 may exceed the last number in field 2, later posts
+having been for somebody else. **A number the node no longer holds, or never
+gave out, is answered as its absence is**, from the oldest post held: a queue
+that has moved on, or a node rebuilt, costs the asker a gap or a repeat and
+no error. **An asker this node does not serve is refused as §6.9's is**, the
+stream closing with no reply. The request changes nothing at the node and is
+in §9.2's read-only class.
+
+**No acknowledgement and no retry**, on §10.1.3's reasoning: a frame that does
+not arrive is repaired by the asking above or not at all.
 
 ## 11. Resource requests
 

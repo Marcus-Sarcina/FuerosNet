@@ -46,7 +46,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | Identity and cryptographic primitives | `crypto/src/{identity,verify,xwing,seal,encryption_key,node_key}.rs` | Hybrid identity and verification present, and the split seal's parts: X-Wing (W §7.8.1), the identity's encryption key (W §2.5), the node key, the message key, the AEAD and the tag. Its composition awaits the analysis noted below. | SIG, PAY |
 | Transactions and identity archive | `archive/src/{tx,record,chain,walk,series,topology,endpoint,locator,currency,node_key,sealed,catalog,submission}.rs` | Typed transactions, verification, archive traversal and state objects present. | TX, ARC, TOP, CUR |
 | Transport and connectivity | `transport/src/{tls,session,queue,stun,traversal}.rs` | QUIC/TLS, session framing, queue support and traversal present. | NET, SES, RES, MAIL |
-| Infrastructure node | `node/src/` | Store, materialized view, propagation, resolution, currency, peering, the per-recipient node keys of W §7.8, wake, queue, submissions, catalog, resources, HTTP and trust runtime present. | TOP, RES, CUR, MAIL, CAT, GAT, OPS |
+| Infrastructure node | `node/src/` | Store, materialized view, propagation, resolution, currency, peering, the per-recipient node keys of W §7.8, wake, queue, submissions, catalog, resources, HTTP and trust runtime present. The downline table and the subnet's board (D §§14.4, 15.2.2) are planned. | TOP, RES, CUR, MAIL, CAT, GAT, OPS, BRD |
 | Participant kernel | `client/src/` | Ceremony, selection, verifier, capture keys, archive, rotation, restore, payload under the split seal (D §14.2.4), horizon, catalog, trust and notices present. Complete product deployment remains planned. | CER, VER, CAP, REC, PAY, UX |
 | Network adaptors | `adaptors/src/{serving,attached,actor,verifier,courier,direct}.rs` | Real serving/attached and actor-to-network paths, verifier courier and direct path integrations present. | SES, VER, MAIL, PAY, INT |
 | Observer-relative policy | `policy/src/{evidence,flow,landscape,archive,series,conformance,policy}.rs` | Typed evidence, flow metric, landscape, archive and policy evaluation present. | POL |
@@ -230,6 +230,31 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | TOP-032 | C | Accept an EndpointRecord from a signer nothing had marked infrastructure: publication is the publisher's commitment and a receiver cannot distinguish an infra node from a light client that signed one. Holding the record is what marks the publisher; the bound that applies is the horizon. | W §7.6; D §1.1 |
 | TOP-033 | C | A storage decision admits only what the node's own materialized state can hold: refuse before retaining or forwarding, never apply the refusal afterwards. A forwarding node vouches with its storage decision, so storing and then rejecting floods what it has itself declined. Cover slot occupancy, and distinguish a held record replaying from a live conflict. | W §§10.1.1–10.1.2; D §3.1 |
 | TOP-034 | C | Exercise the endpoint-line rules at every holder that keeps one, node and participant alike: exact duplicate, older, incomparable, equal-sequence retirement of both contents, and an unproved second series. A rule stated once and implemented twice must be tested at both, including across a cache restore, where the retirements travel with the addresses. | W §10.1.2; L §4.2 |
+
+### The downline table
+
+| ID | Kind | Requirement and functional test oracle | Authority |
+|---|---|---|---|
+| TOP-047 | C | **A node keeps the shape of its downline by position, and holds nobody's identity in it** [author, 2026-11-18; required, 2026-11-23, and meeting D §12.6.1]. One entry per member beneath it, keyed by the path of slot indices from the node, holding the slots filled beneath that member and whether the member runs a node. Test: within the horizon it is filled from stored adoptions, endings and endpoint records; beyond it from memos passing through in either direction, a filling memo adding the position and an emptying one removing it **and every position beneath it**; an earlier memo arriving late reinstates nothing; the table survives a restart; and no keyhash can be read out of it at any depth. A memo naming a slot not beneath the node changes nothing. | D §§12.6.1, 15.2.2; W §10.2.5; I §4.1 |
+| TOP-048 | C | **Who runs a node is exact near and a floor beyond.** A position is marked as running a node where its endpoint record is held or it has dialled this node as its upstream. The depth of a member's node-running downline is the deeper of the deepest position so marked beneath them and, where a position stands three or more levels beneath them, two levels short of the deepest position: D §3.3 allows no position more than two levels below a node. Test a light-only downline of depth 1 and 2 (depth 0), a marked node at each of 1, 2 and 3, a memo-only chain of depth 3, 4 and 7 (1, 2 and 5), and a re-adopted subtree that has sent no memo (read at the depth its head shows). The figure never exceeds the true one where §3.3 holds. | D §§3.3, 15.2.2; W §10.2.5 |
+
+### The subnet's board
+
+| ID | Kind | Requirement and functional test oracle | Authority |
+|---|---|---|---|
+| BRD-001 | S | `BoardPost` is control frame 10: up 0–24, down 0–24, a post of 1 to 16,384 bytes, and the sending node's number only from a node to a member it serves. Reject by discarding the frame, the session surviving: an empty post, one of 16,385 bytes, a count of 25, an unknown field, and field 4 from a member or between nodes. | W §§8.0, 10.3, 1.3 |
+| BRD-002 | C | **A frame must fit the session it arrived on.** From a node beneath: field 1 at least 1 and field 2 exactly 1. From the upstream: field 1 exactly 0. From a member served: any counts in range. Discard, with nothing delivered, stored or forwarded, a copy that breaks its row and any `BoardPost` from a party that is none of these: a sibling's session, a peer, a client attached in failover whose position this node does not serve. | W §10.3 |
+| BRD-003 | C | **The band is the writer's ancestors to `n` with each one's direct subordinates, and the writer's subtree to `m`** [author, 2026-11-18]. In a fixture with nodes at every level: `+0/-0` reaches the writer's own other sessions only; `+0/-1` the direct subordinates; `+1/-0` the patron and the siblings and no nephew; `+2/-2` adds the grandpatron, the patron's siblings and two levels beneath the writer, and no cousin. No post reaches a position in another subnet, and none reaches the `n`th ancestor's whole subtree. | D §14.4; W §10.3 |
+| BRD-004 | C | **The same bands hold where a node serves several levels.** With light members one and two levels beneath a node and a node three levels down: a light writer's post is delivered to its light ancestors and their light subordinates by the one node; an upward copy from the node three levels down, field 1 of 1, is delivered to that node's patron and the patron's direct subordinates and **not** to the receiving node's own operator; field 1 of 4 passes `(1, 1)` on to the upstream. The upward copy counts from its sender. | W §10.3; D §§12.6.1, 14.4 |
+| BRD-005 | C | **Upward reach is two plus the depth of the writer's node-running downline, applied by the first node, lowering and not refusing** [author, 2026-11-18, 2026-11-23]. A member with no node beneath them posting `+5/-0` is carried as `+2`; with a node two levels down, as `+4`; the downward count is never lowered at any depth. The writer is not told. A table reading shallow lowers further and never raises. | D §§14.4, 15.2.2; I §13 |
+| BRD-006 | C | **Forwarding is from three lists worked out when the downline changes** [author, 2026-11-18]. The lists hold the nearest downline nodes one, two and three levels down; a count above three uses the third and carries its real count on, so a `-5` post reaches five levels through intervening nodes. Test that an adoption, an ending, a node launched and a node closed each redo the lists, that no post triggers a walk of the table, and that a downline node whose band would be empty is sent nothing. | D §§3.3, 14.4; W §10.3 |
+| BRD-007 | C | **One post, one delivery, one carriage.** A node delivers a post once to every session of every member it serves in the band, the arriving session excepted, and discards a second frame whose post has the SHA-256 of one it holds: not delivered, not stored, not forwarded. A member in the band as both an ancestor and an ancestor's subordinate receives it once. | W §10.3; I §13 |
+| BRD-008 | C | **A node reads the two counts and nothing of the post.** Posts whose bytes are not CBOR, carry no signature, or name another writer are carried exactly as a well-formed one is; nothing of a post's content appears in logs, diagnostics or any index, and no per-writer or per-thread state exists at the node. | W §10.3; I §13; D §14.4 |
+| BRD-009 | C | **The node's queue is bounded by storage, first in first out, with no time limit, and numbered** [author, 2026-11-18, 2026-11-23]. At the bound the oldest posts go, leaving nothing recoverable; a post a year old stays while room remains. Numbers rise by one per post stored, survive a restart and are never reused. The bound is counted in blocks occupied, 100 MB as shipped. | D §§14.4, 21; I §§2, 13 |
+| BRD-010 | S | `BoardRequest` is request type 17: a 16-byte nonce and an optional last number. `BoardReply` echoes the nonce and carries at most 256 `[number, post]` pairs ascending, the number read through, and whether more is held. Reject a reply out of order, over 256, with a post over the bound, or missing field 3 or 4. The request is read-only and may be answered in early data. | W §§9.2, 10.3, 1.3 |
+| BRD-011 | C | **Catch-up returns the asker's band and nothing else.** Two members served by one node at different positions, asking after the same number, receive different posts; field 3 may exceed the last number returned; a number fallen out of the queue, or above any the node gave, is answered from the oldest held with no error; a reply never exceeds the frame bound, fifteen posts of the largest size filling one; an asker the node does not serve has the stream closed with no reply. | W §10.3; I §13 |
+| BRD-012 | C | **The client composes, signs, checks and counts** (L §4.5). Everything a reader needs is inside the signed bytes; a post whose signature does not verify is not shown as its claimed writer's; the default reach is `+2/-2` and a reply states its thread's reach without offering one; a reach is shown from where the reader stands, the writer's `+3/-3` being `+2/-4` one level above. One hash is one post however often it arrives. | L §4.5; D §14.4 |
+| BRD-013 | C | **The client's pool is per subnet, bounded by storage, oldest out first by the post's own date** [author, 2026-11-18], 50 MB as shipped, the date read as no later than the post's arrival so that one dated ahead does not outlive the rest. **The unread count is the client's** [author, 2026-11-23] and rolls into the subnet's count beside what waits at its resources; no frame tells a node what was read. On attaching the client asks from the last number that node gave it, repeats while more is held, and keeps one number per node. | L §§4.5, 8; D §14.4 |
 
 ### Locators, anchors, endpoint publication and iterative resolution
 
@@ -856,7 +881,7 @@ The following ledger makes the common field-by-field mutation suite in §1 manda
 | SCH-018 | S | Cover ArchiveRequest subject / optional frontier / count / age stop / nonce, and ArchiveReply nonce / records / more / returned frontier. An empty required record list is legal; absence of required more/nonce is not. A record is a `PresentedRecord` for a presence record and a bare `Envelope` otherwise. | W §7.9 |
 | SCH-019 | S | Cover RelaySubmission recipient/Sealed/nonce, WakeRegistration nonce/conditional endpoint/key/expiry, SubmissionReply nonce/code, and the exact three-element RelayedPayload array: queue position, Sealed and a 32-byte node secret. Request types 9 and 10 are retired and not reassigned, so a request carrying either is an unknown request type. | W §§7.10, 9.2 |
 | SCH-020 | S | Cover Capabilities, Attach identity/optional currency/capabilities/optional delegation/optional queue position, AttachAck mode/siblings/interval/u64 queue count/capabilities/optional delegation, Delegation key/keyhash/window/hybrid signature, SiblingRef identity/endpoints/material, Heartbeat counter/time and SiblingUpdate optional replacement list. | W §§8.1–8.2 |
-| SCH-021 | S | Cover TopologyPush kind/encoded object and TopologyMemo patron/locator/slot/source timestamp/optional occupant. Control type numbers are 1 Attach, 2 Ack, 3 Heartbeat, 4 SiblingUpdate, 5 Push, 6 Memo, 7 Delegation; numeric spaces are not interchangeable with transaction/request tags. | W §§8.0–8.2, 10 |
+| SCH-021 | S | Cover TopologyPush kind/encoded object and TopologyMemo patron/locator/slot/source timestamp/optional occupant. Control type numbers are 1 Attach, 2 Ack, 3 Heartbeat, 4 SiblingUpdate, 5 Push, 6 Memo, 7 Delegation, 8 Reopen, 9 PageChanged, 10 BoardPost; numeric spaces are not interchangeable with transaction/request tags. | W §§8.0–8.2, 10 |
 | SCH-022 | S | Cover ResourceRequest resource/HTTP bytes and ResourceResponse status/conditional HTTP bytes, all statuses 0–5 and response streaming conditions. Unknown fields in either unsigned map are malformed even when the enclosed HTTP is valid. | W §§11–11.2 |
 | SCH-023 | S | Cover the ceremony's local-interface encodings (`wire-format.md` §14.3): `OpticalContribution` version/full `KeyMaterial`/16-byte contribution, `TranscriptConfirm` version/32-byte ceremony-id, and `IntentExchange` version/echoed contribution/bundle (0..256 `Introduction`)/started_at/retention/initiator/continuation count/the sender's `SignedLocator`/the sender's `EncryptionKey`/optional reported number (null only before an eleventh field), optional serving node as a `NetworkPoint` without its zone, alone or with the sender's adoption by its patron and that patron's `KeyMaterial`, nine fields, ten or eleven, and `BundleContinuation` version/32-byte ceremony-id/index from one/1..256 `Introduction`. Versioned deterministic CBOR with the §1 bounds, the 256 bounding each carriage and not the bundle (`wire-format.md` §5.4); a bundle entry is an introduction (`wire-format.md` §2.3). **An implementation's encoder is held to these vectors byte for byte**, the corpus being derived from the specification independently of it. | W §§14.3, 2.3, 2.5, 5.4, 1 |
 | SCH-024 | S | Cover the remaining local-interface encodings (`wire-format.md` §14.3.2–.3): `Candidate` kind (0 host, 1 server-reflexive)/address (4-byte IPv4 or 16-byte IPv6, both families)/nonzero u16 port, with `CandidateHandover` version/ceremony-id/1..8 candidates and the same bare 1..8 `Candidate` array on the payload path; `DeviceIntroduction` version/32-byte device key, and `DeviceCredential` version/1..45 `wire-format.md` §8.2 delegations/the identity's 32-byte X-Wing decapsulation seed/its 32-byte sealing-authentication private key (`wire-format.md` §2.5). Versioned deterministic CBOR with the §1 bounds; port zero, an empty candidate list and a ninth candidate are malformed. | W §§14.3, 4.5, 2.5, 8.2, 1 |
@@ -927,6 +952,8 @@ Closed enums reject unassigned values unless their definition explicitly says ot
 | Control 1–4 | Attached peers, heartbeat both directions | Attach/Ack/Heartbeat/SiblingUpdate session state and durable sibling cache. | SES |
 | Control 5 | Adjacent authenticated topology peers | Store-if-eligible, byte-identical forward iff newly stored. | TOP |
 | Control 6 | Child-side topology observer → ancestors | Current rootward hint/table, not signed evidence or global directory. | TOP |
+| Control 10 board post | A member → the node serving it; a node → the next node up or down; a node → each member it serves in the band | An opaque signed post and two counts; a storage-bounded first-in-first-out queue per node, no archive record, no acknowledgement. | BRD |
+| Request 17 board catch-up | A member → the node serving it | The numbered posts in the asker's band after the number it holds; read-only, nothing recorded of the asking. | BRD |
 | Unidirectional payload / queue drain | Recipient's serving node → each device proving the identity; or a direct end-to-end peer → recipient | Sealed with the node's half opened, until the recipient opens it; a delivered copy kept thirty days from first delivery, per node. | MAIL, PAY |
 | KeyGrant / subject response copy | Subject ↔ addressed verifier over E2E association | Ephemeral authorized key/result exchange; no new archive transaction. | VER, CAP |
 | SignedLocator / AnchorEntry / EndpointRecord | Named subject → introducer or routing holders | Current-state signatures; only EndpointRecord has the defined push kind. | RES, TOP |
@@ -1001,6 +1028,9 @@ Use this table alongside OPS/VAL tests during export, restart, migration and del
 | Current topology / current series proof | Eligible horizon holder | Validate against signed authority, retain relevant evidence, prune obsolete derived membership; proofs are not guessed from series magnitude. |
 | Materialized view / routing cache | Local derived state | Rebuildable; bounded/expiring where specified; never overrides authenticated facts. |
 | Rootward memo table | Ancestor within that subnet | Optional current (patron,slot) rows/tombstones, no historical update log or cross-subnet/IP index. |
+| Downline table | Every node, for its own subtree | Required; positions filled and which run a node, with the timestamp that last set each slot; no identity, no memo, no history; kept across a restart (D §15.2.2). |
+| Board queue | Each node that carried the post | The post's bytes, its two counts, the direction it came from, its hash and the node's number; storage-bounded, oldest out first, no time limit; in the clear (D §14.4). |
+| Board pool and unread state | Client, per subnet | Storage-bounded, oldest out first by the post's own date; what was read is the client's alone. |
 | Sibling list and public pins | Attached client kernel | Complete replacement, persisted for dark-primary failover; unusable without validated matching material. |
 | Queue | Custodial serving node only | Ciphertext, recipient, the node key it was sealed to, position, arrival and first-delivery time, nothing per device; undelivered indefinitely under the per-subordinate cap, delivered thirty days from first delivery (per node); at the cap oldest delivered removed first, newest refused only when all held is undelivered; immediate deletion with the node's half, including crash-recovery copies; no sibling replica. |
 | Node keys | Recipient's serving node | One rotating key per recipient served, one day as shipped; each private half held while a message sealed to it is queued and deleted with the last; served unconsumed to whoever asks; no fetch history (I §1's cross-class rule). |
@@ -1028,8 +1058,8 @@ This index accounts for the root document sections, including rationale that doe
 | D §11 | CAT/GAT/PKG/UX; owner scope, pairwise boundary, disclosure and revocation tests. |
 | D §12 | RES/CUR/PAY/TOP; O-007's remaining gap, the unpinned intermediate/anchor authentication profile. |
 | D §13 | TX/REC/OPS/INT/UX; formation, multiple bindings and backup. |
-| D §14 | NET/SES/MAIL/PAY/APP; live device/wake and the split seal's implementation remain planned integrations. |
-| D §15 | TOP/ARC/VAL; explicit horizon counts. |
+| D §14 | NET/SES/MAIL/PAY/APP/BRD; live device/wake and the split seal's implementation remain planned integrations. |
+| D §15 | TOP/ARC/VAL; explicit horizon counts; the downline table in TOP. |
 | D §16 | POL/GAT/REC; distinction from topology and alternative policies. |
 | D §§17–20 | POL/VAL/UX/PKG/INT; threat experiments, accepted privacy/composition costs and empirical assumptions are not converted into fictional guarantees. |
 | D §21 | Boundary matrix, parameterized policy/performance cases and VAL; chosen values distinguished from derived limits. |
@@ -1041,16 +1071,16 @@ This index accounts for the root document sections, including rationale that doe
 | W §§4–5 | TX/CER/VER/CAP/REC; all six live transaction types, rotation/transfer variants and nested evidence. |
 | W §6 | CAT/PKG/SCH; current service state, scope, replies, private local report. |
 | W §7 | CUR/RES/VER/MAIL/GAT/ARC/SCH; all named standalone objects and services. |
-| W §§8–10 | NET/SES/TOP/SCH; control/request dispatch and propagation. |
+| W §§8–10 | NET/SES/TOP/BRD/SCH; control/request dispatch and propagation. |
 | W §11 | GAT/SCH/INT; gateway ordering, HTTP and sessions. |
 | W §§12–13 | Estimates are not new ceilings; explicit bounds tested, open integration choices recorded. |
 | L §§1–2 | CER/VER/CAP/ARC/REC/OPS/UX. |
-| L §§3–4 | PAY/SES/MAIL/TOP/APP. |
+| L §§3–4 | PAY/SES/MAIL/TOP/APP/BRD. |
 | L §§5–7 | UX/CAP/PAY/TOP; choice and warning timing. |
 | L §§8–10 | CAT/GAT/UX/APP/OPS and open multi-device/restore work. |
 | I §§1–4 | TOP/SES/MAIL/CUR/RES/OPS. |
 | I §§5–8 | ARC/MAIL/NET/OPS; headless read-only management boundary. |
-| I §§9–12 | PKG/GAT/CAT/UX; package/profile and in-flight ambiguities recorded. |
+| I §§9–13 | PKG/GAT/CAT/UX/BRD; package/profile and in-flight ambiguities recorded. |
 | R §§1–4 | CAT/GAT/POL/PKG; credentials, HTTP, owner scope and federation. |
 | R §§5–6 | PKG/CAT/GAT; extensions versus arbitrary programs and registration versus presentation. |
 | R §7 | GAT/CAT/UX; all predicate classes, named grants and visible roles. |
@@ -1091,7 +1121,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **604 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **619 numbered requirement/test families** across **27 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -1099,7 +1129,7 @@ This specification contains **604 numbered requirement/test families** across **
 | SIG | 13 |
 | TX | 30 |
 | ARC | 19 |
-| TOP | 46 |
+| TOP | 48 |
 | RES | 17 |
 | CUR | 12 |
 | NET | 36 |
@@ -1121,6 +1151,7 @@ This specification contains **604 numbered requirement/test families** across **
 | SCH | 28 |
 | INT | 24 |
 | VAL | 11 |
+| BRD | 13 |
 
 **The hashes below are those of the documents as first reviewed and are a record, not a live pin**: the live pins are `crates/spec-pins.json`, checked by `crates/tools/pincheck.py` in the gate.
 

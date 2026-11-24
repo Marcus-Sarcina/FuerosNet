@@ -156,6 +156,13 @@ yourself**; nothing routes through an intermediate light-client patron.
 only parties you refer to. Bounded at f, and holding only this keeps per-node state
 constant regardless of network size — the aggregation argument design §12.6.1 rests on.
 
+**The shape of your downline, by position** (design §15.2.2;
+`wire-format.md` §10.2.5) [author, 2026-11-23]: which positions beneath you
+are filled and which of them run a node, built from the topology you store and
+the memos that pass through you, and kept across a restart. It holds no
+identity. This one grows with your subtree where the two above do not, and it
+is positions and not people, which is what design §12.6.1 turns on.
+
 **An anchor table, which your operator supplies at launch** [author, 2026-11-15]
 and gossip adds to. The entries you are handed at launch are the other subnets'
 your operator holds out of band; the rest arrive gossiped and **their signatures
@@ -1577,3 +1584,35 @@ not who answers for it (design §11.5), and that asker may see. Nothing floods, 
   prices — nothing here can enforce it. **A user outside the entry's
   `discover_scope` sees no entry at all**, so the question of evaluating that
   operator does not arise for them: they cannot reach the resource either.
+
+---
+
+## 13. The subnet's board
+
+- **Carry your subnet's board** (design §14.4; `wire-format.md` §10.3)
+  [author, 2026-11-23]. Every node serving a subnet does, for every member it
+  serves, with no grant, no role and no catalog entry: a position in the
+  subnet is the whole of the gate.
+- **Read a post's two counts and nothing else of it.** Do not parse, index,
+  render or log what you carry. A board is the one thing you hold that you
+  could read, and design §18.1 says what that is worth to whoever is beneath
+  you; what you can promise is that your own software does not.
+- **Lower a member's upward count to what they have earned before you do
+  anything else with their post** (design §14.4), from your downline table
+  (§4.1): two, plus the depth of their node-running downline. Lower it; do not
+  refuse the post, and do not tell them.
+- **Work out who a post goes to from your downline, and keep that worked out**
+  [author, 2026-11-18]: the three lists of `wire-format.md` §10.3, redone when
+  an adoption, an ending, or a node launched or closed changes your downline,
+  and not per post.
+- **Deliver a post once to each session of each member you serve in its band,
+  and carry no post twice** (`wire-format.md` §10.3).
+- **Keep what you carry in a queue bounded by storage, oldest out first, with
+  no time limit** [author, 2026-11-18]: 100 MB as shipped and yours to set,
+  counted as §2 counts a mailbox, in the blocks it occupies. Number each post
+  as you store it, from a counter you keep across a restart and never reuse.
+  **What falls out is removed as §2 removes a message**, leaving nothing
+  recoverable.
+- **Answer a member's asking for what it missed with the posts in its own
+  band and no others**, and refuse an asker you do not serve
+  (`wire-format.md` §10.3).

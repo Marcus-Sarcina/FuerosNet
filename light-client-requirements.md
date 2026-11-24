@@ -1188,6 +1188,43 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   convention is a rule; where two reach you, prefer the one signed by the
   root, whose key you hold.
 
+### 4.5 The subnet's board
+
+- **Show each subnet's board with that subnet, and nothing of one subnet's
+  on another's** (design §14.4) [author, 2026-10-27]. The board is your
+  serving node's in that subnet and reaches you over the session you keep
+  there.
+- **A post is bytes you sign, and everything a reader needs is inside them**
+  (`wire-format.md` §10.3): who wrote it and from what position, the reach as
+  written, the thread it continues or the title it starts, when, and the
+  words. The nodes that carry it read none of that, so nothing outside the
+  signature can be relied on by whoever reads it.
+- **Hand a post to your serving node with its reach, `+2/-2` unless the
+  person changes it** [author, 2026-10-27], either count moving a level at a
+  time. **A reply carries its thread's reach**, stated and not offered. Your
+  node may carry a post less far upward than you wrote (design §14.4), and
+  does not tell you.
+- **Show a reach from where the reader stands** [author, 2026-10-27]: the
+  writer's `+3/-3` is your `+2/-4` one level above them. The position a post
+  names is its writer's own statement, and the arithmetic is yours.
+- **Check a post's signature before showing it as anyone's.** A node does not
+  (`wire-format.md` §10.3), so a post is its writer's on the signature's word
+  and on nothing about how it reached you.
+- **Keep a pool of posts for each subnet, bounded by storage and not by
+  time** [author, 2026-11-18], 50 MB unless the person sets another, and at
+  the bound drop the oldest by the post's own date. Read that date as no later
+  than the moment the post reached you, since a post dated ahead would
+  otherwise outlive every honest one. One post is one hash, however many times
+  it arrives.
+- **What is unread is yours to count** [author, 2026-11-23]: you hold the pool
+  and know what you have shown, and no node is told. Show the count with the
+  subnet, beside what waits at its resources (§8).
+- **On attaching, ask your node for what you missed** (`wire-format.md` §10.3
+  request type 17), from the last number it gave you, and again while it says
+  more is held. Keep that number per node: it is the node's own counter and
+  means nothing at another. A post arriving on the session carries its number
+  too, and moves yours once you have caught up.
+
 ---
 
 ## 5. Path selection
