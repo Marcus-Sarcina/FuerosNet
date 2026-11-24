@@ -25,7 +25,9 @@ use rhtn_desktop::screens::{
     self, Body, Crown, History, Holder, LineRow, Person, Place, ResourceRow, Snapshot, SubnetRow,
 };
 use rhtn_desktop::threads::{self, Delivery, Record, Sealer, Threads};
-use rhtn_desktop::{Act, act, code, directory, frame, pairing, phrase, said, verify_and_keep};
+use rhtn_desktop::{
+    Act, Change, act, code, directory, frame, pairing, phrase, said, verify_and_keep,
+};
 use rhtn_ffi::client::{PageShape, Participant, ResourceAnswer, UtilityOutcome};
 use rhtn_ffi::net::Event as Kernel;
 use rhtn_ffi::types::kind_application;
@@ -399,6 +401,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                         up.place.lock().unwrap().back();
                         draw(&up, &back, true);
+                    });
+                }
+                // **what is chosen about a party** [author, 2026-11-23], kept
+                // by the identity their conversation is held as
+                Ok(Act::Person { peer, change }) => {
+                    let (back, up) = (worker.clone(), up.clone());
+                    std::thread::spawn(move || {
+                        let peer = hex(&peer);
+                        if let Some(i) = up.for_peer(&peer) {
+                            let kept = i.threads.choose(&peer, |c| match change {
+                                Change::Colour(name) => c.colour = name,
+                                Change::Muted => c.muted = !c.muted,
+                                Change::Silent => c.silent = !c.silent,
+                                Change::Blocked => c.blocked = !c.blocked,
+                            });
+                            if let Err(why) = kept {
+                                let _ = back
+                                    .send_event(Said::ToPage(false, format!("not kept: {why}")));
+                            }
+                        }
+                        draw(&up, &back, false);
                     });
                 }
                 Ok(Act::Back) => {
@@ -817,9 +840,13 @@ fn draw(up: &Up, back: &EventLoopProxy<Said>, whole: bool) {
     let body = match &place {
         // **a conversation as the identity it is held as**
         Place::Thread(peer) => {
+            // **on screen, what arrived is seen**
             let page = up
                 .for_peer(peer)
-                .map(|i| i.threads.page(peer, None, threads::PAGE, HashMap::new()))
+                .map(|i| {
+                    let _ = i.threads.choose(peer, |c| c.unread = 0);
+                    i.threads.page(peer, None, threads::PAGE, HashMap::new())
+                })
                 .unwrap_or_default();
             Body::Thread(page.messages, page.before.is_some())
         }
@@ -938,6 +965,7 @@ fn snapshot(idents: &[Ident], focus: &Participant, device: Device, dir: &Path) -
         subnets: Vec::new(),
         people: Vec::new(),
         threads: Vec::new(),
+        chosen: Default::default(),
     };
     // **every identity's rows together** [author, 2026-11-07], each saying
     // whose it is
@@ -978,21 +1006,42 @@ fn snapshot(idents: &[Ident], focus: &Participant, device: Device, dir: &Path) -
         }));
         // **the people are the ones met**, as the phone's list has them:
         // an introduction, a verifier and a node are held but not listed
+        // **and the subnet each shares with this key, by the name it goes
+        // by, and where they stand from here in it** [author, 2026-11-23]
+        let held = p.subnets();
+        let subnet_name = |id: &[u8]| {
+            held.iter().find(|s| s.id[..] == id[..]).map(|s| {
+                s.alias
+                    .clone()
+                    .or_else(|| s.own_alias.clone())
+                    .unwrap_or_else(|| format!("subnet {}…", &hex(&s.id)[..8]))
+            })
+        };
         snap.people.extend(
             p.contacts()
                 .into_iter()
                 .filter(|c| c.how == rhtn_model::How::Counterparty)
                 .map(|c| Person {
                     key: hex(&c.keyhash),
-                    alias: c.alias,
                     how: match c.count {
                         1 => "met once".to_string(),
                         n => format!("met {n} times"),
                     },
                     by: by.clone(),
+                    picture: c.image_format.zip(c.image),
+                    subnet: c.subnet.and_then(|s| subnet_name(&s)),
+                    offset: c.offset,
+                    in_line: c.in_line,
+                    alias: c.alias,
                 }),
         );
         snap.threads.extend(i.threads.index());
+        snap.chosen.extend(
+            i.threads
+                .people()
+                .into_iter()
+                .map(|(peer, c)| ((by.clone(), peer), c)),
+        );
     }
     snap
 }
@@ -1035,6 +1084,12 @@ fn pump(up: &Up, back: &EventLoopProxy<Said>, i: &Ident) {
                 let text = String::from_utf8_lossy(&bytes).into_owned();
                 // **kept as the identity it arrived for**
                 let t = &i.threads;
+                // **a party blocked is dropped as it comes**, never kept
+                // or shown [author, 2026-11-23]
+                if t.people().get(&peer).is_some_and(|c| c.blocked) {
+                    tracing::info!(target: "attach", peer = &peer[..8], "message.blocked");
+                    continue;
+                }
                 let kept = t
                     .append(
                         &peer,
@@ -1052,6 +1107,12 @@ fn pump(up: &Up, back: &EventLoopProxy<Said>, i: &Ident) {
                         false,
                         format!("a message from {who} was not kept: {why}"),
                     ));
+                }
+                // **unseen until its thread is on screen**, and seen as it
+                // comes while it is
+                let showing = *up.place.lock().unwrap().here() == Place::Thread(peer.clone());
+                if !showing && let Err(why) = t.choose(&peer, |c| c.unread += 1) {
+                    let _ = back.send_event(Said::ToPage(false, format!("not counted: {why}")));
                 }
                 draw(up, back, false);
             }

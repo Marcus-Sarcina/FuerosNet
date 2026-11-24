@@ -100,9 +100,17 @@ class ShellActivity : Activity() {
     private val sink = object : Front.Ui {
         override fun render() {
             val line = Gateway.front.status()
-            runOnUiThread { connection?.text = Attach.statusLine(line) }
+            // **the direct-message orb's count, redrawn as it moves**
+            val unseen = Gateway.front.unseen()
+            runOnUiThread {
+                connection?.text = Attach.statusLine(line)
+                if (unseen != drawnDirect) drawRail(scopes)
+            }
         }
     }
+
+    /** The direct-message count the rail was last drawn with. */
+    private var drawnDirect = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -311,9 +319,12 @@ class ShellActivity : Activity() {
 
     private fun drawRail(subnets: List<Identities.Owned<uniffi.rhtn_model.Subnet>>) {
         railColumn.removeAllViews()
+        drawnDirect = Gateway.front.unseen()
         val rungs = Chrome.rail(
-            // **zero, and not a guess**: nothing tracks read state yet
-            unseenDirect = 0,
+            // **what arrived unseen on every thread not muted** [author,
+            // 2026-11-23: *"unread DMs should show up as a notification
+            // counter on the DM orb"*]
+            unseenDirect = drawnDirect,
             // **the rail is every identity's subnets together** [author,
             // 2026-11-07]: a subnet is a place this device belongs to,
             // and which of its identities holds it is not the rail's

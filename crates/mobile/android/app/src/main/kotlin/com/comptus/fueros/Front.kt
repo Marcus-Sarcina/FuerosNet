@@ -79,6 +79,32 @@ class Front {
          *  alias it carried, and not answered — a reply goes only to a
          *  contact [author, 2026-11-20]. */
         val unverified: Boolean = false,
+        /** **What arrived on it since it was last on screen** [author,
+         *  2026-11-23]: its card's count, and the direct-message orb's
+         *  unless it is muted. */
+        val unread: Int = 0,
+    )
+
+    /**
+     * **What this person has chosen about one party** [author, 2026-11-23],
+     * per identity as a thread is, and the thread's unread count with it:
+     * kept beside the threads, sealed as they are ([Threads.people]).
+     */
+    data class Person(
+        /** **The colour they are shown in**, by the palette's name; none
+         *  for the one their key gives them ([Chrome.personColour]). */
+        val colour: String? = null,
+        /** **Muted**: arrivals are kept and counted on the thread's card,
+         *  and neither raise the orb's count nor the shade. */
+        val muted: Boolean = false,
+        /** **Notifications muted**: arrivals count as any do, and are not
+         *  told in the shade. */
+        val silent: Boolean = false,
+        /** **Blocked**: arrivals are dropped as they come, never kept or
+         *  shown. */
+        val blocked: Boolean = false,
+        /** What arrived since the thread was last on screen. */
+        val unread: Int = 0,
     )
 
     private class Convo(val by: String, val peer: String, var name: String) {
@@ -102,6 +128,9 @@ class Front {
     private val notices = mutableListOf<String>()
     // insertion order is thread order: the peer provisioned first sits first
     private val convos = linkedMapOf<String, Convo>()
+    private val people = HashMap<String, Person>()
+    /** The thread on screen, by its key, where one is. */
+    private var showing: String? = null
     private var seq = 0L
 
     // ---- binding, the S05 lifecycle ------------------------------------
@@ -134,6 +163,8 @@ class Front {
     var appender: ((by: String, peer: String, record: Threads.Record) -> Long?)? = null
     var indexer: ((by: String) -> Unit)? = null
     var loader: ((by: String, peer: String, before: Long?, pending: Map<Long, Threads.Record.Settled>) -> Threads.Page?)? = null
+    /** Write what `by` has chosen about the people it talks to, and their counts ([people]). */
+    var peopler: ((by: String) -> Unit)? = null
 
     private fun changed() {
         // under the lock, so what a render reads is the state this change
@@ -152,6 +183,61 @@ class Front {
             changed()
         }
     }
+
+    /** What an identity chose about the people it talks to, as its store held it. */
+    fun restorePeople(by: String, held: Map<String, Person>) {
+        synchronized(lock) {
+            for ((peer, p) in held) people[key(by, peer)] = p
+            changed()
+        }
+    }
+
+    /** What `by` has chosen about each party, by their keyhash: what its store keeps. */
+    fun people(by: String): Map<String, Person> =
+        synchronized(lock) {
+            people.filterKeys { it.startsWith("$by/") }
+                .mapKeys { it.key.removePrefix("$by/") }
+                .filterValues { it != Person() }
+        }
+
+    /** What `by` has chosen about `peerKey`. */
+    fun person(by: String, peerKey: String): Person =
+        synchronized(lock) { people[key(by, peerKey)] ?: Person() }
+
+    /** **Change what is chosen about a party**, and keep it. */
+    fun choose(by: String, peerKey: String, change: (Person) -> Person) {
+        synchronized(lock) {
+            val k = key(by, peerKey)
+            people[k] = change(people[k] ?: Person())
+            peopler?.invoke(by)
+            changed()
+        }
+    }
+
+    /** **A thread is on screen**: what arrived on it is seen, and what
+     *  arrives while it shows is seen as it comes. */
+    fun showing(by: String, peerKey: String) {
+        synchronized(lock) {
+            val k = key(by, peerKey)
+            showing = k
+            val p = people[k]
+            if (p != null && p.unread > 0) {
+                people[k] = p.copy(unread = 0)
+                peopler?.invoke(by)
+            }
+            changed()
+        }
+    }
+
+    /** That thread is on screen no more. */
+    fun hidden(by: String, peerKey: String) {
+        synchronized(lock) { if (showing == key(by, peerKey)) showing = null }
+    }
+
+    /** **The direct-message orb's count**: what arrived unseen on every
+     *  thread that is not muted. */
+    fun unseen(): Int =
+        synchronized(lock) { people.values.filter { !it.muted && !it.blocked }.sumOf { it.unread } }
 
     /** What the index of `by` should say now. */
     fun entries(by: String): List<Threads.Entry> =
@@ -232,7 +318,10 @@ class Front {
     private fun key(by: String, peerKey: String) = "$by/$peerKey"
 
     private fun Convo.snapshot() =
-        Thread(by, peer, name, direct, messages.toList(), more = before != null, unverified = unverified)
+        Thread(
+            by, peer, name, direct, messages.toList(), more = before != null, unverified = unverified,
+            unread = people[key(by, peer)]?.unread ?: 0,
+        )
 
     // ---- mutators: the kernel's side -----------------------------------
 
@@ -294,10 +383,16 @@ class Front {
 
     /** An arrival, attributed to its sender: the name it came with is the
      *  attribution and the thread's name from here. [unverified] where the
-     *  kernel could not attribute it: the thread is then not answered. */
-    fun incoming(by: String, peerKey: String, name: String, text: String, unverified: Boolean = false) {
+     *  kernel could not attribute it: the thread is then not answered.
+     *
+     *  **Whether to tell it in the shade**: not for a party blocked, whose
+     *  arrival is dropped here unkept, nor muted or with notifications
+     *  muted, nor for the thread on screen, where it is seen as it comes. */
+    fun incoming(by: String, peerKey: String, name: String, text: String, unverified: Boolean = false): Boolean {
         synchronized(lock) {
             val k = key(by, peerKey)
+            val p = people[k] ?: Person()
+            if (p.blocked) return false
             val had = convos[k]
             val c = convos.getOrPut(k) { Convo(by, peerKey, name) }
             val listed = had == null || c.name != name
@@ -306,7 +401,13 @@ class Front {
             val id = written(c, Threads.Record.Said(false, name, text, Delivery.SENT, null))
             c.messages.add(Message(id, false, name, text, Delivery.SENT, null))
             if (listed) indexer?.invoke(by)
+            val seen = showing == k
+            if (!seen) {
+                people[k] = p.copy(unread = p.unread + 1)
+                peopler?.invoke(by)
+            }
             changed()
+            return !seen && !p.muted && !p.silent
         }
     }
 

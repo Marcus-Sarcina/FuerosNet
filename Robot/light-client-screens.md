@@ -522,6 +522,40 @@ whole screen, until the Direct view is built in the shell's content.
 | C2 Thread | Messages with **actual sender attribution** — never a hint styled as authenticated identity; unsent/refused states carrying their reason; a submission acknowledgement never presented as delivery | `send`, `next_event`, `Event::Payload` | UX-012 |
 | C3 Late arrivals | A late verifier response or response copy labelled as what it is | `Event::Late`, `Event::ResponseCopy` | `light-client-requirements.md` §1.4 |
 
+### The conversation screens as a chat app's [author, 2026-11-23]
+
+*"Mostly, this is just standard chat app UX."* Built 2026-11-23 on both
+apps (`ConversationsActivity`, `ConversationActivity`, `People.kt`;
+`crates/desktop/src/screens.rs` `direct`, `card`, `person`, `thread`).
+
+- **Unread DMs count on the DM orb.** The count is the app's, kept per
+  thread in a sealed `dm/people` file beside the index (so the index is
+  still written only on an add or a rename); a thread on screen counts
+  nothing.
+- **C1 is one full-width card per thread**: the person's orb in their
+  colour, or the picture their profile carries where one was received;
+  their alias in bold; the mutual subnet in normal type, then their
+  relative position, bold where they are in the direct line. The kernel
+  composes the last three (`Contact.subnet`, `offset`, `in_line`) from the
+  contact's locator and this client's position in that subnet, and only
+  where both are stated from one anchor.
+- **The orb's options**, by press and hold (phone) or double click
+  (desktop): the person's colour, mute, block, mute notifications.
+  - A colour not chosen is the palette entry at the key's first byte, so
+    it agrees across devices.
+  - **Confirmed [author, 2026-11-23]**: mute means counted on the card, not
+    on the orb, and not told. Mute notifications means counted, not told.
+    Block means arrivals are dropped unkept, the box goes, and the card
+    sinks to the end.
+  - **Confirmed**: someone a level across is shown as `0`, not bold.
+  - **Confirmed**: what is chosen is per identity and per device; nothing
+    carries it to the other device.
+- **C2**: the box at the foot, the chat stacked up from it, both lifted
+  over the keyboard. The user's bubbles are right-justified, grey and
+  outlined in the colour of the identity they speak as. The other party's
+  are left-justified, on 28% of that party's colour over the ground (ink
+  holds 4.5:1 on every palette entry, in both modes, as tested).
+
 ## D. Meet — the ceremony (design §7.1's order; both devices run it)
 
 | Step | Elements | Beneath | Owes |

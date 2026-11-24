@@ -20,14 +20,34 @@ impl Client {
             .store
             .contacts
             .iter()
-            .map(|(k, v)| Contact {
-                keyhash: *k,
-                alias: v.alias.clone(),
-                how: v.how,
-                located: v.locator.is_some(),
-                addressed: self.store.direct_hints.contains_key(k),
-                count: v.count,
-                last_at: v.last_at,
+            .map(|(k, v)| {
+                // **the subnet both are in, and where they stand from here
+                // there** [author, 2026-11-23]: by the locator they handed
+                // and this client's own position in its subnet
+                let mine = v
+                    .subnet()
+                    .and_then(|s| self.position_in(&s).map(|l| (s, l)));
+                let (offset, in_line) = mine
+                    .as_ref()
+                    .and_then(|(_, l)| {
+                        let (anchor, theirs) = v.position()?;
+                        (anchor == l.anchor).then(|| standing(&nibbles(l), &theirs))
+                    })
+                    .map_or((None, false), |(o, line)| (Some(o), line));
+                Contact {
+                    keyhash: *k,
+                    alias: v.alias.clone(),
+                    how: v.how,
+                    located: v.locator.is_some(),
+                    addressed: self.store.direct_hints.contains_key(k),
+                    count: v.count,
+                    last_at: v.last_at,
+                    image_format: v.image.as_ref().map(|(f, _)| *f),
+                    image: v.image.as_ref().map(|(_, b)| b.clone()),
+                    subnet: mine.map(|(s, _)| s),
+                    offset,
+                    in_line,
+                }
             })
             .collect();
         rows.sort_by_key(|r| std::cmp::Reverse(r.last_at));
@@ -390,5 +410,43 @@ impl Client {
                 crate::ceremony::Msg::AssertHorizon { bytes, nonce }
             })
             .collect()
+    }
+}
+
+/// A locator's significant nibbles, one hop each.
+fn nibbles(l: &rhtn_archive::tx::Locator) -> Vec<u8> {
+    let n = usize::try_from(l.nibbles).unwrap_or(0);
+    (0..n)
+        .filter_map(|i| {
+            let b = *l.path.get(i / 2)?;
+            Some(if i % 2 == 0 { b >> 4 } else { b & 0x0f })
+        })
+        .collect()
+}
+
+/// **Where `theirs` stands from `mine`**, two paths from one anchor: how
+/// many levels above (positive) or below (negative), and whether one path
+/// is the start of the other, which is the direct line.
+fn standing(mine: &[u8], theirs: &[u8]) -> (i32, bool) {
+    let levels = |n: usize| i32::try_from(n).unwrap_or(i32::MAX);
+    let offset = levels(mine.len()) - levels(theirs.len());
+    let in_line = mine.starts_with(theirs) || theirs.starts_with(mine);
+    (offset, in_line)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::standing;
+
+    #[test]
+    fn a_contact_stands_above_below_or_across_from_this_client() {
+        // the patron and the root are above, in the line
+        assert_eq!(standing(&[3, 5], &[3]), (1, true));
+        assert_eq!(standing(&[3, 5], &[]), (2, true));
+        // a grandsubordinate below, in the line
+        assert_eq!(standing(&[3], &[3, 5, 9]), (-2, true));
+        // a sibling across, and a cousin's child below but beside it
+        assert_eq!(standing(&[3, 5], &[3, 6]), (0, false));
+        assert_eq!(standing(&[3, 5], &[4, 1, 2]), (-1, false));
     }
 }

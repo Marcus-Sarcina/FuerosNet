@@ -60,7 +60,10 @@ class ColoursTest {
         assertEquals("the nameplate and the options orb do not wear the focused colour", 2, Regex("""Crowns\.rounded\(focusColour\(\)""").findAll(shell).count())
         assertTrue("Options offers no colour", shell.contains("row(\"Colour\", Identities.colourName(focusColour())) { chooseColour() }"))
         val list = source("ConversationsActivity.kt")
-        assertTrue("a thread is not coloured by the identity it is held as", list.contains("Identities.colourOf(colours, t.by)"))
+        assertTrue(
+            "a thread is not coloured by the identity it is held as",
+            list.contains("card(t.by, t.peerKey,") && list.contains("setStroke(px(2), Identities.colourOf(colours, by))"),
+        )
         // **and the focused identity can start one** [author, 2026-11-11]:
         // its contacts without a thread of its own, opened held as it
         assertTrue(

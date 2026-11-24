@@ -51,12 +51,14 @@ fn main() {
                 alias: Some("Carol".into()),
                 how: "met 3 times".into(),
                 by: "70".repeat(32),
+                ..Default::default()
             },
             Person {
                 key: "44".repeat(32),
                 alias: None,
                 how: "met once".into(),
                 by: "70".repeat(32),
+                ..Default::default()
             },
         ],
         threads: vec![Entry {
@@ -65,6 +67,7 @@ fn main() {
             direct: true,
             by: "70".repeat(32),
         }],
+        chosen: Default::default(),
     };
     let said = |id, mine, text: &str, delivery| Message {
         id,

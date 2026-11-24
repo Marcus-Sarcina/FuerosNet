@@ -241,4 +241,33 @@ class ChromeTest {
         )
         assertEquals("nothing seen is nothing waiting before", 3, Notify.rising(emptyMap(), held).size)
     }
+
+    @Test
+    fun a_person_keeps_the_colour_their_key_gives_them_until_one_is_chosen() {
+        val key = "a3" + "00".repeat(31)
+        val given = Chrome.personColour(null, key)
+        assertEquals(given, Chrome.personColour(null, key))
+        assertEquals(Palette.IDENTITY[0xa3 % Palette.IDENTITY.size], given)
+        assertEquals("Teal", Chrome.personColour("Teal", key).first)
+        assertEquals("a name the palette lacks is not chosen", given, Chrome.personColour("Mauve", key))
+    }
+
+    @Test
+    fun a_card_says_above_with_a_plus_below_with_a_minus_and_across_as_nought() {
+        assertEquals("+2", Chrome.standing(2))
+        assertEquals("-1", Chrome.standing(-1))
+        assertEquals("0", Chrome.standing(0))
+        assertEquals(null, Chrome.standing(null))
+    }
+
+    @Test
+    fun ink_reads_on_every_person_colour_bubble_in_both_modes() {
+        for (set in listOf(Palette.DARK, Palette.LIGHT)) {
+            assertTrue("ink on the grey of one's own bubble", Palette.contrast(set.ink, set.control) >= 4.5)
+            for ((name, c) in Palette.IDENTITY) {
+                val bubble = Palette.mix(c, set.ground, Chrome.BUBBLE_SHARE)
+                assertTrue("ink on $name's bubble", Palette.contrast(set.ink, bubble) >= 4.5)
+            }
+        }
+    }
 }

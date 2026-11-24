@@ -12,8 +12,8 @@ class ArrivedTest {
     fun a_message_arriving_off_screen_is_told_by_sender_and_never_by_content() {
         val loop = File("src/main/kotlin/com/comptus/fueros/Attachments.kt").readText()
         assertTrue(
-            "posted from the arrival, where no screen shows it",
-            loop.contains("if (!Arrived.onScreen()) Arrived.post(it, who, from)"),
+            "posted from the arrival, where no screen shows it and the party is neither muted nor blocked",
+            loop.contains("if (tell && !Arrived.onScreen()) Arrived.post(it, who, from)"),
         )
         val arrived = File("src/main/kotlin/com/comptus/fueros/Arrived.kt").readText()
         assertTrue(arrived.contains(".setContentTitle(who)"))

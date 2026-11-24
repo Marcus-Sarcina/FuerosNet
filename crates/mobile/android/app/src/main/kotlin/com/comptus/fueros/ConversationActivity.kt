@@ -1,8 +1,10 @@
 package com.comptus.fueros
 
 import android.app.Activity
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
+import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -17,6 +19,13 @@ import android.widget.TextView
  * *sending*, *sent* (accepted for carriage, never *delivered* or *read*:
  * the protocol carries no receipt), or *unsent* with the refusal's reason.
  * A submission is never dressed up as a delivery.
+ *
+ * **As a chat is laid out** [author, 2026-11-23]: the box at the foot and
+ * the conversation stacked up from it, both lifted above the keyboard
+ * while it is up ([Screen.insetting]); this person's bubbles to the right,
+ * grey and outlined in the colour of the identity they speak as; the other
+ * party's to the left, on a low-saturation version of that party's colour
+ * ([Chrome.BUBBLE_SHARE]).
  */
 class ConversationActivity : Activity() {
 
@@ -25,6 +34,8 @@ class ConversationActivity : Activity() {
     /** The box and its button: not offered on a thread whose sender is
      *  unverified, since a reply goes only to a contact. */
     private lateinit var compose: LinearLayout
+    /** Who this is with, redrawn with the thread: their colour may change under it. */
+    private lateinit var heading: LinearLayout
     private var peerKey: String? = null
 
     /** The identity this conversation belongs to: the one a thread was
@@ -52,9 +63,16 @@ class ConversationActivity : Activity() {
             return
         }
 
-        messages = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        // **stacked up from the box**: a short conversation sits at the
+        // foot, as a long one ends there
+        heading = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        messages = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.BOTTOM
+        }
         scroll = ScrollView(this).apply {
-            addView(messages)
+            isFillViewport = true
+            addView(messages, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT))
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
         }
         val box = EditText(this).apply {
@@ -87,7 +105,7 @@ class ConversationActivity : Activity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(Screen.gutter(context), 24, Screen.gutter(context), 16)
-            addView(header())
+            addView(heading)
             addView(scroll)
             addView(row)
         }
@@ -108,19 +126,64 @@ class ConversationActivity : Activity() {
         super.onStop()
     }
 
-    private fun header(): TextView =
-        TextView(this).apply {
-            val t = by?.let { b -> peerKey?.let { Gateway.front.thread(b, it) } }
-            text = t?.let { Gateway.aliasOfHeld(it.by, it.peerKey) ?: it.peerName } ?: "conversation"
-            textSize = 22f
-            typeface = Type.bold
-            setPadding(0, 0, 0, 16)
+    // **on screen, what arrives is seen** as it comes, and what had
+    // arrived is seen now
+    override fun onResume() {
+        super.onResume()
+        val (b, p) = Pair(by, peerKey)
+        if (b != null && p != null) Gateway.front.showing(b, p)
+    }
+
+    override fun onPause() {
+        val (b, p) = Pair(by, peerKey)
+        if (b != null && p != null) Gateway.front.hidden(b, p)
+        super.onPause()
+    }
+
+    /** Who this is with: their orb, whose press-and-hold opens their options, and their name. */
+    private fun header(): View {
+        val (b, p) = Pair(by!!, peerKey!!)
+        val t = Gateway.front.thread(b, p)
+        val name = Gateway.aliasOfHeld(b, p) ?: t?.peerName ?: "${p.take(8)}…"
+        val contact = Gateway.contactsHeld().firstOrNull { it.by == b && it.row.keyhash.hex() == p }?.row
+        val orb = People.orb(this, b, p, name, contact, px(40))
+        (orb.layoutParams as LinearLayout.LayoutParams).setMargins(0, 0, px(12), 0)
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, 0, px(12))
+            addView(orb)
+            addView(
+                TextView(this@ConversationActivity).apply {
+                    text = name
+                    textSize = 22f
+                    typeface = Type.bold
+                    maxLines = 1
+                },
+            )
         }
+    }
+
+    private fun px(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
     private fun redraw() {
+        heading.removeAllViews()
+        heading.addView(header())
         messages.removeAllViews()
         val t = by?.let { b -> peerKey?.let { Gateway.front.thread(b, it) } }
-        compose.visibility = if (t?.unverified == true) android.view.View.GONE else android.view.View.VISIBLE
+        // **not answered**: an unattributed sender, or a party blocked
+        val blocked = by?.let { b -> peerKey?.let { Gateway.front.person(b, it).blocked } } == true
+        compose.visibility = if (t?.unverified == true || blocked) View.GONE else View.VISIBLE
+        if (blocked) {
+            messages.addView(
+                TextView(this).apply {
+                    text = "Blocked: what they send is dropped as it comes. Press and hold their orb to unblock."
+                    textSize = 14f
+                    setTextColor(Palette.now.sub)
+                    setPadding(0, 0, 0, px(12))
+                },
+            )
+        }
         if (t == null) {
             // **a screen with nobody behind it says so**: this opens from
             // the thread list, and a thread exists for every party met,
@@ -150,14 +213,48 @@ class ConversationActivity : Activity() {
         scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
     }
 
-    private fun bubble(m: Front.Message): TextView =
-        TextView(this).apply {
-            val body = "${m.who}: ${m.text}"
-            text = if (m.mine) "$body   ${mark(m)}" else body
-            textSize = 16f
-            gravity = if (m.mine) Gravity.END else Gravity.START
-            setPadding(0, 10, 0, 10)
+    /** One message: this person's to the right, the other party's to the left. */
+    private fun bubble(m: Front.Message): View {
+        val (b, p) = Pair(by!!, peerKey!!)
+        val c = Palette.now
+        val inner = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(px(12), px(8), px(12), px(8))
+            background = GradientDrawable().apply {
+                cornerRadius = px(14).toFloat()
+                if (m.mine) {
+                    setColor(c.control)
+                    setStroke(px(2), Identities.colourOf(colours, b))
+                } else {
+                    setColor(Palette.mix(People.colour(b, p), c.ground, Chrome.BUBBLE_SHARE))
+                }
+            }
+            addView(
+                TextView(this@ConversationActivity).apply {
+                    text = m.text
+                    textSize = 16f
+                    setTextColor(c.ink)
+                },
+            )
+            if (m.mine) {
+                addView(
+                    TextView(this@ConversationActivity).apply {
+                        text = mark(m)
+                        textSize = 12f
+                        setTextColor(c.muted)
+                    },
+                )
+            }
         }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = if (m.mine) Gravity.END else Gravity.START
+            setPadding(if (m.mine) px(48) else 0, px(4), if (m.mine) 0 else px(48), px(4))
+            addView(inner, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        }
+    }
+
+    private val colours: Map<String, Int> by lazy { Identities.identityColours(this) }
 
     /** The honest tail on an outgoing bubble: what the kernel told us, and
      *  nothing it did not — *sent* is accepted for carriage, never read. */

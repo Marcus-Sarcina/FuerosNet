@@ -199,6 +199,20 @@ object Palette {
     }
 
     /**
+     * **`share` of colour `a` over colour `b`**, channel by channel and
+     * opaque: a tint, which is how a person's colour becomes a ground
+     * text can still be read on.
+     */
+    fun mix(a: Int, b: Int, share: Double): Int {
+        fun ch(shift: Int): Int {
+            val x = (a shr shift) and 0xFF
+            val y = (b shr shift) and 0xFF
+            return (x * share + y * (1 - share)).toInt().coerceIn(0, 255)
+        }
+        return (0xFF shl 24) or (ch(16) shl 16) or (ch(8) shl 8) or ch(0)
+    }
+
+    /**
      * A colour's relative luminance (WCAG 2.2).
      *
      * **The channels are taken by hand rather than through

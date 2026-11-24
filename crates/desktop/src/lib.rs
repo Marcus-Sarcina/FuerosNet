@@ -164,6 +164,29 @@ pub enum Act {
         /// The palette's name for it.
         name: String,
     },
+    /// **Change what is chosen about a party** [author, 2026-11-23], as the
+    /// identity their conversation is held as.
+    Person {
+        /// Their keyhash.
+        peer: Vec<u8>,
+        /// What changes.
+        change: Change,
+    },
+}
+
+/// **What a person's options change** [author, 2026-11-23]: their colour,
+/// and three toggles.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Change {
+    /// Their colour, by the palette's name; none for the one their key
+    /// gives them.
+    Colour(Option<String>),
+    /// Mute, or unmute.
+    Muted,
+    /// Mute their notifications, or unmute them.
+    Silent,
+    /// Block, or unblock.
+    Blocked,
 }
 
 /// Read one message from the page, or say why it is not one.
@@ -249,6 +272,25 @@ pub fn act(message: &str) -> Result<Act, String> {
                 .any(|(n, _)| *n == name)
                 .then_some(Act::Colour { name: name.clone() })
                 .ok_or_else(|| format!("{name} is not a colour of the palette"));
+        }
+        "person" => {
+            let change = match s("set")?.as_str() {
+                "colour" => {
+                    let name = v.get("colour").and_then(serde_json::Value::as_str);
+                    if name.is_some_and(|n| !screens::PALETTE.iter().any(|(p, _)| *p == n)) {
+                        return Err("not a colour of the palette".into());
+                    }
+                    Change::Colour(name.map(String::from))
+                }
+                "muted" => Change::Muted,
+                "silent" => Change::Silent,
+                "blocked" => Change::Blocked,
+                other => return Err(format!("{other} is not a person's option")),
+            };
+            return Ok(Act::Person {
+                peer: node_key(&s("peer")?).map_err(|_| "a party's key is 64 hex characters")?,
+                change,
+            });
         }
         "open" => {
             return Ok(Act::Open {
@@ -592,6 +634,48 @@ mod tests {
                 by: vec![0xab; 32],
                 patron: vec![0xab; 32]
             }
+        );
+        assert_eq!(
+            act(&format!(
+                r#"{{"act":"person","peer":"{k}","set":"colour","colour":"Teal"}}"#
+            ))
+            .unwrap(),
+            Act::Person {
+                peer: vec![0xab; 32],
+                change: Change::Colour(Some("Teal".into()))
+            }
+        );
+        assert_eq!(
+            act(&format!(
+                r#"{{"act":"person","peer":"{k}","set":"colour"}}"#
+            ))
+            .unwrap(),
+            Act::Person {
+                peer: vec![0xab; 32],
+                change: Change::Colour(None)
+            }
+        );
+        assert_eq!(
+            act(&format!(
+                r#"{{"act":"person","peer":"{k}","set":"blocked"}}"#
+            ))
+            .unwrap(),
+            Act::Person {
+                peer: vec![0xab; 32],
+                change: Change::Blocked
+            }
+        );
+        assert!(
+            act(&format!(
+                r#"{{"act":"person","peer":"{k}","set":"colour","colour":"Mauve"}}"#
+            ))
+            .is_err()
+        );
+        assert!(
+            act(&format!(
+                r#"{{"act":"person","peer":"{k}","set":"forget"}}"#
+            ))
+            .is_err()
         );
         assert_eq!(
             act(&format!(r#"{{"act":"focus","by":"{k}"}}"#)).unwrap(),

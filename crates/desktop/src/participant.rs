@@ -387,18 +387,49 @@ const STYLE: &str = "body { background: var(--ground); color: var(--ink);\n\
        font-size: 11px; line-height: 1.5; text-align: center; vertical-align: super }\n\
      button.card sup { position: absolute; top: -.5em; right: -.5em; margin: 0 }\n\
      ul.rows small { color: var(--sub) }\n\
-     .said { margin: .5rem 0; padding: .5rem .75rem; border-radius: 6px; background: var(--sunken);\n\
-       max-width: 80%; width: fit-content }\n\
+     #messages { display: flex; flex-direction: column; justify-content: flex-end;\n\
+       min-height: calc(100vh - 16rem) }\n\
+     .said { align-self: flex-start; margin: .3rem 0; padding: .5rem .75rem; border-radius: 14px;\n\
+       background: var(--sunken); max-width: 78%; width: fit-content; box-sizing: border-box }\n\
      .said p { margin: 0; white-space: pre-wrap }\n\
-     .said.mine { margin-left: auto; background: var(--control) }\n\
-     .said small { color: var(--sub) }\n\
+     .said.mine { align-self: flex-end; background: var(--control); border: 2px solid var(--rule) }\n\
+     .said small { color: var(--muted) }\n\
+     .talks { display: flex; flex-direction: column; gap: 10px; margin: .5rem 0 1rem }\n\
+     a.talk { display: flex; align-items: center; gap: 14px; padding: 12px 14px 12px 12px;\n\
+       background: var(--sunken); border: 2px solid var(--rule); border-radius: 12px;\n\
+       color: var(--ink); text-decoration: none; cursor: pointer }\n\
+     a.talk:hover { background: var(--control) }\n\
+     a.talk.blocked { opacity: .6 }\n\
+     a.talk .lines { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px }\n\
+     a.talk .lines > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis }\n\
+     a.talk .place { color: var(--muted); font-size: 14px; margin-left: .5em }\n\
+     a.talk .place b { color: var(--ink) }\n\
+     a.talk small { color: var(--muted); font-size: 13px }\n\
+     a.talk sup { margin: 0 }\n\
+     sup.muted { background: var(--muted) }\n\
+     .who { flex: none; width: 48px; height: 48px; border-radius: 50%; display: flex;\n\
+       align-items: center; justify-content: center; overflow: hidden; color: var(--rail-ink);\n\
+       font-weight: 700; font-size: 18px; cursor: pointer; user-select: none }\n\
+     header.bar .who { width: 40px; height: 40px; margin-right: 12px; font-size: 16px }\n\
+     .who img { width: 100%; height: 100%; object-fit: cover }\n\
      #compose { position: sticky; bottom: 0; background: var(--ground); padding-top: .5rem }";
 
 const SCRIPT: &str = r#"const post = m => window.ipc.postMessage(JSON.stringify(m));
 const say = t => { document.getElementById('said').textContent = t; };
 // one listener for the page, since a place's rail and body are redrawn
 // under it and anything bound to them would go with them
+let opening = null;
 document.addEventListener('click', e => {
+  // **a person's orb opens their conversation on a click and their options
+  // on a double click** [author, 2026-11-23], so the click waits a beat to
+  // see which it is
+  const w = e.target.closest('[data-person]');
+  if (w) {
+    clearTimeout(opening);
+    const go = w.closest('[data-go]');
+    if (go) opening = setTimeout(() => post({ act: 'go', place: go.dataset.go }), 280);
+    return;
+  }
   const b = e.target.closest('button, a[data-go]');
   if (!b) return;
   if (b.dataset.go) return post({ act: 'go', place: b.dataset.go });
@@ -422,6 +453,11 @@ document.addEventListener('click', e => {
     b.disabled = true;
     post({ act: 'leave', patron: b.dataset.leave, by: b.dataset.by });
     return say('leaving…');
+  }
+  if (b.dataset.personSet) {
+    const m = { act: 'person', peer: b.dataset.peer, set: b.dataset.personSet };
+    if (b.dataset.tint) m.colour = b.dataset.tint;
+    return post(m);
   }
   if (b.dataset.colour) return post({ act: 'colour', name: b.dataset.colour });
   if (b.dataset.focus) return post({ act: 'focus', by: b.dataset.focus });
@@ -468,8 +504,14 @@ function send() {
 }
 // **a double click on the nameplate opens which identity acts** [author,
 // 2026-11-23], where the phone presses and holds
+// and on a person's orb opens their options
 document.addEventListener('dblclick', e => {
   if (e.target.closest('a.plate')) post({ act: 'go', place: 'identities' });
+  const w = e.target.closest('[data-person]');
+  if (w) {
+    clearTimeout(opening);
+    post({ act: 'go', place: 'person:' + w.dataset.person });
+  }
 });
 // Enter sends, as a chat's box does; Shift and Enter is a new line
 document.addEventListener('keydown', e => {

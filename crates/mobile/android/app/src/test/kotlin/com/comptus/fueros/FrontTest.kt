@@ -266,4 +266,49 @@ class FrontTest {
         front.settle(other, "aa", id, Front.Delivery.SENT, null)
         assertEquals(Front.Delivery.SENDING, front.thread(ME, "aa")!!.messages.last().delivery)
     }
+
+    // ---- the people talked to [author, 2026-11-23] -----------------------
+
+    @Test
+    fun an_arrival_counts_until_its_thread_is_on_screen_and_none_while_it_is() {
+        val front = Front()
+        assertTrue(front.incoming(ME, "aa", "carol", "one"))
+        assertTrue(front.incoming(ME, "aa", "carol", "two"))
+        front.incoming(ME, "bb", "dave", "three")
+        assertEquals(3, front.unseen())
+        assertEquals(2, front.thread(ME, "aa")?.unread)
+        front.showing(ME, "aa")
+        assertEquals(0, front.thread(ME, "aa")?.unread)
+        assertFalse("the thread on screen is not told in the shade", front.incoming(ME, "aa", "carol", "four"))
+        assertEquals(1, front.unseen())
+        front.hidden(ME, "aa")
+        front.incoming(ME, "aa", "carol", "five")
+        assertEquals(2, front.unseen())
+    }
+
+    @Test
+    fun muted_counts_on_its_card_alone_and_notifications_muted_counts_untold() {
+        val front = Front()
+        front.choose(ME, "aa") { it.copy(muted = true) }
+        front.choose(ME, "bb") { it.copy(silent = true) }
+        assertFalse(front.incoming(ME, "aa", "carol", "hush"))
+        assertFalse(front.incoming(ME, "bb", "dave", "quiet"))
+        assertEquals(1, front.thread(ME, "aa")?.unread)
+        assertEquals("only the thread not muted raises the orb", 1, front.unseen())
+    }
+
+    @Test
+    fun a_blocked_party_is_dropped_unkept_and_the_choices_are_what_the_store_keeps() {
+        val front = Front()
+        val kept = HashMap<String, Map<String, Front.Person>>()
+        front.peopler = { by -> kept[by] = front.people(by) }
+        front.choose(ME, "aa") { it.copy(blocked = true, colour = "Teal") }
+        assertFalse(front.incoming(ME, "aa", "mallory", "let me in"))
+        assertNull("nothing of a blocked party is kept", front.thread(ME, "aa"))
+        assertEquals(0, front.unseen())
+        assertEquals(Front.Person(colour = "Teal", blocked = true), kept[ME]?.get("aa"))
+        val again = Front()
+        again.restorePeople(ME, kept.getValue(ME))
+        assertTrue(again.person(ME, "aa").blocked)
+    }
 }

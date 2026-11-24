@@ -74,6 +74,36 @@ class Threads(private val files: Files, private val sealer: Sealer, private val 
         return files.write(INDEX, sealer.seal("$by/$INDEX", json.toByteArray()))
     }
 
+    /**
+     * **What this identity chose about the people it talks to, and each
+     * thread's unread count** [author, 2026-11-23]: one sealed file beside
+     * the index, so the index is still written only when a thread is added
+     * or renamed. None where there is none or it does not open.
+     */
+    fun people(): Map<String, Front.Person> {
+        val bytes = files.read(PEOPLE) ?: return emptyMap()
+        val open = sealer.unseal("$by/$PEOPLE", bytes) ?: return emptyMap()
+        val v = runCatching { Json.parse(String(open)) }.getOrNull() ?: return emptyMap()
+        return Json.obj(v).mapNotNull { (peer, e) ->
+            val o = Json.obj(e)
+            peer to Front.Person(
+                colour = Json.string(o["colour"]),
+                muted = Json.bool(o["muted"]) ?: false,
+                silent = Json.bool(o["silent"]) ?: false,
+                blocked = Json.bool(o["blocked"]) ?: false,
+                unread = Json.number(o["unread"])?.toInt()?.coerceAtLeast(0) ?: 0,
+            )
+        }.toMap()
+    }
+
+    fun writePeople(people: Map<String, Front.Person>): Boolean {
+        val json = people.entries.joinToString(",", "{", "}") { (peer, p) ->
+            "${Json.quote(peer)}:{\"colour\":${p.colour?.let { Json.quote(it) } ?: "null"}," +
+                "\"muted\":${p.muted},\"silent\":${p.silent},\"blocked\":${p.blocked},\"unread\":${p.unread}}"
+        }
+        return files.write(PEOPLE, sealer.seal("$by/$PEOPLE", json.toByteArray()))
+    }
+
     /** Append one record to the thread with `peer`; the record's id (its offset), or null where the file did not take it. */
     fun append(peer: String, record: Record): Long? {
         val name = fileOf(peer)
@@ -129,6 +159,7 @@ class Threads(private val files: Files, private val sealer: Sealer, private val 
         const val PAGE = 50
         const val DIR = "dm"
         const val INDEX = "$DIR/index"
+        const val PEOPLE = "$DIR/people"
         fun fileOf(peer: String) = "$DIR/$peer"
 
         private fun putLen(b: ByteArray, at: Int, len: Int) {

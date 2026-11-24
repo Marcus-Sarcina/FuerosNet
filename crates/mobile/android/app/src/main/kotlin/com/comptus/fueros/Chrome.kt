@@ -224,6 +224,31 @@ object Chrome {
     }
 
     /** The foot: this person's own name, and what the bar says it does. */
+    /**
+     * **A person's colour** [author, 2026-11-23: *"in a characteristic
+     * color"*]: the palette's entry chosen for them, else the one their
+     * key gives them — its first byte, over the palette — so a party keeps
+     * one colour without anybody choosing it.
+     */
+    fun personColour(chosen: String?, key: String): Pair<String, Int> =
+        Palette.IDENTITY.firstOrNull { it.first == chosen }
+            ?: Palette.IDENTITY[(key.take(2).toIntOrNull(16) ?: 0) % Palette.IDENTITY.size]
+
+    /** **How much of a person's colour their bubbles wear** over the
+     *  ground: a low-saturation version of it, under which ink still reads. */
+    const val BUBBLE_SHARE = 0.28
+
+    /**
+     * **Where a person stands from here, as their card says it** [author,
+     * 2026-11-23]: levels above with a plus, below with a minus, across as
+     * nought; none where it cannot be stated.
+     */
+    fun standing(offset: Int?): String? = when {
+        offset == null -> null
+        offset > 0 -> "+$offset"
+        else -> "$offset"
+    }
+
     fun foot(alias: String?, me: String): Pair<String, String> =
         (alias?.takeIf { it.isNotBlank() } ?: me.take(12) + "…") to "home"
 }

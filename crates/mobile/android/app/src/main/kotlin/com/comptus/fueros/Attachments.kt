@@ -417,10 +417,12 @@ object Attachments {
                     is Event.Payload -> {
                         val from = Gateway.hex(e.from)
                         val who = if (from == peerKey) peerName else from.take(16)
-                        Gateway.front.incoming(id, from, who, String(e.bytes))
+                        val tell = Gateway.front.incoming(id, from, who, String(e.bytes))
                         // **told in the shade where no screen shows it**
-                        // [author, 2026-11-17]: it came over the session kept
-                        Gateway.appContext?.let { if (!Arrived.onScreen()) Arrived.post(it, who, from) }
+                        // [author, 2026-11-17]: it came over the session
+                        // kept, and not for a party muted or blocked
+                        // [author, 2026-11-23]
+                        Gateway.appContext?.let { if (tell && !Arrived.onScreen()) Arrived.post(it, who, from) }
                     }
                     // **a sender this identity cannot attribute** [author,
                     // 2026-11-19]: shown under the alias it carries, marked
@@ -428,8 +430,8 @@ object Attachments {
                     is Event.Unverified -> {
                         val from = Gateway.hex(e.from)
                         val who = "${e.alias} (unverified)"
-                        Gateway.front.incoming(id, from, who, String(e.bytes), unverified = true)
-                        Gateway.appContext?.let { if (!Arrived.onScreen()) Arrived.post(it, who, from) }
+                        val tell = Gateway.front.incoming(id, from, who, String(e.bytes), unverified = true)
+                        Gateway.appContext?.let { if (tell && !Arrived.onScreen()) Arrived.post(it, who, from) }
                     }
                     is Event.Connection -> {
                         // every identity's connection is recorded for itself
@@ -788,10 +790,12 @@ object Attachments {
                 val s = storeOf(h.id) ?: continue
                 migrateThreads(AndroidShell(a, h.scope), s)
                 Gateway.front.restore(h.id, s.index())
+                Gateway.front.restorePeople(h.id, s.people())
             }
             Gateway.front.appender = { by, peer, rec -> storeOf(by)?.append(peer, rec) }
             Gateway.front.indexer = { by -> storeOf(by)?.writeIndex(Gateway.front.entries(by)) }
             Gateway.front.loader = { by, peer, before, pending -> storeOf(by)?.page(peer, before, Threads.PAGE, pending) }
+            Gateway.front.peopler = { by -> storeOf(by)?.writePeople(Gateway.front.people(by)) }
         }
         for ((hid, hp) in Gateway.loaded) {
             if (hid != up) launchHeld(hid, hp, index.firstOrNull { it.id == hid }?.scope)

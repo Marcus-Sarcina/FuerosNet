@@ -13,7 +13,7 @@
 //! so what is being typed beside them survives a message arriving.
 
 use crate::participant::{Device, escape, hex, shell};
-use crate::threads::{Delivery, Entry, Message};
+use crate::threads::{Chosen, Delivery, Entry, Message};
 
 /// **Where the window is.**
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,6 +41,10 @@ pub enum Place {
     /// **Which identity is in focus** [author, 2026-11-23], opened by a
     /// double click on the nameplate: the one a direct message starts as.
     Identities,
+    /// **One party's options** [author, 2026-11-23], by their keyhash in
+    /// hex, opened by a double click on their orb: their colour, mute,
+    /// notifications, block.
+    Person(String),
 }
 
 impl Place {
@@ -64,6 +68,7 @@ impl Place {
             Some(("thread", h)) => hex64(h).map(Place::Thread),
             Some(("subnet", h)) => hex64(h).map(Place::Subnet),
             Some(("subnet-options", h)) => hex64(h).map(Place::SubnetOptions),
+            Some(("person", h)) => hex64(h).map(Place::Person),
             Some(_) => None,
         }
     }
@@ -81,6 +86,7 @@ impl Place {
             Place::Thread(h) => format!("thread:{h}"),
             Place::Subnet(h) => format!("subnet:{h}"),
             Place::SubnetOptions(h) => format!("subnet-options:{h}"),
+            Place::Person(h) => format!("person:{h}"),
         }
     }
 
@@ -99,7 +105,7 @@ impl Place {
         match self {
             Place::Node | Place::Colour => Place::Options,
             Place::SubnetOptions(h) => Place::Subnet(h.clone()),
-            Place::Thread(_) => Place::Direct,
+            Place::Thread(_) | Place::Person(_) => Place::Direct,
             _ => Place::Home,
         }
     }
@@ -219,7 +225,7 @@ pub struct SubnetRow {
 }
 
 /// One person this key knows.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Person {
     /// Their keyhash, in hex.
     pub key: String,
@@ -229,6 +235,16 @@ pub struct Person {
     pub how: String,
     /// The identity that met them, in hex.
     pub by: String,
+    /// **The picture their profile carries**: the format tag (1 PNG, 2
+    /// JPEG, 3 WebP) and the bytes, where one has been received.
+    pub picture: Option<(u64, Vec<u8>)>,
+    /// **The subnet the two share**, by the name it goes by, where there is
+    /// one [author, 2026-11-23].
+    pub subnet: Option<String>,
+    /// Where they stand from here in it, in levels: above positive.
+    pub offset: Option<i32>,
+    /// Whether they are in this key's direct line there.
+    pub in_line: bool,
 }
 
 impl Person {
@@ -281,9 +297,53 @@ pub struct Snapshot {
     pub people: Vec<Person>,
     /// The threads the index names.
     pub threads: Vec<Entry>,
+    /// **What each identity chose about each party** [author, 2026-11-23],
+    /// by the identity and the party, both in hex; a party absent chose
+    /// nothing and has nothing unread.
+    pub chosen: std::collections::BTreeMap<(String, String), Chosen>,
 }
 
 impl Snapshot {
+    /// What `by` chose about `peer`.
+    pub fn chosen_of(&self, by: &str, peer: &str) -> Chosen {
+        self.chosen
+            .get(&(by.to_string(), peer.to_string()))
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// **The direct-message orb's count** [author, 2026-11-23]: what
+    /// arrived unseen on every thread neither muted nor blocked.
+    pub fn direct_unseen(&self) -> u32 {
+        self.chosen
+            .values()
+            .filter(|c| !c.muted && !c.blocked)
+            .map(|c| c.unread)
+            .sum()
+    }
+
+    /// **The identity a conversation with `peer` is held as**: the one
+    /// whose thread it is, else the one that met them, else the one in
+    /// focus, as the window's own choice of it goes.
+    pub fn holder_of(&self, peer: &str) -> String {
+        self.threads
+            .iter()
+            .find(|t| t.peer == peer)
+            .map(|t| t.by.clone())
+            .or_else(|| {
+                self.people
+                    .iter()
+                    .find(|p| p.key == peer)
+                    .map(|p| p.by.clone())
+            })
+            .unwrap_or_else(|| hex(&self.me))
+    }
+
+    /// The person `by` knows as `peer`, where they are one.
+    pub fn person(&self, by: &str, peer: &str) -> Option<&Person> {
+        self.people.iter().find(|p| p.by == by && p.key == peer)
+    }
+
     /// This person's name, else the start of their key.
     pub fn who(&self) -> String {
         self.name
@@ -360,6 +420,26 @@ pub const PALETTE: [(&str, &str); 8] = [
     ("Slate", "--identity-slate"),
 ];
 
+/// **A person's colour** [author, 2026-11-23: *"in a characteristic
+/// color"*], by the palette's name: the one chosen for them, else the one
+/// their key gives them — its first byte, over the palette, as the phone's
+/// `Chrome.personColour` takes it.
+pub fn person_colour<'a>(chosen: Option<&'a str>, peer: &str) -> &'a str {
+    if let Some(c) = chosen.filter(|c| PALETTE.iter().any(|(n, _)| n == c)) {
+        return c;
+    }
+    let first = peer
+        .get(..2)
+        .and_then(|b| u8::from_str_radix(b, 16).ok())
+        .unwrap_or(0);
+    PALETTE[usize::from(first) % PALETTE.len()].0
+}
+
+/// **How much of a person's colour their bubbles wear** over the ground,
+/// in percent: a low-saturation version of it, as the phone's
+/// `Chrome.BUBBLE_SHARE`.
+pub const BUBBLE_SHARE: u32 = 28;
+
 /// The token a palette name is drawn in; the orb's own where the name is
 /// none of the palette's.
 pub fn token(name: &str) -> &'static str {
@@ -376,6 +456,8 @@ pub fn token(name: &str) -> &'static str {
 /// own way back.
 pub fn page(snap: &Snapshot, place: &Place, body: &Body) -> String {
     let compose = match place {
+        // **not answered once blocked**
+        Place::Thread(peer) if snap.chosen_of(&snap.holder_of(peer), peer).blocked => String::new(),
         Place::Thread(peer) => format!(
             "<div id=\"compose\"><textarea id=\"text\" rows=\"3\" data-peer=\"{peer}\" \
              placeholder=\"Say something to {}\"></textarea>\
@@ -421,9 +503,10 @@ pub fn rail(snap: &Snapshot, place: &Place) -> String {
         &Place::Direct,
         matches!(place, Place::Direct | Place::Thread(_)),
         "DM",
-        "Direct messages",
+        &format!("Direct messages{}", said(snap.direct_unseen())),
         Crown::None,
-        0,
+        // **unread direct messages count on its orb** [author, 2026-11-23]
+        snap.direct_unseen(),
         None,
     );
     if !snap.subnets.is_empty() {
@@ -580,6 +663,7 @@ fn main(snap: &Snapshot, place: &Place, body: &Body) -> String {
         Place::Node => node(snap),
         Place::Colour => colour(snap),
         Place::Identities => identities(snap),
+        Place::Person(peer) => person(snap, peer),
         Place::Authority => match body {
             Body::Authority(lines) => authority(lines),
             _ => authority(&[]),
@@ -638,18 +722,16 @@ fn direct(snap: &Snapshot) -> String {
         return out;
     }
     if !snap.threads.is_empty() {
-        out.push_str("<h2>Conversations</h2>\n<ul class=\"rows\">\n");
-        // **each thread marked with the colour of the identity it is held
-        // as** [author, 2026-11-12]
-        for t in &snap.threads {
-            out.push_str(&format!(
-                "<li><a data-go=\"thread:{}\">{}{}</a></li>\n",
-                t.peer,
-                swatch(snap, &t.by),
-                escape(&snap.name_of(&t.peer))
-            ));
+        out.push_str("<h2>Conversations</h2>\n<div class=\"talks\">\n");
+        // **a blocked party's card goes last**, where it is unblocked from
+        let (open, blocked): (Vec<&Entry>, Vec<&Entry>) = snap
+            .threads
+            .iter()
+            .partition(|t| !snap.chosen_of(&t.by, &t.peer).blocked);
+        for t in open.into_iter().chain(blocked) {
+            out.push_str(&card(snap, &t.by, &t.peer, true));
         }
-        out.push_str("</ul>\n");
+        out.push_str("</div>\n");
     }
     let quiet: Vec<&Person> = snap
         .people
@@ -657,23 +739,192 @@ fn direct(snap: &Snapshot) -> String {
         .filter(|p| !snap.threads.iter().any(|t| t.peer == p.key))
         .collect();
     if !quiet.is_empty() {
-        out.push_str("<h2>People</h2>\n<ul class=\"rows\">\n");
+        out.push_str("<h2>People</h2>\n<div class=\"talks\">\n");
         for p in quiet {
-            out.push_str(&format!(
-                "<li><a data-go=\"thread:{}\">{}</a> <small>{}</small></li>\n",
-                p.key,
-                escape(&p.name()),
-                escape(&p.how)
-            ));
+            out.push_str(&card(snap, &p.by, &p.key, false));
         }
-        out.push_str("</ul>\n");
+        out.push_str("</div>\n");
+    }
+    out
+}
+
+/// **A person's orb** [author, 2026-11-23]: the picture their profile
+/// carries, else their initial on their colour; a double click opens their
+/// options, where the phone presses and holds.
+fn person_orb(snap: &Snapshot, by: &str, peer: &str) -> String {
+    let name = snap.name_of(peer);
+    let colour = token(person_colour(
+        snap.chosen_of(by, peer).colour.as_deref(),
+        peer,
+    ));
+    let inner = match snap.person(by, peer).and_then(|p| p.picture.as_ref()) {
+        Some((format, bytes)) => format!(
+            "<img alt=\"\" src=\"data:{};base64,{}\">",
+            match format {
+                2 => "image/jpeg",
+                3 => "image/webp",
+                _ => "image/png",
+            },
+            base64(bytes)
+        ),
+        None => escape(
+            &name
+                .chars()
+                .next()
+                .map(|c| c.to_uppercase().collect::<String>())
+                .unwrap_or_default(),
+        ),
+    };
+    format!(
+        "<span class=\"who\" data-person=\"{peer}\" style=\"background: var({colour})\" \
+         title=\"{} — double-click for their options\">{inner}</span>",
+        escape(&name)
+    )
+}
+
+/// **One card the width of the page** [author, 2026-11-23]: the person's
+/// orb; their name in bold, the subnet the two share and where they stand
+/// from here in it, in bold where they are in this key's direct line; what
+/// arrived unseen; and what was muted. Edged in the colour of the identity
+/// it is held as [author, 2026-11-12].
+fn card(snap: &Snapshot, by: &str, peer: &str, thread: bool) -> String {
+    let c = snap.chosen_of(by, peer);
+    let p = snap.person(by, peer);
+    let place = p
+        .and_then(|p| p.subnet.as_ref().map(|s| (p, s)))
+        .map(|(p, s)| {
+            let at = match p.offset {
+                Some(n) if n > 0 => format!(" +{n}"),
+                Some(n) => format!(" {n}"),
+                None => String::new(),
+            };
+            format!(
+                " <span class=\"place\">{}{}</span>",
+                escape(s),
+                if p.in_line && !at.is_empty() {
+                    format!(" <b>{}</b>", at.trim())
+                } else {
+                    at
+                }
+            )
+        })
+        .unwrap_or_default();
+    let note = if c.blocked {
+        "blocked"
+    } else if !thread {
+        "nothing said yet"
+    } else if c.muted {
+        "muted"
+    } else if c.silent {
+        "notifications muted"
+    } else {
+        ""
+    };
+    let edge = snap
+        .held
+        .iter()
+        .find(|h| h.by == by)
+        .map(|h| token(&h.colour))
+        .unwrap_or("--rule");
+    format!(
+        "<a class=\"talk{}\" data-go=\"thread:{peer}\" style=\"border-color: var({edge})\">{}\
+         <span class=\"lines\"><span><b>{}</b>{place}</span>{}</span>{}</a>\n",
+        if c.blocked { " blocked" } else { "" },
+        person_orb(snap, by, peer),
+        escape(&snap.name_of(peer)),
+        if note.is_empty() {
+            String::new()
+        } else {
+            format!("<small>{note}</small>")
+        },
+        if c.unread > 0 {
+            format!(
+                "<sup{}>{}</sup>",
+                if c.muted { " class=\"muted\"" } else { "" },
+                c.unread
+            )
+        } else {
+            String::new()
+        }
+    )
+}
+
+/// **One party's options** [author, 2026-11-23]: their colour, chosen from
+/// the palette or left to the one their key gives them, and mute, mute
+/// notifications and block, each a toggle saying what it will do.
+fn person(snap: &Snapshot, peer: &str) -> String {
+    let by = snap.holder_of(peer);
+    let c = snap.chosen_of(&by, peer);
+    let mut out = bar(&snap.name_of(peer), true, None);
+    out.push_str(&format!(
+        "<p class=\"sub mono\">{peer}</p>\n<h2>Colour</h2>\n"
+    ));
+    let given = person_colour(None, peer);
+    out.push_str(&format!(
+        "<button class=\"row\" data-person-set=\"colour\" data-peer=\"{peer}\" data-tint=\"\">\
+         <span><i class=\"swatch\" style=\"background: var({})\"></i>{}The one their key gives \
+         them ({given})</span></button>\n",
+        token(given),
+        if c.colour.is_none() { "● " } else { "" }
+    ));
+    for (name, t) in PALETTE {
+        out.push_str(&format!(
+            "<button class=\"row\" data-person-set=\"colour\" data-peer=\"{peer}\" \
+             data-tint=\"{name}\"><span><i class=\"swatch\" style=\"background: var({t})\"></i>\
+             {}{name}</span></button>\n",
+            if c.colour.as_deref() == Some(name) {
+                "● "
+            } else {
+                ""
+            }
+        ));
+    }
+    out.push_str("<h2>Options</h2>\n");
+    for (set, on, off, now) in [
+        ("muted", "Unmute", "Mute", c.muted),
+        (
+            "silent",
+            "Unmute notifications",
+            "Mute notifications",
+            c.silent,
+        ),
+        ("blocked", "Unblock", "Block", c.blocked),
+    ] {
+        out.push_str(&format!(
+            "<button class=\"row\" data-person-set=\"{set}\" data-peer=\"{peer}\"><span>{}</span>\
+             </button>\n",
+            if now { on } else { off }
+        ));
     }
     out
 }
 
 fn thread(snap: &Snapshot, peer: &str, messages: &[Message], more: bool) -> String {
-    let mut out = bar(&snap.name_of(peer), true, None);
+    let by = snap.holder_of(peer);
+    let c = snap.chosen_of(&by, peer);
+    // **as a chat is laid out** [author, 2026-11-23]: this person's
+    // bubbles to the right, grey and outlined in the colour of the identity
+    // they speak as; the other party's to the left, on a low-saturation
+    // version of that party's colour
+    let mine = snap
+        .held
+        .iter()
+        .find(|h| h.by == by)
+        .map_or("--rule", |h| token(&h.colour));
+    let theirs = token(person_colour(c.colour.as_deref(), peer));
+    let mut out = format!(
+        "<header class=\"bar\"><button class=\"back\" data-act=\"back\" aria-label=\"Back\">‹\
+         </button>{}<h1>{}</h1></header>\n",
+        person_orb(snap, &by, peer),
+        escape(&snap.name_of(peer))
+    );
     out.push_str(&format!("<p class=\"sub mono\">{peer}</p>\n"));
+    if c.blocked {
+        out.push_str(
+            "<p class=\"sub\">Blocked: what they send is dropped as it comes. Double-click their \
+             orb to unblock.</p>\n",
+        );
+    }
     if more {
         out.push_str("<p class=\"sub\">Earlier messages are kept; the newest are shown.</p>\n");
     }
@@ -690,10 +941,16 @@ fn thread(snap: &Snapshot, peer: &str, messages: &[Message], more: bool) -> Stri
                     .map(|w| format!(": {}", escape(w)))
                     .unwrap_or_default()
             ),
+            (Delivery::Sent, _) if m.mine => " <small>sent</small>".to_string(),
             (Delivery::Sent, _) => String::new(),
         };
+        let style = if m.mine {
+            format!("border-color: var({mine})")
+        } else {
+            format!("background: color-mix(in srgb, var({theirs}) {BUBBLE_SHARE}%, var(--ground))")
+        };
         out.push_str(&format!(
-            "<div class=\"said{}\"><p>{}</p>{state}</div>\n",
+            "<div class=\"said{}\" style=\"{style}\"><p>{}</p>{state}</div>\n",
             if m.mine { " mine" } else { "" },
             escape(&m.text)
         ));
@@ -760,24 +1017,6 @@ fn subnet_options(snap: &Snapshot, id: &str) -> String {
         });
     }
     out
-}
-
-/// The mark of the colour `by` wears, where this desktop holds more than
-/// one identity and so the mark says something.
-fn swatch(snap: &Snapshot, by: &str) -> String {
-    if snap.held.len() < 2 {
-        return String::new();
-    }
-    snap.held
-        .iter()
-        .find(|h| h.by == by)
-        .map(|h| {
-            format!(
-                "<i class=\"swatch\" style=\"background: var({})\"></i>",
-                token(&h.colour)
-            )
-        })
-        .unwrap_or_default()
 }
 
 /// **Which identity is in focus** [author, 2026-11-23]: the phone's list,
@@ -1076,12 +1315,14 @@ mod tests {
                     alias: Some("Carol".into()),
                     how: "met".into(),
                     by: "ab".repeat(32),
+                    ..Default::default()
                 },
                 Person {
                     key: "44".repeat(32),
                     alias: None,
                     how: "introduced".into(),
                     by: "ab".repeat(32),
+                    ..Default::default()
                 },
             ],
             threads: vec![Entry {
@@ -1090,6 +1331,7 @@ mod tests {
                 direct: true,
                 by: "ab".repeat(32),
             }],
+            chosen: Default::default(),
         }
     }
 
@@ -1234,7 +1476,75 @@ mod tests {
         let carol = d.find("Carol").unwrap();
         let people = d.find("<h2>People</h2>").unwrap();
         assert!(carol < people, "the thread's party is under conversations");
-        assert!(d.contains("4444444444444444") && d.matches("Carol").count() == 1);
+        assert!(d.contains("4444444444444444") && d.matches("<b>Carol</b>").count() == 1);
+    }
+
+    #[test]
+    fn a_conversation_is_a_card_naming_where_they_stand_and_what_waits() {
+        let mut s = snap();
+        let (me, carol) = ("ab".repeat(32), "33".repeat(32));
+        s.people[0].subnet = Some("Mirror".into());
+        s.people[0].offset = Some(1);
+        s.people[0].in_line = true;
+        s.chosen.insert(
+            (me.clone(), carol.clone()),
+            Chosen {
+                unread: 4,
+                ..Default::default()
+            },
+        );
+        let d = direct(&s);
+        assert!(d.contains("<b>Carol</b> <span class=\"place\">Mirror <b>+1</b></span>"));
+        assert!(d.contains("<sup>4</sup>") && d.contains(&format!("data-person=\"{carol}\"")));
+        assert!(rail(&s, &Place::Direct).contains("Direct messages, 4 unseen"));
+        // **muted counts on its card alone**, and a branch beside this
+        // key's line is not in bold
+        s.people[0].in_line = false;
+        s.chosen
+            .get_mut(&(me.clone(), carol.clone()))
+            .unwrap()
+            .muted = true;
+        let d = direct(&s);
+        assert!(d.contains("Mirror +1</span>") && d.contains("<sup class=\"muted\">4</sup>"));
+        assert_eq!(s.direct_unseen(), 0);
+        let o = person(&s, &carol);
+        assert!(o.contains("Unmute") && o.contains("Mute notifications") && o.contains("Block"));
+        assert!(o.contains(&format!(
+            "The one their key gives them ({})",
+            person_colour(None, &carol)
+        )));
+    }
+
+    #[test]
+    fn bubbles_wear_the_speaker_s_identity_and_the_party_s_tint_and_a_block_ends_the_box() {
+        let mut s = snap();
+        let (me, carol) = ("ab".repeat(32), "33".repeat(32));
+        s.chosen.insert(
+            (me.clone(), carol.clone()),
+            Chosen {
+                colour: Some("Pink".into()),
+                ..Default::default()
+            },
+        );
+        let said = |mine| Message {
+            id: 0,
+            mine,
+            who: String::new(),
+            text: "hi".into(),
+            delivery: Delivery::Sent,
+            reason: None,
+        };
+        let p = page(
+            &s,
+            &Place::Thread(carol.clone()),
+            &Body::Thread(vec![said(false), said(true)], false),
+        );
+        assert!(p.contains("color-mix(in srgb, var(--identity-pink) 28%, var(--ground))"));
+        assert!(p.contains("class=\"said mine\" style=\"border-color: var(--identity-teal)\""));
+        assert!(p.contains("id=\"compose\""));
+        s.chosen.get_mut(&(me, carol.clone())).unwrap().blocked = true;
+        let p = page(&s, &Place::Thread(carol), &Body::Thread(vec![], false));
+        assert!(!p.contains("id=\"compose\"") && p.contains("Blocked:"));
     }
 
     #[test]

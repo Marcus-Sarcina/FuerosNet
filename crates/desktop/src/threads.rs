@@ -25,6 +25,11 @@ use std::path::{Path, PathBuf};
 pub const DIR: &str = "dm";
 /// The index's name, within the desktop's directory.
 pub const INDEX: &str = "dm/index";
+/// **What this identity chose about the people it talks to, and each
+/// thread's unread count** [author, 2026-11-23]: one sealed file beside the
+/// index, so the index is still written only when a thread is added or
+/// renamed.
+pub const PEOPLE: &str = "dm/people";
 /// How many messages a page holds.
 pub const PAGE: usize = 50;
 
@@ -187,11 +192,32 @@ pub struct Page {
     pub broken: bool,
 }
 
+/// **What this person has chosen about one party** [author, 2026-11-23],
+/// and the thread's unread count with it.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Chosen {
+    /// **The colour they are shown in**, by the palette's name; none for
+    /// the one their key gives them.
+    pub colour: Option<String>,
+    /// **Muted**: arrivals are kept and counted on the thread's card, and
+    /// do not raise the direct-message orb.
+    pub muted: bool,
+    /// **Notifications muted**: arrivals count as any do, and are not told.
+    pub silent: bool,
+    /// **Blocked**: arrivals are dropped as they come, never kept or shown.
+    pub blocked: bool,
+    /// What arrived since the thread was last on screen.
+    pub unread: u32,
+}
+
 /// One identity's threads, under the desktop's directory.
 pub struct Threads {
     dir: PathBuf,
     by: String,
     sealer: Box<dyn Sealer>,
+    /// What is chosen is read, changed and written whole, from the window
+    /// and from the kernel's arrivals both.
+    people: std::sync::Mutex<()>,
 }
 
 impl Threads {
@@ -202,7 +228,74 @@ impl Threads {
             dir: dir.to_path_buf(),
             by: by.to_string(),
             sealer,
+            people: std::sync::Mutex::new(()),
         }
+    }
+
+    /// **What this identity chose about each party**, by their keyhash in
+    /// hex; none where there is none or it does not open.
+    pub fn people(&self) -> std::collections::BTreeMap<String, Chosen> {
+        let Ok(bytes) = std::fs::read(self.path(PEOPLE)) else {
+            return Default::default();
+        };
+        let Some(open) = self.sealer.unseal(&format!("{}/{PEOPLE}", self.by), &bytes) else {
+            return Default::default();
+        };
+        let Ok(Value::Object(all)) = serde_json::from_slice::<Value>(&open) else {
+            return Default::default();
+        };
+        all.into_iter()
+            .map(|(peer, o)| {
+                let flag = |k: &str| o.get(k).and_then(Value::as_bool).unwrap_or(false);
+                let chosen = Chosen {
+                    colour: o.get("colour").and_then(Value::as_str).map(String::from),
+                    muted: flag("muted"),
+                    silent: flag("silent"),
+                    blocked: flag("blocked"),
+                    unread: o
+                        .get("unread")
+                        .and_then(Value::as_u64)
+                        .and_then(|n| u32::try_from(n).ok())
+                        .unwrap_or(0),
+                };
+                (peer, chosen)
+            })
+            .collect()
+    }
+
+    /// **Change what is chosen about `peer`**, and keep it; what it is now.
+    pub fn choose(&self, peer: &str, change: impl FnOnce(&mut Chosen)) -> Result<Chosen, String> {
+        let _held = self
+            .people
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut all = self.people();
+        let mut c = all.get(peer).cloned().unwrap_or_default();
+        let was = c.clone();
+        change(&mut c);
+        if c == was {
+            return Ok(c);
+        }
+        if c == Chosen::default() {
+            all.remove(peer);
+        } else {
+            all.insert(peer.to_string(), c.clone());
+        }
+        let body: serde_json::Map<String, Value> = all
+            .into_iter()
+            .map(|(peer, c)| {
+                let v = json!({"colour": c.colour, "muted": c.muted, "silent": c.silent,
+                    "blocked": c.blocked, "unread": c.unread});
+                (peer, v)
+            })
+            .collect();
+        let sealed = self.sealer.seal(
+            &format!("{}/{PEOPLE}", self.by),
+            Value::Object(body).to_string().as_bytes(),
+        );
+        crate::platform::create_private(&self.path(DIR))?;
+        crate::platform::write_whole(&self.path(PEOPLE), &sealed).map_err(|e| e.to_string())?;
+        Ok(c)
     }
 
     fn file_of(peer: &str) -> String {
@@ -532,6 +625,36 @@ mod tests {
         // another identity's sealer label does not open this index
         let other = Threads::new(&d, "else", Box::new(Labelled));
         assert!(other.index().is_empty());
+        let _ = std::fs::remove_dir_all(d);
+    }
+
+    #[test]
+    fn what_is_chosen_about_a_party_is_kept_sealed_and_read_back() {
+        let (d, t) = fresh("people");
+        let peer = "ab".repeat(32);
+        t.choose(&peer, |c| {
+            c.muted = true;
+            c.unread = 2;
+            c.colour = Some("Teal".into());
+        })
+        .unwrap();
+        let bytes = std::fs::read(d.join(PEOPLE)).unwrap();
+        assert!(Labelled.unseal("me/dm/people", &bytes).is_some());
+        assert!(Labelled.unseal("them/dm/people", &bytes).is_none());
+        let back = Threads::new(&d, "me", Box::new(Labelled)).people();
+        assert_eq!(
+            back.get(&peer),
+            Some(&Chosen {
+                colour: Some("Teal".into()),
+                muted: true,
+                silent: false,
+                blocked: false,
+                unread: 2,
+            })
+        );
+        // back to nothing chosen and nothing unread, the party is not kept
+        t.choose(&peer, |c| *c = Chosen::default()).unwrap();
+        assert!(t.people().is_empty());
         let _ = std::fs::remove_dir_all(d);
     }
 }

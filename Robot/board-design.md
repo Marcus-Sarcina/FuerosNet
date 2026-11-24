@@ -218,3 +218,39 @@ different copies:
 This is mine, not yours. Its one judgement is that the counter's `down` on the
 upward leg is fixed at 1, which encodes "and that ancestor's direct
 subordinates".
+
+**Approved 2026-11-23** [author: *"Yes, that is the correct behavior"*]:
+two legs, with the upward copy's `down` fixed at 1.
+
+## Gaps in that mechanism, found writing it into the design (asked 2026-11-23)
+
+1. **Not every level runs a node.** A member attaches to its nearest
+   infrastructure ancestor (design section 12.6.1), so the first node may
+   sit several levels above the writer, and a node's upstream may sit
+   several levels above its own owner. A pair `(up, down)` cannot say
+   "these ancestors along this branch, and their direct subordinates" at a
+   node serving several levels.
+   - *Proposed*: the receiving node reads the branch from the session the
+     copy arrived on (its downline table gives the path to the sender) and
+     applies the band to each position it serves.
+     - On the upward leg: each of the writer's ancestors within `up`, and
+       those ancestors' direct subordinates.
+     - On the downward leg: every position within `down` below the
+       writer's line.
+2. **Catch-up needs a cursor.** A node's FIFO has many readers, so nothing
+   is deleted on a read, and it holds no timestamps.
+   - *Proposed*: the node numbers what it stores, and a returning client
+     asks for everything after the last number it holds. A number fallen
+     out of the FIFO answers from the oldest held.
+3. **The downline table is required state** (transmission authority reads
+   its depth). Design section 15.2.1 calls the memo table optional, and
+   section 12.6.1 says a node must never be required to hold a map of the
+   subnet.
+   - Positions without identities is the author's own compaction
+     [2026-11-18]; whether it satisfies section 12.6.1 or amends it is his
+     call.
+
+**Answered 2026-11-23** [author]: yes to 1 and 2. On 3: *"positions-only
+satisfies 12.6.1; that is what we designed it for."* So section 12.6.1 stands
+as written, and the design says why the downline table meets it: it holds no
+identities, and section 12.6.1 forbids requiring a map of who is where.

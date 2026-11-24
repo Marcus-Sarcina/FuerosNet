@@ -94,6 +94,22 @@ pub struct Contact {
     pub count: u64,
     /// When last, seconds since the epoch.
     pub last_at: u64,
+    /// **The picture their profile carries** (`wire-format.md` §7.11), where
+    /// one has been received: its format tag (1 PNG, 2 JPEG, 3 WebP).
+    pub image_format: Option<u64>,
+    /// The picture's bytes, in that format.
+    pub image: Option<Vec<u8>>,
+    /// **The subnet they and this client are both in** [author,
+    /// 2026-11-23], by the locator they handed: none where it names one
+    /// this client holds no position in, or no locator is held.
+    pub subnet: Option<Txid>,
+    /// **Where they stand from here in that subnet**, in levels: above
+    /// this client positive, below negative, a level across zero; none
+    /// where the two positions are not stated from one anchor.
+    pub offset: Option<i32>,
+    /// **Whether they are in this client's direct line there**: an
+    /// ancestor or a descendant, not a branch beside it.
+    pub in_line: bool,
 }
 
 /// **What this key is in a subnet** — its rank there, in the order the
