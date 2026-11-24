@@ -31,6 +31,26 @@ pub struct Kept {
     pub dated: u64,
     /// Whether the person has been shown it.
     pub read: bool,
+    /// **The upward count the post was carried with, from its writer**,
+    /// as the node that delivered it said: what the writer asked, lowered
+    /// by the first node to what the writer has earned (design §14.4).
+    /// Nothing for a post this client wrote and no node has yet handed
+    /// back.
+    pub carried: Option<u64>,
+}
+
+impl Kept {
+    /// **The post's reach from its writer, as it was carried**: the
+    /// downward count as written, which nothing lowers, and the upward
+    /// count as the first node carried it, never more than was written.
+    /// As written where no node has yet said.
+    #[must_use]
+    pub fn reach(&self) -> (u64, u64) {
+        (
+            self.carried.map_or(self.post.up, |c| c.min(self.post.up)),
+            self.post.down,
+        )
+    }
 }
 
 /// What became of a post handed to the pool.
@@ -98,10 +118,23 @@ impl Pool {
     /// `arrived`.** It is kept where it parses, its signature makes it
     /// the writer's it names, and it names no other subnet. A post this
     /// client wrote is read already. At the bound the oldest go, by their
-    /// own dates.
-    pub fn take(&mut self, subnet: &Txid, me: &Keyhash, bytes: &[u8], arrived: u64) -> Took {
+    /// own dates. `carried` is the upward count the delivering node says
+    /// the post was carried with, and nothing for a post this client has
+    /// just written; a post already held learns it here, which is how a
+    /// writer's own post comes to read as its node carried it.
+    pub fn take(
+        &mut self,
+        subnet: &Txid,
+        me: &Keyhash,
+        bytes: &[u8],
+        arrived: u64,
+        carried: Option<u64>,
+    ) -> Took {
         let hash = Post::hash(bytes);
-        if self.posts.contains_key(&hash) {
+        if let Some(held) = self.posts.get_mut(&hash) {
+            if held.carried.is_none() {
+                held.carried = carried;
+            }
             return Took::Held;
         }
         let Ok(post) = Post::parse(bytes) else {
@@ -121,6 +154,7 @@ impl Pool {
                 dated: post.written_at.min(arrived),
                 hash,
                 post,
+                carried,
             },
         );
         while self.bytes > self.cap {
@@ -255,17 +289,21 @@ impl Pool {
     }
 
     /// The pool as it is kept between runs: each post with when it was
-    /// dated and whether it was read, and the cursors.
+    /// dated, whether it was read and, where a node has said, the upward
+    /// count it was carried with, and the cursors.
     #[must_use]
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_array_head(&mut out, 2);
         emit_array_head(&mut out, self.posts.len());
         for k in self.posts.values() {
-            emit_array_head(&mut out, 3);
+            emit_array_head(&mut out, 3 + usize::from(k.carried.is_some()));
             emit_bstr(&mut out, &k.post.bytes);
             emit_uint(&mut out, k.dated);
             emit_bool(&mut out, k.read);
+            if let Some(n) = k.carried {
+                emit_uint(&mut out, n);
+            }
         }
         emit_map_head(&mut out, self.cursors.len());
         for (node, n) in &self.cursors {
@@ -290,8 +328,15 @@ impl Pool {
         let mut pool = Pool::new(cap);
         for p in posts {
             let Item::Array(f) = p else { return None };
-            let [Item::Bytes(r), Item::Uint(dated), Item::Bool(read)] = f.as_slice() else {
-                return None;
+            let (r, dated, read, carried) = match f.as_slice() {
+                [Item::Bytes(r), Item::Uint(dated), Item::Bool(read)] => (r, dated, read, None),
+                [
+                    Item::Bytes(r),
+                    Item::Uint(dated),
+                    Item::Bool(read),
+                    Item::Uint(carried),
+                ] => (r, dated, read, Some(*carried)),
+                _ => return None,
             };
             let post = Post::parse(&b[r.clone()]).ok()?;
             let hash = Post::hash(&post.bytes);
@@ -303,6 +348,7 @@ impl Pool {
                     hash,
                     dated: *dated,
                     read: *read,
+                    carried,
                 },
             );
         }
@@ -420,13 +466,15 @@ impl Client {
             None => reach.unwrap_or(DEFAULT_REACH),
             Some(id) => {
                 // every post of a thread carries its reach, each from
-                // where its writer stood: any one of them says the band
+                // where its writer stood: any one of them says the band,
+                // which is the band it was carried in
                 let pool = self.boards.pool(subnet);
                 let held = pool.thread(&id);
                 let any = held
                     .first()
                     .ok_or("no post of that thread is held to take its reach from")?;
-                reach_from(any.post.up, any.post.down, &any.post.position, &position)
+                let (up, down) = any.reach();
+                reach_from(up, down, &any.post.position, &position)
             }
         };
         let material = self.public.key_material();
@@ -457,7 +505,9 @@ impl Client {
         }
         .ok_or("the post is out of bounds: a title or words too long, or none")?;
         let (me, now) = (self.public.keyhash, self.now_s());
-        self.boards.pool(subnet).take(subnet, &me, &bytes, now);
+        self.boards
+            .pool(subnet)
+            .take(subnet, &me, &bytes, now, None);
         self.changed.insert(rhtn_model::Noun::Board);
         Ok(vec![Msg::BoardPost {
             node,
@@ -466,6 +516,7 @@ impl Client {
                 down,
                 post: bytes,
                 number: None,
+                carried: None,
             }
             .encode(),
         }])
@@ -481,9 +532,15 @@ impl Client {
         let subnet = self.board_subnet(&node)?;
         let (me, now) = (self.public.keyhash, self.now_s());
         let pool = self.boards.pool(&subnet);
-        let took = pool.take(&subnet, &me, &frame.post, now);
+        // this client's own post coming back, which from here reads as
+        // its node carried it
+        let learns = frame.carried.is_some()
+            && pool
+                .get(&Post::hash(&frame.post))
+                .is_some_and(|k| k.carried.is_none());
+        let took = pool.take(&subnet, &me, &frame.post, now, frame.carried);
         pool.delivered(&node, number);
-        if took == Took::New {
+        if took == Took::New || learns {
             self.changed.insert(rhtn_model::Noun::Board);
         }
         Some(took)
@@ -521,8 +578,8 @@ impl Client {
         let (me, now) = (self.public.keyhash, self.now_s());
         let pool = self.boards.pool(&subnet);
         let mut new = false;
-        for (_, post) in &reply.posts {
-            new |= pool.take(&subnet, &me, post, now) == Took::New;
+        for (_, post, carried) in &reply.posts {
+            new |= pool.take(&subnet, &me, post, now, Some(*carried)) == Took::New;
         }
         pool.caught_up(&node, reply.through, reply.more);
         if new {
@@ -554,7 +611,8 @@ impl Client {
     }
 
     /// One thread's posts, oldest first, each with its reach as this
-    /// client reads it from where it stands in the subnet.
+    /// client reads it from where it stands in the subnet: the reach the
+    /// post was carried with ([`Kept::reach`]), not the one asked for.
     #[must_use]
     pub fn board_thread(&self, subnet: &Txid, id: &[u8; 32]) -> Vec<(Kept, (u64, u64))> {
         let Some(pool) = self.boards.pools.get(subnet) else {
@@ -564,9 +622,10 @@ impl Client {
         pool.thread(id)
             .into_iter()
             .map(|k| {
+                let (up, down) = k.reach();
                 let reach = match &here {
-                    Some(h) => reach_from(k.post.up, k.post.down, &k.post.position, h),
-                    None => (k.post.up, k.post.down),
+                    Some(h) => reach_from(up, down, &k.post.position, h),
+                    None => (up, down),
                 };
                 (k.clone(), reach)
             })

@@ -28,6 +28,11 @@ pub struct BoardPost {
     /// The number the sending node stored it under: from a node to a
     /// member, and nowhere else.
     pub number: Option<u64>,
+    /// **The upward count the first node carried the post with**,
+    /// measured from the writer: what was asked, lowered to what the
+    /// writer has earned (design §14.4). On every copy a node sends, to a
+    /// node or a member, and never from a member.
+    pub carried: Option<u64>,
 }
 
 impl BoardPost {
@@ -35,7 +40,10 @@ impl BoardPost {
     #[must_use]
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
-        emit_map_head(&mut out, 3 + usize::from(self.number.is_some()));
+        emit_map_head(
+            &mut out,
+            3 + usize::from(self.number.is_some()) + usize::from(self.carried.is_some()),
+        );
         emit_uint(&mut out, 1);
         emit_uint(&mut out, self.up);
         emit_uint(&mut out, 2);
@@ -44,6 +52,10 @@ impl BoardPost {
         emit_bstr(&mut out, &self.post);
         if let Some(n) = self.number {
             emit_uint(&mut out, 4);
+            emit_uint(&mut out, n);
+        }
+        if let Some(n) = self.carried {
+            emit_uint(&mut out, 5);
             emit_uint(&mut out, n);
         }
         out
@@ -64,6 +76,7 @@ impl BoardPost {
             down: map_get(m, 2).and_then(as_uint).ok_or("field 2")?,
             post: b[post.clone()].to_vec(),
             number: map_get(m, 4).and_then(as_uint),
+            carried: map_get(m, 5).and_then(as_uint),
         })
     }
 }
@@ -112,8 +125,9 @@ impl BoardRequest {
 pub struct BoardReply {
     /// The request's nonce, echoed.
     pub nonce: [u8; 16],
-    /// Number and post, ascending by number.
-    pub posts: Vec<(u64, Vec<u8>)>,
+    /// Number, post and the upward count the post was carried with from
+    /// its writer, ascending by number.
+    pub posts: Vec<(u64, Vec<u8>, u64)>,
     /// The number this reply read through: what to ask from next.
     pub through: u64,
     /// Whether posts numbered above that are held.
@@ -130,10 +144,11 @@ impl BoardReply {
         emit_bstr(&mut out, &self.nonce);
         emit_uint(&mut out, 2);
         emit_array_head(&mut out, self.posts.len());
-        for (number, post) in &self.posts {
-            emit_array_head(&mut out, 2);
+        for (number, post, carried) in &self.posts {
+            emit_array_head(&mut out, 3);
             emit_uint(&mut out, *number);
             emit_bstr(&mut out, post);
+            emit_uint(&mut out, *carried);
         }
         emit_uint(&mut out, 3);
         emit_uint(&mut out, self.through);
@@ -155,12 +170,12 @@ impl BoardReply {
         let mut posts = Vec::with_capacity(pairs.len());
         for pair in pairs {
             let Item::Array(p) = pair else {
-                return Err("a post is a pair".into());
+                return Err("a post is a triple".into());
             };
-            let [Item::Uint(number), Item::Bytes(post)] = p.as_slice() else {
-                return Err("a post is a number and a post".into());
+            let [Item::Uint(number), Item::Bytes(post), Item::Uint(carried)] = p.as_slice() else {
+                return Err("a post is a number, a post and a count".into());
             };
-            posts.push((*number, b[post.clone()].to_vec()));
+            posts.push((*number, b[post.clone()].to_vec(), *carried));
         }
         let Some(Item::Bool(more)) = map_get(m, 4) else {
             return Err("field 4".into());

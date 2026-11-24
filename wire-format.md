@@ -5391,9 +5391,13 @@ BoardPost = {
   1: uint,                   ; up: levels above still to reach, 0 to 24
   2: uint,                   ; down: levels below still to reach, 0 to 24
   3: bstr .size (1..16384),  ; the post, which no node reads
-  ? 4: uint                  ; the number the sending node stored it under;
+  ? 4: uint,                 ; the number the sending node stored it under;
                              ;   from a node to a member it serves, and
                              ;   nowhere else
+  ? 5: uint                  ; the upward count the first node carried the
+                             ;   post with, measured from the writer, 0 to
+                             ;   24; on every frame a node sends, and never
+                             ;   from a member
 }
 ```
 
@@ -5404,15 +5408,28 @@ session it arrived on, which is all the cap below needs. **So a node does not
 check that a post is its sender's own**, and a member handing in a post
 somebody else signed has replayed it and forged nothing.
 
+**The first node says what a post is carried with, and every node after it
+carries that on** [author, 2026-11-24]. Field 5 is the upward count the post
+left its first node with, after the lowering below, measured from the writer.
+It is set once, by the first node a post reaches, and goes unchanged on every
+copy in both directions, to every member a copy is delivered to, and in every
+answer to a member that was away, so that a reader anywhere in the band is
+shown the band the post was carried in and not the one its writer asked for
+(§10.3.1). A node cannot say it inside field 3, which is signed and is not
+the node's to change. Nothing checks it, as nothing checks the lowering
+(design §14.4).
+
 **The counts are measured from a different place in each direction, and the
 session a frame arrives on says which.**
 
 | Sent by | To | Fields 1 and 2 are measured from | And say |
 |---|---|---|---|
-| a member | the node serving it | the writer | the post as written: `+up/-down` |
+| a member | the node serving it | the writer | the post as written: `+up/-down`; field 5 absent |
 | a node | the next node up | the **sending** node's own position | field 1, at least 1: that position's ancestors to so many levels, **and each one's direct subordinates**. Field 2 is 1 |
 | a node | a node beneath it | the **receiving** node's own position | field 1 is 0: that position and its subtree to field 2 levels |
 | a node | a member it serves | nothing | both 0, the post being for this member; field 4 present |
+
+Field 5 is present in the last three rows.
 
 **The upward copy counts from its sender** because the node above may serve
 members who are in the band while its own position is not: a node's upstream
@@ -5423,7 +5440,8 @@ go below zero to say so.
 **A frame that does not fit the session it arrived on is discarded** (§8.0): a
 copy from below whose field 1 is 0 or whose field 2 is not 1, a copy from
 above whose field 1 is not 0, a count over 24, field 4 from anyone but the
-node the receiver is attached to, and any `BoardPost` from a party that is
+node the receiver is attached to, field 5 from a member or a node's copy
+without it, and any `BoardPost` from a party that is
 none of the four rows, a member attached in failover being a member for this
 purpose.
 
@@ -5435,7 +5453,8 @@ none between it and this one, which stands one, two or three levels down
 
 1. **From a member it serves**, standing `w` levels beneath the node (0 for
    its own operator, else 1 or 2): field 1 is lowered to that member's reach
-   (design §14.4) where it exceeds it. Then:
+   (design §14.4) where it exceeds it, and the count it then holds is field 5
+   of every frame this node sends for the post. Then:
    - **below**, every position at or beneath the writer to field 2 levels is
      in the band, and each nearest downline node beneath the writer, `d`
      levels below them with `d` no more than field 2, is sent `(0, field 2 -
@@ -5475,8 +5494,9 @@ node (§8.2), this node cannot work out its band and does two things it can:
 - **a post the member hands in is sent on upstream** as `(field 1 - j, 1)`,
   where it exceeds `j`, the levels the member stands below its own node,
   field 1 first lowered to what every member may post, this node's table
-  showing nothing of that member's downline. This node's own operator is in
-  that band and is delivered it.
+  showing nothing of that member's downline, and that lowered count being the
+  post's field 5. This node's own operator is in that band and is delivered
+  it.
 
 What lies inside the member's own node's subtree is not reached from here.
 
@@ -5490,7 +5510,7 @@ forwarded again. A tree has one path between two nodes, so a second copy is a
 replay or a fault and never a wider band arriving late.
 
 **A node stores each post it has delivered or would have delivered**, with the
-counts and the direction it came from, in a queue bounded by storage and
+counts, field 5 and the direction it came from, in a queue bounded by storage and
 emptied oldest first (design §14.4), **and numbers it**: a counter of the
 node's own that rises by one for each post stored, is kept across a restart
 and is never reused. The hash above is remembered for as long as the post is
@@ -5508,9 +5528,11 @@ BoardRequest = {
 
 BoardReply = {
   1: bstr .size 16,          ; echoes the request nonce
-  2: [ * [ uint, bstr .size (1..16384) ] ],
-                             ; number and post, ascending by number: at most
-                             ;   256, and no more than the frame bound takes
+  2: [ * [ uint, bstr .size (1..16384), uint ] ],
+                             ; number, post and the upward count the post
+                             ;   was carried with (`BoardPost` field 5),
+                             ;   ascending by number: at most 256, and no
+                             ;   more than the frame bound takes
   3: uint,                   ; the number this reply read through: ask from
                              ;   here next
   4: bool                    ; whether posts numbered above field 3 are held
@@ -5577,9 +5599,16 @@ once the keys, the signature and a delegation are in it.
 
 **What a signature does not say** is that the writer stands where field 3
 says, or that fields 4 and 5 are how far the post was carried: the first node
-may have lowered the upward count (§10.3), and a reader is told nothing of it.
-The bands a reader shows are worked out from field 3 and are the writer's
-word.
+may have lowered the upward count, and says what it carried the post with
+beside the post and not inside it (§10.3 `BoardPost` field 5). **A reader
+shows a post's band as it was carried** [author, 2026-11-24]: upward the
+lesser of field 4 and what the node said, a node being believed where it
+lowers and not where it raises; downward field 5, which nothing lowers; both
+read from field 3, which is the writer's word. A reply takes that band and
+not the one written. **This binds what every reader but the writer is
+shown**: a node has no hand in the writer's own display. The reference client
+shows a post of its own as written until its node hands the post back, and as
+carried from then on.
 
 ## 11. Resource requests
 

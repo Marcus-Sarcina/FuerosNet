@@ -81,13 +81,20 @@ async fn a_post_crosses_live_sessions_and_a_member_that_was_away_is_handed_it() 
         down: 0,
         post: b"bytes the node does not read".to_vec(),
         number: None,
+        carried: None,
     };
     assert!(carol.send_control(FRAME_BOARD_POST, &frame.encode()));
     let delivered = next_post(&mut w1).await.expect("w1 is in the band");
     assert_eq!(delivered.post, frame.post);
+    // numbered, and with the upward count the node carried it with
     assert_eq!(
-        (delivered.up, delivered.down, delivered.number),
-        (0, 0, Some(1))
+        (
+            delivered.up,
+            delivered.down,
+            delivered.number,
+            delivered.carried
+        ),
+        (0, 0, Some(1), Some(1))
     );
     // and it comes back to its writer numbered, which is how her device
     // learns the node took it
@@ -99,6 +106,7 @@ async fn a_post_crosses_live_sessions_and_a_member_that_was_away_is_handed_it() 
         down: 0,
         post: b"a note to self".to_vec(),
         number: None,
+        carried: None,
     };
     assert!(w1.send_control(FRAME_BOARD_POST, &note.encode()));
     assert_eq!(next_post(&mut w1).await.map(|p| p.number), Some(Some(2)));
@@ -108,11 +116,11 @@ async fn a_post_crosses_live_sessions_and_a_member_that_was_away_is_handed_it() 
     assert_eq!(all.nonce, [4; 16]);
     assert_eq!(
         all.posts,
-        vec![(1, frame.post.clone()), (2, note.post.clone())]
+        vec![(1, frame.post.clone(), 1), (2, note.post.clone(), 0)]
     );
     assert_eq!((all.through, all.more), (2, false));
     let hers = ask(&carol, None).await.expect("answered");
-    assert_eq!(hers.posts, vec![(1, frame.post.clone())]);
+    assert_eq!(hers.posts, vec![(1, frame.post.clone(), 1)]);
     assert_eq!(ask(&w1, Some(1)).await.unwrap().posts.len(), 1);
     assert!(ask(&w1, Some(2)).await.unwrap().posts.is_empty());
 

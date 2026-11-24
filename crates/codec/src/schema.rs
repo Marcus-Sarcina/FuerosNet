@@ -243,6 +243,9 @@ const BOARD_POST: Fields = &[
     (3, true, BstrMax(crate::bounds::BOARD_POST_BYTES)),
     // the number the sending node stored it under, to a member only
     (4, false, Uint),
+    // the upward count the first node carried it with, from the writer:
+    // on every copy a node sends, and never from a member
+    (5, false, Uint),
 ];
 const BOARD_REQUEST: Fields = &[(1, true, Nonce16), (2, false, Uint)];
 const BOARD_REPLY: Fields = &[
@@ -847,11 +850,15 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
             for r in pairs {
                 let it = parse_all(&b[r.clone()])?;
                 let Item::Array(ref pair) = it else {
-                    return Err(Error("a board post is a pair"));
+                    return Err(Error("a board post is a triple"));
                 };
-                let [Item::Uint(number), Item::Bytes(post)] = pair.as_slice() else {
-                    return Err(Error("a board post is a number and a post"));
+                let [Item::Uint(number), Item::Bytes(post), Item::Uint(carried)] = pair.as_slice()
+                else {
+                    return Err(Error("a board post is a number, a post and a count"));
                 };
+                if *carried > crate::bounds::PATH_NIBBLES {
+                    return Err(Error("board count over the path bound"));
+                }
                 if post.is_empty() || post.len() > crate::bounds::BOARD_POST_BYTES {
                     return Err(Error("board post size"));
                 }
@@ -1149,6 +1156,9 @@ pub fn check_unsigned(f: Family, b: &[u8], at: usize) -> Result<(), Error> {
                         {
                             return Err(Error("board count over the path bound"));
                         }
+                    }
+                    if map_get(m, 5).and_then(as_uint).unwrap_or(0) > crate::bounds::PATH_NIBBLES {
+                        return Err(Error("board count over the path bound"));
                     }
                 }
                 Family::TopologyMemo => {

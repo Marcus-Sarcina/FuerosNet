@@ -1203,10 +1203,17 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   person changes it** [author, 2026-10-27], either count moving a level at a
   time. **A reply carries its thread's reach**, stated and not offered. Your
   node may carry a post less far upward than you wrote (design §14.4), and
-  does not tell you.
+  says how far when it hands the post back to you.
 - **Show a reach from where the reader stands** [author, 2026-10-27]: the
   writer's `+3/-3` is your `+2/-4` one level above them. The position a post
   names is its writer's own statement, and the arithmetic is yours.
+- **Show another's post with its reach as it was carried, not as it was
+  written** [author, 2026-11-24]. The node that hands you a post says the
+  upward count its first node carried it with (`wire-format.md` §10.3): show
+  the lesser of that and the count written, keep it with the post, and give a
+  reply that band. **A post of your own is not held to this**, no node
+  reaching into what you show yourself; the reference client shows it as
+  written until its node hands it back, and as carried from then on.
 - **Check a post's signature before showing it as anyone's.** A node does not
   (`wire-format.md` §10.3), so a post is its writer's on the signature's word
   and on nothing about how it reached you. The post carries its writer's keys

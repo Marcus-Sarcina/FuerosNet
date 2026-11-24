@@ -1603,7 +1603,13 @@ not who answers for it (design §11.5), and that asker may see. Nothing floods, 
 - **Lower a member's upward count to what they have earned before you do
   anything else with their post** (design §14.4), from your downline table
   (§4.1): two, plus the depth of their node-running downline. Lower it; do not
-  refuse the post, and do not tell them.
+  refuse the post. **Send the count you carried it with on every frame you
+  send for it** [author, 2026-11-24], to the nodes above and below and to
+  every member you deliver it to, the writer among them
+  (`wire-format.md` §10.3).
+- **Carry on, unchanged, the count a post arrives with from another node**,
+  keep it with the post, and give it with the post to a member asking for
+  what it missed.
 - **Work out who a post goes to from your downline, and keep that worked out**
   [author, 2026-11-18]: the three lists of `wire-format.md` §10.3, redone when
   an adoption, an ending, or a node launched or closed changes your downline,

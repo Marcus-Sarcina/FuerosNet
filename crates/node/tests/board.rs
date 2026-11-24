@@ -72,14 +72,23 @@ fn scene() -> Scene {
     Scene { w, table, n, fab }
 }
 
+/// A member's frame: the counts as written, and nothing of what the post
+/// is carried with, which is the first node's to say.
 fn frame(up: u64, down: u64, post: &[u8]) -> Vec<u8> {
     BoardPost {
         up,
         down,
         post: post.to_vec(),
         number: None,
+        carried: None,
     }
     .encode()
+}
+
+/// A node's copy arriving, carrying the upward count the first node
+/// carried the post with.
+fn relay(up: u64, down: u64, carried: u64, post: &[u8]) -> Vec<u8> {
+    copy(up, down, carried, post).encode()
 }
 
 /// The `BoardPost` frames sent to `to`, decoded.
@@ -90,21 +99,23 @@ fn got(fab: &Fabric, to: &str) -> Vec<BoardPost> {
         .collect()
 }
 
-fn delivery(post: &[u8], number: u64) -> BoardPost {
+fn delivery(post: &[u8], number: u64, carried: u64) -> BoardPost {
     BoardPost {
         up: 0,
         down: 0,
         post: post.to_vec(),
         number: Some(number),
+        carried: Some(carried),
     }
 }
 
-fn copy(up: u64, down: u64, post: &[u8]) -> BoardPost {
+fn copy(up: u64, down: u64, carried: u64, post: &[u8]) -> BoardPost {
     BoardPost {
         up,
         down,
         post: post.to_vec(),
         number: None,
+        carried: Some(carried),
     }
 }
 
@@ -126,11 +137,15 @@ fn a_light_members_post_reaches_its_ancestors_and_their_direct_subordinates() {
         }
     );
     for member in ["w1", "w2", "bob"] {
-        assert_eq!(got(&s.fab, member), vec![delivery(b"hello", 1)], "{member}");
+        assert_eq!(
+            got(&s.fab, member),
+            vec![delivery(b"hello", 1, 2)],
+            "{member}"
+        );
     }
     // carol's node is sent a copy for its operator alone, and the root
     // nothing: two levels up from w2 is N's own operator
-    assert_eq!(got(&s.fab, "carol"), vec![copy(0, 0, b"hello")]);
+    assert_eq!(got(&s.fab, "carol"), vec![copy(0, 0, 2, b"hello")]);
     assert!(got(&s.fab, "alice").is_empty());
     // carol's node takes it from above: its operator, and not w3 beneath
     let mut c = node(
@@ -141,7 +156,7 @@ fn a_light_members_post_reaches_its_ancestors_and_their_direct_subordinates() {
     );
     c.attached.insert(kh("w3"));
     let cfab = Fabric::with(&[kh("bob"), kh("carol"), kh("w3")]);
-    let taken = c.receive_board(&*cfab, &kh("bob"), &frame(0, 0, b"hello"));
+    let taken = c.receive_board(&*cfab, &kh("bob"), &relay(0, 0, 2, b"hello"));
     assert_eq!(
         taken,
         Taken::Carried {
@@ -151,7 +166,7 @@ fn a_light_members_post_reaches_its_ancestors_and_their_direct_subordinates() {
             down: 0
         }
     );
-    assert_eq!(got(&cfab, "carol"), vec![delivery(b"hello", 1)]);
+    assert_eq!(got(&cfab, "carol"), vec![delivery(b"hello", 1, 2)]);
     assert!(got(&cfab, "w3").is_empty());
 }
 
@@ -163,13 +178,18 @@ fn a_post_goes_up_as_far_as_its_writer_has_earned_and_no_further() {
     // one level of it past this node, counted from this node
     let taken = s.n.receive_board(&*s.fab, &kh("w1"), &frame(9, 0, b"up"));
     assert!(matches!(taken, Taken::Carried { up: true, .. }));
-    assert_eq!(got(&s.fab, "alice"), vec![copy(1, 1, b"up")]);
+    assert_eq!(got(&s.fab, "alice"), vec![copy(1, 1, 2, b"up")]);
+    // and everyone it is delivered to, the writer among them, is told it
+    // was carried as `+2` from its writer and not the `+9` asked
+    for member in ["w1", "bob"] {
+        assert_eq!(got(&s.fab, member), vec![delivery(b"up", 1, 2)], "{member}");
+    }
     // the root takes it from the node beneath: itself and its direct
     // subordinates, of whom w4 runs a node and bob sent it
     let mut root = node("alice", &s.table, &[], s.w.clock);
     root.attached.insert(kh("alice"));
     let rfab = Fabric::with(&[kh("alice"), kh("bob"), kh("w4")]);
-    let taken = root.receive_board(&*rfab, &kh("bob"), &frame(1, 1, b"up"));
+    let taken = root.receive_board(&*rfab, &kh("bob"), &relay(1, 1, 2, b"up"));
     assert_eq!(
         taken,
         Taken::Carried {
@@ -179,13 +199,14 @@ fn a_post_goes_up_as_far_as_its_writer_has_earned_and_no_further() {
             down: 1
         }
     );
-    assert_eq!(got(&rfab, "w4"), vec![copy(0, 0, b"up")]);
+    assert_eq!(got(&rfab, "w4"), vec![copy(0, 0, 2, b"up")]);
+    assert_eq!(got(&rfab, "alice"), vec![delivery(b"up", 1, 2)]);
     assert!(got(&rfab, "bob").is_empty(), "not back to its sender");
     // the operator's own downline runs a node one level down: `+9` is `+3`
     let taken =
         s.n.receive_board(&*s.fab, &kh("bob"), &frame(9, 0, b"mine"));
     assert!(matches!(taken, Taken::Carried { up: true, .. }));
-    assert_eq!(got(&s.fab, "alice")[1], copy(3, 1, b"mine"));
+    assert_eq!(got(&s.fab, "alice")[1], copy(3, 1, 3, b"mine"));
 }
 
 // functional_tests.md: BRD-006
@@ -205,13 +226,17 @@ fn a_post_goes_down_through_the_nearest_nodes_with_what_is_left_of_its_count() {
             down: 1
         }
     );
-    assert_eq!(got(&s.fab, "carol"), vec![copy(0, 1, b"down")]);
+    assert_eq!(got(&s.fab, "carol"), vec![copy(0, 1, 0, b"down")]);
     for member in ["bob", "w1", "w2"] {
-        assert_eq!(got(&s.fab, member), vec![delivery(b"down", 1)], "{member}");
+        assert_eq!(
+            got(&s.fab, member),
+            vec![delivery(b"down", 1, 0)],
+            "{member}"
+        );
     }
     // from above with nothing left, it is the operator's alone
     let taken =
-        s.n.receive_board(&*s.fab, &kh("alice"), &frame(0, 0, b"top"));
+        s.n.receive_board(&*s.fab, &kh("alice"), &relay(0, 0, 4, b"top"));
     assert_eq!(
         taken,
         Taken::Carried {
@@ -221,7 +246,7 @@ fn a_post_goes_down_through_the_nearest_nodes_with_what_is_left_of_its_count() {
             down: 0
         }
     );
-    assert_eq!(got(&s.fab, "bob")[1], delivery(b"top", 2));
+    assert_eq!(got(&s.fab, "bob")[1], delivery(b"top", 2, 4));
 }
 
 // functional_tests.md: BRD-002, BRD-007
@@ -240,27 +265,41 @@ fn a_copy_that_is_a_repeat_or_fits_no_session_is_discarded_whole() {
         Taken::Duplicate
     );
     assert_eq!(
-        s.n.receive_board(&*s.fab, &kh("alice"), &frame(0, 5, b"once")),
+        s.n.receive_board(&*s.fab, &kh("alice"), &relay(0, 5, 1, b"once")),
         Taken::Duplicate
     );
     // from a node beneath, a copy that is not on the upward leg
     assert_eq!(
-        s.n.receive_board(&*s.fab, &kh("carol"), &frame(0, 3, b"a")),
+        s.n.receive_board(&*s.fab, &kh("carol"), &relay(0, 3, 2, b"a")),
         Taken::Discarded(Discard::Leg)
     );
     assert_eq!(
-        s.n.receive_board(&*s.fab, &kh("carol"), &frame(2, 2, b"b")),
+        s.n.receive_board(&*s.fab, &kh("carol"), &relay(2, 2, 2, b"b")),
         Taken::Discarded(Discard::Leg)
     );
     // from above, one with anything left to go up
     assert_eq!(
-        s.n.receive_board(&*s.fab, &kh("alice"), &frame(1, 0, b"c")),
+        s.n.receive_board(&*s.fab, &kh("alice"), &relay(1, 0, 2, b"c")),
         Taken::Discarded(Discard::Leg)
     );
     // a number is a node's to give a member, and nobody's to give a node
-    let numbered = delivery(b"d", 7).encode();
+    let numbered = delivery(b"d", 7, 2).encode();
     assert_eq!(
         s.n.receive_board(&*s.fab, &kh("w1"), &numbered),
+        Taken::Malformed
+    );
+    // what a post was carried with is the first node's to say: a member
+    // does not say it, and a node always does
+    assert_eq!(
+        s.n.receive_board(&*s.fab, &kh("w1"), &relay(2, 2, 2, b"g")),
+        Taken::Malformed
+    );
+    assert_eq!(
+        s.n.receive_board(&*s.fab, &kh("alice"), &frame(0, 1, b"h")),
+        Taken::Malformed
+    );
+    assert_eq!(
+        s.n.receive_board(&*s.fab, &kh("carol"), &frame(1, 1, b"i")),
         Taken::Malformed
     );
     assert_eq!(
@@ -322,7 +361,7 @@ fn a_member_that_was_away_is_handed_its_own_band_after_the_number_it_holds() {
     assert_eq!(r.nonce, [9; 16]);
     assert_eq!(
         r.posts,
-        vec![(1, b"to the team".to_vec()), (3, b"from w1".to_vec())]
+        vec![(1, b"to the team".to_vec(), 0), (3, b"from w1".to_vec(), 1)]
     );
     assert_eq!((r.through, r.more), (3, false));
     // w2 stands two levels down: not the operator's `-1`, but its own note
@@ -330,7 +369,10 @@ fn a_member_that_was_away_is_handed_its_own_band_after_the_number_it_holds() {
     let r = ask(&s.n, "w2", None).unwrap();
     assert_eq!(
         r.posts,
-        vec![(2, b"a note to self".to_vec()), (3, b"from w1".to_vec())]
+        vec![
+            (2, b"a note to self".to_vec(), 0),
+            (3, b"from w1".to_vec(), 1)
+        ]
     );
     // after the number it holds, only what is newer
     assert_eq!(ask(&s.n, "w2", Some(2)).unwrap().posts.len(), 1);
@@ -350,10 +392,10 @@ fn a_siblings_member_in_failover_is_carried_as_far_as_this_node_can() {
     s.fab.add_session(&kh("w5"));
     // what comes from above with one level left is what w4 would have
     // been sent: w5's, where w5 stands
-    s.n.receive_board(&*s.fab, &kh("alice"), &frame(0, 1, b"one down"));
-    assert_eq!(got(&s.fab, "w5"), vec![delivery(b"one down", 1)]);
+    s.n.receive_board(&*s.fab, &kh("alice"), &relay(0, 1, 2, b"one down"));
+    assert_eq!(got(&s.fab, "w5"), vec![delivery(b"one down", 1, 2)]);
     // and with none left it is the two operators' alone
-    s.n.receive_board(&*s.fab, &kh("alice"), &frame(0, 0, b"operators"));
+    s.n.receive_board(&*s.fab, &kh("alice"), &relay(0, 0, 2, b"operators"));
     assert_eq!(got(&s.fab, "w5").len(), 1);
     // nothing that started beneath this node is theirs
     s.n.receive_board(&*s.fab, &kh("w1"), &frame(2, 2, b"local"));
@@ -372,12 +414,12 @@ fn a_siblings_member_in_failover_is_carried_as_far_as_this_node_can() {
             down: 0
         }
     );
-    assert_eq!(got(&s.fab, "alice"), vec![copy(1, 1, b"from w5")]);
-    assert_eq!(got(&s.fab, "bob"), vec![delivery(b"from w5", 4)]);
+    assert_eq!(got(&s.fab, "alice"), vec![copy(1, 1, 2, b"from w5")]);
+    assert_eq!(got(&s.fab, "bob"), vec![delivery(b"from w5", 4, 2)]);
     assert!(got(&s.fab, "w1").is_empty() && got(&s.fab, "carol").is_empty());
     // and catch-up is answered by the same test
     let r = ask(&s.n, "w5", None).unwrap();
-    assert_eq!(r.posts, vec![(1, b"one down".to_vec())]);
+    assert_eq!(r.posts, vec![(1, b"one down".to_vec(), 2)]);
 }
 
 // functional_tests.md: BRD-009
@@ -390,16 +432,17 @@ fn the_queue_is_kept_a_file_a_post_and_taken_up_where_it_was_left() {
     s.n.receive_board(&*s.fab, &kh("bob"), &frame(0, 1, b"first"));
     s.n.receive_board(&*s.fab, &kh("w1"), &frame(1, 0, b"second"));
     assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 2);
-    // the file is who it was for here, then the post: no writer, no time
+    // the file is the count it was carried with and who it was for
+    // here, then the post: no writer, no time
     let kept = std::fs::read(dir.join(format!("{:020}", 1))).unwrap();
-    assert_eq!(kept, b"b=./1\nfirst");
+    assert_eq!(kept, b"0 b=./1\nfirst");
     // started again from those files alone
     let mut again = scene();
     again.n.open_board(&dir).expect("opens again");
     assert_eq!(again.n.board, s.n.board);
     assert_eq!(
         ask(&again.n, "w1", None).unwrap().posts,
-        vec![(1, b"first".to_vec()), (2, b"second".to_vec())]
+        vec![(1, b"first".to_vec(), 0), (2, b"second".to_vec(), 1)]
     );
     // and no number is given twice
     let taken = again
@@ -408,7 +451,8 @@ fn the_queue_is_kept_a_file_a_post_and_taken_up_where_it_was_left() {
     assert!(matches!(taken, Taken::Carried { number: 3, .. }));
     // a file that does not read is not held, and the rest are
     std::fs::write(dir.join(format!("{:020}", 9)), b"no band line").unwrap();
-    std::fs::write(dir.join("stray"), b"b=./1\nnot a number").unwrap();
+    std::fs::write(dir.join("stray"), b"0 b=./1\nnot a number").unwrap();
+    std::fs::write(dir.join(format!("{:020}", 8)), b"b=./1\nno count").unwrap();
     let mut third = scene();
     third.n.open_board(&dir).expect("opens on a bad file");
     assert_eq!(third.n.board.len(), 3);

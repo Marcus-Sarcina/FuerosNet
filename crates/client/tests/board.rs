@@ -51,19 +51,31 @@ fn me() -> [u8; 32] {
 fn a_post_is_kept_once_and_only_where_its_signature_makes_it_its_writers() {
     let mut pool = Pool::new(1 << 20);
     let a = post("carol", 100, None, "hello");
-    assert_eq!(pool.take(&SUBNET, &me(), &a, 200), Took::New);
+    assert_eq!(pool.take(&SUBNET, &me(), &a, 200, None), Took::New);
     // one hash is one post, however many times it arrives
-    assert_eq!(pool.take(&SUBNET, &me(), &a, 300), Took::Held);
+    assert_eq!(pool.take(&SUBNET, &me(), &a, 300, None), Took::Held);
     assert_eq!(pool.len(), 1);
     // bytes that are no post, and a post changed after it was signed
-    assert_eq!(pool.take(&SUBNET, &me(), b"not a post", 200), Took::Unread);
+    assert_eq!(
+        pool.take(&SUBNET, &me(), b"not a post", 200, None),
+        Took::Unread
+    );
     let mut changed = a.clone();
     let i = changed.windows(5).position(|w| w == b"hello").unwrap();
     changed[i] ^= 1;
-    assert_eq!(pool.take(&SUBNET, &me(), &changed, 200), Took::Unsigned);
+    assert_eq!(
+        pool.take(&SUBNET, &me(), &changed, 200, None),
+        Took::Unsigned
+    );
     // and nothing on a board comes from another subnet
     assert_eq!(
-        pool.take(&[0xee; 32], &me(), &post("carol", 101, None, "x"), 200),
+        pool.take(
+            &[0xee; 32],
+            &me(),
+            &post("carol", 101, None, "x"),
+            200,
+            None
+        ),
         Took::Foreign
     );
     assert_eq!(pool.len(), 1);
@@ -75,11 +87,17 @@ fn threads_are_listed_newest_first_and_a_reply_sits_in_its_thread() {
     let first = post("carol", 100, None, "the first thread");
     let second = post("w1", 200, None, "the second thread");
     let id = Post::hash(&first);
-    pool.take(&SUBNET, &me(), &first, 1_000);
-    pool.take(&SUBNET, &me(), &second, 1_000);
+    pool.take(&SUBNET, &me(), &first, 1_000, None);
+    pool.take(&SUBNET, &me(), &second, 1_000, None);
     assert_eq!(pool.threads()[0].id, Post::hash(&second), "newest first");
     // a reply moves its thread to the top and is listed under it
-    pool.take(&SUBNET, &me(), &post("w1", 300, Some(id), "a reply"), 1_000);
+    pool.take(
+        &SUBNET,
+        &me(),
+        &post("w1", 300, Some(id), "a reply"),
+        1_000,
+        None,
+    );
     let threads = pool.threads();
     assert_eq!(threads[0].id, id);
     assert_eq!((threads[0].posts, threads[0].latest), (2, 300));
@@ -101,6 +119,7 @@ fn threads_are_listed_newest_first_and_a_reply_sits_in_its_thread() {
         &me(),
         &post("w1", 400, Some([7; 32]), "orphan"),
         1_000,
+        None,
     );
     let t = &pool.threads()[0];
     assert_eq!((t.id, t.title.clone(), t.began_by), ([7; 32], None, None));
@@ -111,11 +130,29 @@ fn what_is_unread_is_the_clients_own_count() {
     let mut pool = Pool::new(1 << 20);
     let first = post("carol", 100, None, "one");
     let id = Post::hash(&first);
-    pool.take(&SUBNET, &me(), &first, 1_000);
-    pool.take(&SUBNET, &me(), &post("w1", 200, Some(id), "two"), 1_000);
+    pool.take(&SUBNET, &me(), &first, 1_000, None);
+    pool.take(
+        &SUBNET,
+        &me(),
+        &post("w1", 200, Some(id), "two"),
+        1_000,
+        None,
+    );
     // what this client wrote is read already
-    pool.take(&SUBNET, &me(), &post("bob", 300, Some(id), "mine"), 1_000);
-    pool.take(&SUBNET, &me(), &post("w1", 400, None, "elsewhere"), 1_000);
+    pool.take(
+        &SUBNET,
+        &me(),
+        &post("bob", 300, Some(id), "mine"),
+        1_000,
+        None,
+    );
+    pool.take(
+        &SUBNET,
+        &me(),
+        &post("w1", 400, None, "elsewhere"),
+        1_000,
+        None,
+    );
     assert_eq!(pool.unread(), 3);
     assert_eq!(pool.threads().iter().map(|t| t.unread).sum::<usize>(), 3);
     assert_eq!(pool.mark_read(&id), 2);
@@ -134,15 +171,15 @@ fn the_oldest_go_first_by_the_posts_own_date_read_no_later_than_its_arrival() {
     let mut pool = Pool::new(room);
     // arrival order is not the order they go in
     for p in [&c, &a, &b] {
-        assert_eq!(pool.take(&SUBNET, &me(), p, 1_000), Took::New);
+        assert_eq!(pool.take(&SUBNET, &me(), p, 1_000, None), Took::New);
     }
-    assert_eq!(pool.take(&SUBNET, &me(), &ahead, 150), Took::New);
+    assert_eq!(pool.take(&SUBNET, &me(), &ahead, 150, None), Took::New);
     assert_eq!(pool.get(&Post::hash(&ahead)).unwrap().dated, 150);
     // the oldest by date went, and the one dated ahead is next to go
     assert!(pool.get(&Post::hash(&a)).is_none());
     assert_eq!(pool.len(), 3);
     let d = post("carol", 400, None, "newer still");
-    pool.take(&SUBNET, &me(), &d, 1_000);
+    pool.take(&SUBNET, &me(), &d, 1_000, None);
     assert!(
         pool.get(&Post::hash(&ahead)).is_none(),
         "it outlived nothing"
@@ -180,8 +217,8 @@ fn the_cursor_is_per_node_and_moves_by_the_asking_until_caught_up() {
 fn the_pool_comes_back_as_it_was_kept() {
     let mut pool = Pool::new(1 << 20);
     let first = post("carol", 100, None, "one");
-    pool.take(&SUBNET, &me(), &first, 1_000);
-    pool.take(&SUBNET, &me(), &post("w1", 200, None, "two"), 150);
+    pool.take(&SUBNET, &me(), &first, 1_000, None);
+    pool.take(&SUBNET, &me(), &post("w1", 200, None, "two"), 150, None);
     pool.mark_read(&Post::hash(&first));
     pool.caught_up(&[1; 32], 77, true);
     let back = Pool::decode(1 << 20, &pool.encode()).expect("reads");

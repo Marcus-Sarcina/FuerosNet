@@ -193,6 +193,12 @@ pub struct Plan {
     /// The downline nodes to send it to, each with the count it is sent
     /// as `(0, down)`.
     pub down: Vec<(Position, usize)>,
+    /// **The upward count this node carries the post with, from the
+    /// writer**, where this is the first node the post reached: what was
+    /// asked, lowered to what the writer has earned. Every copy carries
+    /// it on unchanged, so a reader anywhere in the band reads the band
+    /// the post was carried in and not the one its writer asked for.
+    pub carried: Option<usize>,
 }
 
 /// **Work out what to do with a copy** (`wire-format.md` §10.3) from the
@@ -238,6 +244,7 @@ pub fn plan(
             // what the writer has earned, and does not refuse it (design
             // §14.4) [author, 2026-11-18]
             let up = up.min(downline.reach(w));
+            out.carried = Some(up);
             out.band.beneath = Some((w.clone(), down));
             for p in within(w.len() + down) {
                 if p.len() > w.len() && p.starts_with(w) && p.len() - w.len() <= down {
@@ -272,6 +279,7 @@ pub fn plan(
             // this node's table shows nothing of that member's downline,
             // so their reach is what every member has
             let up = up.min(BASE_REACH);
+            out.carried = Some(up);
             if up > *below {
                 // this node's own operator is a subordinate of the
                 // writer's ancestor, and is in the band; nobody beneath
@@ -301,13 +309,15 @@ pub struct Held {
     pub post: Vec<u8>,
     /// Who it was for at this node.
     pub band: Band,
+    /// The upward count it was carried with, from its writer.
+    pub carried: usize,
 }
 
 /// One answer to a member asking for what it missed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Page<'a> {
-    /// Number and post, ascending.
-    pub posts: Vec<(u64, &'a [u8])>,
+    /// Number, post and the upward count it was carried with, ascending.
+    pub posts: Vec<(u64, &'a [u8], usize)>,
     /// The number this page read through: what to ask from next.
     pub through: u64,
     /// Whether posts numbered above that are held.
@@ -415,7 +425,7 @@ impl Queue {
     /// already held, for an empty one, or for one over the bound. The
     /// oldest go to make room, and a post too large for the whole queue
     /// is not kept.
-    pub fn keep(&mut self, post: Vec<u8>, band: Band) -> Option<u64> {
+    pub fn keep(&mut self, post: Vec<u8>, band: Band, carried: usize) -> Option<u64> {
         let h = hash(&post);
         let cost = Self::cost_of(&post);
         if post.is_empty() || post.len() > POST_MAX || cost > self.cap || self.holds(&h) {
@@ -431,7 +441,12 @@ impl Queue {
         self.next += 1;
         self.cost += cost;
         self.hashes.insert(h);
-        self.held.push_back(Held { number, post, band });
+        self.held.push_back(Held {
+            number,
+            post,
+            band,
+            carried,
+        });
         Some(number)
     }
 
@@ -450,14 +465,14 @@ impl Queue {
         let mut used = 0;
         for h in self.held.iter().filter(|h| h.number > from) {
             if mine(&h.band) {
-                // a number, a byte-string head and the post
-                let size = h.post.len() + 16;
+                // a number, a byte-string head, the post and a count
+                let size = h.post.len() + 18;
                 if page.posts.len() == REPLY_POSTS || used + size > room {
                     page.more = true;
                     break;
                 }
                 used += size;
-                page.posts.push((h.number, h.post.as_slice()));
+                page.posts.push((h.number, h.post.as_slice(), h.carried));
             }
             page.through = h.number;
         }
@@ -473,7 +488,8 @@ impl Queue {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Taken {
     /// It does not read, or carries a number, which is a node's to give a
-    /// member and nobody's to give a node.
+    /// member and nobody's to give a node, or carries the count a post
+    /// was carried with from a member, or lacks it from a node.
     Malformed,
     /// From a party that is neither a member here, a node beneath, nor
     /// the upstream.
@@ -552,13 +568,25 @@ impl NodeView {
             Ok(p) => p,
             Err(why) => return Taken::Discarded(why),
         };
+        // **the first node says what the post is carried with, and every
+        // node after it carries that on**: a member says nothing of it,
+        // and a node always does
+        let said = frame.carried.and_then(|n| usize::try_from(n).ok());
+        let carried = match (plan.carried, said) {
+            (Some(first), None) => first,
+            (None, Some(passed)) if passed <= MAX_REACH => passed,
+            _ => return Taken::Malformed,
+        };
         if plan.band.is_empty() && plan.up.is_none() && plan.down.is_empty() {
             return Taken::Nowhere;
         }
-        let Some(number) = self.board.keep(frame.post.clone(), plan.band.clone()) else {
+        let Some(number) = self
+            .board
+            .keep(frame.post.clone(), plan.band.clone(), carried)
+        else {
             return Taken::Unkept;
         };
-        self.file_board(number, &plan.band, &frame.post);
+        self.file_board(number, &plan.band, carried, &frame.post);
         // **to every session of every member in the band**, the writer's
         // own among them: a control frame goes to each session a key
         // holds, and the post coming back numbered is how a writer's
@@ -569,6 +597,7 @@ impl NodeView {
             down: 0,
             post: frame.post.clone(),
             number: Some(number),
+            carried: Some(carried as u64),
         }
         .encode();
         let mut members: BTreeSet<Keyhash> = self.attached.clone();
@@ -586,6 +615,7 @@ impl NodeView {
                 down: down as u64,
                 post: frame.post.clone(),
                 number: None,
+                carried: Some(carried as u64),
             }
             .encode()
         };
@@ -643,7 +673,7 @@ impl NodeView {
                 posts: page
                     .posts
                     .iter()
-                    .map(|(n, post)| (*n, post.to_vec()))
+                    .map(|(n, post, carried)| (*n, post.to_vec(), *carried as u64))
                     .collect(),
                 through: page.through,
                 more: page.more,
@@ -671,14 +701,20 @@ impl NodeView {
             let Some(cut) = bytes.iter().position(|b| *b == b'\n') else {
                 continue;
             };
-            let band = std::str::from_utf8(&bytes[..cut])
+            // the count the post was carried with, a space, and the band
+            let line = std::str::from_utf8(&bytes[..cut])
                 .ok()
-                .and_then(Band::decode);
-            if let Some(band) = band {
+                .and_then(|l| l.split_once(' '))
+                .and_then(|(carried, band)| {
+                    let carried = carried.parse::<usize>().ok().filter(|n| *n <= MAX_REACH)?;
+                    Some((carried, Band::decode(band)?))
+                });
+            if let Some((carried, band)) = line {
                 held.push(Held {
                     number,
                     post: bytes[cut + 1..].to_vec(),
                     band,
+                    carried,
                 });
             }
         }
@@ -690,9 +726,9 @@ impl NodeView {
 
     /// Write a post just kept to its file, and remove the files of those
     /// that fell out to make room, leaving nothing of them.
-    fn file_board(&mut self, number: u64, band: &Band, post: &[u8]) {
+    fn file_board(&mut self, number: u64, band: &Band, carried: usize, post: &[u8]) {
         if let Some(dir) = &self.board_dir {
-            let mut bytes = band.encode().into_bytes();
+            let mut bytes = format!("{carried} {}", band.encode()).into_bytes();
             bytes.push(b'\n');
             bytes.extend_from_slice(post);
             if let Err(e) = std::fs::write(Self::board_file(dir, number), bytes) {
@@ -1003,15 +1039,15 @@ mod tests {
     #[test]
     fn the_queue_numbers_what_it_stores_and_holds_one_copy_of_a_post() {
         let mut q = Queue::new(QUEUE_BYTES);
-        assert_eq!(q.keep(b"one".to_vec(), Band::default()), Some(1));
-        assert_eq!(q.keep(b"two".to_vec(), Band::default()), Some(2));
+        assert_eq!(q.keep(b"one".to_vec(), Band::default(), 2), Some(1));
+        assert_eq!(q.keep(b"two".to_vec(), Band::default(), 2), Some(2));
         // a second copy is known by its hash and not stored again
         assert!(q.holds(&hash(b"one")));
-        assert_eq!(q.keep(b"one".to_vec(), Band::default()), None);
+        assert_eq!(q.keep(b"one".to_vec(), Band::default(), 2), None);
         // nor an empty post, nor one over the bound
-        assert_eq!(q.keep(Vec::new(), Band::default()), None);
-        assert_eq!(q.keep(vec![7; POST_MAX + 1], Band::default()), None);
-        assert_eq!(q.keep(vec![7; POST_MAX], Band::default()), Some(3));
+        assert_eq!(q.keep(Vec::new(), Band::default(), 2), None);
+        assert_eq!(q.keep(vec![7; POST_MAX + 1], Band::default(), 2), None);
+        assert_eq!(q.keep(vec![7; POST_MAX], Band::default(), 2), Some(3));
         assert_eq!((q.len(), q.next()), (3, 4));
     }
 
@@ -1020,15 +1056,18 @@ mod tests {
         // room for three posts of a block each
         let mut q = Queue::new(3 * BLOCK);
         for n in 0..5u8 {
-            assert_eq!(q.keep(vec![n; 10], Band::default()), Some(u64::from(n) + 1));
+            assert_eq!(
+                q.keep(vec![n; 10], Band::default(), 2),
+                Some(u64::from(n) + 1)
+            );
         }
         assert_eq!(q.held().map(|h| h.number).collect::<Vec<_>>(), [3, 4, 5]);
         // what fell out is forgotten, hash and all: sent again it is a
         // new arrival with a new number
         assert!(!q.holds(&hash(&[0; 10])));
-        assert_eq!(q.keep(vec![0; 10], Band::default()), Some(6));
+        assert_eq!(q.keep(vec![0; 10], Band::default(), 2), Some(6));
         // a post of four blocks cannot be held at all
-        assert_eq!(q.keep(vec![9; 3 * BLOCK + 1], Band::default()), None);
+        assert_eq!(q.keep(vec![9; 3 * BLOCK + 1], Band::default(), 2), None);
         // a queue that lost what it held keeps counting from where it was
         let q = Queue::resumed(3 * BLOCK, 7);
         assert_eq!((q.len(), q.next()), (0, 7));
@@ -1037,22 +1076,22 @@ mod tests {
     #[test]
     fn catch_up_returns_the_askers_band_after_the_number_it_holds() {
         let mut q = Queue::new(QUEUE_BYTES);
-        q.keep(b"a".to_vec(), band_for(&[1]));
-        q.keep(b"b".to_vec(), band_for(&[2]));
-        q.keep(b"c".to_vec(), band_for(&[1]));
-        q.keep(b"d".to_vec(), band_for(&[2]));
+        q.keep(b"a".to_vec(), band_for(&[1]), 2);
+        q.keep(b"b".to_vec(), band_for(&[2]), 2);
+        q.keep(b"c".to_vec(), band_for(&[1]), 2);
+        q.keep(b"d".to_vec(), band_for(&[2]), 2);
         let one = |b: &Band| b.holds(&[1]);
         let two = |b: &Band| b.holds(&[2]);
         // two members asking after the same number are answered apart
         let p = q.after(None, one, usize::MAX);
-        assert_eq!(p.posts, vec![(1, &b"a"[..]), (3, &b"c"[..])]);
+        assert_eq!(p.posts, vec![(1, &b"a"[..], 2), (3, &b"c"[..], 2)]);
         assert_eq!(
             (p.through, p.more),
             (4, false),
             "read through a post not theirs"
         );
         let p = q.after(Some(2), two, usize::MAX);
-        assert_eq!(p.posts, vec![(4, &b"d"[..])]);
+        assert_eq!(p.posts, vec![(4, &b"d"[..], 2)]);
         // nothing new is an empty page at the same number
         let p = q.after(Some(4), one, usize::MAX);
         assert_eq!((p.posts.len(), p.through, p.more), (0, 4, false));
@@ -1064,7 +1103,7 @@ mod tests {
     fn a_page_stops_at_the_frame_and_says_more_is_held() {
         let mut q = Queue::new(QUEUE_BYTES);
         for n in 0..20u8 {
-            q.keep(vec![n; POST_MAX], Band::default());
+            q.keep(vec![n; POST_MAX], Band::default(), 2);
         }
         // the largest posts, fifteen to a reply of 262,144 bytes
         let p = q.after(None, |_| true, 262_144 - 64);
@@ -1074,16 +1113,19 @@ mod tests {
         // and never more than the bound on posts, however small
         let mut q = Queue::new(QUEUE_BYTES);
         for n in 0..300u16 {
-            q.keep(n.to_be_bytes().to_vec(), Band::default());
+            q.keep(n.to_be_bytes().to_vec(), Band::default(), 2);
         }
         let p = q.after(None, |_| true, usize::MAX);
         assert_eq!((p.posts.len(), p.through, p.more), (REPLY_POSTS, 256, true));
         // a number fallen out of the queue is answered from what is left
         let mut q = Queue::new(2 * BLOCK);
         for n in 0..4u8 {
-            q.keep(vec![n], Band::default());
+            q.keep(vec![n], Band::default(), 2);
         }
         let p = q.after(Some(1), |_| true, usize::MAX);
-        assert_eq!(p.posts.iter().map(|(n, _)| *n).collect::<Vec<_>>(), [3, 4]);
+        assert_eq!(
+            p.posts.iter().map(|(n, _, _)| *n).collect::<Vec<_>>(),
+            [3, 4]
+        );
     }
 }

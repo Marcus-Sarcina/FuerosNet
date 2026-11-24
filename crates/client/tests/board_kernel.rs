@@ -21,13 +21,15 @@ fn posted(msgs: &[Msg], node: &str) -> BoardPost {
     BoardPost::decode(bytes).expect("a frame")
 }
 
-/// The frame a node hands a member: the post, and the node's number.
-fn delivery(post: &[u8], number: u64) -> Vec<u8> {
+/// The frame a node hands a member: the post, the node's number, and the
+/// upward count the post was carried with from its writer.
+fn delivery(post: &[u8], number: u64, carried: u64) -> Vec<u8> {
     BoardPost {
         up: 0,
         down: 0,
         post: post.to_vec(),
         number: Some(number),
+        carried: Some(carried),
     }
     .encode()
 }
@@ -108,7 +110,7 @@ fn a_delivery_is_taken_and_a_reply_carries_its_threads_reach_from_where_it_is_wr
     // the node delivers it to alice, numbered
     let alice = s.client("alice");
     assert_eq!(
-        alice.board_arrived(kh("alice"), &delivery(&frame.post, 7)),
+        alice.board_arrived(kh("alice"), &delivery(&frame.post, 7, 3)),
         Some(Took::New)
     );
     assert_eq!(alice.board_unread(&subnet), 1);
@@ -121,17 +123,17 @@ fn a_delivery_is_taken_and_a_reply_carries_its_threads_reach_from_where_it_is_wr
     // a second copy is the same post, and a copy between nodes, which
     // carries no number, is not a client's
     assert_eq!(
-        alice.board_arrived(kh("alice"), &delivery(&frame.post, 7)),
+        alice.board_arrived(kh("alice"), &delivery(&frame.post, 7, 3)),
         Some(Took::Held)
     );
     let between = BoardPost {
         number: None,
-        ..BoardPost::decode(&delivery(b"x", 1)).unwrap()
+        ..BoardPost::decode(&delivery(b"x", 1, 0)).unwrap()
     };
     assert_eq!(alice.board_arrived(kh("alice"), &between.encode()), None);
     // nor is anything from a node that carries no board of hers
     assert_eq!(
-        alice.board_arrived(kh("w3"), &delivery(&frame.post, 1)),
+        alice.board_arrived(kh("w3"), &delivery(&frame.post, 1, 3)),
         None
     );
     // shown, it is read
@@ -151,6 +153,62 @@ fn a_delivery_is_taken_and_a_reply_carries_its_threads_reach_from_where_it_is_wr
             .board_post(None, &subnet, None, Some([5; 32]), None, "to nothing")
             .is_err()
     );
+}
+
+// functional_tests.md: BRD-016
+#[test]
+fn a_post_asked_further_up_than_its_writer_earned_reads_as_it_was_carried() {
+    let mut s = setup(&PARTIES);
+    s.adopted("bob", "alice", "w1", 1);
+    let subnet = s.client("alice").subnets()[0];
+    s.client("bob").attach(kh("alice"), &[]);
+    s.client("alice").attach(kh("alice"), &[]);
+    // bob, with nobody beneath him, asks `+4/-2`
+    let msgs = s
+        .client("bob")
+        .board_post(None, &subnet, Some((4, 2)), None, Some("Far"), "the words")
+        .unwrap();
+    let frame = posted(&msgs, "alice");
+    assert_eq!((frame.up, frame.down, frame.carried), (4, 2, None));
+    let thread = Post::hash(&frame.post);
+    // until his node hands it back, his own copy reads as he wrote it
+    let bob = s.client("bob");
+    assert_eq!(bob.board_thread(&subnet, &thread)[0].1, (4, 2));
+    // the node carried it as `+2`, and says so to everyone it delivers to:
+    // his own copy now reads `+2/-2`, and the board is said to have moved
+    let _ = bob.take_changed();
+    assert_eq!(
+        bob.board_arrived(kh("alice"), &delivery(&frame.post, 1, 2)),
+        Some(Took::Held)
+    );
+    assert_eq!(bob.board_thread(&subnet, &thread)[0].1, (2, 2));
+    assert!(bob.take_changed().contains(&rhtn_model::Noun::Board));
+    // one level above him it reads `+1/-3`, not the `+3/-3` he asked for
+    let alice = s.client("alice");
+    alice.board_arrived(kh("alice"), &delivery(&frame.post, 1, 2));
+    assert_eq!(alice.board_thread(&subnet, &thread)[0].1, (1, 3));
+    // and a reply takes the band the thread was carried in
+    let msgs = alice
+        .board_post(None, &subnet, None, Some(thread), None, "a reply")
+        .unwrap();
+    let reply = posted(&msgs, "alice");
+    assert_eq!((reply.up, reply.down), (1, 3));
+    // a node that says more than was written is not believed past it
+    let msgs = s
+        .client("bob")
+        .board_post(None, &subnet, Some((1, 0)), None, Some("Near"), "x")
+        .unwrap();
+    let near = posted(&msgs, "alice");
+    let alice = s.client("alice");
+    alice.board_arrived(kh("alice"), &delivery(&near.post, 2, 9));
+    assert_eq!(
+        alice.board_thread(&subnet, &Post::hash(&near.post))[0].1,
+        (0, 1)
+    );
+    // what the node said is kept between runs
+    let kept = alice.board_part();
+    alice.restore_board(&kept).expect("restores");
+    assert_eq!(alice.board_thread(&subnet, &thread)[0].1, (1, 3));
 }
 
 #[test]
@@ -184,7 +242,7 @@ fn what_was_missed_is_asked_for_from_the_last_number_and_again_while_more_is_hel
     // a reply to something else is not taken
     let forged = BoardReply {
         nonce: [0; 16],
-        posts: vec![(1, written[0].clone())],
+        posts: vec![(1, written[0].clone(), 2)],
         through: 1,
         more: false,
     };
@@ -193,7 +251,7 @@ fn what_was_missed_is_asked_for_from_the_last_number_and_again_while_more_is_hel
     // the node says more is held: the next asking goes from where it read
     let reply = BoardReply {
         nonce: first.nonce,
-        posts: vec![(4, written[0].clone()), (6, written[1].clone())],
+        posts: vec![(4, written[0].clone(), 2), (6, written[1].clone(), 2)],
         through: 6,
         more: true,
     };
@@ -202,7 +260,7 @@ fn what_was_missed_is_asked_for_from_the_last_number_and_again_while_more_is_hel
     assert_eq!(second.after, Some(6));
     assert_eq!(bob.board_unread(&subnet), 2);
     // a delivery meanwhile is taken and does not move the number
-    bob.board_arrived(kh("alice"), &delivery(&written[2], 40));
+    bob.board_arrived(kh("alice"), &delivery(&written[2], 40, 2));
     let reply = BoardReply {
         nonce: second.nonce,
         posts: vec![],

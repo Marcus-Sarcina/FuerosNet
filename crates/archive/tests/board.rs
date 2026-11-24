@@ -10,6 +10,15 @@ fn post(up: u64, down: u64, bytes: &[u8], number: Option<u64>) -> BoardPost {
         down,
         post: bytes.to_vec(),
         number,
+        carried: None,
+    }
+}
+
+/// A copy as a node sends it, with the upward count it was carried with.
+fn carried(up: u64, down: u64, bytes: &[u8], number: Option<u64>, carried: u64) -> BoardPost {
+    BoardPost {
+        carried: Some(carried),
+        ..post(up, down, bytes, number)
     }
 }
 
@@ -26,6 +35,8 @@ fn a_post_round_trips_with_and_without_the_nodes_number() {
         post(0, 0, b"x", None),
         post(24, 24, &[7; 16_384], None),
         post(0, 0, b"for a member", Some(u64::MAX)),
+        carried(0, 0, b"for a member", Some(7), 24),
+        carried(3, 1, b"between nodes", None, 0),
     ] {
         assert_eq!(BoardPost::decode(&p.encode()), Ok(p));
     }
@@ -38,10 +49,11 @@ fn a_post_out_of_bounds_does_not_decode() {
     assert!(BoardPost::decode(&post(0, 0, &[7; 16_385], None).encode()).is_err());
     assert!(BoardPost::decode(&post(25, 0, b"x", None).encode()).is_err());
     assert!(BoardPost::decode(&post(0, 25, b"x", None).encode()).is_err());
+    assert!(BoardPost::decode(&carried(0, 0, b"x", None, 25).encode()).is_err());
     // an unknown field on an unsigned message
     let mut b = post(1, 1, b"x", Some(3)).encode();
     b[0] += 1;
-    b.extend([0x05, 0x00]);
+    b.extend([0x06, 0x00]);
     assert!(BoardPost::decode(&b).is_err());
     // and a missing one: the map head says three and holds two
     let whole = post(1, 1, b"x", None).encode();
@@ -66,7 +78,7 @@ fn the_asking_and_its_answer_round_trip() {
     }
     let reply = BoardReply {
         nonce: [3; 16],
-        posts: vec![(42, b"a".to_vec()), (45, vec![9; 16_384])],
+        posts: vec![(42, b"a".to_vec(), 2), (45, vec![9; 16_384], 24)],
         through: 47,
         more: true,
     };
@@ -82,22 +94,22 @@ fn the_asking_and_its_answer_round_trip() {
 
 #[test]
 fn an_answer_out_of_order_or_over_its_bounds_does_not_decode() {
-    let reply = |posts: Vec<(u64, Vec<u8>)>| BoardReply {
+    let reply = |posts: Vec<(u64, Vec<u8>, u64)>| BoardReply {
         nonce: [3; 16],
         posts,
         through: 900,
         more: false,
     };
     let x = || b"x".to_vec();
-    assert!(BoardReply::decode(&reply(vec![(2, x()), (1, x())]).encode()).is_err());
-    assert!(BoardReply::decode(&reply(vec![(2, x()), (2, x())]).encode()).is_err());
-    assert!(BoardReply::decode(&reply(vec![(1, Vec::new())]).encode()).is_err());
-    assert!(BoardReply::decode(&reply(vec![(1, vec![0; 16_385])]).encode()).is_err());
-    let many = |n: u64| (1..=n).map(|i| (i, x())).collect::<Vec<_>>();
+    assert!(BoardReply::decode(&reply(vec![(2, x(), 2), (1, x(), 2)]).encode()).is_err());
+    assert!(BoardReply::decode(&reply(vec![(2, x(), 2), (2, x(), 2)]).encode()).is_err());
+    assert!(BoardReply::decode(&reply(vec![(1, Vec::new(), 2)]).encode()).is_err());
+    assert!(BoardReply::decode(&reply(vec![(1, vec![0; 16_385], 2)]).encode()).is_err());
+    let many = |n: u64| (1..=n).map(|i| (i, x(), 2)).collect::<Vec<_>>();
     assert!(BoardReply::decode(&reply(many(256)).encode()).is_ok());
     assert!(BoardReply::decode(&reply(many(257)).encode()).is_err());
     // fifteen posts of the largest size fit a reply's frame, sixteen do not
-    let big = |n: u64| reply((1..=n).map(|i| (i, vec![0; 16_384])).collect());
+    let big = |n: u64| reply((1..=n).map(|i| (i, vec![0; 16_384], 2)).collect());
     assert!(big(15).encode().len() <= 262_144);
     assert!(big(16).encode().len() > 262_144);
 }

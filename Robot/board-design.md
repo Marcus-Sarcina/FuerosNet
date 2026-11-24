@@ -441,14 +441,8 @@ title, words (8,192 bytes), alias, a classical signature under
 
 - **Mine, flagged**: the post carries the writer's full key material (about
   2 KB), so that a reader who has never held the writer can check it.
-- **Asked of the author, assumed meanwhile**: design section 23.3 says a
-  paired desktop "signs nothing" [author, 2026-11-18]. A post is signed
-  [author, 2026-11-18], so a paired desktop can post only if it signs
-  under its delegated key with the delegation stapled, as a node signs an
-  acknowledgement. Built that way, and section 23.3 amended to say "signs
-  nothing but a post on a subnet's board". The other options: a paired
-  desktop reads the board and cannot post; or its posts go by way of the
-  phone.
+- **Ruled 2026-11-24**: *"A paired desktop may post, signed under its
+  delegated key."* Design section 23.3 says so, tagged.
 
 ## Built 2026-11-24: the client, and both shells
 
@@ -481,3 +475,32 @@ opened. ZU8 and 4VC hold no position in a subnet yet and keep empty boards.
 - A phone attached before the node was upgraded asked the old node, which
   rejected request type 17 without a word, and did not ask again until its
   session was replaced. Relaunch the apps after a node upgrade.
+
+## The count a post is carried with (2026-11-24)
+
+The author posted `+4/-2` from MRK, which has nobody beneath it, and GXV read
+it as `+3/-3`: the band as written. He expected `+1/-3`, the band as pruned.
+The node had lowered the count in its own carriage and nothing told a reader:
+the display came from the post's signed fields, which a node cannot change.
+"The writer is not told" and "a reader is told nothing of it" were my
+sentences, not his; his ruling was *"Posts over the cap are propagated with
+the cap adjusted to the sender's authority"*, which reads as the adjusted cap
+travelling with the post.
+
+- `BoardPost` field 5: the upward count the first node carried the post
+  with, from the writer. Set once, carried unchanged on both legs, on every
+  delivery and in every catch-up entry (`[number, post, carried]`). Absent
+  from a member; a node's copy without it, or a member's frame with it, is
+  malformed.
+- The queue file's first line is `<carried> <band>`.
+- The client keeps it with the post (`Kept::carried`), shows
+  `min(written, carried)` upward, gives a reply that band, and shows its own
+  post as written until the node's echo arrives.
+- Functional row BRD-016. No migration: queue files and pools written
+  before this do not read and are started empty.
+- **Ruled 2026-11-24, after the fix was described**: *"The visibility is
+  relaxed for the poster, since the node can't reach into their interface
+  and force a different selection locally. But the reach should be displayed
+  honestly for all others."* The documents bind every reader but the writer;
+  the reference client still shows its own post as carried once the node
+  hands it back, as its own choice.
