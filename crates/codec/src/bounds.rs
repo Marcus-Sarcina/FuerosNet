@@ -67,6 +67,12 @@ pub const CATALOG_ENTRY_BYTES: usize = 2048;
 /// here, the bound being per answering node.  The frame bound caps it at
 /// 127 regardless.
 pub const CATALOG_REPLY_ENTRIES: usize = 111;
+/// A board post (§10.3): 16 KiB of the post itself, which a control
+/// frame's 64 KiB carries with room. Provisional [author, 2026-11-23].
+pub const BOARD_POST_BYTES: usize = 16_384;
+/// Posts per `BoardReply` (§10.3), and fewer where the frame bound is met
+/// first.
+pub const BOARD_REPLY_POSTS: usize = 256;
 
 /// A catalog page item's name, in bytes (`wire-format.md` §6.9): the same
 /// as an entry's instance name, which it is where one is held.

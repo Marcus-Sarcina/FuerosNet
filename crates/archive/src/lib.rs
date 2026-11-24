@@ -15,6 +15,9 @@
 
 #![warn(missing_docs)]
 
+/// The board's wire objects (`wire-format.md` §10.3): the post as it is
+/// carried, a member's asking for what it missed, and the answer.
+pub mod board;
 /// The resource objects the network carries (`wire-format.md` §6, §11):
 /// the scope vocabulary, the catalog entry, the abuse report, and the
 /// query, registration and request with their answers.

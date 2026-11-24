@@ -5455,8 +5455,10 @@ none between it and this one, which stands one, two or three levels down
    down, with `d` no more than field 2, is sent `(0, field 2 - d)`.
 
 **In each case the node delivers the post once to every session of every
-member it serves whose position is in the band**, the session it arrived on
-excepted, and the writer's other devices included.
+member it serves whose position is in the band**, the writer's own sessions
+among them, the one it arrived on included: a control frame goes to each
+session a key holds (§8.0), and the post coming back with its number is how a
+writer's device learns that its node took it.
 
 **A member attached in failover is carried as far as what reaches this node
 allows** [author, 2026-11-24], with no promise of service or of completeness.

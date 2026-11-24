@@ -2056,11 +2056,16 @@ impl Node {
             },
             move |fam, b, body, item| match fam {
                 Family::Attach | Family::AttachAck => false,
-                Family::TopologyPush | Family::TopologyMemo => {
+                Family::TopologyPush | Family::TopologyMemo | Family::BoardPost => {
                     if let Some(h) = &on_control {
                         h(
                             claimed,
-                            if fam == Family::TopologyPush { 5 } else { 6 },
+                            match fam {
+                                Family::TopologyPush => 5,
+                                Family::TopologyMemo => 6,
+                                // a post on the subnet's board (§10.3)
+                                _ => 10,
+                            },
                             b[body].to_vec(),
                         );
                     }
@@ -2926,6 +2931,13 @@ async fn attach_on(
                 // carried up to whoever asks for pages again
                 Family::PageChanged => {
                     let _ = ftx.send((9, Vec::new()));
+                    true
+                }
+                // **a post on the subnet's board** (`wire-format.md`
+                // §10.3): to a member from the node it is attached to, and
+                // to a node from the one above it
+                Family::BoardPost => {
+                    let _ = ftx.send((10, b[body].to_vec()));
                     true
                 }
                 _ => true,

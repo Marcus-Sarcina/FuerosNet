@@ -477,6 +477,10 @@ impl LiveNode {
                 6 => {
                     view.receive_memo(&a, &peer, &body);
                 }
+                // a post on the subnet's board (`wire-format.md` §10.3)
+                10 => {
+                    view.receive_board(&a, &peer, &body);
+                }
                 _ => {}
             }
         });
@@ -771,6 +775,14 @@ impl LiveNode {
                             .encode(),
                         )
                     }
+                    // **what a member missed on the board** (`wire-format.md`
+                    // §10.3): the posts in its own band after the number it
+                    // holds; an asker holding no session here closes the
+                    // stream
+                    Family::BoardRequest => {
+                        let view = v.lock().unwrap();
+                        view.answer_board(&peer, &body)
+                    }
                     Family::ResourceRequest => {
                         // never in early data: the transport defers every
                         // request stream past the handshake; one request
@@ -1021,6 +1033,9 @@ impl LiveNode {
                             }
                             6 => {
                                 view.receive_memo(&a, &serving, &body);
+                            }
+                            10 => {
+                                view.receive_board(&a, &serving, &body);
                             }
                             _ => {}
                         }
@@ -1361,6 +1376,9 @@ pub fn pump_client(
                 }
                 6 => {
                     v.receive_memo(&pump_adj, &serving, &body);
+                }
+                10 => {
+                    v.receive_board(&pump_adj, &serving, &body);
                 }
                 _ => {}
             }

@@ -15,8 +15,12 @@
 //! downline nodes to send it to.
 
 use crate::downline::{BASE_REACH, Downline, MAX_REACH, Position};
+use crate::view::NodeView;
+use crate::{Adjacency, Keyhash};
+use rhtn_archive::board::{BoardPost, BoardReply, BoardRequest, FRAME_BOARD_POST};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeSet, VecDeque};
+use std::path::{Path, PathBuf};
 
 /// The largest post, in bytes (`wire-format.md` §1.3). Provisional
 /// [author, 2026-11-23].
@@ -113,6 +117,69 @@ impl Band {
             && self.around.is_empty()
             && self.only.is_empty()
             && self.fostered.is_none()
+    }
+
+    /// The band as one line, for the file a held post is kept in: `b` a
+    /// position and a depth, `a` and `o` positions, `f` a depth, a position
+    /// being its digits and the node's own a dot.
+    #[must_use]
+    pub fn encode(&self) -> String {
+        let path = |p: &[u8]| -> String {
+            if p.is_empty() {
+                ".".into()
+            } else {
+                p.iter().map(|s| char::from(b'0' + *s)).collect()
+            }
+        };
+        let list = |ps: &[Position]| ps.iter().map(|p| path(p)).collect::<Vec<_>>().join(",");
+        let mut parts = Vec::new();
+        if let Some((root, depth)) = &self.beneath {
+            parts.push(format!("b={}/{depth}", path(root)));
+        }
+        if !self.around.is_empty() {
+            parts.push(format!("a={}", list(&self.around)));
+        }
+        if !self.only.is_empty() {
+            parts.push(format!("o={}", list(&self.only)));
+        }
+        if let Some(depth) = self.fostered {
+            parts.push(format!("f={depth}"));
+        }
+        parts.join(";")
+    }
+
+    /// A band from the line [`Band::encode`] wrote. A part it does not
+    /// know is passed over; one it knows and cannot read refuses the line.
+    #[must_use]
+    pub fn decode(line: &str) -> Option<Self> {
+        let path = |s: &str| -> Option<Position> {
+            if s == "." {
+                return Some(Vec::new());
+            }
+            (!s.is_empty() && s.len() <= MAX_REACH)
+                .then(|| {
+                    s.bytes()
+                        .map(|b| b.checked_sub(b'0').filter(|d| *d <= 9))
+                        .collect::<Option<Position>>()
+                })
+                .flatten()
+        };
+        let list = |s: &str| s.split(',').map(path).collect::<Option<Vec<Position>>>();
+        let mut band = Band::default();
+        for part in line.split(';').filter(|p| !p.is_empty()) {
+            let (key, value) = part.split_once('=')?;
+            match key {
+                "b" => {
+                    let (root, depth) = value.split_once('/')?;
+                    band.beneath = Some((path(root)?, depth.parse().ok()?));
+                }
+                "a" => band.around = list(value)?,
+                "o" => band.only = list(value)?,
+                "f" => band.fostered = Some(value.parse().ok()?),
+                _ => {}
+            }
+        }
+        Some(band)
     }
 }
 
@@ -257,6 +324,9 @@ pub struct Queue {
     next: u64,
     held: VecDeque<Held>,
     hashes: BTreeSet<[u8; 32]>,
+    /// The numbers that fell out since last asked: what to remove from
+    /// wherever the queue is also kept.
+    gone: Vec<u64>,
 }
 
 impl Queue {
@@ -276,7 +346,39 @@ impl Queue {
             next: next.max(1),
             held: VecDeque::new(),
             hashes: BTreeSet::new(),
+            gone: Vec::new(),
         }
+    }
+
+    /// A queue from the posts a node kept on disk, in the order of their
+    /// numbers, counting on from the newest. The oldest go where the
+    /// bound has since been lowered.
+    #[must_use]
+    pub fn restored(cap: usize, mut held: Vec<Held>) -> Self {
+        held.sort_by_key(|h| h.number);
+        let mut q = Self::resumed(cap, held.last().map_or(1, |h| h.number + 1));
+        for h in held {
+            let cost = Self::cost_of(&h.post);
+            if h.post.is_empty() || h.post.len() > POST_MAX || cost > cap {
+                q.gone.push(h.number);
+                continue;
+            }
+            while q.cost + cost > q.cap {
+                let Some(old) = q.held.pop_front() else { break };
+                q.cost -= Self::cost_of(&old.post);
+                q.hashes.remove(&hash(&old.post));
+                q.gone.push(old.number);
+            }
+            q.cost += cost;
+            q.hashes.insert(hash(&h.post));
+            q.held.push_back(h);
+        }
+        q
+    }
+
+    /// The numbers that fell out since this was last asked.
+    pub fn take_gone(&mut self) -> Vec<u64> {
+        std::mem::take(&mut self.gone)
     }
 
     /// The number the next post stored will be given.
@@ -323,6 +425,7 @@ impl Queue {
             let gone = self.held.pop_front()?;
             self.cost -= Self::cost_of(&gone.post);
             self.hashes.remove(&hash(&gone.post));
+            self.gone.push(gone.number);
         }
         let number = self.next;
         self.next += 1;
@@ -366,6 +469,322 @@ impl Queue {
     }
 }
 
+/// What a node did with an arriving `BoardPost`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Taken {
+    /// It does not read, or carries a number, which is a node's to give a
+    /// member and nobody's to give a node.
+    Malformed,
+    /// From a party that is neither a member here, a node beneath, nor
+    /// the upstream.
+    Stranger,
+    /// A post of this hash is already held: not delivered, stored or
+    /// forwarded again.
+    Duplicate,
+    /// Its counts do not fit the session it arrived on.
+    Discarded(Discard),
+    /// It is for nobody here and goes nowhere on.
+    Nowhere,
+    /// The queue could not take it.
+    Unkept,
+    /// Stored under `number`, delivered to so many members, sent upstream
+    /// or not, and sent to so many nodes beneath.
+    Carried {
+        /// The number it was stored under.
+        number: u64,
+        /// Members it was delivered to.
+        delivered: usize,
+        /// Whether it went on upstream.
+        up: bool,
+        /// Nodes beneath it was sent to.
+        down: usize,
+    },
+}
+
+/// Where a party attached here stands, for what is delivered to it.
+enum Standing {
+    /// At a position this node's own records place beneath it.
+    At(Position),
+    /// A sibling's member in failover, so many levels below its own node.
+    Fostered(usize),
+}
+
+/// The room a catch-up reply's posts may take: the request frame bound
+/// (`wire-format.md` §9.2) less the reply's own fields.
+const REPLY_ROOM: usize = 262_144 - 64;
+
+impl NodeView {
+    /// **Receive a `BoardPost`** on the session from `from`
+    /// (`wire-format.md` §10.3): work out who it is for here from the
+    /// counts and where it came from, keep it, deliver it to every member
+    /// attached here in its band, and send it on.  The post's own bytes
+    /// are not read.
+    pub fn receive_board(&mut self, adj: &dyn Adjacency, from: &Keyhash, body: &[u8]) -> Taken {
+        let taken = self.carry_board(adj, from, body);
+        // the counts and the outcome, and nothing of the post
+        tracing::debug!(
+            target: "node",
+            from8 = %crate::diag::id8(from),
+            taken = ?taken,
+            "node.board"
+        );
+        taken
+    }
+
+    fn carry_board(&mut self, adj: &dyn Adjacency, from: &Keyhash, body: &[u8]) -> Taken {
+        let Ok(frame) = BoardPost::decode(body) else {
+            return Taken::Malformed;
+        };
+        if frame.number.is_some() {
+            return Taken::Malformed;
+        }
+        let Some(source) = self.board_source(from) else {
+            return Taken::Stranger;
+        };
+        if self.board.holds(&hash(&frame.post)) {
+            return Taken::Duplicate;
+        }
+        let (up, down) = (
+            usize::try_from(frame.up).unwrap_or(usize::MAX),
+            usize::try_from(frame.down).unwrap_or(usize::MAX),
+        );
+        let plan = match plan(&self.downline, self.downline.lists(), &source, up, down) {
+            Ok(p) => p,
+            Err(why) => return Taken::Discarded(why),
+        };
+        if plan.band.is_empty() && plan.up.is_none() && plan.down.is_empty() {
+            return Taken::Nowhere;
+        }
+        let Some(number) = self.board.keep(frame.post.clone(), plan.band.clone()) else {
+            return Taken::Unkept;
+        };
+        self.file_board(number, &plan.band, &frame.post);
+        // **to every session of every member in the band**, the writer's
+        // own among them: a control frame goes to each session a key
+        // holds, and the post coming back numbered is how a writer's
+        // device learns this node took it
+        let me = self.me();
+        let delivery = BoardPost {
+            up: 0,
+            down: 0,
+            post: frame.post.clone(),
+            number: Some(number),
+        }
+        .encode();
+        let mut members: BTreeSet<Keyhash> = self.attached.clone();
+        members.insert(me);
+        let mut delivered = 0;
+        for k in members {
+            if self.in_band(&k, &plan.band) && adj.has_session(&k) {
+                adj.send(&k, FRAME_BOARD_POST, &delivery);
+                delivered += 1;
+            }
+        }
+        let copy = |up: usize, down: usize| {
+            BoardPost {
+                up: up as u64,
+                down: down as u64,
+                post: frame.post.clone(),
+                number: None,
+            }
+            .encode()
+        };
+        // upward always goes on while the count allows, to this node's
+        // patron where a session exists and otherwise to the nearest node
+        // on the patron chain, as a memo does
+        let upstream = self
+            .patron_in(&self.anchor())
+            .filter(|p| adj.has_session(p))
+            .or(self.serving_node);
+        let mut went_up = false;
+        if let (Some(up), Some(to)) = (plan.up, upstream) {
+            adj.send(&to, FRAME_BOARD_POST, &copy(up, 1));
+            went_up = true;
+        }
+        let mut sent_down = 0;
+        for (at, down) in &plan.down {
+            if let Some(k) = self.key_at(at)
+                && adj.has_session(&k)
+            {
+                adj.send(&k, FRAME_BOARD_POST, &copy(0, *down));
+                sent_down += 1;
+            }
+        }
+        Taken::Carried {
+            number,
+            delivered,
+            up: went_up,
+            down: sent_down,
+        }
+    }
+
+    /// **Answer a member asking for what it missed** (`wire-format.md`
+    /// §10.3, request type 17): the posts numbered above the one it holds
+    /// whose band holds where it stands now.  Nothing, which closes the
+    /// stream, for an asker holding no session attached here.
+    #[must_use]
+    pub fn answer_board(&self, asker: &Keyhash, body: &[u8]) -> Option<Vec<u8>> {
+        let req = BoardRequest::decode(body).ok()?;
+        if *asker != self.me() && !self.attached.contains(asker) {
+            return None;
+        }
+        let standing = self.board_standing(asker)?;
+        let page = self.board.after(
+            req.after,
+            |band| match &standing {
+                Standing::At(at) => band.holds(at),
+                Standing::Fostered(below) => band.holds_fostered(*below),
+            },
+            REPLY_ROOM,
+        );
+        Some(
+            BoardReply {
+                nonce: req.nonce,
+                posts: page
+                    .posts
+                    .iter()
+                    .map(|(n, post)| (*n, post.to_vec()))
+                    .collect(),
+                through: page.through,
+                more: page.more,
+            }
+            .encode(),
+        )
+    }
+
+    /// **Keep the queue in `dir`**, a file a post named by its number, and
+    /// take up what is already there: the numbers go on from the newest
+    /// held, so none is given twice across a restart.  A file that does
+    /// not read is left where it is and not held.
+    pub fn open_board(&mut self, dir: &Path) -> std::io::Result<()> {
+        std::fs::create_dir_all(dir)?;
+        let mut held = Vec::new();
+        for entry in std::fs::read_dir(dir)? {
+            let path = entry?.path();
+            let number = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .and_then(|n| n.parse::<u64>().ok());
+            let (Some(number), Ok(bytes)) = (number, std::fs::read(&path)) else {
+                continue;
+            };
+            let Some(cut) = bytes.iter().position(|b| *b == b'\n') else {
+                continue;
+            };
+            let band = std::str::from_utf8(&bytes[..cut])
+                .ok()
+                .and_then(Band::decode);
+            if let Some(band) = band {
+                held.push(Held {
+                    number,
+                    post: bytes[cut + 1..].to_vec(),
+                    band,
+                });
+            }
+        }
+        self.board = Queue::restored(QUEUE_BYTES, held);
+        self.board_dir = Some(dir.to_path_buf());
+        self.clear_gone();
+        Ok(())
+    }
+
+    /// Write a post just kept to its file, and remove the files of those
+    /// that fell out to make room, leaving nothing of them.
+    fn file_board(&mut self, number: u64, band: &Band, post: &[u8]) {
+        if let Some(dir) = &self.board_dir {
+            let mut bytes = band.encode().into_bytes();
+            bytes.push(b'\n');
+            bytes.extend_from_slice(post);
+            if let Err(e) = std::fs::write(Self::board_file(dir, number), bytes) {
+                tracing::warn!(target: "node", error = %e, "node.board.unwritten");
+            }
+        }
+        self.clear_gone();
+    }
+
+    fn clear_gone(&mut self) {
+        let gone = self.board.take_gone();
+        if let Some(dir) = &self.board_dir {
+            for n in gone {
+                let _ = std::fs::remove_file(Self::board_file(dir, n));
+            }
+        }
+    }
+
+    fn board_file(dir: &Path, number: u64) -> PathBuf {
+        dir.join(format!("{number:020}"))
+    }
+
+    /// Where a copy came from, by the session it arrived on.
+    fn board_source(&self, from: &Keyhash) -> Option<Source> {
+        if *from == self.me() {
+            return Some(Source::Member(Vec::new()));
+        }
+        if let Some(at) = self.path_to(from) {
+            // a subordinate that runs a node sends copies; one that does
+            // not is a member writing
+            return Some(if self.table.is_infra(from) {
+                Source::Below(at)
+            } else {
+                Source::Member(at)
+            });
+        }
+        if self.patron_in(&self.anchor()) == Some(*from) || self.serving_node == Some(*from) {
+            return Some(Source::Above);
+        }
+        if self.attached.contains(from) {
+            return self.levels_below_own_node(from).map(Source::Fostered);
+        }
+        None
+    }
+
+    /// Where a party attached here stands, for delivery and for catch-up.
+    /// Nothing for a node beneath, which is sent copies and delivered
+    /// nothing, and for a party this node cannot place.
+    fn board_standing(&self, k: &Keyhash) -> Option<Standing> {
+        if *k == self.me() {
+            return Some(Standing::At(Vec::new()));
+        }
+        if let Some(at) = self.path_to(k) {
+            return (!self.table.is_infra(k)).then_some(Standing::At(at));
+        }
+        self.levels_below_own_node(k).map(Standing::Fostered)
+    }
+
+    fn in_band(&self, k: &Keyhash, band: &Band) -> bool {
+        match self.board_standing(k) {
+            Some(Standing::At(at)) => band.holds(&at),
+            Some(Standing::Fostered(below)) => band.holds_fostered(below),
+            None => false,
+        }
+    }
+
+    /// How many levels a sibling's member stands below its own node, by
+    /// the bindings this node holds: nothing where it holds too few to
+    /// say, and that member is not carried.
+    fn levels_below_own_node(&self, k: &Keyhash) -> Option<usize> {
+        let mut at = *k;
+        for below in 0..=2 {
+            if self.table.is_infra(&at) {
+                return Some(below);
+            }
+            at = self.table.patrons(&at).into_iter().next()?;
+        }
+        None
+    }
+
+    /// Who stands at a position beneath this node, by its own slots and
+    /// the bindings it holds.
+    fn key_at(&self, at: &[u8]) -> Option<Keyhash> {
+        let (first, rest) = at.split_first()?;
+        let mut k = self.slots.get(&u64::from(*first))?.occupant?;
+        for slot in rest {
+            k = self.slot_states(&k).get(slot)?.0?;
+        }
+        Some(k)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -400,7 +819,7 @@ mod tests {
         for node in [&[0][..], &[0, 0], &[0, 0, 0], &[1, 1], &[2, 0, 0]] {
             assert!(d.mark_node(node, true));
         }
-        let lists = d.lists();
+        let lists = d.lists().clone();
         (d, lists)
     }
 

@@ -1221,7 +1221,7 @@ impl NodeView {
     /// Where `k` stands beneath this node, by this node's own records: its
     /// own slots, and beneath them the open bindings its table holds.
     /// Nothing for a party those records do not place beneath it.
-    fn path_to(&self, k: &Keyhash) -> Option<Vec<u8>> {
+    pub(crate) fn path_to(&self, k: &Keyhash) -> Option<Vec<u8>> {
         let mut at = *k;
         let mut path = Vec::new();
         for _ in 0..crate::downline::MAX_REACH {
@@ -1316,7 +1316,7 @@ impl NodeView {
 
     /// Each slot of `patron` as this node's table settles it: by the open
     /// binding where one holds it, and otherwise by the latest ending.
-    fn slot_states(&self, patron: &Keyhash) -> BTreeMap<u8, (Option<Keyhash>, u64)> {
+    pub(crate) fn slot_states(&self, patron: &Keyhash) -> BTreeMap<u8, (Option<Keyhash>, u64)> {
         let mut held: BTreeMap<u8, (Option<Keyhash>, u64)> = BTreeMap::new();
         for b in self.table.bindings() {
             if b.patron != *patron {

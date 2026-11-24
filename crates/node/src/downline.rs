@@ -61,6 +61,9 @@ struct Entry {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Downline {
     slots: BTreeMap<Position, Entry>,
+    /// The three lists a post is forwarded by, redone whenever a row
+    /// changes and at no other time [author, 2026-11-18].
+    lists: [Vec<Position>; 3],
 }
 
 impl Downline {
@@ -111,6 +114,7 @@ impl Downline {
                 },
             );
         }
+        self.rework();
         true
     }
 
@@ -150,6 +154,7 @@ impl Downline {
                 stamp: stamp.max(held.map_or(0, |e| e.stamp)),
             },
         );
+        self.rework();
         true
     }
 
@@ -253,12 +258,17 @@ impl Downline {
     /// two and within three, the third serving every count above it.
     /// Worked out when the downline changes, not per post.
     #[must_use]
-    pub fn lists(&self) -> [Vec<Position>; 3] {
+    pub fn lists(&self) -> &[Vec<Position>; 3] {
+        &self.lists
+    }
+
+    /// Redo the three lists: called where a row changed.
+    fn rework(&mut self) {
         let all = self.nearest_nodes();
         let within =
             |k: usize| -> Vec<Position> { all.iter().filter(|p| p.len() <= k).cloned().collect() };
         let (one, two) = (within(1), within(2));
-        [one, two, all]
+        self.lists = [one, two, all];
     }
 
     /// The table as it goes to disk: one line a row, the path as its
@@ -318,7 +328,12 @@ impl Downline {
             let stamp = stamp.parse().ok()?;
             slots.insert(at, Entry { filled, stamp });
         }
-        Some(Self { slots })
+        let mut read = Self {
+            slots,
+            lists: Default::default(),
+        };
+        read.rework();
+        Some(read)
     }
 
     /// Whether any position at or above `at` was emptied.
@@ -520,7 +535,7 @@ mod tests {
         d.set(&[2], 2, true, 1);
         d.set(&[2, 2], 2, true, 1);
         d.mark_node(&[2, 2, 2], true);
-        let [one, two, three] = d.lists();
+        let [one, two, three] = d.lists().clone();
         assert_eq!(one, vec![vec![0]]);
         assert_eq!(two, vec![vec![0], vec![1, 1]]);
         assert_eq!(three, vec![vec![0], vec![1, 1], vec![2, 2, 2]]);

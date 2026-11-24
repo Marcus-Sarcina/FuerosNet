@@ -74,6 +74,7 @@ pub fn family_of(stream: Stream, frame_type: u64) -> Option<Family> {
         (Stream::Control, 7) => Delegation,
         (Stream::Control, 8) => Reopen,
         (Stream::Control, 9) => PageChanged,
+        (Stream::Control, 10) => BoardPost,
         (Stream::Request, 1) => ResolveRequest,
         (Stream::Request, 2) => ArchiveRequest,
         (Stream::Request, 3) => NodeKeyRequestOrBatch,
@@ -90,6 +91,7 @@ pub fn family_of(stream: Stream, frame_type: u64) -> Option<Family> {
         (Stream::Request, 14) => ProfileRequest,
         (Stream::Request, 15) => HorizonAssertion,
         (Stream::Request, 16) => CatalogPageRequest,
+        (Stream::Request, 17) => BoardRequest,
         _ => return None,
     })
 }

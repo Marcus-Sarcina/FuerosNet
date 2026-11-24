@@ -1,6 +1,6 @@
 # Local device-to-device interfaces (`wire-format.md` §14.3)
 
-Generated against `wire-format.md` `e9ba982e7bd7f812…`, `network-design.md` `c952c5f8e6546dad…` and `light-client-requirements.md` `dd681ed3f7df574a…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `42d552dfaea63fc4…`, `network-design.md` `c952c5f8e6546dad…` and `light-client-requirements.md` `dd681ed3f7df574a…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Canonical. Spec-derived, reproduced by the independent harness.** The encodings
 of `wire-format.md` §14.3, as one coherent exchange: **alice initiates with

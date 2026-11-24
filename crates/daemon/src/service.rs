@@ -26,6 +26,8 @@ use std::time::Duration;
 const DERIVED: &str = "derived";
 /// The downline table's file, beside the derived state (design §15.2.2).
 const DOWNLINE: &str = "downline";
+/// The directory the board's queue is kept in (design §14.4).
+const BOARD: &str = "board";
 
 /// Why a daemon would not start.  Every one of these is reported and none
 /// is worked around: a node that repairs its own configuration serves
@@ -595,6 +597,10 @@ impl Service {
         {
             view.downline = d;
         }
+        // **the board's queue, a file a post** (design §14.4): taken up
+        // from where it was left, so no number is given twice
+        view.open_board(&cfg.topology.join(BOARD))
+            .map_err(|e| Startup::State(format!("{}: {e}", cfg.topology.join(BOARD).display())))?;
         let snap = std::fs::read(cfg.topology.join(DERIVED))
             .ok()
             .and_then(|b| Snapshot::decode(&b));

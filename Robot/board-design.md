@@ -402,3 +402,32 @@ the asker stands when it asks), and `Queue` (numbered, storage-bounded in
 and its reply), carriage in the transport session, the node view holding the
 queue and the lists and acting on a plan, the queue on disk, then the client
 kernel's pool and both shells.
+
+**Confirmed 2026-11-24** [author: *"The failover rule is right; no privacy
+row, carry on"*]: the failover mechanics stand as written, and no privacy
+register row is added for nodes holding posts in the clear.
+
+## Built 2026-11-24: the node carries posts
+
+The three wire objects (`crates/archive/src/board.rs`, the codec's schema
+and frame table), the frame over sessions in both directions
+(`transport/src/session.rs`), the node acting on a copy
+(`NodeView::receive_board`), catch-up (`answer_board`, request 17) and the
+queue kept a file a post under `<topology>/board/`.
+
+- **The writer's own sessions are delivered the post**, the sending one
+  included: a control frame goes to every session a key holds, so excluding
+  one was not expressible, and the numbered echo tells the writer's device
+  its node took the post. The wire format says so now.
+- **Known edge, not handled**: a node and its operator's own devices share
+  one key. An operator's phone attached in failover to the node *above*
+  its own is read there as that node sending an upward copy, so its post is
+  discarded unless its downward count is 1. Its own node being away, it has
+  no better path; best effort covers it.
+- **A sibling's member more than one level below its node is not carried**
+  where this node holds too few bindings to say how far below its own node
+  that member stands (three edges away is outside the horizon).
+
+**Next**: the client kernel (compose and sign a post, hand it over, take
+deliveries, the pool, the unread count, catch-up on attach), the adaptors'
+serving path, the facade, then both shells.

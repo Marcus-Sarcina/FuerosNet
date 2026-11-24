@@ -58,6 +58,11 @@ pub enum T {
     /// An array of catalog entries, each held to the `CatalogEntry` kind
     /// and to §1.3's byte bound.
     CatalogEntries,
+    /// A board reply's posts (§10.3): at most
+    /// [`BOARD_REPLY_POSTS`](crate::bounds::BOARD_REPLY_POSTS) pairs of a
+    /// number and a post, ascending by number, each post 1 to
+    /// [`BOARD_POST_BYTES`](crate::bounds::BOARD_POST_BYTES) bytes.
+    BoardPosts,
     /// A catalog page's items (§6.9), at most
     /// [`CATALOG_REPLY_ENTRIES`](crate::bounds::CATALOG_REPLY_ENTRIES), each
     /// a `PageItem` map.
@@ -193,6 +198,15 @@ pub enum Family {
     /// Control frame 9: a node telling a client its page there has
     /// changed (`wire-format.md` §6.9) [author, 2026-11-23].
     PageChanged,
+    /// Control frame 10: a post on the subnet's board, between a member
+    /// and the node serving it and from node to node (`wire-format.md`
+    /// §10.3) [author, 2026-11-23].
+    BoardPost,
+    /// Request frame 17: a member asking its node for the posts it missed
+    /// (§10.3).
+    BoardRequest,
+    /// The answer to a [`BoardRequest`](Family::BoardRequest).
+    BoardReply,
 }
 
 use T::*;
@@ -223,6 +237,20 @@ const ATTACH_ACK: Fields = &[
 pub const MAX_CLOSED: usize = 256;
 const REOPEN: Fields = &[(1, true, Keyhash), (2, true, Key64)];
 const PAGE_CHANGED: Fields = &[];
+const BOARD_POST: Fields = &[
+    (1, true, Uint),
+    (2, true, Uint),
+    (3, true, BstrMax(crate::bounds::BOARD_POST_BYTES)),
+    // the number the sending node stored it under, to a member only
+    (4, false, Uint),
+];
+const BOARD_REQUEST: Fields = &[(1, true, Nonce16), (2, false, Uint)];
+const BOARD_REPLY: Fields = &[
+    (1, true, Nonce16),
+    (2, true, BoardPosts),
+    (3, true, Uint),
+    (4, true, Bool),
+];
 const HEARTBEAT: Fields = &[(1, true, Uint), (2, true, Uint)];
 const SIBLING_UPDATE: Fields = &[(1, false, SiblingRefs)];
 const TOPOLOGY_PUSH: Fields = &[(1, true, Uint), (2, true, Bstr)];
@@ -436,6 +464,9 @@ pub fn fields(f: Family) -> Option<Fields> {
         TopologyMemo => TOPOLOGY_MEMO,
         Reopen => REOPEN,
         PageChanged => PAGE_CHANGED,
+        BoardPost => BOARD_POST,
+        BoardRequest => BOARD_REQUEST,
+        BoardReply => BOARD_REPLY,
         ResolveRequest => RESOLVE_REQUEST,
         ArchiveRequest => ARCHIVE_REQUEST,
         CatalogQuery => CATALOG_QUERY,
@@ -789,6 +820,29 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
                 check_kind(es, "CatalogEntry", &parse_all(es)?)?;
             }
         }
+        BoardPosts => {
+            let pairs = array_item_ranges(b, at).ok_or(Error("board posts not array"))?;
+            if pairs.len() > crate::bounds::BOARD_REPLY_POSTS {
+                return Err(Error("board reply over 256 posts"));
+            }
+            let mut last: Option<u64> = None;
+            for r in pairs {
+                let it = parse_all(&b[r.clone()])?;
+                let Item::Array(ref pair) = it else {
+                    return Err(Error("a board post is a pair"));
+                };
+                let [Item::Uint(number), Item::Bytes(post)] = pair.as_slice() else {
+                    return Err(Error("a board post is a number and a post"));
+                };
+                if post.is_empty() || post.len() > crate::bounds::BOARD_POST_BYTES {
+                    return Err(Error("board post size"));
+                }
+                if last.is_some_and(|l| l >= *number) {
+                    return Err(Error("board posts ascend by number"));
+                }
+                last = Some(*number);
+            }
+        }
         PageItems => {
             let items = array_item_ranges(b, at).ok_or(Error("page items not array"))?;
             if items.len() > CATALOG_REPLY_ENTRIES {
@@ -1067,6 +1121,16 @@ pub fn check_unsigned(f: Family, b: &[u8], at: usize) -> Result<(), Error> {
                     // Delegation, 3 a SubtreeAck (§10.1)
                     if map_get(m, 1).and_then(as_uint).unwrap_or(9) > 3 {
                         return Err(Error("body kind out of range"));
+                    }
+                }
+                Family::BoardPost => {
+                    // each count is at most the path bound (§10.3)
+                    for k in [1, 2] {
+                        if map_get(m, k).and_then(as_uint).unwrap_or(99)
+                            > crate::bounds::PATH_NIBBLES
+                        {
+                            return Err(Error("board count over the path bound"));
+                        }
                     }
                 }
                 Family::TopologyMemo => {
@@ -2431,6 +2495,9 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
         "CatalogReply" => check_unsigned(Family::CatalogReply, b, 0),
         "CatalogPageRequest" => check_unsigned(Family::CatalogPageRequest, b, 0),
         "CatalogPage" => check_unsigned(Family::CatalogPage, b, 0),
+        "BoardPost" => check_unsigned(Family::BoardPost, b, 0),
+        "BoardRequest" => check_unsigned(Family::BoardRequest, b, 0),
+        "BoardReply" => check_unsigned(Family::BoardReply, b, 0),
         "SubtreeAck" => {
             let Item::Map(m) = item else {
                 return Err(Error("not map"));

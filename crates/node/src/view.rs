@@ -120,6 +120,12 @@ pub struct NodeView {
     /// dates the memo that says so (`wire-format.md` §10.2), the same each
     /// time it is sent so that a repeat is one a table already holds.
     pub node_since: Option<u64>,
+    /// **The subnet's board as this node carries it** (design §14.4): the
+    /// posts it holds, numbered, with who each was for here.
+    pub board: crate::board::Queue,
+    /// Where the board's queue is kept across a restart, a file a post;
+    /// `None` keeps it in memory alone.
+    pub board_dir: Option<std::path::PathBuf>,
     /// Light clients attached to this node (design §14.1.2).
     pub attached: BTreeSet<Keyhash>,
     /// Peering edges (design §6.3): adjacency for the flood, and no part of
@@ -200,6 +206,8 @@ impl NodeView {
             memo_positions: BTreeMap::new(),
             downline: crate::downline::Downline::new(),
             node_since: None,
+            board: crate::board::Queue::new(crate::board::QUEUE_BYTES),
+            board_dir: None,
             attached: BTreeSet::new(),
             peers: BTreeSet::new(),
             serving_node: None,
