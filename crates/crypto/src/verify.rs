@@ -503,20 +503,23 @@ pub fn record<L: Lookup + ?Sized>(ids: &L, kind: &str, raw: &[u8]) -> Result<(),
     let id = ids
         .identity(&signer)
         .ok_or_else(|| Failure::MissingKey(signer.clone()))?;
-    // the stapled delegation sits outside the signature (§7.1 field 8)
-    let stapled = if kind == "CurrencyAttestation" {
-        match value_slice(raw, 8) {
-            Some(r8) => {
-                let d = delegation(ids, &raw[r8])?;
-                if d.keyhash != signer.as_slice() {
-                    return Err("a stapled delegation is not the issuer's".into());
-                }
-                Some(d.key)
+    // the stapled delegation sits outside the signature (§7.1 field 8;
+    // §10.3.1 field 12)
+    let staple = match kind {
+        "CurrencyAttestation" => Some(8),
+        "Post" => Some(12),
+        _ => None,
+    }
+    .filter(|s| value_slice(raw, *s).is_some());
+    let stapled = match staple.and_then(|s| value_slice(raw, s)) {
+        Some(r) => {
+            let d = delegation(ids, &raw[r])?;
+            if d.keyhash != signer.as_slice() {
+                return Err("a stapled delegation is not the issuer's".into());
             }
-            None => None,
+            Some(d.key)
         }
-    } else {
-        None
+        None => None,
     };
     let Some(Item::Array(cs)) = map_get(m, slot) else {
         return Err("sig slot".into());
@@ -540,12 +543,10 @@ pub fn record<L: Lookup + ?Sized>(ids: &L, kind: &str, raw: &[u8]) -> Result<(),
     if named_signer_alg(&prot, &cs[1]) != Some(cose::ALG_EDDSA) {
         return Err("a standalone signature carries a header beyond alg, or an algorithm other than the profile's".into());
     }
-    let payload =
-        if stapled.is_some() || (kind == "CurrencyAttestation" && value_slice(raw, 8).is_some()) {
-            map_without_keys(raw, &[slot, 8]).ok_or("payload")?
-        } else {
-            map_without_key(raw, slot).ok_or("payload")?
-        };
+    let payload = match staple {
+        Some(s) => map_without_keys(raw, &[slot, s]).ok_or("payload")?,
+        None => map_without_key(raw, slot).ok_or("payload")?,
+    };
     let tbs = cose::sig_structure_sign1(&prot, tag, &payload);
     if let Some(k) = stapled {
         // field 8 names the key field 7 was made under, and nothing else

@@ -73,6 +73,12 @@ pub const BOARD_POST_BYTES: usize = 16_384;
 /// Posts per `BoardReply` (§10.3), and fewer where the frame bound is met
 /// first.
 pub const BOARD_REPLY_POSTS: usize = 256;
+/// A post's title (§10.3.1), in bytes.
+pub const BOARD_TITLE_BYTES: usize = 128;
+/// A post's words (§10.3.1), in bytes: what the post bound leaves once the
+/// writer's keys, the signature and a delegation stapled by a device
+/// holding no seed are in it.
+pub const BOARD_TEXT_BYTES: usize = 8192;
 
 /// A catalog page item's name, in bytes (`wire-format.md` §6.9): the same
 /// as an entry's instance name, which it is where one is held.

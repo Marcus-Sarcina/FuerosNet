@@ -182,6 +182,8 @@ pub mod aad {
     pub const NODE_KEY: &[u8] = b"rhtn/1:node-key";
     /// A profile, an alias and an image per position (§1.1, §7.11).
     pub const PROFILE: &[u8] = b"rhtn/1:profile";
+    /// A post on a subnet's board, as its writer signs it (§1.1, §10.3.1).
+    pub const BOARD_POST: &[u8] = b"rhtn/1:board-post";
     /// A subtree acknowledgement (§1.1, §7.5).
     pub const SUBTREE_ACK: &[u8] = b"rhtn/1:subtree-ack";
     /// An old key's successor statement (§1.1, §4.1).

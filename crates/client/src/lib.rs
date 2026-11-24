@@ -61,6 +61,9 @@ compile_error!(
 );
 
 pub mod backup;
+/// A subnet's board as a client keeps it: the pool, what is unread, and
+/// where it stands with each node (`light-client-requirements.md` §4.5).
+pub mod board;
 pub mod catalog;
 pub mod ceremony;
 pub mod contacts;

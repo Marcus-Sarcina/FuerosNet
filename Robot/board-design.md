@@ -431,3 +431,21 @@ queue kept a file a post under `<topology>/board/`.
 **Next**: the client kernel (compose and sign a post, hand it over, take
 deliveries, the pool, the unread count, catch-up on attach), the adaptors'
 serving path, the facade, then both shells.
+
+## The post as the reference client writes it (2026-11-24)
+
+`Post` in `crates/archive/src/board.rs`, wire-format section 10.3.1: writer,
+the writer's key material, locator, reach as written, date, thread or
+title, words (8,192 bytes), alias, a classical signature under
+`rhtn/1:board-post`, and an optional stapled delegation.
+
+- **Mine, flagged**: the post carries the writer's full key material (about
+  2 KB), so that a reader who has never held the writer can check it.
+- **Asked of the author, assumed meanwhile**: design section 23.3 says a
+  paired desktop "signs nothing" [author, 2026-11-18]. A post is signed
+  [author, 2026-11-18], so a paired desktop can post only if it signs
+  under its delegated key with the delegation stapled, as a node signs an
+  acknowledgement. Built that way, and section 23.3 amended to say "signs
+  nothing but a post on a subnet's board". The other options: a paired
+  desktop reads the board and cannot post; or its posts go by way of the
+  phone.

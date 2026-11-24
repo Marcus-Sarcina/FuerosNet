@@ -332,6 +332,24 @@ const PROFILE: Fields = &[
     (6, true, Uint),
     (7, true, Any),
 ];
+/// A post as its writer signs it (§10.3.1): the reference client's, which
+/// no node reads.
+const POST: Fields = &[
+    (1, true, Keyhash),
+    (2, true, KeyMaterial),
+    (3, true, Locator),
+    (4, true, Uint),
+    (5, true, Uint),
+    (6, true, Uint),
+    (7, false, Bytes32),
+    (8, false, Tstr(crate::bounds::BOARD_TITLE_BYTES)),
+    (9, true, Tstr(crate::bounds::BOARD_TEXT_BYTES)),
+    (10, false, Tstr(crate::bounds::PROFILE_ALIAS_BYTES)),
+    (11, true, Any),
+    // the delegation of the key that signed it, from a device holding no
+    // seed; outside the signature, as a currency attestation's is
+    (12, false, Delegation),
+];
 const CURRENCY_REQUEST: Fields = &[(1, true, Keyhash), (2, true, Nonce16)];
 const RESOLVE_REPLY: Fields = &[
     (1, true, Nonce16),
@@ -1225,6 +1243,7 @@ pub fn sign1_profile(kind: &str) -> Option<(u64, &'static [u8], u64)> {
         "SubtreeAck" => (5, aad::SUBTREE_ACK, 2),
         "NodeKey" => (6, aad::NODE_KEY, 2),
         "Profile" => (7, aad::PROFILE, 1),
+        "Post" => (11, aad::BOARD_POST, 1),
         "EndpointRecord" => (4, aad::ENDPOINTS, 1),
         "SignedLocator" => (3, aad::LOCATOR, 1),
         _ => return None,
@@ -1293,6 +1312,7 @@ fn record_extension_bounds(b: &[u8], kind: &str, item: &Item) -> Result<(), Erro
         "CurrencyAttestation" => Some(8),
         "NodeKey" => Some(6),
         "Profile" => Some(7),
+        "Post" => Some(12),
         "AnchorEntry" | "SubtreeAck" | "AbuseReport" | "Witness" | "Delegation" => Some(5),
         "EncryptionKey" => Some(4),
         "EndpointRecord" => Some(4),
@@ -2540,6 +2560,24 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             };
             check_map_signed(b, 0, PROFILE)?;
             profile_ok(b, m)
+        }
+        "Post" => {
+            let Item::Map(m) = item else {
+                return Err(Error("not map"));
+            };
+            check_map_signed(b, 0, POST)?;
+            // each count within the path bound, and a post either begins
+            // a thread, with its title, or continues one, with neither
+            // both nor none (§10.3.1)
+            for k in [4, 5] {
+                if map_get(m, k).and_then(as_uint).unwrap_or(99) > crate::bounds::PATH_NIBBLES {
+                    return Err(Error("post reach over the path bound"));
+                }
+            }
+            if map_get(m, 7).is_some() == map_get(m, 8).is_some() {
+                return Err(Error("a post begins a thread or continues one"));
+            }
+            sign1_shape(map_get(m, 11).ok_or(Error("post signature"))?)
         }
         "VerificationQuery" => {
             let Item::Map(m) = item else {

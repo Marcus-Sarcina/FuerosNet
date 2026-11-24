@@ -124,6 +124,7 @@ either be structurally disjoint from every language above, or carry its own
 | Node key (§7.8) | `rhtn/1:node-key` |
 | Encryption key (§2.5) | `rhtn/1:encryption-key` |
 | Profile (§7.11) | `rhtn/1:profile` |
+| Board post, as its writer signs it (§10.3.1) | `rhtn/1:board-post` |
 | Subtree acknowledgement (§7.5) | `rhtn/1:subtree-ack` |
 | Old-key successor statement (§4.1) | `rhtn/1:successor` |
 | Former-patron transfer statement (§4.1) | `rhtn/1:transfer` |
@@ -5529,6 +5530,56 @@ in §9.2's read-only class.
 
 **No acknowledgement and no retry**, on §10.1.3's reasoning: a frame that does
 not arrive is repaired by the asking above or not at all.
+
+#### 10.3.1 The post as the reference client writes it
+
+**What is inside field 3 is a client's, and no node reads it** (design §14.4).
+Two clients that are to read one another's posts must agree on it all the
+same, so the reference client's is set down here. **A post is signed, not
+sealed** [author, 2026-11-18], and everything a reader needs is inside it, the
+writer's keys among them: a board reaches readers who have never held its
+writer.
+
+```
+Post = {
+  1: keyhash,              ; the writer
+  2: KeyMaterial,          ; the writer's keys (§2.2), which hash to field 1
+  3: Locator,              ; where the writer stood when writing (§2.3), the
+                           ;   subnet in it: the writer's own statement
+  4: uint,                 ; the reach as written, upward, 0 to 24
+  5: uint,                 ; the reach as written, downward, 0 to 24
+  6: timestamp,            ; when it was written, by the writer's clock
+  ? 7: bstr .size 32,      ; the thread it continues: the SHA-256 of the
+                           ;   post that began it
+  ? 8: tstr .size (1..128),   ; the title of the thread it begins
+  9: tstr .size (1..8192), ; the words
+  ? 10: tstr .size (1..64),   ; the writer's alias in the subnet. Display
+                           ;   only, as a profile's is (§7.11)
+  11: COSE_Sign1,          ; over canonical CBOR of fields 1-10;
+                           ;   external_aad = "rhtn/1:board-post". Classical
+                           ;   only, for §2.3's reason
+  ? 12: Delegation         ; of the key field 11 was made under (§8.2),
+                           ;   outside the signature
+}
+```
+
+**Exactly one of fields 7 and 8 is present**: a post begins a thread, with its
+title, or continues one. A thread is named by the hash of the post that began
+it, which is the hash a node knows that post by (§10.3).
+
+**A device holding no seed signs under the key it was delegated** (design
+§23.3), and staples the delegation as field 12, as a currency attestation
+staples its own (§7.1). A reader checks the delegation hybrid under field 2's
+keys, that field 6 falls in its window, and field 11 under the key it names;
+without field 12, field 11 verifies under field 2's classical key or the post
+is nobody's. The 8,192-byte bound on the words is what a post's 16,384 leave
+once the keys, the signature and a delegation are in it.
+
+**What a signature does not say** is that the writer stands where field 3
+says, or that fields 4 and 5 are how far the post was carried: the first node
+may have lowered the upward count (§10.3), and a reader is told nothing of it.
+The bands a reader shows are worked out from field 3 and are the writer's
+word.
 
 ## 11. Resource requests
 

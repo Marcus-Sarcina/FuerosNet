@@ -101,3 +101,248 @@ fn an_answer_out_of_order_or_over_its_bounds_does_not_decode() {
     assert!(big(15).encode().len() <= 262_144);
     assert!(big(16).encode().len() > 262_144);
 }
+
+// ------------------------------------------------- the post as it is signed
+
+use rhtn_archive::tx::{Locator, Seqno};
+use rhtn_crypto::identity::testkit::test_identity;
+
+fn at(path: &[u8]) -> Locator {
+    Locator {
+        anchor: test_identity("alice").public.keyhash,
+        path: path.to_vec(),
+        nibbles: 2 * path.len() as u64,
+        seqno: Seqno {
+            series: 1,
+            counter: 0,
+        },
+        subnet: Some([0xdb; 32]),
+    }
+}
+
+fn draft<'a>(position: &'a Locator, text: &'a str) -> Draft<'a> {
+    Draft {
+        position,
+        up: 2,
+        down: 2,
+        written_at: 1_800_000_000,
+        thread: None,
+        title: Some("A title"),
+        text,
+        alias: Some("Bob"),
+    }
+}
+
+#[test]
+fn a_post_carries_everything_a_reader_needs_and_verifies_under_the_key_it_carries() {
+    let bob = test_identity("bob");
+    let km = bob.public.key_material();
+    let here = at(&[0x10]);
+    let bytes = Post::build(&Writer::own(&bob, &km), &draft(&here, "the words")).expect("builds");
+    let p = Post::parse(&bytes).expect("parses");
+    assert_eq!(p.writer, bob.public.keyhash);
+    assert_eq!(p.material, bob.public.key_material());
+    assert_eq!(p.position, here);
+    assert_eq!((p.up, p.down, p.written_at), (2, 2, 1_800_000_000));
+    assert_eq!((p.thread, p.title.as_deref()), (None, Some("A title")));
+    assert_eq!(
+        (p.text.as_str(), p.alias.as_deref()),
+        ("the words", Some("Bob"))
+    );
+    // a reader that has never held the writer checks it all the same
+    assert_eq!(p.verify(), Ok(()));
+    // a thread is named by the hash of the post that began it
+    assert_eq!(p.thread_id(), Post::hash(&bytes));
+    let reply = Post::build(
+        &Writer::own(&bob, &km),
+        &Draft {
+            thread: Some(p.thread_id()),
+            title: None,
+            alias: None,
+            ..draft(&here, "a reply")
+        },
+    )
+    .expect("builds");
+    let r = Post::parse(&reply).unwrap();
+    assert_eq!(r.thread_id(), p.thread_id());
+    assert_eq!(r.verify(), Ok(()));
+    // and it fits a frame's post
+    assert!(BoardPost::decode(&post(2, 2, &bytes, None).encode()).is_ok());
+}
+
+#[test]
+fn a_post_changed_or_carrying_another_key_is_not_its_writers() {
+    let bob = test_identity("bob");
+    let km = bob.public.key_material();
+    let here = at(&[0x10]);
+    let bytes = Post::build(&Writer::own(&bob, &km), &draft(&here, "the words")).unwrap();
+    // one byte of the words
+    let mut changed = bytes.clone();
+    let i = changed.windows(9).position(|w| w == b"the words").unwrap();
+    changed[i] ^= 0x01;
+    assert!(Post::parse(&changed).unwrap().verify().is_err());
+    // carol's keys under bob's name: the material does not hash to field 1
+    let mut forged = Post::parse(&bytes).unwrap();
+    forged.material = test_identity("carol").public.key_material();
+    assert!(forged.verify().is_err());
+    // carol signing as herself over bob's keyhash does not parse back as
+    // bob's either: build names the signer
+    let carol = test_identity("carol");
+    let hers_km = carol.public.key_material();
+    let hers = Post::build(&Writer::own(&carol, &hers_km), &draft(&here, "the words")).unwrap();
+    assert_ne!(Post::parse(&hers).unwrap().writer, bob.public.keyhash);
+}
+
+#[test]
+fn a_post_begins_a_thread_or_continues_one_and_stays_within_its_bounds() {
+    let bob = test_identity("bob");
+    let km = bob.public.key_material();
+    let here = at(&[0x10]);
+    let d = draft(&here, "x");
+    // both a thread and a title, and neither
+    assert!(
+        Post::build(
+            &Writer::own(&bob, &km),
+            &Draft {
+                thread: Some([1; 32]),
+                ..d.clone()
+            }
+        )
+        .is_none()
+    );
+    assert!(
+        Post::build(
+            &Writer::own(&bob, &km),
+            &Draft {
+                title: None,
+                ..d.clone()
+            }
+        )
+        .is_none()
+    );
+    // no words, a title over its bound, a reach over the path bound
+    assert!(
+        Post::build(
+            &Writer::own(&bob, &km),
+            &Draft {
+                text: "",
+                ..d.clone()
+            }
+        )
+        .is_none()
+    );
+    let long = "t".repeat(129);
+    assert!(
+        Post::build(
+            &Writer::own(&bob, &km),
+            &Draft {
+                title: Some(&long),
+                ..d.clone()
+            }
+        )
+        .is_none()
+    );
+    assert!(
+        Post::build(
+            &Writer::own(&bob, &km),
+            &Draft {
+                up: 25,
+                ..d.clone()
+            }
+        )
+        .is_none()
+    );
+    // the words at their bound fit a post, and one byte more does not
+    let most = "w".repeat(8192);
+    let bytes = Post::build(
+        &Writer::own(&bob, &km),
+        &Draft {
+            text: &most,
+            ..d.clone()
+        },
+    )
+    .expect("fits");
+    assert!(bytes.len() <= 16_384, "{}", bytes.len());
+    let over = "w".repeat(8193);
+    assert!(
+        Post::build(
+            &Writer::own(&bob, &km),
+            &Draft {
+                text: &over,
+                ..d.clone()
+            }
+        )
+        .is_none()
+    );
+    // bytes that are no post do not parse
+    assert!(Post::parse(b"\xa0").is_err());
+    assert!(Post::parse(&vec![0; 16_385]).is_err());
+}
+
+#[test]
+fn a_device_holding_no_seed_signs_under_the_key_it_was_delegated() {
+    use rhtn_crypto::signer::DelegatedSigner;
+    let bob = test_identity("bob");
+    let km = bob.public.key_material();
+    let here = at(&[0x10]);
+    // the desktop's own transport key, and bob's delegation of it for a
+    // window the post is written in
+    let key = ed25519_dalek::SigningKey::from_bytes(&[7; 32]);
+    let public = key.verifying_key().to_bytes();
+    let delegation = rhtn_crypto::delegation::issue(&bob, &public, 1_800_000_000 - 60);
+    let device = DelegatedSigner::new(bob.public.keyhash, key);
+    let writer = Writer {
+        signer: &device,
+        material: &km,
+        delegation: Some(&delegation),
+    };
+    let bytes = Post::build(&writer, &draft(&here, "from the desktop")).expect("builds");
+    let p = Post::parse(&bytes).unwrap();
+    assert!(p.delegated);
+    assert_eq!(
+        p.writer, bob.public.keyhash,
+        "it is bob's post all the same"
+    );
+    assert_eq!(p.verify(), Ok(()));
+    // with the words at their bound it still fits a post
+    let most = "w".repeat(8192);
+    let full = Post::build(
+        &writer,
+        &Draft {
+            text: &most,
+            ..draft(&here, "")
+        },
+    )
+    .expect("fits");
+    assert!(full.len() <= 16_384, "{}", full.len());
+    // written outside the window the key was delegated for
+    let late = Post::build(
+        &writer,
+        &Draft {
+            written_at: 1_800_000_000 + 172_800,
+            ..draft(&here, "late")
+        },
+    )
+    .unwrap();
+    assert!(Post::parse(&late).unwrap().verify().is_err());
+    // the delegated key without its delegation is nobody's signature
+    let bare = Writer {
+        delegation: None,
+        ..writer
+    };
+    let unstapled = Post::build(&bare, &draft(&here, "bare")).unwrap();
+    assert!(Post::parse(&unstapled).unwrap().verify().is_err());
+    // and another identity's delegation does not make it bob's
+    let carol = test_identity("carol");
+    let hers = rhtn_crypto::delegation::issue(&carol, &public, 1_800_000_000 - 60);
+    let wrong = Writer {
+        delegation: Some(&hers),
+        ..Writer {
+            signer: &device,
+            material: &km,
+            delegation: None,
+        }
+    };
+    let crossed = Post::build(&wrong, &draft(&here, "crossed")).unwrap();
+    assert!(Post::parse(&crossed).unwrap().verify().is_err());
+}

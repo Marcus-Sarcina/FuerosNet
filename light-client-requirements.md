@@ -1209,7 +1209,12 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   names is its writer's own statement, and the arithmetic is yours.
 - **Check a post's signature before showing it as anyone's.** A node does not
   (`wire-format.md` §10.3), so a post is its writer's on the signature's word
-  and on nothing about how it reached you.
+  and on nothing about how it reached you. The post carries its writer's keys
+  (`wire-format.md` §10.3.1), so this needs nothing you already hold.
+- **On a device holding no seed, sign under the key you were delegated and
+  staple the delegation** (`wire-format.md` §10.3.1; design §23.3). A post is
+  not an act the signing table keeps for the identity key: it enters no
+  archive.
 - **Keep a pool of posts for each subnet, bounded by storage and not by
   time** [author, 2026-11-18], 50 MB unless the person sets another, and at
   the bound drop the oldest by the post's own date. Read that date as no later

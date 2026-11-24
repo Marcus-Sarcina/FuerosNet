@@ -9382,7 +9382,10 @@ nowhere else**: a device that performs ceremonies, and a desktop its holder
 restores from the phrase. An instance and a terminal instrument each carry a
 delegated transport credential instead, and so does a desktop paired from the
 phone (`wire-format.md` §14.3.3). **A desktop is brought up either way**
-[author, 2026-11-18]. Paired, it reads everything and signs nothing, and **it
+[author, 2026-11-18]. Paired, it reads everything and signs nothing but a post
+on a subnet's board, which enters no archive and which it signs under its
+delegated key with the delegation beside it (§14.4; `wire-format.md` §10.3.1),
+and **it
 holds every identity the phone held at the pairing** [author, 2026-11-23], each
 under a transport key of its own (`wire-format.md` §14.3.3); an identity removed
 from either device afterwards stays on the other. Restored,
