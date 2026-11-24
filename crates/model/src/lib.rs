@@ -374,6 +374,54 @@ pub enum Connection {
     Lost { from: Keyhash, reason: String },
 }
 
+/// **A thread on a subnet's board** (design §14.4;
+/// `light-client-requirements.md` §4.5), as the client's pool holds it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "ffi", derive(uniffi::Record))]
+pub struct BoardThread {
+    /// The hash of the post that began it, which is its name.
+    pub id: Hash32,
+    /// Its title, where the post that began it is held.
+    pub title: Option<String>,
+    /// Who began it, where that post is held.
+    pub began_by: Option<Keyhash>,
+    /// How many of its posts are held.
+    pub posts: u32,
+    /// How many of those the person has not been shown: the client's own
+    /// count, which no node is told.
+    pub unread: u32,
+    /// The date of the newest, in seconds.
+    pub latest: u64,
+}
+
+/// **A post on a subnet's board**, as its writer signed it and this
+/// client checked it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "ffi", derive(uniffi::Record))]
+pub struct BoardPost {
+    /// The hash it is known by.
+    pub hash: Hash32,
+    /// The thread it is in.
+    pub thread: Hash32,
+    /// Who wrote it, on the signature's word.
+    pub writer: Keyhash,
+    /// The alias the writer gave with it. Display only, never matched.
+    pub alias: Option<String>,
+    /// Whether this client wrote it.
+    pub mine: bool,
+    /// The words.
+    pub text: String,
+    /// Its date, read as no later than when it reached this client.
+    pub written_at: u64,
+    /// **Its reach, read from where this client stands** [author,
+    /// 2026-10-27]: levels up.
+    pub up: u32,
+    /// And levels down.
+    pub down: u32,
+    /// Whether the person has been shown it.
+    pub read: bool,
+}
+
 /// **Which noun changed**, for a client keeping a copy in step with the
 /// kernel [author, 2026-10-29: update logic that keeps them in sync].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -387,6 +435,7 @@ pub enum Noun {
     Profiles,
     Connection,
     Meetings,
+    Board,
 }
 
 #[cfg(test)]

@@ -124,6 +124,18 @@ pub trait Serving: Send + Sync {
     fn page<'a>(&'a self, _from: Keyhash, _body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
         Box::pin(async { None })
     }
+    /// A `BoardPost` from `from` (`wire-format.md` §10.3): a post that
+    /// member wrote, handed to the node on the session it holds. Whether
+    /// the frame left; there is no reply, and a node that carries no
+    /// board takes none.
+    fn board_post<'a>(&'a self, _from: Keyhash, _body: &'a [u8]) -> Answer<'a, bool> {
+        Box::pin(async { false })
+    }
+    /// A `BoardRequest` from `from` (`wire-format.md` §10.3): what that
+    /// member missed, or nothing where the node answers none.
+    fn board<'a>(&'a self, _from: Keyhash, _body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
+        Box::pin(async { None })
+    }
     /// A `ResourceRequest` from `from` (`wire-format.md` §11.1): the
     /// node's `ResourceResponse`, or nothing where it answers none.
     fn resource<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>>;
@@ -370,6 +382,18 @@ impl Serving for LocalNode {
             };
             view.catalog.answer(&from, body, &scopes)
         })
+    }
+
+    fn board_post<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, bool> {
+        Box::pin(async move {
+            let mut view = self.node.view.lock().unwrap();
+            let taken = view.receive_board(&self.node.adjacency, &from, body);
+            matches!(taken, rhtn_node::board::Taken::Carried { .. })
+        })
+    }
+
+    fn board<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
+        Box::pin(async move { self.node.view.lock().unwrap().answer_board(&from, body) })
     }
 
     fn page<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {

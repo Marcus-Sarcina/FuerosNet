@@ -1042,6 +1042,14 @@ impl Participant {
             self.storage.write(STATE.into(), vec![0]);
         }
 
+        // **the boards, where any were kept**: apart from the relations
+        // above, and bytes that do not read leave them empty, the nodes
+        // being asked again at the next attach
+        if let Some(bytes) = self.storage.read(rhtn_client::board::RELATION_BOARD.into()) {
+            let pools = self.handle.with_blocking(move |c| c.restore_board(&bytes));
+            tracing::info!(target: "pay", pools = ?pools, "pay.board.restored");
+        }
+
         // the kernel re-learned its contacts from the state; the transport
         // binds a dial by them (`wire-format.md` §9.1), so it learns them too
         self.pin_known();
@@ -1163,7 +1171,13 @@ fn save_relations(
     storage: &Arc<dyn crate::device::Storage>,
     written: &std::sync::Mutex<std::collections::HashMap<&'static str, [u8; 32]>>,
 ) -> Result<usize, String> {
-    let parts = handle.with_blocking(|c| c.durable_parts());
+    let parts = handle.with_blocking(|c| {
+        // the boards beside the relations a start needs: a state written
+        // before there was a board still opens
+        let mut parts = c.durable_parts();
+        parts.push((rhtn_client::board::RELATION_BOARD, c.board_part()));
+        parts
+    });
     let mut written = written.lock().unwrap_or_else(|e| e.into_inner());
     let mut wrote = 0usize;
     for (name, bytes) in parts {
@@ -1479,6 +1493,91 @@ impl Participant {
             self.net.browse(&self.handle, node)?;
             self.icons_at(node);
             self.save()
+        })
+    }
+
+    /// **The threads of a subnet's board** (`rhtn_model::BoardThread`;
+    /// `light-client-requirements.md` §4.5), the one with the newest post
+    /// first, from this client's own pool.
+    #[must_use]
+    pub fn board_threads(&self, subnet: Id) -> Vec<rhtn_model::BoardThread> {
+        self.call_plain("board_threads", || {
+            let Some(subnet) = keyhash(&subnet) else {
+                return Vec::new();
+            };
+            self.handle
+                .with_blocking(move |c| c.board_threads_held(&subnet))
+        })
+    }
+
+    /// **One thread's posts**, oldest first (`rhtn_model::BoardPost`),
+    /// each reach read from where this client stands.
+    #[must_use]
+    pub fn board_thread(&self, subnet: Id, thread: Id) -> Vec<rhtn_model::BoardPost> {
+        self.call_plain("board_thread", || {
+            let (Some(subnet), Some(thread)) = (keyhash(&subnet), keyhash(&thread)) else {
+                return Vec::new();
+            };
+            self.handle
+                .with_blocking(move |c| c.board_thread_held(&subnet, &thread))
+        })
+    }
+
+    /// **How many posts of a subnet's board the person has not been
+    /// shown**: this client's own count, which no node is told, and what
+    /// rolls into the subnet's count beside what waits at its resources.
+    #[must_use]
+    pub fn board_unread(&self, subnet: Id) -> u32 {
+        self.call_plain("board_unread", || {
+            keyhash(&subnet).map_or(0, |s| {
+                let n = self.handle.with_blocking(move |c| c.board_unread(&s));
+                u32::try_from(n).unwrap_or(u32::MAX)
+            })
+        })
+    }
+
+    /// The person has been shown a thread.
+    pub fn board_read(&self, subnet: Id, thread: Id) -> Result<(), Refused> {
+        self.call("board_read", || {
+            let (Some(subnet), Some(thread)) = (keyhash(&subnet), keyhash(&thread)) else {
+                return Err(Refused::new("a subnet and a thread are 32 bytes each"));
+            };
+            self.handle
+                .with_blocking(move |c| c.board_read(&subnet, &thread));
+            self.save()
+        })
+    }
+
+    /// **Begin a thread on a subnet's board**: a title, the words, and how
+    /// far it travels, `up` levels and `down`, `+2/-2` being what a shell
+    /// offers first. Signed here and handed to the node serving this
+    /// client in that subnet.
+    pub fn board_post(
+        &self,
+        subnet: Id,
+        up: u32,
+        down: u32,
+        title: String,
+        text: String,
+    ) -> Result<(), Refused> {
+        self.call("board_post", || {
+            self.board_write(
+                &subnet,
+                Some((u64::from(up), u64::from(down))),
+                None,
+                Some(title),
+                text,
+            )
+        })
+    }
+
+    /// **Continue a thread**: the words alone. A reply carries its
+    /// thread's reach, read from where this client stands, and is offered
+    /// none.
+    pub fn board_reply(&self, subnet: Id, thread: Id, text: String) -> Result<(), Refused> {
+        self.call("board_reply", || {
+            let thread = keyhash(&thread).ok_or_else(|| Refused::new("a thread is 32 bytes"))?;
+            self.board_write(&subnet, None, Some(thread), None, text)
         })
     }
 
@@ -4942,6 +5041,52 @@ pub fn network_point(
 }
 
 impl Participant {
+    /// **Write a post and hand it over** (`light-client-requirements.md`
+    /// §4.5): signed by the identity where this device holds its seed and
+    /// under its delegated key where it does not, kept in the pool, and
+    /// carried to the node serving this client in the subnet. A post the
+    /// node did not take is forgotten, so the pool never shows as posted
+    /// what nobody else holds.
+    fn board_write(
+        &self,
+        subnet: &[u8],
+        reach: Option<(u64, u64)>,
+        thread: Option<[u8; 32]>,
+        title: Option<String>,
+        text: String,
+    ) -> Result<(), Refused> {
+        let subnet = keyhash(subnet).ok_or_else(|| Refused::new("a subnet is 32 bytes"))?;
+        let device = self.net.delegated_signer();
+        let msgs = self
+            .handle
+            .with_blocking(move |c| {
+                let delegated = device.as_ref().map(|(signer, delegation)| {
+                    (
+                        signer as &dyn rhtn_crypto::signer::Sign1,
+                        delegation.as_slice(),
+                    )
+                });
+                c.board_post(delegated, &subnet, reach, thread, title.as_deref(), &text)
+            })
+            .map_err(Refused::new)?;
+        let post: Option<Vec<u8>> = msgs.iter().find_map(|m| match m {
+            rhtn_client::ceremony::Msg::BoardPost { bytes, .. } => {
+                rhtn_archive::board::BoardPost::decode(bytes)
+                    .ok()
+                    .map(|f| f.post)
+            }
+            _ => None,
+        });
+        if let Err(e) = self.net.board_carry(msgs) {
+            if let Some(post) = post {
+                self.handle
+                    .with_blocking(move |c| c.board_forget(&subnet, &post));
+            }
+            return Err(e);
+        }
+        self.save()
+    }
+
     /// **Ask each resource at `node` for its icon, once a run**
     /// (`rhtn_client::ceremony::ICON_PATH`) [author, 2026-11-23]: after a
     /// sweep, for what it found that has not been asked. An answer that is

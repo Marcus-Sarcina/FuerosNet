@@ -206,6 +206,25 @@ impl Serving for AttachedNode {
         })
     }
 
+    /// Frame 10 on stream 0 (`wire-format.md` §10.3): a post this client
+    /// wrote. Not a request: the answer is only whether the frame left,
+    /// and the post coming back numbered is what says the node took it.
+    fn board_post<'a>(&'a self, _from: Keyhash, body: &'a [u8]) -> Answer<'a, bool> {
+        Box::pin(async move {
+            let Some(s) = (self.session)() else {
+                return false;
+            };
+            s.send_control(rhtn_archive::board::FRAME_BOARD_POST, body)
+        })
+    }
+
+    fn board<'a>(&'a self, _from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
+        Box::pin(async move {
+            self.ask(rhtn_archive::board::REQUEST_BOARD, body.to_vec())
+                .await
+        })
+    }
+
     /// Frame 5 on stream 0, which is the one channel a transaction
     /// travels on (`wire-format.md` §10.1).  Not a request: §10.1.3
     /// defines no acknowledgement and the answer here is only whether the
@@ -254,7 +273,31 @@ pub fn follow(
     mut frames: tokio::sync::mpsc::UnboundedReceiver<(u64, Vec<u8>)>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
+        // **a session just up is one to catch the board up on**
+        // (`light-client-requirements.md` §4.5): from the last number this
+        // node gave, and again while it says more is held
+        let asking = handle.with(move |c| c.board_ask(node)).await;
+        if !asking.is_empty() {
+            let courier = courier.clone();
+            tokio::spawn(async move {
+                courier.carry(asking).await;
+                courier.wrote();
+            });
+        }
         while let Some((frame_type, body)) = frames.recv().await {
+            // **a post on the subnet's board** (`wire-format.md` §10.3):
+            // into the pool, and the state written as after any arrival
+            if frame_type == rhtn_archive::board::FRAME_BOARD_POST {
+                let took = handle.with(move |c| c.board_arrived(node, &body)).await;
+                tracing::info!(
+                    target: "pay",
+                    node = %rhtn_client::diag::id8(&node),
+                    took = ?took,
+                    "pay.board.arrived"
+                );
+                courier.wrote();
+                continue;
+            }
             if frame_type == rhtn_archive::catalog::FRAME_PAGE_CHANGED {
                 let msgs = handle.with(move |c| c.browse_at(node)).await;
                 let carried = courier.carry(msgs).await;
@@ -317,6 +360,8 @@ pub fn follow(
                 })
                 .await;
         }
+        // the session ended: the next one catches the board up again
+        handle.with(move |c| c.board_detached(&node)).await;
     })
 }
 

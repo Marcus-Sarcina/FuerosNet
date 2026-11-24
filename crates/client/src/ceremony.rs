@@ -313,6 +313,23 @@ pub enum Msg {
         /// The encoded request.
         bytes: Vec<u8>,
     },
+    /// A `BoardPost` (`wire-format.md` §10.3), to the node named: a post
+    /// this client wrote, on the session it holds there. No reply.
+    BoardPost {
+        /// The node serving this client in the post's subnet.
+        node: Keyhash,
+        /// The encoded frame body.
+        bytes: Vec<u8>,
+    },
+    /// A `BoardRequest` (`wire-format.md` §10.3), to the node named: what
+    /// this client missed there, the reply taken by
+    /// [`Client::take_board_reply`].
+    BoardAsk {
+        /// The node asked.
+        node: Keyhash,
+        /// The encoded request.
+        bytes: Vec<u8>,
+    },
     /// A `ResourceRequest` (`wire-format.md` §11.1), to the node hosting
     /// the resource it names.
     ResourceRequest {
@@ -420,7 +437,9 @@ impl Msg {
             Msg::Payload { bytes, .. }
             | Msg::Sealed { sealed: bytes, .. }
             | Msg::ResourceRequest { bytes, .. }
-            | Msg::CatalogPage { bytes, .. } => bytes.clone(),
+            | Msg::CatalogPage { bytes, .. }
+            | Msg::BoardPost { bytes, .. }
+            | Msg::BoardAsk { bytes, .. } => bytes.clone(),
             Msg::NodeKeyRequest(v) => v.concat(),
             Msg::RecoveryProposal { block, .. } => block.clone(),
             Msg::Consent { consent, .. } => consent.clone(),
@@ -773,6 +792,9 @@ pub struct Client {
     /// portion — its own entries and those of the clients it serves
     /// (design §11.5), not a directory of anything wider.
     pub catalog: crate::catalog::View,
+    /// **The boards this client keeps**, a pool a subnet
+    /// (`light-client-requirements.md` §4.5).
+    pub boards: crate::board::Boards,
     browsing: Option<(Keyhash, crate::catalog::Sweep)>,
     /// Archive fetches outstanding, by subject: the nonce sent and the
     /// head asked for.  One at a time per subject, which is what lets a
@@ -1131,6 +1153,7 @@ impl Client {
             outbox: Vec::new(),
             changed: std::collections::BTreeSet::new(),
             catalog: crate::catalog::View::default(),
+            boards: crate::board::Boards::default(),
             browsing: None,
             fetching: BTreeMap::new(),
             key_retry: BTreeMap::new(),

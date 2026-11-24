@@ -640,6 +640,33 @@ impl Net {
         Ok(())
     }
 
+    /// **The key this device signs a board post under where it holds no
+    /// seed** (`wire-format.md` §10.3.1; design §23.3): its delegated
+    /// transport key, and the delegation in force to staple. Nothing on a
+    /// device that presents the identity's own key.
+    pub(crate) fn delegated_signer(
+        &self,
+    ) -> Option<(rhtn_crypto::signer::DelegatedSigner, Vec<u8>)> {
+        let c = self.me.credential()?;
+        Some((c.signer(), c.current()?.raw))
+    }
+
+    /// **Hand a post this client wrote to the node serving it**
+    /// (`wire-format.md` §10.3): the frame carried on the session held
+    /// there. A frame that did not leave is an error, and the caller
+    /// forgets the post.
+    pub(crate) fn board_carry(&self, msgs: Vec<rhtn_client::ceremony::Msg>) -> Result<(), Refused> {
+        let courier = self.attached_courier()?;
+        let carried = self.rt().block_on(async move { courier.carry(msgs).await });
+        if carried.refused.is_empty() {
+            Ok(())
+        } else {
+            Err(Refused::new(
+                "the node serving that subnet did not take the post",
+            ))
+        }
+    }
+
     /// The cached sibling list as it goes to storage
     /// (`light-client-requirements.md` §4: persisted across restarts,
     /// because it cannot be discovered once the serving node is dark).

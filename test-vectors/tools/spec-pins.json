@@ -2,7 +2,7 @@
  "specs": {
   "wire-format.md": "82f03ede8c263c0c76247e1e5a32bd296e21ff1cf8f73cfaa513c6ae46efcf47",
   "network-design.md": "61197c5230882259fc25d8cbb3d363476da7ab93d1be1b67db016e9b0c025921",
-  "light-client-requirements.md": "8cb191ea2bd212cc52a4a590418475a6d60ae9788f4b61d588473cf04496dc7a"
+  "light-client-requirements.md": "cbfc8aca2343024b3c463fdccd548b2e2a924ea5c87ff7264c8827b37facf6ee"
  },
  "generator": "4e391820576b72457c610537cfb27eee2bdb61f94d757a1adddb640ed96abe07",
  "verifier": "ceabb4036f818445cb0284de020399584702102f5beb2c9b65ed6b8768080b7c",
@@ -11,14 +11,14 @@
   "cryptography": "41.0.7"
  },
  "outputs": {
-  "keys.md": "c67f9a8ca3955d1af9861f90bce06ec5a40f9c1141fe9358c7d624334cc1ceb9",
-  "primitives.md": "e3da5ec27940fa897860dadf27f3efca34ac834a2a13cad36448537294b66967",
-  "transactions.md": "fd3440d2ff05f83ab38d61409c5fbb36a6ebfeb8cf773151cf9995b1f2f240ee",
-  "records.md": "7b5f36fbca292ad5f2a035b355be90323f58d9b5b26578a1b06de2249dd221ed",
-  "verifier-selection.md": "3d366768cd9291d1bbd980eb371d1b55a650e5b2d8fa97d74b55bbfd53d929c0",
-  "messages.md": "f27408117ba532170b8f854c6b6d137929cbc07d3789759b2ed39e69531647ac",
-  "local-interfaces.md": "02b99449249d073ff4905ff87425bf686384bda754ed667dd7558787604d3414",
-  "corpus.json": "dc2698ea3f09c72c643ec259c94e75536404f20f4395935dd83c7139fc133823",
+  "keys.md": "ac259a2a1dca8d23460ed5b268cfbc26902cdf685c80019319e9e8a7f881729c",
+  "primitives.md": "0d32ee256c0336124e36365ff35aab1c37af6b2dbd7d7c5337881b089b16bf81",
+  "transactions.md": "371d210756111d764df72c0f90ffd9f4bf68a78c61c05d97ed7dab1bf3d90aef",
+  "records.md": "f02bf42ca085ec8baae9553eb7296fb5e3aa971324521f3ead85ed67a50b7db4",
+  "verifier-selection.md": "af5319960d2ff4291b866ef25e23b1c2f3e32adb14423ad0793c2f9db6b88e95",
+  "messages.md": "a446f8156105224e8c1efcc8f44678635627767899de01d0d25747ec443593ac",
+  "local-interfaces.md": "7bf721653cda69cf2f680626260b27680923c9c95c91566b06692a7837b3184f",
+  "corpus.json": "d8bbf9fe478c72396d079dfa711af81247790917cf4decff867042f7bb228caa",
   "README.md": "e056b2abf09c5f469db98d05b3708b8b3e6432b0f4a9af8fea4f4328ee05002f",
   "negative-vectors.md": "8776c948e3db1bc2dea6ffbbf0ecf793ecc498a7d4d17ad155f255e3fe12aa09"
  }

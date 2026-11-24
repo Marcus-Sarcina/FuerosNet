@@ -145,6 +145,13 @@ impl Pool {
         self.posts.len()
     }
 
+    /// Drop one post, by its hash.
+    pub fn forget(&mut self, hash: &[u8; 32]) {
+        if let Some(gone) = self.posts.remove(hash) {
+            self.bytes -= gone.post.bytes.len();
+        }
+    }
+
     /// Whether nothing is held.
     #[must_use]
     pub fn is_empty(&self) -> bool {
@@ -327,4 +334,352 @@ pub fn reach_from(up: u64, down: u64, writer: &Locator, reader: &Locator) -> (u6
         clamp(i128::from(up) - above),
         clamp(i128::from(down) + above),
     )
+}
+
+// ------------------------------------------------- the client's own boards
+
+use crate::ceremony::{Client, Msg};
+use rhtn_archive::board::{BoardPost, BoardReply, BoardRequest, Draft, Writer};
+use rhtn_crypto::signer::Sign1;
+
+/// The reach a client offers before the writer changes it (design §21)
+/// [author, 2026-10-27].
+pub const DEFAULT_REACH: (u64, u64) = (2, 2);
+
+/// The version word the board relation carries first.
+const BOARD_VERSION: u64 = 1;
+
+/// The name the board relation is kept under: the pools, a subnet each.
+pub const RELATION_BOARD: &str = "board";
+
+/// **The boards a client keeps**, a pool a subnet, and the askings it has
+/// in flight.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Boards {
+    pools: BTreeMap<Txid, Pool>,
+    /// The nonce of the asking each node has not yet answered.
+    asked: BTreeMap<Keyhash, [u8; 16]>,
+}
+
+impl Boards {
+    fn pool(&mut self, subnet: &Txid) -> &mut Pool {
+        self.pools
+            .entry(*subnet)
+            .or_insert_with(|| Pool::new(POOL_BYTES))
+    }
+}
+
+/// A key a device holding no seed signs a post under, with its
+/// delegation: what the transport holds and the kernel does not.
+pub type Delegated<'a> = (&'a dyn Sign1, &'a [u8]);
+
+impl Client {
+    /// **The node that carries this client's board in `subnet`**: the one
+    /// serving it there, or its own where it is the root. Nothing where
+    /// this client holds no attachment to it.
+    #[must_use]
+    pub fn board_node(&self, subnet: &Txid) -> Option<Keyhash> {
+        let node = self.board_node_of(subnet);
+        self.payload.attachments.contains(&node).then_some(node)
+    }
+
+    fn board_node_of(&self, subnet: &Txid) -> Keyhash {
+        self.serving_in(subnet).unwrap_or(self.public.keyhash)
+    }
+
+    /// The subnet whose board `node` carries for this client.
+    fn board_subnet(&self, node: &Keyhash) -> Option<Txid> {
+        self.subnets()
+            .into_iter()
+            .find(|s| self.board_node_of(s) == *node)
+    }
+
+    /// **Write a post and hand it to the node serving `subnet`**
+    /// (`light-client-requirements.md` §4.5). A post beginning a thread
+    /// takes a title and the reach given, `+2/-2` where none is; one
+    /// continuing a thread carries that thread's reach, read from where
+    /// this client stands, and is offered none. Signed by the identity
+    /// where this device holds its seed, and otherwise under the key it
+    /// was delegated.
+    pub fn board_post(
+        &mut self,
+        delegated: Option<Delegated<'_>>,
+        subnet: &Txid,
+        reach: Option<(u64, u64)>,
+        thread: Option<[u8; 32]>,
+        title: Option<&str>,
+        text: &str,
+    ) -> Result<Vec<Msg>, String> {
+        let position = self
+            .position_in(subnet)
+            .ok_or("this identity holds no position in that subnet")?;
+        let node = self
+            .board_node(subnet)
+            .ok_or("not attached to the node serving that subnet")?;
+        let (up, down) = match thread {
+            None => reach.unwrap_or(DEFAULT_REACH),
+            Some(id) => {
+                // every post of a thread carries its reach, each from
+                // where its writer stood: any one of them says the band
+                let pool = self.boards.pool(subnet);
+                let held = pool.thread(&id);
+                let any = held
+                    .first()
+                    .ok_or("no post of that thread is held to take its reach from")?;
+                reach_from(any.post.up, any.post.down, &any.post.position, &position)
+            }
+        };
+        let material = self.public.key_material();
+        let alias = self
+            .own_alias(subnet)
+            .or_else(|| self.default_alias().map(str::to_string));
+        let draft = Draft {
+            position: &position,
+            up,
+            down,
+            written_at: self.now_s(),
+            thread,
+            title,
+            text,
+            alias: alias.as_deref(),
+        };
+        let bytes = match (self.signer(), delegated) {
+            (Ok(identity), _) => Post::build(&Writer::own(identity, &material), &draft),
+            (Err(_), Some((signer, delegation))) => Post::build(
+                &Writer {
+                    signer,
+                    material: &material,
+                    delegation: Some(delegation),
+                },
+                &draft,
+            ),
+            (Err(_), None) => return Err("this device holds no key to sign a post with".into()),
+        }
+        .ok_or("the post is out of bounds: a title or words too long, or none")?;
+        let (me, now) = (self.public.keyhash, self.now_s());
+        self.boards.pool(subnet).take(subnet, &me, &bytes, now);
+        self.changed.insert(rhtn_model::Noun::Board);
+        Ok(vec![Msg::BoardPost {
+            node,
+            bytes: BoardPost {
+                up,
+                down,
+                post: bytes,
+                number: None,
+            }
+            .encode(),
+        }])
+    }
+
+    /// **A `BoardPost` arrived on the session with `node`**
+    /// (`wire-format.md` §10.3): one for this member carries the node's
+    /// number and is taken into the pool of the subnet that node serves.
+    /// A copy between nodes, which carries none, is not a client's.
+    pub fn board_arrived(&mut self, node: Keyhash, body: &[u8]) -> Option<Took> {
+        let frame = BoardPost::decode(body).ok()?;
+        let number = frame.number?;
+        let subnet = self.board_subnet(&node)?;
+        let (me, now) = (self.public.keyhash, self.now_s());
+        let pool = self.boards.pool(&subnet);
+        let took = pool.take(&subnet, &me, &frame.post, now);
+        pool.delivered(&node, number);
+        if took == Took::New {
+            self.changed.insert(rhtn_model::Noun::Board);
+        }
+        Some(took)
+    }
+
+    /// **Ask `node` for what this client missed** (`wire-format.md` §10.3
+    /// request type 17), from the last number it gave: on attaching, and
+    /// again while it says more is held. Nothing where that node carries
+    /// no board of this client's.
+    pub fn board_ask(&mut self, node: Keyhash) -> Vec<Msg> {
+        let Some(subnet) = self.board_subnet(&node) else {
+            return Vec::new();
+        };
+        let nonce = self.nonce();
+        let after = self.boards.pool(&subnet).cursor(&node);
+        self.boards.asked.insert(node, nonce);
+        vec![Msg::BoardAsk {
+            node,
+            bytes: BoardRequest { nonce, after }.encode(),
+        }]
+    }
+
+    /// **Take `node`'s answer**: each post into the pool, the cursor to
+    /// where the reply read through, and the next asking where more is
+    /// held. A reply this client did not ask that node for is not taken.
+    pub fn take_board_reply(&mut self, node: Keyhash, bytes: &[u8]) -> Result<Vec<Msg>, String> {
+        let reply = BoardReply::decode(bytes)?;
+        if self.boards.asked.get(&node) != Some(&reply.nonce) {
+            return Err("a reply this client did not ask that node for".into());
+        }
+        self.boards.asked.remove(&node);
+        let subnet = self
+            .board_subnet(&node)
+            .ok_or("that node carries no board of this client's")?;
+        let (me, now) = (self.public.keyhash, self.now_s());
+        let pool = self.boards.pool(&subnet);
+        let mut new = false;
+        for (_, post) in &reply.posts {
+            new |= pool.take(&subnet, &me, post, now) == Took::New;
+        }
+        pool.caught_up(&node, reply.through, reply.more);
+        if new {
+            self.changed.insert(rhtn_model::Noun::Board);
+        }
+        Ok(if reply.more {
+            self.board_ask(node)
+        } else {
+            Vec::new()
+        })
+    }
+
+    /// The session with `node` ended: the next one asks again.
+    pub fn board_detached(&mut self, node: &Keyhash) {
+        self.boards.asked.remove(node);
+        for pool in self.boards.pools.values_mut() {
+            pool.detached(node);
+        }
+    }
+
+    /// The threads of `subnet`'s board, the one with the newest post first.
+    #[must_use]
+    pub fn board_threads(&self, subnet: &Txid) -> Vec<Thread> {
+        self.boards
+            .pools
+            .get(subnet)
+            .map(Pool::threads)
+            .unwrap_or_default()
+    }
+
+    /// One thread's posts, oldest first, each with its reach as this
+    /// client reads it from where it stands in the subnet.
+    #[must_use]
+    pub fn board_thread(&self, subnet: &Txid, id: &[u8; 32]) -> Vec<(Kept, (u64, u64))> {
+        let Some(pool) = self.boards.pools.get(subnet) else {
+            return Vec::new();
+        };
+        let here = self.position_in(subnet);
+        pool.thread(id)
+            .into_iter()
+            .map(|k| {
+                let reach = match &here {
+                    Some(h) => reach_from(k.post.up, k.post.down, &k.post.position, h),
+                    None => (k.post.up, k.post.down),
+                };
+                (k.clone(), reach)
+            })
+            .collect()
+    }
+
+    /// The person has been shown a thread.
+    pub fn board_read(&mut self, subnet: &Txid, id: &[u8; 32]) {
+        if self.boards.pool(subnet).mark_read(id) > 0 {
+            self.changed.insert(rhtn_model::Noun::Board);
+        }
+    }
+
+    /// How many posts of `subnet`'s board the person has not been shown.
+    #[must_use]
+    pub fn board_unread(&self, subnet: &Txid) -> usize {
+        self.boards.pools.get(subnet).map_or(0, Pool::unread)
+    }
+
+    /// **The board relation as it is kept between runs**: every pool,
+    /// under its subnet. Kept apart from the relations a start needs, so
+    /// a state written before there was a board still opens.
+    #[must_use]
+    pub fn board_part(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        emit_array_head(&mut out, 2);
+        emit_uint(&mut out, BOARD_VERSION);
+        emit_array_head(&mut out, self.boards.pools.len());
+        for (subnet, pool) in &self.boards.pools {
+            emit_array_head(&mut out, 2);
+            emit_bstr(&mut out, subnet);
+            emit_bstr(&mut out, &pool.encode());
+        }
+        out
+    }
+
+    /// Take the board relation back. Bytes that do not read leave the
+    /// boards empty, and the nodes are asked again.
+    pub fn restore_board(&mut self, b: &[u8]) -> Option<usize> {
+        let item = parse_all(b).ok()?;
+        let Item::Array(parts) = &item else {
+            return None;
+        };
+        let [Item::Uint(BOARD_VERSION), Item::Array(pools)] = parts.as_slice() else {
+            return None;
+        };
+        let mut read = BTreeMap::new();
+        for p in pools {
+            let Item::Array(f) = p else { return None };
+            let [Item::Bytes(subnet), Item::Bytes(pool)] = f.as_slice() else {
+                return None;
+            };
+            read.insert(
+                <[u8; 32]>::try_from(&b[subnet.clone()]).ok()?,
+                Pool::decode(POOL_BYTES, &b[pool.clone()])?,
+            );
+        }
+        self.boards.pools = read;
+        Some(self.boards.pools.len())
+    }
+}
+
+// ------------------------------------------------------- the model's nouns
+
+impl Client {
+    /// The threads of `subnet`'s board as the model's noun
+    /// (`rhtn_model::BoardThread`), the one with the newest post first.
+    #[must_use]
+    pub fn board_threads_held(&self, subnet: &Txid) -> Vec<rhtn_model::BoardThread> {
+        let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
+        self.board_threads(subnet)
+            .into_iter()
+            .map(|t| rhtn_model::BoardThread {
+                id: t.id,
+                title: t.title,
+                began_by: t.began_by,
+                posts: count(t.posts),
+                unread: count(t.unread),
+                latest: t.latest,
+            })
+            .collect()
+    }
+
+    /// One thread's posts as the model's noun (`rhtn_model::BoardPost`),
+    /// oldest first, each reach read from where this client stands.
+    #[must_use]
+    pub fn board_thread_held(&self, subnet: &Txid, id: &[u8; 32]) -> Vec<rhtn_model::BoardPost> {
+        let count = |n: u64| u32::try_from(n).unwrap_or(u32::MAX);
+        let me = self.public.keyhash;
+        self.board_thread(subnet, id)
+            .into_iter()
+            .map(|(k, (up, down))| rhtn_model::BoardPost {
+                hash: k.hash,
+                thread: k.post.thread_id(),
+                writer: k.post.writer,
+                alias: k.post.alias.clone(),
+                mine: k.post.writer == me,
+                text: k.post.text.clone(),
+                written_at: k.dated,
+                up: count(up),
+                down: count(down),
+                read: k.read,
+            })
+            .collect()
+    }
+
+    /// **Forget a post this client wrote and could not hand over**: the
+    /// node did not take the frame, so nobody else holds it and the pool
+    /// does not show it as posted.
+    pub fn board_forget(&mut self, subnet: &Txid, post: &[u8]) {
+        if let Some(pool) = self.boards.pools.get_mut(subnet) {
+            pool.forget(&Post::hash(post));
+            self.changed.insert(rhtn_model::Noun::Board);
+        }
+    }
 }

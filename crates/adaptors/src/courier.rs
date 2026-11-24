@@ -284,7 +284,7 @@ impl Courier {
     }
 
     /// Write what an arrival changed, where a writer is wired.
-    fn wrote(&self) {
+    pub(crate) fn wrote(&self) {
         let w = self.wrote.lock().unwrap().clone();
         if let Some(w) = w {
             w();
@@ -979,6 +979,42 @@ impl Courier {
                                 }
                             }
                             None => out.refused.push(Msg::CatalogQuery(b)),
+                        }
+                    }
+                    // **a post this client wrote**, on the session held
+                    // with the node serving it there (`wire-format.md`
+                    // §10.3): a frame with no reply
+                    Msg::BoardPost { node, bytes } => {
+                        let sent = match me.serving_for(&node) {
+                            Some(s) => s.board_post(me.me(), &bytes).await,
+                            None => false,
+                        };
+                        tracing::debug!(target: "pay", node = %hex4(&node), sent, "pay.board.post");
+                        if !sent {
+                            out.refused.push(Msg::BoardPost { node, bytes });
+                        }
+                    }
+                    // **what this client missed there**: the reply taken,
+                    // and the next asking carried where the node holds more
+                    Msg::BoardAsk { node, bytes } => {
+                        let answered = match me.serving_for(&node) {
+                            Some(s) => s.board(me.me(), &bytes).await,
+                            None => None,
+                        };
+                        match answered {
+                            Some(reply) => {
+                                let more = me
+                                    .handle
+                                    .with(move |c| c.take_board_reply(node, &reply))
+                                    .await;
+                                tracing::debug!(target: "pay", node = %hex4(&node), more = ?more.as_ref().map(Vec::len), "pay.board.caught_up");
+                                if let Ok(more) = more
+                                    && !more.is_empty()
+                                {
+                                    out.absorb(me.carry(more).await);
+                                }
+                            }
+                            None => out.refused.push(Msg::BoardAsk { node, bytes }),
                         }
                     }
                     // the page beside it, over the session held with the
