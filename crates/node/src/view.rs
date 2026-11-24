@@ -112,6 +112,10 @@ pub struct NodeView {
     /// The position each patron in the memo table last gave for itself:
     /// what a downward memo descends by (`wire-format.md` §10.2.4).
     pub memo_positions: BTreeMap<Keyhash, Locator>,
+    /// **The shape of this node's downline, by position** (design §15.2.2;
+    /// `wire-format.md` §10.2.5): required where the memo table is
+    /// optional, and holding nobody's identity.
+    pub downline: crate::downline::Downline,
     /// Light clients attached to this node (design §14.1.2).
     pub attached: BTreeSet<Keyhash>,
     /// Peering edges (design §6.3): adjacency for the flood, and no part of
@@ -190,6 +194,7 @@ impl NodeView {
             memo_table: BTreeMap::new(),
             keeps_memo_table: true,
             memo_positions: BTreeMap::new(),
+            downline: crate::downline::Downline::new(),
             attached: BTreeSet::new(),
             peers: BTreeSet::new(),
             serving_node: None,
@@ -368,6 +373,11 @@ impl NodeView {
                 timestamp,
             },
         );
+        // the downline table's first level is this row (design §15.2.2)
+        if let Ok(slot) = u8::try_from(slot) {
+            self.downline
+                .settle(&[], slot, occupant.is_some(), timestamp);
+        }
     }
 
     /// Which slot `occupant` holds, where it holds one.

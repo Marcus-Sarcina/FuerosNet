@@ -1797,3 +1797,102 @@ fn a_node_knowing_nobody_learns_the_subnet_from_its_operators_replay() {
     assert!(n.store.pending().is_empty(), "and nothing is left waiting");
     assert!(settled > 0, "the settling is what released the held one");
 }
+
+// ------------------------------------------------------ the downline table
+
+#[test]
+fn the_downline_table_is_settled_from_the_nodes_own_slots_and_bindings() {
+    let mut s = scene();
+    s.n.sync_downline();
+    // S1 and S2 in N's own slots, and S3 beneath S1 from the binding N holds
+    assert!(s.n.downline.filled(&[0]) && s.n.downline.filled(&[1]));
+    assert_eq!(s.n.downline.len(), 3);
+    assert_eq!(s.n.downline.depth(&[]), 2);
+    assert_eq!(s.n.downline.depth(&[0]), 1);
+    assert_eq!(s.n.downline.depth(&[1]), 0);
+    // who runs a node is read from the endpoint records N holds: S1 and S2
+    // do, S3 does not
+    assert!(s.n.downline.runs_node(&[0]) && s.n.downline.runs_node(&[1]));
+    assert_eq!(s.n.downline.nearest_nodes(), vec![vec![0], vec![1]]);
+    assert_eq!(s.n.downline.node_depth(&[]), 1);
+    assert_eq!(s.n.downline.reach(&[]), 3);
+    // a subordinate leaving takes its branch out of the table with it
+    s.n.set_slot(0, None, s.w.clock + 10);
+    assert_eq!(s.n.downline.len(), 1);
+    assert_eq!(s.n.downline.depth(&[]), 1);
+}
+
+#[test]
+fn a_memo_passing_through_fills_the_downline_table_and_names_nobody() {
+    let mut s = scene();
+    s.n.sync_downline();
+    let t = s.w.clock;
+    // from S1's branch, about a slot four levels beneath N, of a patron N
+    // holds no record of: N is at [0], the patron at [0,0,4,2]
+    let fill = memo_at("w5", &[0, 0, 4, 2], 7, t, Some("w6"));
+    assert_eq!(
+        s.n.receive_memo(&*s.fab, &kh("carol"), &fill.encode()),
+        MemoOutcome::Forwarded { to: kh("alice") }
+    );
+    assert!(s.n.downline.filled(&[0, 4, 2, 7]));
+    assert_eq!(s.n.downline.depth(&[]), 4);
+    // nothing marks a node that deep, and design §3.3 puts one no more
+    // than two levels above the deepest position
+    assert_eq!(s.n.downline.node_depth(&[]), 2);
+    assert_eq!(s.n.downline.reach(&[]), 4);
+    // the table went to disk as paths, a letter and a time
+    let text = s.n.downline.encode();
+    assert!(text.contains("0427 f "));
+    assert!(
+        text.bytes()
+            .all(|b| b.is_ascii_digit() || matches!(b, b' ' | b'\n' | b'f' | b'n' | b'e'))
+    );
+    // an earlier memo arriving late changes nothing, and the emptying one
+    // takes the position out
+    let late = memo_at("w5", &[0, 0, 4, 2], 7, t - 5, None);
+    s.n.receive_memo(&*s.fab, &kh("carol"), &late.encode());
+    assert!(s.n.downline.filled(&[0, 4, 2, 7]));
+    let gone = memo_at("w5", &[0, 0, 4, 2], 7, t + 5, None);
+    s.n.receive_memo(&*s.fab, &kh("carol"), &gone.encode());
+    assert!(!s.n.downline.filled(&[0, 4, 2, 7]));
+    assert_eq!(s.n.downline.depth(&[]), 2);
+}
+
+#[test]
+fn a_memo_is_a_hint_to_the_downline_table_and_is_read_as_one() {
+    let mut s = scene();
+    s.n.sync_downline();
+    let t = s.w.clock;
+    let before = s.n.downline.clone();
+    // S2 names a slot in S1's branch: a memo travels up the patron chain,
+    // so one from S2 says nothing of a position that is not beneath S2
+    let other = memo_at("w5", &[0, 0, 4], 7, t, Some("w6"));
+    s.n.receive_memo(&*s.fab, &kh("w1"), &other.encode());
+    assert_eq!(
+        s.n.downline, before,
+        "another branch's positions are not S2's to state"
+    );
+    // a slot N holds a signed binding for is settled by that record: a
+    // memo emptying S3's slot under S1, dated ahead, moves nothing
+    let slot =
+        s.n.table
+            .bindings()
+            .iter()
+            .find(|b| b.node == kh("w2"))
+            .and_then(|b| b.slot)
+            .expect("S3 is bound under S1");
+    let forged = memo_at("carol", &[0, 0], u64::from(slot), t + 9_999, None);
+    s.n.receive_memo(&*s.fab, &kh("carol"), &forged.encode());
+    assert_eq!(
+        s.n.downline, before,
+        "the binding is signed and the memo is not"
+    );
+    // and a memo naming one of N's own slots is answered from N's own rows
+    let mine = memo_at("bob", &[0], 1, t + 9_999, None);
+    s.n.receive_memo(&*s.fab, &kh("w1"), &mine.encode());
+    assert!(s.n.downline.filled(&[1]));
+    // a memo from another subnet reaches no table at all
+    let foreign = memo("w5", "w6", 3, t, Some("w2"));
+    s.n.receive_memo(&*s.fab, &kh("carol"), &foreign.encode());
+    assert_eq!(s.n.downline, before);
+}

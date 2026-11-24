@@ -309,3 +309,27 @@ already settled and I had lost them.
   the cap to the position a copy arrived from, which would make the cap hold
   against a node that does not apply it for its own members. The ruling is
   the first node only.
+
+## Built 2026-11-23: the downline table
+
+`crates/node/src/downline.rs`, wired into `NodeView` (`downline`), kept in a
+file `downline` beside the derived state and read back at start.
+
+- **Sources**: the node's own slots (`set_slot`), the bindings its table
+  holds beneath them (`sync_downline`, after every stored transaction and
+  endpoint record, and after a rebuild or restore), and every memo passing
+  through (`note_downline`, in `route_memo` before any routing decision).
+- **A memo is read as a hint**: not applied to one of the node's own slots,
+  not applied to a slot the table holds a signed binding for, and from below
+  only about the branch it came up (`path_to` the sender must prefix it).
+- **Node marks** come from `table.is_infra`, which endpoint records set.
+- **Not built**: nothing reads it yet. The board (frame 10, request 17, the
+  queue, the client pool, both UIs) is next.
+
+**Found on the way, not fixed**: no code originates a memo for a slot of a
+light-client patron. `originate_memo` fires for the node's own slots only,
+and the client crate sends none. Design section 15.2 has a memo for every
+membership change, sent through the nearest infrastructure ancestor
+(functional test TOP-023). The effect here is that an upstream node does not
+see the light tail beneath a downstream node, so depth reads up to two levels
+short and never long.

@@ -51,6 +51,9 @@ pub mod propagation;
 /// across a restart.
 pub mod queue;
 
+/// The downline table: which positions beneath this node are filled and
+/// which of them run a node, holding nobody's identity (design §15.2.2).
+pub mod downline;
 /// Where the rows asserted about this node's horizon are kept: the
 /// table's own persistence, as against the topology store's seen-set.
 pub mod horizon;

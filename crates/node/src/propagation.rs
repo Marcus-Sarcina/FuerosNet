@@ -434,6 +434,8 @@ impl NodeView {
                     // removed. None of the four moments is a request,
                     // which is why this is here and not in `serve`.
                     self.expand_grants();
+                    // and the downline's shape with it (design §15.2.2)
+                    self.sync_downline();
                 }
                 // **an endpoint record is what says its subject is
                 // infrastructure** (`wire-format.md` §7.6: published by
@@ -446,6 +448,7 @@ impl NodeView {
                     && let Ok(er) = EndpointRecord::parse(object)
                 {
                     self.table.mark_infra(er.node);
+                    self.sync_downline();
                 }
                 // a delegation that just entered is what an acknowledgement
                 // held aside for it was waiting on (`wire-format.md` §7.5)
@@ -759,6 +762,7 @@ impl NodeView {
         }
         self.mark_infrastructure();
         self.adopt_own_position();
+        self.sync_downline();
         Rebuilt {
             records: records.len(),
         }
@@ -1101,6 +1105,9 @@ impl NodeView {
         if memo.position.anchor != self.anchor() {
             return MemoOutcome::ForeignSubnet;
         }
+        // a memo passing through, in either direction, that names a slot
+        // beneath this node is applied to the downline table (§10.2.5)
+        self.note_downline(from, &memo);
         let me = self.me();
         // "is this me?" — the cycle check, on the memo alone, at any depth
         if memo.patron == me {
@@ -1171,6 +1178,140 @@ impl NodeView {
                 MemoOutcome::StoppedAtRoot
             }
             (None, _) => MemoOutcome::Unroutable,
+        }
+    }
+
+    /// Where `pos` stands beneath this node: the slot indices from this
+    /// node's own position down to it.  Nothing for a position that is not
+    /// at or beneath this one in its subnet.
+    fn beneath_me(&self, pos: &Locator) -> Option<Vec<u8>> {
+        if pos.anchor != self.position.anchor {
+            return None;
+        }
+        let mine = Path {
+            bytes: self.position.path.clone(),
+            nibbles: self.position.nibbles,
+        }
+        .indices();
+        let theirs = Path {
+            bytes: pos.path.clone(),
+            nibbles: pos.nibbles,
+        }
+        .indices();
+        theirs.strip_prefix(mine.as_slice()).map(<[u8]>::to_vec)
+    }
+
+    /// Where `k` stands beneath this node, by this node's own records: its
+    /// own slots, and beneath them the open bindings its table holds.
+    /// Nothing for a party those records do not place beneath it.
+    fn path_to(&self, k: &Keyhash) -> Option<Vec<u8>> {
+        let mut at = *k;
+        let mut path = Vec::new();
+        for _ in 0..crate::downline::MAX_REACH {
+            if let Some(slot) = self.slot_of(&at) {
+                path.push(u8::try_from(slot).ok()?);
+                path.reverse();
+                return Some(path);
+            }
+            let b = self
+                .table
+                .bindings()
+                .iter()
+                .find(|b| b.node == at && b.open())?;
+            path.push(b.slot?);
+            at = b.patron;
+        }
+        None
+    }
+
+    /// **Apply a memo passing through to the downline table**
+    /// (`wire-format.md` §10.2.5; design §15.2.2).  A hint, read as one:
+    /// a slot this node's own records settle is left to them, and a memo
+    /// from below is believed only about the branch it came up.
+    fn note_downline(&mut self, from: &Keyhash, memo: &Memo) {
+        let Some(at) = self.beneath_me(&memo.position) else {
+            return;
+        };
+        let Ok(slot) = u8::try_from(memo.slot) else {
+            return;
+        };
+        // this node's own slots are its own rows, and a slot it holds a
+        // binding for is settled from that signed record
+        // ([`NodeView::sync_downline`]), never from a memo
+        let settled = at.is_empty()
+            || self
+                .table
+                .bindings()
+                .iter()
+                .any(|b| b.patron == memo.patron && b.slot == Some(slot));
+        if settled {
+            return;
+        }
+        // a memo travels up the patron chain, so one arriving from below
+        // names a slot beneath whoever sent it: a node below cannot empty
+        // another branch's positions
+        if let Some(sender) = self.path_to(from)
+            && !at.starts_with(&sender)
+        {
+            return;
+        }
+        self.downline
+            .set(&at, slot, memo.occupant.is_some(), memo.timestamp);
+    }
+
+    /// **Settle the downline table against this node's own records**
+    /// (design §15.2.2): its own slots, beneath them the bindings its
+    /// table holds, which are signed where a memo is not, and who among
+    /// them is marked as running a node.  What the table holds deeper,
+    /// from memos, is left as it stands.  A node serves one subnet (design
+    /// §3.3), so the bindings beneath its own slots are that subnet's.
+    pub fn sync_downline(&mut self) {
+        let mut next: Vec<(Keyhash, Vec<u8>)> = Vec::new();
+        for (slot, s) in &self.slots {
+            let Ok(slot) = u8::try_from(*slot) else {
+                continue;
+            };
+            self.downline
+                .settle(&[], slot, s.occupant.is_some(), s.timestamp);
+            if let Some(k) = s.occupant {
+                self.downline.mark_node(&[slot], self.table.is_infra(&k));
+                next.push((k, vec![slot]));
+            }
+        }
+        let mut seen: BTreeSet<Keyhash> = BTreeSet::new();
+        while let Some((patron, at)) = next.pop() {
+            if !seen.insert(patron) || at.len() >= crate::downline::MAX_REACH {
+                continue;
+            }
+            // each slot by the open binding where one holds it, and
+            // otherwise by the latest ending
+            let mut held: BTreeMap<u8, (Option<Keyhash>, u64)> = BTreeMap::new();
+            for b in self.table.bindings() {
+                if b.patron != patron {
+                    continue;
+                }
+                let Some(slot) = b.slot else { continue };
+                let this = match &b.end {
+                    None => (Some(b.node), b.from),
+                    Some((_, ended, _)) => (None, *ended),
+                };
+                let wins = held.get(&slot).is_none_or(|h| {
+                    (this.0.is_some() && h.0.is_none())
+                        || (this.0.is_some() == h.0.is_some() && this.1 > h.1)
+                });
+                if wins {
+                    held.insert(slot, this);
+                }
+            }
+            for (slot, (occupant, stamp)) in held {
+                self.downline.settle(&at, slot, occupant.is_some(), stamp);
+                if let Some(k) = occupant {
+                    let mut child = at.clone();
+                    child.push(slot);
+                    self.downline.mark_node(&child, self.table.is_infra(&k));
+                    next.push((k, child));
+                }
+            }
         }
     }
 
@@ -1383,6 +1524,7 @@ impl NodeView {
                 // watermark over transactions says nothing about them
                 self.mark_infrastructure();
                 self.adopt_own_position();
+                self.sync_downline();
                 if later.is_empty() {
                     Restored::Current
                 } else {

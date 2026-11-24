@@ -24,6 +24,8 @@ use std::time::Duration;
 /// The derived view, kept in the topology directory beside the records it
 /// is a fold of.  A store copied without it simply replays.
 const DERIVED: &str = "derived";
+/// The downline table's file, beside the derived state (design §15.2.2).
+const DOWNLINE: &str = "downline";
 
 /// Why a daemon would not start.  Every one of these is reported and none
 /// is worked around: a node that repairs its own configuration serves
@@ -582,6 +584,17 @@ impl Service {
         // folds in what arrived since rather than replaying the history
         // [author, 2026-09-13]; a snapshot that cannot account for what the
         // store holds is discarded and the whole fold runs
+        // **the downline table is read before the fold and settled by it**
+        // (design §15.2.2): what memos told this node of positions beyond
+        // its horizon is in no store, so it is kept beside the derived
+        // state, and a file that does not read is refused whole, the
+        // table reading shallow until memos fill it again
+        if let Some(d) = std::fs::read_to_string(cfg.topology.join(DOWNLINE))
+            .ok()
+            .and_then(|s| rhtn_node::downline::Downline::decode(&s))
+        {
+            view.downline = d;
+        }
         let snap = std::fs::read(cfg.topology.join(DERIVED))
             .ok()
             .and_then(|b| Snapshot::decode(&b));
@@ -1245,6 +1258,7 @@ impl Service {
         view.profiles.save(&self.keys)?;
         view.archive.save(&self.archive)?;
         view.store.save(&self.topology)?;
+        std::fs::write(self.topology.join(DOWNLINE), view.downline.encode())?;
         // the derived state last, so it is never newer than the store it
         // claims to be a fold of: a snapshot ahead of its store would be
         // discarded on the next start, which costs a replay, while a

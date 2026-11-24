@@ -485,6 +485,60 @@ async fn a_restart_rebuilds_the_routing_view_and_verifies_this_nodes_own_signatu
     let _ = std::fs::remove_dir_all(&l.dir);
 }
 
+/// design §15.2.2: the downline table is kept across a restart, the part
+/// of it memos gave being in no store to rebuild from.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_restart_finds_the_downline_table_as_it_was_left() {
+    use rhtn_daemon::config::Config;
+    use rhtn_daemon::service::Service;
+    use rhtn_node::store::{Decision, KIND_TRANSACTION};
+    let l = layout("downline");
+    std::fs::write(
+        &l.peers,
+        ["carol", "witness"]
+            .map(|n| format!("{}\n", hex(&test_identity(n).public.key_material())))
+            .concat(),
+    )
+    .unwrap();
+    let cfg = Config::read(&l.config).unwrap();
+    let (pop, adoption) = adoption_under_slot("bob", "carol", 0);
+    let before = {
+        let s = Service::start(&cfg, &l.peers).await.expect("starts");
+        let mut view = s.node.view.lock().unwrap();
+        let pop_id = rhtn_archive::record::Record::parse(&pop).unwrap().txid;
+        view.store.keep_presence(pop_id, pop.clone());
+        let me = view.me();
+        let d = view.take_object(&s.node.adjacency, &me, KIND_TRANSACTION, &adoption, &ids());
+        assert_eq!(d, Decision::Stored);
+        // the subordinate in slot 0 from the signed adoption, and beneath
+        // it what only memos told this node of, four levels down
+        assert!(view.downline.filled(&[0]));
+        assert!(view.downline.set(&[0, 4, 2], 7, true, 1_800_000_000));
+        assert_eq!(view.downline.depth(&[]), 4);
+        let before = view.downline.clone();
+        drop(view);
+        s.persist().expect("persists");
+        before
+    };
+    let kept = std::fs::read_to_string(cfg.topology.join("downline")).expect("written beside");
+    assert!(kept.contains("0427 f 1800000000"), "{kept}");
+    // started again from those bytes alone
+    let s = Service::start(&cfg, &l.peers).await.expect("starts again");
+    assert_eq!(s.node.view.lock().unwrap().downline, before);
+    drop(s);
+    // a file that does not read is refused whole: the table comes back
+    // from the store alone, reading shallow, and the node starts
+    std::fs::write(cfg.topology.join("downline"), "0 f 1\nnot a row\n").unwrap();
+    let s = Service::start(&cfg, &l.peers)
+        .await
+        .expect("starts on a bad file");
+    let view = s.node.view.lock().unwrap();
+    assert!(view.downline.filled(&[0]), "the signed part is rebuilt");
+    assert_eq!(view.downline.depth(&[]), 1, "the memos' part is not");
+    drop(view);
+    let _ = std::fs::remove_dir_all(&l.dir);
+}
+
 fn ids() -> Vec<rhtn_crypto::Identity> {
     ["bob", "carol", "w1", "witness"]
         .iter()
