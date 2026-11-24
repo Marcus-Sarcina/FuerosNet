@@ -333,3 +333,37 @@ membership change, sent through the nearest infrastructure ancestor
 (functional test TOP-023). The effect here is that an upstream node does not
 see the light tail beneath a downstream node, so depth reads up to two levels
 short and never long.
+
+## Answered 2026-11-23 (second round) [author]
+
+1. **Who runs a node is in the table at every depth, not inferred.** *"In the
+   notation I sketched out, characters 0-9 indicated a filled slot while any
+   other character (I would pick something intuitive like 'n') indicates the
+   owner itself served from it's own node, 'node actual' if you will. So long
+   as users in the next two layers after every node get their own records,
+   you should see an 'actual' entry for every node and an empty array record
+   for every terminal light client."* So the inference from design section
+   3.3 is withdrawn, and two things are built in its place:
+   - a node says of itself that it runs, as a memo whose slot field is 10
+     and whose occupant is itself, sent when its upstream session comes up;
+   - the node serving a light member sends the memos that member's slot
+     changes are owed (the gap found above, now closed).
+2. **The cap is the first node's alone.** *"either this is subnet-normal
+   behavior in which case it is outside of our ability to enforce, or the
+   error will be obvious from the next node upstream and the operator who
+   does this marks themselves out as untrustworthy to their superiors.
+   There's no way to get a message further upstream than it belongs without
+   it being apparent to the person who recieves it and holds the topology
+   table."* Written into design section 14.4 as his.
+3. **The memos serve both purposes.** *"The cycle detection messages also
+   serve to update the subnet as to changes in the routable table. the
+   topology table serves both purposes."*
+   - *My reading, asked*: the memo carries that a position runs a node and
+     no address, so design section 15.2's "no address rootward" stands and
+     the endpoint record stays in the horizon.
+
+**Mine in this, flagged**: the value 10 on the wire (`n` in the table's
+file); the node-actual memo dated when the node began to say so this run,
+there being no transaction to copy a time from; closing a node is encodable
+(occupant absent) and nothing sends it yet, there being no act of closing a
+node in the code.

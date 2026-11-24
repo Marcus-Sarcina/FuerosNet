@@ -116,6 +116,10 @@ pub struct NodeView {
     /// `wire-format.md` §10.2.5): required where the memo table is
     /// optional, and holding nobody's identity.
     pub downline: crate::downline::Downline,
+    /// When this node first said of itself that it runs, this run: what
+    /// dates the memo that says so (`wire-format.md` §10.2), the same each
+    /// time it is sent so that a repeat is one a table already holds.
+    pub node_since: Option<u64>,
     /// Light clients attached to this node (design §14.1.2).
     pub attached: BTreeSet<Keyhash>,
     /// Peering edges (design §6.3): adjacency for the flood, and no part of
@@ -195,6 +199,7 @@ impl NodeView {
             keeps_memo_table: true,
             memo_positions: BTreeMap::new(),
             downline: crate::downline::Downline::new(),
+            node_since: None,
             attached: BTreeSet::new(),
             peers: BTreeSet::new(),
             serving_node: None,

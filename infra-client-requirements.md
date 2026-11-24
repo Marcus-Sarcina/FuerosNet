@@ -161,7 +161,10 @@ constant regardless of network size — the aggregation argument design §12.6.1
 are filled and which of them run a node, built from the topology you store and
 the memos that pass through you, and kept across a restart. It holds no
 identity. This one grows with your subtree where the two above do not, and it
-is positions and not people, which is what design §12.6.1 turns on.
+is positions and not people, which is what design §12.6.1 turns on. **And feed
+the tables above you** (`wire-format.md` §10.2): say of yourself that you run,
+by memo, when your session upstream comes up, and send the memo each light
+member you serve is owed when a slot of theirs changes.
 
 **An anchor table, which your operator supplies at launch** [author, 2026-11-15]
 and gossip adds to. The entries you are handed at launch are the other subnets'

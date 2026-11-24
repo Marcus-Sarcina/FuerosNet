@@ -82,6 +82,11 @@ impl Horizon for OwnState {
 }
 
 pub use rhtn_archive::topology::FRAME_TOPOLOGY_PUSH;
+
+/// **Node actual** in a memo's slot field (`wire-format.md` §10.2): the
+/// patron speaks of its own position and says it runs a node, where 0 to 9
+/// name one of its subordinate slots [author, 2026-11-23].
+pub const MEMO_NODE_ACTUAL: u64 = 10;
 /// Control frame 6: a rootward memo.
 pub const FRAME_TOPOLOGY_MEMO: u64 = 6;
 
@@ -420,6 +425,12 @@ impl NodeView {
                     let (slot, acks) = self.apply_stored(object, ids);
                     if let Some(slot) = slot {
                         self.originate_memo(adj, slot);
+                    } else if let Some(memo) = self.memo_for_served(object) {
+                        // a light member's slot: this node serves them,
+                        // so the memo their change is owed goes rootward
+                        // from here (§10.2)
+                        self.note_memo(&memo);
+                        self.send_memo(adj, &memo);
                     }
                     for ack in acks {
                         let push = encode_push(KIND_SUBTREE_ACK, &ack);
@@ -1113,6 +1124,12 @@ impl NodeView {
         if memo.patron == me {
             return self.cycle_check(adj, from, &memo);
         }
+        // a node saying of itself that it runs: nothing to check it
+        // against and nobody to look for elsewhere, so it is noted and
+        // travels on (§10.2)
+        if memo.slot == MEMO_NODE_ACTUAL {
+            return self.pass_node_actual(adj, &memo);
+        }
         // a serving node runs the check for its attached clients as well
         // (§10.2): a memo naming an attached client that arrives from below
         // that client is the client's own memo come back, and the records
@@ -1237,13 +1254,15 @@ impl NodeView {
         };
         // this node's own slots are its own rows, and a slot it holds a
         // binding for is settled from that signed record
-        // ([`NodeView::sync_downline`]), never from a memo
+        // ([`NodeView::sync_downline`]), never from a memo.  Who runs a
+        // node is not a binding's to say, so that row is the memo's
         let settled = at.is_empty()
-            || self
-                .table
-                .bindings()
-                .iter()
-                .any(|b| b.patron == memo.patron && b.slot == Some(slot));
+            || (memo.slot != MEMO_NODE_ACTUAL
+                && self
+                    .table
+                    .bindings()
+                    .iter()
+                    .any(|b| b.patron == memo.patron && b.slot == Some(slot)));
         if settled {
             return;
         }
@@ -1257,6 +1276,126 @@ impl NodeView {
         }
         self.downline
             .set(&at, slot, memo.occupant.is_some(), memo.timestamp);
+    }
+
+    /// A node-actual memo passing through (`wire-format.md` §10.2): held
+    /// against a repeat where a table is kept, and sent on rootward.
+    fn pass_node_actual(&mut self, adj: &dyn Adjacency, memo: &Memo) -> MemoOutcome {
+        let key = (memo.patron, memo.slot);
+        if let Some(held) = self.memo_table.get(&key)
+            && held.timestamp >= memo.timestamp
+        {
+            return MemoOutcome::AlreadyPassed;
+        }
+        self.note_memo(memo);
+        match self.send_memo(adj, memo) {
+            Some(to) => MemoOutcome::Forwarded { to },
+            None if self.patron_in(&memo.position.anchor).is_none() => MemoOutcome::StoppedAtRoot,
+            None => MemoOutcome::Unroutable,
+        }
+    }
+
+    /// **This node saying of itself that it runs** (`wire-format.md`
+    /// §10.2; design §15.2.2) [author, 2026-11-23]: the memo that marks its
+    /// position node actual in every downline table above it, sent
+    /// rootward as its slots' memos are.  Dated once a run, so a repeat is
+    /// one a table already holds.  Nothing at a root, which has nobody
+    /// above it to tell.
+    pub fn announce_node(&mut self, adj: &dyn Adjacency) -> Option<Keyhash> {
+        let since = *self.node_since.get_or_insert_with(|| (self.clock)());
+        let me = self.me();
+        let memo = Memo {
+            patron: me,
+            position: self.position.clone(),
+            slot: MEMO_NODE_ACTUAL,
+            timestamp: since,
+            occupant: Some(me),
+        };
+        self.send_memo(adj, &memo)
+    }
+
+    /// Each slot of `patron` as this node's table settles it: by the open
+    /// binding where one holds it, and otherwise by the latest ending.
+    fn slot_states(&self, patron: &Keyhash) -> BTreeMap<u8, (Option<Keyhash>, u64)> {
+        let mut held: BTreeMap<u8, (Option<Keyhash>, u64)> = BTreeMap::new();
+        for b in self.table.bindings() {
+            if b.patron != *patron {
+                continue;
+            }
+            let Some(slot) = b.slot else { continue };
+            let this = match &b.end {
+                None => (Some(b.node), b.from),
+                Some((_, ended, _)) => (None, *ended),
+            };
+            let wins = held.get(&slot).is_none_or(|h| {
+                (this.0.is_some() && h.0.is_none())
+                    || (this.0.is_some() == h.0.is_some() && this.1 > h.1)
+            });
+            if wins {
+                held.insert(slot, this);
+            }
+        }
+        held
+    }
+
+    /// **The memo a light member's change is owed** (`wire-format.md`
+    /// §10.2): a stored adoption, departure or disavowal that changed a
+    /// slot of a member this node serves, as that member's own statement
+    /// about the slot.  A light client holds no session to send one on,
+    /// and this node holds every record of its light subtree.  Nothing
+    /// for a patron that runs a node, which says so itself, and nothing
+    /// for a record that is not a membership change beneath this node.
+    fn memo_for_served(&self, object: &[u8]) -> Option<Memo> {
+        let rec = Record::parse(object).ok()?;
+        let (patron, node) = match rec.tx_type {
+            TYPE_ADOPTION | TYPE_DEPARTURE => (rec.field_hash(2)?, rec.field_hash(1)?),
+            TYPE_DISAVOWAL => (rec.field_hash(1)?, rec.field_hash(2)?),
+            _ => return None,
+        };
+        let me = self.me();
+        if patron == me
+            || self.table.is_infra(&patron)
+            || !self.table.nearest_infra_is(&me, &patron)
+        {
+            return None;
+        }
+        let at = self.path_to(&patron)?;
+        // the slot is the one the member's binding names, and what the
+        // memo says of it is what the table settled, not the record
+        let slot = self
+            .table
+            .bindings()
+            .iter()
+            .filter(|b| b.patron == patron && b.node == node)
+            .max_by_key(|b| b.from)
+            .and_then(|b| b.slot)?;
+        let (occupant, timestamp) = *self.slot_states(&patron).get(&slot)?;
+        let series = self
+            .table
+            .bindings()
+            .iter()
+            .find(|b| b.node == patron && b.open())
+            .map_or(1, |b| b.series);
+        let mut full = Path {
+            bytes: self.position.path.clone(),
+            nibbles: self.position.nibbles,
+        }
+        .indices();
+        full.extend(at);
+        let p = Path::from_indices(&full);
+        Some(Memo {
+            patron,
+            position: Locator {
+                anchor: self.position.anchor,
+                path: p.bytes,
+                nibbles: p.nibbles,
+                seqno: tx::Seqno { series, counter: 0 },
+                subnet: self.position.subnet,
+            },
+            slot: u64::from(slot),
+            timestamp,
+            occupant,
+        })
     }
 
     /// **Settle the downline table against this node's own records**
@@ -1274,7 +1413,11 @@ impl NodeView {
             self.downline
                 .settle(&[], slot, s.occupant.is_some(), s.timestamp);
             if let Some(k) = s.occupant {
-                self.downline.mark_node(&[slot], self.table.is_infra(&k));
+                // an endpoint record held marks a node; nothing held
+                // unmarks one a memo marked
+                if self.table.is_infra(&k) {
+                    self.downline.mark_node(&[slot], true);
+                }
                 next.push((k, vec![slot]));
             }
         }
@@ -1283,32 +1426,15 @@ impl NodeView {
             if !seen.insert(patron) || at.len() >= crate::downline::MAX_REACH {
                 continue;
             }
-            // each slot by the open binding where one holds it, and
-            // otherwise by the latest ending
-            let mut held: BTreeMap<u8, (Option<Keyhash>, u64)> = BTreeMap::new();
-            for b in self.table.bindings() {
-                if b.patron != patron {
-                    continue;
-                }
-                let Some(slot) = b.slot else { continue };
-                let this = match &b.end {
-                    None => (Some(b.node), b.from),
-                    Some((_, ended, _)) => (None, *ended),
-                };
-                let wins = held.get(&slot).is_none_or(|h| {
-                    (this.0.is_some() && h.0.is_none())
-                        || (this.0.is_some() == h.0.is_some() && this.1 > h.1)
-                });
-                if wins {
-                    held.insert(slot, this);
-                }
-            }
+            let held = self.slot_states(&patron);
             for (slot, (occupant, stamp)) in held {
                 self.downline.settle(&at, slot, occupant.is_some(), stamp);
                 if let Some(k) = occupant {
                     let mut child = at.clone();
                     child.push(slot);
-                    self.downline.mark_node(&child, self.table.is_infra(&k));
+                    if self.table.is_infra(&k) {
+                        self.downline.mark_node(&child, true);
+                    }
                     next.push((k, child));
                 }
             }
@@ -1338,7 +1464,13 @@ impl NodeView {
         let o = memo.occupant?;
         self.memo_table
             .iter()
-            .find(|((p, s), row)| row.occupant == Some(o) && (*p, *s) != (memo.patron, memo.slot))
+            .find(|((p, s), row)| {
+                // a node-actual row names its own patron, which is no
+                // second place that patron is held
+                *s != MEMO_NODE_ACTUAL
+                    && row.occupant == Some(o)
+                    && (*p, *s) != (memo.patron, memo.slot)
+            })
             .map(|((p, s), _)| (*p, *s))
     }
 

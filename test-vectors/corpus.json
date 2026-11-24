@@ -1,8 +1,8 @@
 {
  "format": "rhtn-test-corpus/1",
  "pins": {
-  "wire-format.md": "b6a9990685f683a41692895aca9825b8c669e3cc1e08f7e93e52570665ec6094",
-  "network-design.md": "9c2be0907a270c3a89e35dad0b2b94306bedb5daf1a6cb2ce94387ac78edbf42",
+  "wire-format.md": "823ae0d9956224c23384f8b312f8c3cd406a51b10f3662c3b2e4036c7f994a79",
+  "network-design.md": "fdb0ec44c9fe227ba9d81a9397c31240846579f709dd50415fc40ad6f59ff371",
   "light-client-requirements.md": "c9c8587f8f15df1af1f25bfa8e190e7505cc6cae0b7916afc0fd1053fee53e66"
  },
  "classes": {
@@ -1249,9 +1249,9 @@
     "outcome": "reject",
     "kind": "frame",
     "layer": "schema",
-    "reason": "memo slot 10 outside the nibble range 0-9"
+    "reason": "memo slot 11 outside the slots 0-9 and node actual, 10"
    },
-   "hex": "000000808206a40158206bcf8a3e8899fc206bc603744414d58b01db857986d82f611b0794ac9c32c37502a40158206bcf8a3e8899fc206bc603744414d58b01db857986d82f611b0794ac9c32c37502a201400200038209030458203f438083da65968113a3ddace3e7f735d8607a8edb392cbbb069aca5a92cd6fa030a041a69d99d10"
+   "hex": "000000808206a40158206bcf8a3e8899fc206bc603744414d58b01db857986d82f611b0794ac9c32c37502a40158206bcf8a3e8899fc206bc603744414d58b01db857986d82f611b0794ac9c32c37502a201400200038209030458203f438083da65968113a3ddace3e7f735d8607a8edb392cbbb069aca5a92cd6fa030b041a69d99d10"
   },
   {
    "id": "N-enum-resource-status",

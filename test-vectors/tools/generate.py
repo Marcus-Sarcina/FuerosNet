@@ -3412,9 +3412,9 @@ reg('N-enum-resolve-code', 'bytes', REJ('ResolveReply', 'schema', 'result 9 outs
     e_map([(e_uint(1), e_bstr(NONCE(b'resolve'))), (e_uint(2), e_uint(9))]))
 reg('N-enum-push-kind', 'bytes', REJ('frame', 'schema', 'TopologyPush kind 4 outside 0-3'),
     frame(5, e_map([(e_uint(1), e_uint(4)), (e_uint(2), e_bstr(adopt_env))])))
-reg('N-enum-memo-slot', 'bytes', REJ('frame', 'schema', 'memo slot 10 outside the nibble range 0-9'),
+reg('N-enum-memo-slot', 'bytes', REJ('frame', 'schema', 'memo slot 11 outside the slots 0-9 and node actual, 10'),
     frame(6, e_map([(e_uint(1), e_bstr(bob.keyhash)), (e_uint(2), root_loc),
-                    (e_uint(3), e_uint(10)), (e_uint(4), e_uint(TS_ADOPT))])))
+                    (e_uint(3), e_uint(11)), (e_uint(4), e_uint(TS_ADOPT))])))
 reg('N-enum-resource-status', 'bytes', REJ('ResourceResponse', 'schema', 'status 9 outside 0-5'),
     e_map([(e_uint(1), e_uint(9))]))
 reg('N-enum-attach-mode', 'bytes', REJ('frame', 'schema', 'AttachAck mode 9 outside 0-1'),

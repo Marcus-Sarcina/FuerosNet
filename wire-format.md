@@ -3140,7 +3140,8 @@ end-to-end channel, which is how a peering's snapshot of an address is kept
 current without reissuing the peering (§4.4).
 
 **Carried in the topology class**, by §10.1's forwarding rule, so it reaches the
-node's horizon and its patron with it. **It does not travel rootward** (§10.2).
+node's horizon and its patron with it. **It does not travel rootward** (§10.2):
+that a node runs at a position does, as a memo, and where it answers does not.
 
 **Self-signed, and the signature's value is the same one §7.2 states**: a recipient
 holding no key material cannot check it on receipt, so it gives **retroactive
@@ -4641,12 +4642,16 @@ TopologyMemo = {
                        ;   only party this object speaks for
   2: Locator,          ; the patron's OWN position
   3: uint,             ; the subordinate SLOT: one nibble, 0-9, the child index
-                       ;   under field 2's path (§2.1)
+                       ;   under field 2's path (§2.1). Or 10, NODE ACTUAL:
+                       ;   the patron speaks of field 2's position itself and
+                       ;   says it runs a node (§10.2)
   4: timestamp,        ; the underlying transaction's own timestamp, copied —
                        ;   not a fresh clock reading. Orders two statements by
                        ;   THIS patron about THIS slot, and nothing else
   5: ? keyhash         ; the node now occupying that slot. ABSENT means the slot
-                       ;   is empty: a departure or a disavowal
+                       ;   is empty: a departure or a disavowal. With field 3
+                       ;   at 10, the patron itself, and ABSENT means its node
+                       ;   has closed
 }
 ```
 
@@ -5126,13 +5131,32 @@ root.** `TopologyMemo`, control frame type 6 on stream 0 (§8.0).
 This is what design §15's *ancestors* reach means: **full transactions flood within
 the horizon; only memos travel further up.**
 
-**Restricted to membership operations — adoption, departure and disavowal, and the
-restriction is load-bearing.** Peering is topology class and is **excluded from
+**Restricted to membership operations — adoption, departure and disavowal — and to
+a node saying that it runs, and the restriction is load-bearing.** Peering is topology class and is **excluded from
 rootward travel**: a peering record carries `NetworkPoint` for both endpoints plus
 ASN and zone (§4.4), and design §19.8 C8 maps that composition to a
 natural person. A memo carries keys and positions and no address, which is what
 makes a root's accumulated view tolerable; adding peering for symmetry would
 silently remove that property.
+
+**And a node says of itself that it runs** [author, 2026-11-23]: a memo whose
+field 3 is 10 and whose field 5 is the patron itself, sent rootward when the
+node comes up and its session upstream does. It marks field 2's position *node
+actual* in every downline table it passes (§10.2.5), which is how a table comes
+to hold who runs a node at any depth; field 5 absent withdraws it. Field 4 is
+when the node began to say so, the same at every sending of one run, there being
+no transaction behind the statement to copy a time from. **It carries no
+address**, as no memo does: the endpoint record (§7.6) says where the node
+answers and stays in the horizon. Nothing is confirmed against it and no check
+below reads it: it names no subordinate, so it is neither a cycle nor a second
+place anyone is held.
+
+**A light member's memo is sent by the node that serves it.** A light client
+holds no session to send one on, and its serving node stores every record of
+its light subtree (design §12.6.1); so when that node stores an adoption, a
+departure or a disavowal that changes a slot of a member it serves, it sends
+the memo as that member's own statement about the slot. A member that runs a
+node sends its own.
 
 **Forwarding.** A receiving node forwards the memo to its own patron, unchanged
 except that nothing is added — the memo already carries the position it describes.
@@ -5199,7 +5223,9 @@ moved for an endpoint change (§2.3).
 that pass through it.** Every memo from below traverses it, so the table's
 coverage is that node's **whole subtree** rather than its horizon. Read the other
 way (by occupant), it answers the re-parenting question: a node appearing in two
-slots is held in two places.
+slots is held in two places. **A node-actual row, `(patron, 10)`, is kept for one
+purpose**, so that a repeat of it is not forwarded again, and is not read by
+occupant: its occupant is its own patron, which is no second place.
 
 **It is a RIB.** design §15's liveness class already sets the retention rule: *keep
 the table, not the update history, as BGP keeps the RIB.* Write the slot, retain the
@@ -5339,10 +5365,13 @@ within one patron's one slot and by field 4: the table keeps the timestamp
 that last set each slot, an emptied one included, so that an earlier memo
 arriving late reinstates nothing.
 
+**A memo whose field 3 is 10 marks field 2's position node actual**, or with
+field 5 absent unmarks it, under the same ordering. A node heard of before its
+position was is a position all the same.
+
 **Within its horizon a node fills the same table from the transactions it
 stores** (§10.1), which are signed where a memo is not, and marks a position
-as running a node where it holds that position's endpoint record (§7.6) or
-that node has dialled it as its upstream.
+node actual where it holds that position's endpoint record (§7.6).
 
 **§10.2.3 stands, and this table does not strain it.** A memo here is a hint
 as it is everywhere: nothing is confirmed against it and nothing is cut on it.

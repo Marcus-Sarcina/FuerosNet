@@ -8,10 +8,18 @@
 //! [author, 2026-11-23]: design §12.6.1 refuses requiring a map of who
 //! lives beneath a node, and this holds where and not who.
 //!
+//! **As the author sketched it** [2026-11-18]: `3[0, 2, 5, n]` is the
+//! subordinate in slot 3, with subordinates of their own in slots 0, 2 and
+//! 5, who runs a node; `3,5,9[]` a great-grandsubordinate with nobody
+//! beneath them and no node. The digits are filled slots and `n` is *node
+//! actual*: the member is served from a node of their own. Here each of
+//! those is a row keyed by its path, the `n` among them.
+//!
 //! **Filled from what the node already receives.** Within its horizon,
 //! from the bindings its own table settled on, which are signed; deeper,
 //! from the memos that pass through it in either direction, which are
-//! hints (`wire-format.md` §10.2.3). Nothing is cut, refused or disavowed
+//! hints (`wire-format.md` §10.2.3) and say both who fills a slot and who
+//! runs a node [author, 2026-11-23]. Nothing is cut, refused or disavowed
 //! on this table's word. What reads it is how far a board post travels
 //! (design §14.4), where a table reading shallow lowers a writer's reach
 //! and a fabricated memo lengthens its fabricator's own.
@@ -32,21 +40,21 @@ pub const BASE_REACH: usize = 2;
 /// The path bound (`wire-format.md` §1.3), which no reach exceeds.
 pub const MAX_REACH: usize = 24;
 
-/// design §3.3's L: no position lies more than this many levels below a
-/// node.
-const LIGHT_LEVELS: usize = 2;
+/// **Node actual**: the row beneath a position that says its member is
+/// served from a node of their own. Outside 0 to 9, slot 0 being a real
+/// slot [author, 2026-11-18], and what `wire-format.md` §10.2 carries in a
+/// memo's slot field for the same statement.
+pub const NODE: u8 = 10;
 
-/// One slot as the table holds it.
+/// One row as the table holds it: a slot, or a position's node actual.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Entry {
-    /// Whether anyone stands there. An emptied slot stays as a row, so
-    /// that an earlier memo arriving late reinstates nothing
-    /// (`wire-format.md` §10.2.2).
+    /// Whether the statement holds. One withdrawn stays as a row, so that
+    /// an earlier memo arriving late reinstates nothing (`wire-format.md`
+    /// §10.2.2).
     filled: bool,
-    /// The timestamp of the transaction that last set it.
+    /// The timestamp of what last set it.
     stamp: u64,
-    /// Whether whoever stands there runs a node.
-    node: bool,
 }
 
 /// The table.
@@ -63,15 +71,16 @@ impl Downline {
     }
 
     /// Fill or empty the slot `slot` of the position `patron`, as of
-    /// `stamp`. Ordering is `wire-format.md` §10.2.2's: a later timestamp
-    /// replaces, an equal one keeps what arrived first. Emptying removes
-    /// every position beneath the slot, the subtree having left with its
-    /// head. Says whether the table changed.
+    /// `stamp`; with [`NODE`] for the slot, say that the position's own
+    /// member runs a node or has stopped. Ordering is `wire-format.md`
+    /// §10.2.2's: a later timestamp replaces, an equal one keeps what
+    /// arrived first. Emptying a slot removes every row beneath it, the
+    /// subtree having left with its head. Says whether the table changed.
     pub fn set(&mut self, patron: &[u8], slot: u8, filled: bool, stamp: u64) -> bool {
-        if slot > 9 || patron.len() >= MAX_REACH || patron.iter().any(|s| *s > 9) {
+        if !Self::names_a_row(patron, slot) {
             return false;
         }
-        // a position beneath an emptied one is not added: its head left,
+        // a row beneath an emptied position is not added: its head left,
         // and it with it
         if filled && self.under_emptied(patron) {
             return false;
@@ -82,15 +91,7 @@ impl Downline {
             Some(held) if held.stamp >= stamp => return false,
             Some(held) if held.filled == filled => {
                 // the same statement, later: the stamp moves and nothing else
-                let node = held.node;
-                self.slots.insert(
-                    at,
-                    Entry {
-                        filled,
-                        stamp,
-                        node,
-                    },
-                );
+                self.slots.insert(at, Entry { filled, stamp });
                 return false;
             }
             _ => {}
@@ -98,15 +99,31 @@ impl Downline {
         if !filled {
             self.remove_beneath(&at);
         }
-        self.slots.insert(
-            at,
-            Entry {
-                filled,
-                stamp,
-                node: false,
-            },
-        );
+        self.slots.insert(at, Entry { filled, stamp });
+        // a node runs where somebody stands: one heard of before its
+        // position was is a position all the same
+        if filled && slot == NODE && !self.filled(patron) {
+            self.slots.insert(
+                patron.to_vec(),
+                Entry {
+                    filled: true,
+                    stamp: 0,
+                },
+            );
+        }
         true
+    }
+
+    /// Whether `slot` of `patron` is a row this table can hold: a slot 0
+    /// to 9 or a node actual, of a position within the path bound. The
+    /// node itself has no node-actual row, being one by definition.
+    fn names_a_row(patron: &[u8], slot: u8) -> bool {
+        let fits = match slot {
+            0..=9 => patron.len() < MAX_REACH,
+            NODE => !patron.is_empty() && patron.len() <= MAX_REACH,
+            _ => false,
+        };
+        fits && patron.iter().all(|s| *s <= 9)
     }
 
     /// **The same slot on a signed record's word**: what this node's own
@@ -114,7 +131,7 @@ impl Downline {
     /// ordering having no say over it.  A slot already as stated is left
     /// as it stands, with whatever is held beneath it.
     pub fn settle(&mut self, patron: &[u8], slot: u8, filled: bool, stamp: u64) -> bool {
-        if slot > 9 || patron.len() >= MAX_REACH || patron.iter().any(|s| *s > 9) {
+        if !Self::names_a_row(patron, slot) {
             return false;
         }
         let mut at = patron.to_vec();
@@ -131,34 +148,33 @@ impl Downline {
             Entry {
                 filled,
                 stamp: stamp.max(held.map_or(0, |e| e.stamp)),
-                node: false,
             },
         );
         true
     }
 
-    /// Mark the position as running a node, or as not. Nothing where
-    /// nobody stands there. Says whether the table changed.
+    /// Mark the position as running a node, or as not, on this node's own
+    /// records. Nothing where nobody stands there. Says whether the table
+    /// changed.
     pub fn mark_node(&mut self, at: &[u8], runs: bool) -> bool {
-        match self.slots.get_mut(at) {
-            Some(e) if e.filled && e.node != runs => {
-                e.node = runs;
-                true
-            }
-            _ => false,
-        }
+        !at.is_empty() && self.filled(at) && self.settle(at, NODE, runs, 0)
     }
 
     /// Whether anyone stands at the position. The node itself always does.
     #[must_use]
     pub fn filled(&self, at: &[u8]) -> bool {
-        at.is_empty() || self.slots.get(at).is_some_and(|e| e.filled)
+        at.is_empty() || (at.last() != Some(&NODE) && self.slots.get(at).is_some_and(|e| e.filled))
     }
 
     /// Whether the position is marked as running a node. The node itself is.
     #[must_use]
     pub fn runs_node(&self, at: &[u8]) -> bool {
-        at.is_empty() || self.slots.get(at).is_some_and(|e| e.filled && e.node)
+        if at.is_empty() {
+            return true;
+        }
+        let mut row = at.to_vec();
+        row.push(NODE);
+        self.filled(at) && self.slots.get(&row).is_some_and(|e| e.filled)
     }
 
     /// Every filled position beneath `at`, with whether it runs a node.
@@ -166,14 +182,14 @@ impl Downline {
         self.slots
             .range(at.to_vec()..)
             .take_while(move |(p, _)| p.starts_with(at))
-            .filter(move |(p, e)| e.filled && p.len() > at.len())
-            .map(|(p, e)| (p.as_slice(), e.node))
+            .filter(move |(p, e)| e.filled && p.len() > at.len() && p.last() != Some(&NODE))
+            .map(move |(p, _)| (p.as_slice(), self.runs_node(p)))
     }
 
     /// How many filled positions the table holds.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.slots.values().filter(|e| e.filled).count()
+        self.beneath(&[]).count()
     }
 
     /// Whether nobody stands beneath this node.
@@ -192,22 +208,17 @@ impl Downline {
     }
 
     /// **The depth of the node-running downline beneath `at`** (design
-    /// §15.2.2): the deepest position marked as running a node, and beyond
-    /// what is marked, what design §3.3 implies. No position lies more
-    /// than two levels below a node, so a position three or more levels
-    /// down stands for a node no more than two levels above it. A floor,
-    /// never over the true figure where §3.3 holds.
+    /// §15.2.2): how many levels down the deepest position marked node
+    /// actual stands. A node says so of itself by memo, as a patron says
+    /// who fills a slot [author, 2026-11-23], so the mark is there at any
+    /// depth a memo has come up from.
     #[must_use]
     pub fn node_depth(&self, at: &[u8]) -> usize {
-        let marked = self
-            .beneath(at)
+        self.beneath(at)
             .filter(|(_, node)| *node)
             .map(|(p, _)| p.len() - at.len())
             .max()
-            .unwrap_or(0);
-        let deepest = self.depth(at);
-        let implied = deepest.saturating_sub(LIGHT_LEVELS);
-        marked.max(implied)
+            .unwrap_or(0)
     }
 
     /// **How far up whoever stands at `at` may post** (design §14.4)
@@ -250,19 +261,24 @@ impl Downline {
         [one, two, all]
     }
 
-    /// The table as it goes to disk: one line a slot, the path as its
-    /// digits, `f` filled, `n` filled and running a node, `e` emptied, and
-    /// the timestamp that set it.
+    /// The table as it goes to disk: one line a row, the path as its
+    /// digits with `n` closing a node actual's, `f` where the row holds
+    /// and `e` where it was withdrawn, and the timestamp that set it.
     #[must_use]
     pub fn encode(&self) -> String {
         let mut out = String::new();
         for (p, e) in &self.slots {
-            let path: String = p.iter().map(|s| char::from(b'0' + *s)).collect();
-            let what = match (e.filled, e.node) {
-                (true, true) => 'n',
-                (true, false) => 'f',
-                (false, _) => 'e',
-            };
+            let path: String = p
+                .iter()
+                .map(|s| {
+                    if *s == NODE {
+                        'n'
+                    } else {
+                        char::from(b'0' + *s)
+                    }
+                })
+                .collect();
+            let what = if e.filled { 'f' } else { 'e' };
             let _ = writeln!(out, "{path} {what} {}", e.stamp);
         }
         out
@@ -278,28 +294,29 @@ impl Downline {
         for line in s.lines() {
             let mut parts = line.split(' ');
             let (path, what, stamp) = (parts.next()?, parts.next()?, parts.next()?);
-            if parts.next().is_some() || path.is_empty() || path.len() > MAX_REACH {
+            if parts.next().is_some() || path.is_empty() || path.len() > MAX_REACH + 1 {
                 return None;
             }
-            let at: Position = path
+            // a node actual closes the path of the position it speaks of
+            let (digits, node) = match path.strip_suffix('n') {
+                Some(d) if !d.is_empty() => (d, true),
+                Some(_) => return None,
+                None => (path, false),
+            };
+            let mut at: Position = digits
                 .bytes()
                 .map(|b| b.checked_sub(b'0').filter(|d| *d <= 9))
                 .collect::<Option<_>>()?;
-            let (filled, node) = match what {
-                "n" => (true, true),
-                "f" => (true, false),
-                "e" => (false, false),
+            if node {
+                at.push(NODE);
+            }
+            let filled = match what {
+                "f" => true,
+                "e" => false,
                 _ => return None,
             };
             let stamp = stamp.parse().ok()?;
-            slots.insert(
-                at,
-                Entry {
-                    filled,
-                    stamp,
-                    node,
-                },
-            );
+            slots.insert(at, Entry { filled, stamp });
         }
         Some(Self { slots })
     }
@@ -309,7 +326,8 @@ impl Downline {
         (1..=at.len()).any(|n| self.slots.get(&at[..n]).is_some_and(|e| !e.filled))
     }
 
-    /// Remove every row beneath `at`, `at` itself excepted.
+    /// Remove every row beneath `at`, its node actual among them, `at`
+    /// itself excepted.
     fn remove_beneath(&mut self, at: &[u8]) {
         let gone: Vec<Position> = self
             .slots
@@ -343,6 +361,7 @@ mod tests {
         assert!(d.set(&[], 3, true, 10));
         assert!(d.set(&[3], 5, true, 11));
         assert!(d.set(&[3, 5], 9, true, 12));
+        assert!(d.set(&[3, 5], NODE, true, 12));
         assert!(d.set(&[], 4, true, 10));
         assert_eq!(d.len(), 4);
         assert_eq!(d.depth(&[]), 3);
@@ -351,6 +370,7 @@ mod tests {
         assert_eq!(d.len(), 1);
         assert!(!d.filled(&[3]));
         assert!(!d.filled(&[3, 5, 9]));
+        assert!(!d.runs_node(&[3, 5]));
         assert!(d.filled(&[4]));
         assert_eq!(d.depth(&[]), 1);
     }
@@ -363,9 +383,10 @@ mod tests {
         // the fill it was emptied after, arriving late
         assert!(!d.set(&[], 3, true, 10));
         assert!(!d.filled(&[3]));
-        // and a late memo from the subtree that left with it
+        // and late memos from the subtree that left with it
         assert!(!d.set(&[3], 5, true, 15));
-        assert!(!d.filled(&[3, 5]));
+        assert!(!d.set(&[3], NODE, true, 15));
+        assert!(!d.filled(&[3, 5]) && !d.filled(&[3]));
         // an equal timestamp keeps what arrived first
         assert!(!d.set(&[], 3, true, 20));
         assert!(!d.filled(&[3]));
@@ -394,12 +415,17 @@ mod tests {
     }
 
     #[test]
-    fn a_slot_out_of_range_or_a_path_over_the_bound_changes_nothing() {
+    fn a_row_out_of_range_or_a_path_over_the_bound_changes_nothing() {
         let mut d = Downline::new();
-        assert!(!d.set(&[], 10, true, 1));
+        assert!(!d.set(&[], 11, true, 1));
         assert!(!d.set(&[12], 1, true, 1));
         assert!(!d.set(&[1; MAX_REACH], 1, true, 1));
+        // the node itself is one by definition and holds no row saying so
+        assert!(!d.set(&[], NODE, true, 1));
+        // and a node actual is the end of a path, never a step in one
+        assert!(!d.set(&[NODE], 1, true, 1));
         assert!(d.is_empty());
+        assert!(d.runs_node(&[]));
     }
 
     #[test]
@@ -411,30 +437,35 @@ mod tests {
         assert_eq!(d.depth(&[]), 4);
         assert_eq!(d.depth(&[2]), 3);
         assert_eq!(d.depth(&[8]), 0);
+        // and a node heard of before its position was stands there
+        assert!(d.set(&[5, 5, 5], NODE, true, 10));
+        assert!(d.filled(&[5, 5, 5]) && d.runs_node(&[5, 5, 5]));
+        assert_eq!(d.node_depth(&[]), 3);
+        // the adoption's own memo, arriving after, changes nothing
+        assert!(!d.set(&[5, 5], 5, true, 9));
+        assert!(d.runs_node(&[5, 5, 5]));
     }
 
     #[test]
-    fn who_runs_a_node_is_exact_near_and_a_floor_beyond() {
-        // light members only, one and two levels down: no node beneath
-        assert_eq!(chain(1).node_depth(&[]), 0);
+    fn who_runs_a_node_is_what_the_node_actual_rows_say() {
+        // light members only, to any depth the table shows: no node beneath
         assert_eq!(chain(2).node_depth(&[]), 0);
-        // a marked node at each of one, two and three levels
-        for at in 1..=3 {
-            let mut d = chain(at);
-            assert!(d.mark_node(&vec![3; at], true));
+        assert_eq!(chain(7).node_depth(&[]), 0);
+        // a node actual at each depth is counted where it stands
+        for at in 1..=7 {
+            let mut d = chain(7);
+            assert!(d.set(&vec![3; at], NODE, true, 10));
             assert_eq!(d.node_depth(&[]), at);
+            assert_eq!(d.node_depth(&[3]), at - 1);
         }
-        // memos alone, nothing marked: design §3.3 puts a node no more
-        // than two levels above the deepest position
-        assert_eq!(chain(3).node_depth(&[]), 1);
-        assert_eq!(chain(4).node_depth(&[]), 2);
-        assert_eq!(chain(7).node_depth(&[]), 5);
-        // and the same from a member's own position
-        assert_eq!(chain(7).node_depth(&[3, 3]), 3);
-        // a mark deeper than the floor wins
+        // a node that closed is one no longer, and an earlier launch
+        // arriving late does not reopen it
         let mut d = chain(4);
-        assert!(d.mark_node(&[3, 3, 3, 3], true));
-        assert_eq!(d.node_depth(&[]), 4);
+        d.set(&[3, 3, 3, 3], NODE, true, 10);
+        assert!(d.set(&[3, 3, 3, 3], NODE, false, 20));
+        assert_eq!(d.node_depth(&[]), 0);
+        assert!(!d.set(&[3, 3, 3, 3], NODE, true, 15));
+        assert!(d.filled(&[3, 3, 3, 3]), "the member stays; the node went");
     }
 
     #[test]
@@ -442,14 +473,16 @@ mod tests {
         assert_eq!(Downline::new().reach(&[]), 2);
         assert_eq!(chain(2).reach(&[]), 2);
         let mut d = chain(2);
-        d.mark_node(&[3, 3], true);
+        assert!(d.mark_node(&[3, 3], true));
         assert_eq!(d.reach(&[]), 4);
         assert_eq!(d.reach(&[3]), 3);
         assert_eq!(d.reach(&[3, 3]), 2);
         // a mark on nobody is no mark
         assert!(!d.mark_node(&[9], true));
         // and no reach passes the path bound
-        assert_eq!(chain(MAX_REACH).reach(&[]), MAX_REACH);
+        let mut d = chain(MAX_REACH);
+        d.mark_node(&[3; MAX_REACH], true);
+        assert_eq!(d.reach(&[]), MAX_REACH);
     }
 
     #[test]
@@ -506,16 +539,19 @@ mod tests {
         let mut d = Downline::new();
         d.set(&[], 0, true, 5);
         d.set(&[0], 9, true, 6);
-        d.mark_node(&[0], true);
+        d.set(&[0], NODE, true, 7);
         d.set(&[], 3, true, 7);
         d.set(&[], 3, false, 8);
         let text = d.encode();
-        assert_eq!(text, "0 n 5\n09 f 6\n3 e 8\n");
+        // `0[9, n]` and an emptied slot 3, a row each
+        assert_eq!(text, "0 f 5\n09 f 6\n0n f 7\n3 e 8\n");
         assert_eq!(Downline::decode(&text), Some(d));
         // what does not read is refused whole
-        assert_eq!(Downline::decode("0 n 5\n0x f 6\n"), None);
+        assert_eq!(Downline::decode("0 f 5\n0x f 6\n"), None);
         assert_eq!(Downline::decode("0 q 5\n"), None);
         assert_eq!(Downline::decode(" f 5\n"), None);
+        assert_eq!(Downline::decode("n f 5\n"), None);
+        assert_eq!(Downline::decode("0n3 f 5\n"), None);
         assert_eq!(Downline::decode("0 f 5 6\n"), None);
         assert_eq!(Downline::decode(""), Some(Downline::new()));
     }
@@ -529,8 +565,9 @@ mod tests {
         for line in d.encode().lines() {
             let parts: Vec<&str> = line.split(' ').collect();
             assert_eq!(parts.len(), 3);
-            assert!(parts[0].len() <= MAX_REACH && parts[0].bytes().all(|b| b.is_ascii_digit()));
-            assert!(matches!(parts[1], "f" | "n" | "e"));
+            assert!(parts[0].len() <= MAX_REACH + 1);
+            assert!(parts[0].bytes().all(|b| b.is_ascii_digit() || b == b'n'));
+            assert!(matches!(parts[1], "f" | "e"));
             assert!(parts[2].parse::<u64>().is_ok());
         }
     }

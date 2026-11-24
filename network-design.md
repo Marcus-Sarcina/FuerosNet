@@ -6789,7 +6789,13 @@ stands: **two, plus the depth of the member's node-running downline** [author,
 downline table (§15.2.2), **and a post over the cap is carried with its upward
 count lowered to the cap, not refused**. It is that node's view, and where the
 table reads shallow the cap is lower than the member has earned and never
-higher.
+higher. **Nothing checks the first node's work, and nothing needs to** [author,
+2026-11-23]. A node that lets its own members post further than they have
+earned is either doing what its subnet does, which is beyond anyone's power to
+enforce (§1.1), or is plain to the next node up: a post cannot arrive further
+upstream than it belongs without the person who receives it, and who holds the
+table, seeing that it has. An operator who does it marks themselves out to
+their own superiors.
 
 **Only upward reach is capped** [author, 2026-11-23]. A member's own subtree is
 theirs to address at any depth, and a symmetrical cap would never bind: two
@@ -7035,14 +7041,24 @@ the patron, the patron's position, which slot, when, and who is in it: with an e
 slot meaning a departure or a disavowal. It carries no address, **and no reason**: why
 a patron disavowed someone is in-horizon state and stays there.
 
+**Or about itself: that it runs a node** [author, 2026-11-23]. The same memo,
+naming the patron's own position in place of a slot, says the member there is
+served from a node of their own, and its withdrawal says the node has closed.
+The memos that detect a cycle are also what tell a subnet how its routable shape
+has changed, and one table serves both (§15.2.2). **It still carries no
+address**: where the node answers is its endpoint record's to say, which stays
+in the horizon (`wire-format.md` §7.6).
+
 **Every field is one the patron has authority over.** Nothing in a memo comes from a
 party that did not sign the transaction behind it, which is what lets a disavowal
 produce a memo like any other: the subordinate neither signs it nor contributes to
 it, because it reached the subtree on the patron's authority and ceases to exist from
 the subtree's point of view when that authority is withdrawn.
 
-**Restricted to membership operations, and the restriction is load-bearing.**
-Adoption, departure and disavowal travel rootward; **peering does not.** The
+**Restricted to membership operations and to who runs a node, and the restriction
+is load-bearing.**
+Adoption, departure and disavowal travel rootward, and a node's launch and
+closing with them; **peering does not.** The
 memo summarises only changes to the membership slots this chain governs; a
 relationship formed outside its authority is not its business to summarise. A peering
 record names each peer by network point, ASN and zone where it runs an instance
@@ -7128,15 +7144,19 @@ adoptions and endings, and the endpoint records that say who runs a node
 (`wire-format.md` §7.6). Deeper, from the memos that pass through it (§15.2):
 a memo filling a slot adds the position, and a memo emptying one removes it
 **and every position beneath it**, the subtree having left with its head. So
-the depth it shows moves both ways, and nothing new travels to build it
-(`wire-format.md` §10.2.5).
+the depth it shows moves both ways, and nothing travels to build it but the
+memo (`wire-format.md` §10.2.5).
 
-**Who runs a node is known exactly only near.** A memo says a slot is filled
-and not that its occupant serves. Beyond its horizon a node knows the nodes
-that dial it as their upstream, and of the rest what §3.3 implies: no position
-lies more than two levels below a node, so a filled position three or more
-levels beneath a member stands for a node in that member's downline no more
-than two levels above it.
+**Who runs a node is in the table at every depth** [author, 2026-11-23]. An
+entry lists its member's filled slots and, beside them, one mark that is no
+slot: *node actual*, the member being served from a node of their own. So
+`3[0, 2, 5, n]` is the subordinate in slot 3, with subordinates in slots 0, 2
+and 5, running a node, and `3,5,9[]` a great-grandsubordinate with nobody
+beneath them and no node. A node says it of itself by memo when it launches
+(§15.2), and every member in the two light levels beneath a node has an entry
+of their own, the node that serves them sending the memos their changes are
+owed. So the table shows a node actual for every node and an empty entry for
+every light member with nobody beneath them.
 
 **Where it is wrong it reads shallow.** Memos are best-effort, and a subtree
 carried in whole by a re-adoption sends none until it next changes [author,

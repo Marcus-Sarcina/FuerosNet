@@ -1070,7 +1070,9 @@ pub fn check_unsigned(f: Family, b: &[u8], at: usize) -> Result<(), Error> {
                     }
                 }
                 Family::TopologyMemo => {
-                    if map_get(m, 3).and_then(as_uint).unwrap_or(99) > 9 {
+                    // a slot, 0 to 9, or 10 for the patron's own node
+                    // (`wire-format.md` §10.2)
+                    if map_get(m, 3).and_then(as_uint).unwrap_or(99) > 10 {
                         return Err(Error("memo slot outside the nibble range"));
                     }
                 }

@@ -1836,13 +1836,33 @@ fn a_memo_passing_through_fills_the_downline_table_and_names_nobody() {
     );
     assert!(s.n.downline.filled(&[0, 4, 2, 7]));
     assert_eq!(s.n.downline.depth(&[]), 4);
-    // nothing marks a node that deep, and design §3.3 puts one no more
-    // than two levels above the deepest position
-    assert_eq!(s.n.downline.node_depth(&[]), 2);
-    assert_eq!(s.n.downline.reach(&[]), 4);
+    // a filled slot says nothing of a node: the deepest N knows of are
+    // still its own subordinates'
+    assert_eq!(s.n.downline.node_depth(&[]), 1);
+    assert_eq!(s.n.downline.reach(&[]), 3);
+    // the member there launches a node and says so of itself: the same
+    // memo, its slot field naming the patron's own position
+    let actual = memo_at("w6", &[0, 0, 4, 2, 7], MEMO_NODE_ACTUAL, t + 1, Some("w6"));
+    assert_eq!(
+        s.n.receive_memo(&*s.fab, &kh("carol"), &actual.encode()),
+        MemoOutcome::Forwarded { to: kh("alice") }
+    );
+    assert!(s.n.downline.runs_node(&[0, 4, 2, 7]));
+    assert_eq!(s.n.downline.node_depth(&[]), 4);
+    assert_eq!(s.n.downline.reach(&[]), 6);
+    assert_eq!(
+        s.n.downline.reach(&[0]),
+        5,
+        "and S1's own, from where S1 stands"
+    );
+    // a repeat is one the table already holds, and goes no further
+    assert_eq!(
+        s.n.receive_memo(&*s.fab, &kh("carol"), &actual.encode()),
+        MemoOutcome::AlreadyPassed
+    );
     // the table went to disk as paths, a letter and a time
     let text = s.n.downline.encode();
-    assert!(text.contains("0427 f "));
+    assert!(text.contains("0427 f ") && text.contains("0427n f "));
     assert!(
         text.bytes()
             .all(|b| b.is_ascii_digit() || matches!(b, b' ' | b'\n' | b'f' | b'n' | b'e'))
@@ -1895,4 +1915,136 @@ fn a_memo_is_a_hint_to_the_downline_table_and_is_read_as_one() {
     let foreign = memo("w5", "w6", 3, t, Some("w2"));
     s.n.receive_memo(&*s.fab, &kh("carol"), &foreign.encode());
     assert_eq!(s.n.downline, before);
+}
+
+#[test]
+fn a_node_saying_it_runs_is_nobody_held_in_two_places() {
+    let mut s = scene();
+    let t = s.w.clock;
+    // S1 reports w2 in its slot 4, and N's memo table takes the row
+    let adopted = memo_at("carol", &[0, 0], 4, t, Some("w2"));
+    s.n.receive_memo(&*s.fab, &kh("carol"), &adopted.encode());
+    s.fab.clear();
+    // w2 then says of itself that it runs a node. It is its own row's
+    // occupant and S1's, and that is one place, not two
+    let actual = memo_at("w2", &[0, 0, 4], MEMO_NODE_ACTUAL, t + 1, Some("w2"));
+    assert_eq!(
+        s.n.receive_memo(&*s.fab, &kh("carol"), &actual.encode()),
+        MemoOutcome::Forwarded { to: kh("alice") }
+    );
+    assert!(
+        s.fab.to(&kh("carol"), FRAME_TOPOLOGY_MEMO).is_empty(),
+        "nothing descends"
+    );
+    // and a later memo placing somebody else is not matched against it
+    let other = memo_at("carol", &[0, 0], 5, t + 2, Some("w6"));
+    assert_eq!(
+        s.n.receive_memo(&*s.fab, &kh("carol"), &other.encode()),
+        MemoOutcome::Forwarded { to: kh("alice") }
+    );
+    // a node's own word about itself, come back to it, confirms nothing
+    let mine = memo_at("bob", &[0], MEMO_NODE_ACTUAL, t + 3, Some("bob"));
+    assert_eq!(
+        s.n.receive_memo(&*s.fab, &kh("carol"), &mine.encode()),
+        MemoOutcome::Unconfirmed
+    );
+    assert_eq!(s.n.slot_of(&kh("carol")), Some(0), "and nobody is removed");
+}
+
+#[test]
+fn a_node_tells_the_nodes_above_it_that_it_runs_and_a_root_tells_nobody() {
+    let mut s = scene();
+    s.fab.clear();
+    assert_eq!(s.n.announce_node(&*s.fab), Some(kh("alice")));
+    let sent = s.fab.to(&kh("alice"), FRAME_TOPOLOGY_MEMO);
+    assert_eq!(sent.len(), 1);
+    let m = Memo::decode(&sent[0]).expect("a memo");
+    assert_eq!(
+        (m.patron, m.slot, m.occupant),
+        (kh("bob"), MEMO_NODE_ACTUAL, Some(kh("bob")))
+    );
+    assert_eq!(m.position, s.n.position, "of its own position");
+    // said again, it is the same statement with the same date
+    s.n.set_now(s.w.clock + 9_000);
+    s.n.announce_node(&*s.fab);
+    assert_eq!(s.fab.to(&kh("alice"), FRAME_TOPOLOGY_MEMO)[1], sent[0]);
+    // and a slot field past it does not decode
+    let mut far = m.clone();
+    far.slot = 11;
+    assert!(Memo::decode(&far.encode()).is_err());
+    // the node above marks the position in its own table and no other
+    let mut root = view("alice", Table::with_me(kh("alice")), "alice", &[]);
+    root.set_slot(0, Some(kh("bob")), s.w.clock);
+    let rfab = Fabric::with(&[kh("bob")]);
+    assert!(!root.downline.runs_node(&[0]));
+    assert_eq!(
+        root.receive_memo(&*rfab, &kh("bob"), &sent[0]),
+        MemoOutcome::StoppedAtRoot
+    );
+    assert!(root.downline.runs_node(&[0]));
+    assert_eq!(root.downline.reach(&[]), 3);
+    assert_eq!(root.announce_node(&*rfab), None);
+    assert_eq!(rfab.count(FRAME_TOPOLOGY_MEMO), 0);
+}
+
+#[test]
+fn a_light_members_change_goes_rootward_from_the_node_that_serves_them() {
+    // the scene with S2 (w1) a light member and not a node
+    let mut w = World::new();
+    let (a_n, _) = w.adopt("bob", "alice", 1);
+    let (a_s1, _) = w.adopt("carol", "bob", 2);
+    let (a_s2, _) = w.adopt("w1", "bob", 3);
+    let table = table_with(
+        kh("bob"),
+        &w,
+        &[&a_n, &a_s1, &a_s2],
+        &["alice", "bob", "carol"],
+    );
+    let mut n = view("bob", table, "alice", &[0]);
+    n.set_now(w.clock + 3600);
+    n.attached.insert(kh("w1"));
+    n.set_slot(0, Some(kh("carol")), w.clock);
+    n.set_slot(1, Some(kh("w1")), w.clock);
+    let fab = Fabric::with(&[kh("alice"), kh("carol"), kh("w1")]);
+    // w1 adopts w5: N stores it, and w1 holds no session to say so on
+    let (obj, _) = w.adopt("w5", "w1", 7);
+    let d = n.receive_push(
+        &*fab,
+        &kh("w1"),
+        &encode_push(KIND_TRANSACTION, &obj.bytes),
+        &ids(),
+    );
+    assert_eq!(d, Decision::Stored);
+    let sent = fab.to(&kh("alice"), FRAME_TOPOLOGY_MEMO);
+    assert_eq!(sent.len(), 1, "one memo, rootward");
+    let m = Memo::decode(&sent[0]).expect("a memo");
+    let slot = n
+        .table
+        .bindings()
+        .iter()
+        .find(|b| b.node == kh("w5"))
+        .and_then(|b| b.slot)
+        .expect("w5 is bound under w1");
+    assert_eq!(m.patron, kh("w1"), "as the member's own statement");
+    assert_eq!(m.slot, u64::from(slot));
+    assert_eq!(m.occupant, Some(kh("w5")));
+    assert_eq!(
+        (m.position.anchor, m.position.nibbles),
+        (kh("alice"), 2),
+        "of the member's own position, one beneath N"
+    );
+    assert_eq!(m.position.path, pack_path(&[0, 1]));
+    // N's own table has the position from the signed record
+    assert!(n.downline.filled(&[1, slot]));
+    // a subordinate that runs a node says its own: N sends nothing for
+    // a change beneath carol
+    fab.clear();
+    let (obj, _) = w.adopt("w6", "carol", 8);
+    n.receive_push(
+        &*fab,
+        &kh("carol"),
+        &encode_push(KIND_TRANSACTION, &obj.bytes),
+        &ids(),
+    );
+    assert_eq!(fab.count(FRAME_TOPOLOGY_MEMO), 0);
 }

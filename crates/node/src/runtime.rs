@@ -994,6 +994,9 @@ impl LiveNode {
                     self.adjacency
                         .send(&serving, crate::propagation::FRAME_TOPOLOGY_PUSH, &frame);
                 }
+                // and that this position runs a node, for every downline
+                // table above it (`wire-format.md` §10.2; design §15.2.2)
+                self.view.lock().unwrap().announce_node(&self.adjacency);
                 let (_, dummy) = mpsc::unbounded_channel();
                 let mut frames = std::mem::replace(&mut session.frames, dummy);
                 let (v, i, a, s, pins) = (
