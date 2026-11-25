@@ -19,11 +19,22 @@ use wry::http::{Response, StatusCode};
 pub type Carrier =
     Arc<dyn Fn(&str, &str, Option<&str>, &[u8], bool) -> frame::Served + Send + Sync>;
 
+/// **Where the engine is sent with everything it would fetch for itself:
+/// a port of this machine that nothing may listen on**, as the phone's
+/// frame is (`Frames.NOWHERE`).
+pub const NOWHERE: (&str, &str) = ("127.0.0.1", "1");
+
 /// **A resource's web view**, in `context`: its origin's scheme answered
 /// by `carry` and nothing else, `first` served to the first `GET /` where
 /// it is in hand, a navigation anywhere else not followed and `refused`
 /// called, no window it could open and no download it could start, and
 /// `rhtn.request` published only where `allowed`.
+///
+/// **And nothing the engine would fetch for itself leaves this machine**
+/// ([`NOWHERE`]): a page's markup can ask the engine to open a connection
+/// ahead of use, which is no request and is offered to no handler here,
+/// and it reached a listener outside [found 2026-11-25, WebKitGTK]. The
+/// scheme above is answered before any proxy is consulted.
 pub fn builder<'a>(
     context: &'a mut wry::WebContext,
     origin: &str,
@@ -85,6 +96,10 @@ pub fn builder<'a>(
             }
             going
         })
+        .with_proxy_config(wry::ProxyConfig::Http(wry::ProxyEndpoint {
+            host: NOWHERE.0.into(),
+            port: NOWHERE.1.into(),
+        }))
         .with_new_window_req_handler(|_, _| wry::NewWindowResponse::Deny)
         .with_download_started_handler(|_, _| false)
         // **the inspector, for whoever is writing the page**, in a

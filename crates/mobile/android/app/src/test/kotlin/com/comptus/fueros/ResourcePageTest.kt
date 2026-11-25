@@ -172,18 +172,42 @@ class ResourcePageTest {
         assertEquals("127.0.0.1", host)
         // below 1024 is the system's to bind, so no other app listens there
         assertTrue(port in 1..1023)
-        // and both names a peer connection is made under are taken
-        for (name in listOf("'RTCPeerConnection'", "'webkitRTCPeerConnection'")) {
-            assertTrue(name, Frames.NO_PEERS.contains(name))
-        }
-        assertTrue(Frames.NO_PEERS.contains("configurable:false"))
+        assertTrue(Engine.NOWHERE in 1..1023)
+    }
+
+    @Test
+    fun a_resources_engine_is_told_one_proxy_and_no_peer_connection() {
+        val told = Engine.prefs(41234).toMap()
+        assertEquals(false, told["media.peerconnection.enabled"])
+        assertEquals(false, told["network.webtransport.enabled"])
+        // plain requests to this app's own proxy, and every other stream nowhere
+        assertEquals(1, told["network.proxy.type"])
+        assertEquals("127.0.0.1", told["network.proxy.http"])
+        assertEquals(41234, told["network.proxy.http_port"])
+        assertEquals(Engine.NOWHERE, told["network.proxy.ssl_port"])
+        assertEquals(Engine.NOWHERE, told["network.proxy.socks_port"])
+        assertEquals(false, told["network.proxy.failover_direct"])
+        // nothing is exempt from the proxy, this device's own loopback included
+        assertEquals("", told["network.proxy.no_proxies_on"])
+        assertEquals(true, told["network.proxy.allow_hijacking_localhost"])
+        // and nothing is fetched ahead of being asked for
+        assertEquals(0, told["network.http.speculative-parallel-limit"])
+        assertEquals(true, told["network.dns.disablePrefetch"])
+        // the file the engine reads before it starts says the same
+        val file = Engine.file(41234)
+        assertTrue(file.startsWith("prefs:\n"))
+        assertTrue(file.contains("  media.peerconnection.enabled: false\n"))
+        assertTrue(file.contains("  network.proxy.http: \"127.0.0.1\"\n"))
+        assertTrue(file.contains("  network.proxy.http_port: 41234\n"))
+        assertEquals(told.size + 1, file.trimEnd().lines().size)
     }
 
     @Test
     fun a_resources_origin_is_its_own_and_resolves_nowhere() {
         val a = "a".repeat(64)
         val b = "b".repeat(64)
-        assertEquals("https://${"a".repeat(32)}.${"a".repeat(32)}.rhtn.invalid", Frames.origin(a))
+        assertEquals("http://${"a".repeat(32)}.${"a".repeat(32)}.localhost", Frames.origin(a))
+        assertEquals("${"a".repeat(32)}.${"a".repeat(32)}.localhost", Frames.host(a))
         assertNotEquals(Frames.origin(a), Frames.origin(b))
         assertEquals(Frames.Going.INSIDE, Frames.resourceGoing(Frames.origin(a), Frames.origin(a) + "/x?y"))
         assertEquals(Frames.Going.REFUSE, Frames.resourceGoing(Frames.origin(a), Frames.origin(b) + "/x"))
@@ -215,47 +239,34 @@ class ResourcePageTest {
 
     @Test
     fun the_frame_asks_for_every_refusal_the_policy_names() {
-        // **the settings moved to [Frames] and the screen calls it**
-        // [2026-11-08], so the instrumentation run can apply the same code
-        // to a real `WebView` instead of a copy of it. Both halves are
-        // asserted: the definition refuses, and the screen reaches for the
-        // definition — either alone would pass while the other drifted.
-        val src = source("Frames.kt")
-        assertTrue(
-            "ResourceActivity no longer frames through Frames.resource",
-            source("ResourceActivity.kt").contains("Frames.resource(this, script)"),
-        )
-        for (setting in listOf(
-            "javaScriptEnabled = script",
-            "domStorageEnabled = script",
-            "databaseEnabled = false",
-            "allowFileAccess = false",
-            "allowContentAccess = false",
-            "allowFileAccessFromFileURLs = false",
-            "allowUniversalAccessFromFileURLs = false",
-            "blockNetworkLoads = true",
-            "setGeolocationEnabled(false)",
-        )) {
-            assertTrue("the frame does not set $setting", src.contains(setting))
-        }
-        // **the origin is the resource's own, and the page loads at it**
-        // [author, 2026-11-15]: served from the kernel's answer by the
-        // screen's client, never handed to the engine with no origin
+        // **a resource's page is framed in this app's own engine**
+        // [author, 2026-11-25], held by [Engine] and answered by [Carrier].
+        // Both halves are asserted: the definitions refuse, and the screen
+        // reaches for the definitions — either alone would pass while the
+        // other drifted.
         val screen = source("ResourceActivity.kt")
         assertTrue("the page loads at the resource's own origin", screen.contains("Frames.origin(resource)"))
-        assertFalse("no document is given no origin any more", screen.contains("loadDataWithBaseURL("))
-        assertTrue("the first load is served from the answer in hand", screen.contains("loadUrl(\"\$origin\$path\")"))
-        // and the one object a running page is given is the bridge, in
-        // the screen and only behind the person's answer
-        assertFalse("Frames publishes nothing into a page", src.contains("addJavascriptInterface"))
-        assertTrue(
-            "the bridge is given only to a page that runs",
-            screen.contains("if (script) {\n            // **the one object**"),
-        )
-        val bridge = source("ResourceBridge.kt")
-        assertTrue("the bridge carries a request and nothing else", bridge.contains("@JavascriptInterface"))
-        assertEquals("one method on the one object", 1, Regex("@JavascriptInterface").findAll(bridge).count())
-        assertTrue("a path under /.rhtn/ is the node's and refused", bridge.contains("/.rhtn/"))
+        assertTrue("its origin is answered by the carrier", screen.contains("Carrier.serve("))
+        assertTrue("no frame before the engine holds what it was told", screen.contains("Engine.with(this) { engine ->"))
+        assertTrue("the session is the engine's own definition", screen.contains("Engine.session(allowed)"))
+        assertTrue("the first load is the origin's own URL", screen.contains("made.loadUri(\"\$origin\$path\")"))
+        assertFalse("no document is given no origin", screen.contains("loadData"))
+        assertFalse("the screen holds no system web view", screen.contains("android.webkit"))
+        // nothing of this app is published into a page: the one object is
+        // a script of the engine's, carrying a request and nothing else
+        for (f in File(module(), "app/src/main/kotlin").walkTopDown().filter { it.extension == "kt" }) {
+            assertFalse("${f.name} publishes into a page", f.readText().contains("addJavascriptInterface("))
+        }
+        val script = File(module(), "app/src/main/assets/frame/request.js").readText()
+        assertTrue("a path under /.rhtn/ is the node's and refused", script.contains("p.startsWith('/.rhtn/')"))
+        assertEquals("one function on the one object", 1, Regex("exportFunction\\(").findAll(script).count())
+        val manifest = File(module(), "app/src/main/assets/frame/manifest.json").readText()
+        assertTrue("it runs before the page's own code", manifest.contains("\"run_at\": \"document_start\""))
+        assertTrue("and only on a resource's origin", manifest.contains("\"matches\": [\"http://*.localhost/*\"]"))
+        // and the engine is not asked for a frame until it read back as told
+        val engine = source("Engine.kt")
+        assertTrue(engine.contains("got[\"media.peerconnection.enabled\"] == false"))
+        assertTrue(engine.contains("got[\"network.proxy.http_port\"] == proxy"))
     }
 
     /** No screen framing somebody else's content may be written without
@@ -264,14 +275,25 @@ class ResourcePageTest {
     fun only_the_two_known_frames_hold_a_web_view() {
         val holders = File(module(), "app/src/main/kotlin").walkTopDown()
             .filter { it.extension == "kt" }
-            .filter { it.readText().contains("WebView(this)") }
+            .filter { Regex("(?<![A-Za-z.])WebView\\(this\\)").containsMatchIn(it.readText()) }
             .map { it.name }
             .sorted()
             .toList()
         assertEquals(
-            "a web view in a third place is a third frame policy",
-            listOf("NodePageActivity.kt", "ResourceActivity.kt"),
+            "the system's web view frames the node's own page and nothing else",
+            listOf("NodePageActivity.kt"),
             holders,
+        )
+        val engines = File(module(), "app/src/main/kotlin").walkTopDown()
+            .filter { it.extension == "kt" }
+            .filter { it.readText().contains("GeckoView(this)") }
+            .map { it.name }
+            .sorted()
+            .toList()
+        assertEquals(
+            "a view of this app's engine in a second place is a second frame policy",
+            listOf("ResourceActivity.kt"),
+            engines,
         )
     }
 
@@ -288,7 +310,7 @@ class ResourcePageTest {
         assertEquals(
             "the resource's frame takes the decision and makes none of its own",
             1,
-            Regex("javaScriptEnabled = script").findAll(frames).count(),
+            Regex("allowJavascript\\(script\\)").findAll(source("Engine.kt")).count(),
         )
         assertFalse("no frame enables script on its own", frames.contains("javaScriptEnabled = true"))
         assertTrue(
@@ -302,8 +324,8 @@ class ResourcePageTest {
             source("NodePageActivity.kt").contains("Frames.node(this)"),
         )
         assertTrue(
-            "ResourceActivity does not frame through Frames.resource",
-            source("ResourceActivity.kt").contains("Frames.resource(this, script)"),
+            "ResourceActivity does not frame through the engine's own session",
+            source("ResourceActivity.kt").contains("Engine.session(allowed)"),
         )
         for (name in listOf("NodePageActivity.kt", "ResourceActivity.kt")) {
             assertFalse(

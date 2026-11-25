@@ -13,6 +13,12 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // The engine a resource's page is framed in (`app/build.gradle.kts`),
+        // from its maker's own repository and nothing else from there.
+        maven {
+            url = uri("https://maven.mozilla.org/maven2/")
+            content { includeGroup("org.mozilla.geckoview") }
+        }
     }
 }
 rootProject.name = "fueros"

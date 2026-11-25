@@ -1,0 +1,15 @@
+{
+  "manifest_version": 2,
+  "name": "frame",
+  "version": "1",
+  "description": "Gives a resource's page its one object, rhtn.request, as the other clients do.",
+  "browser_specific_settings": { "gecko": { "id": "frame@fueros.comptus.com" } },
+  "content_scripts": [
+    {
+      "matches": ["http://*.localhost/*"],
+      "js": ["request.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ]
+}

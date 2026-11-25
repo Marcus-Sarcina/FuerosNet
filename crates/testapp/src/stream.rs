@@ -490,6 +490,7 @@ __SEGS__ segments played as they arrive. Nothing here is one message.</p>
   (async () => {
     row('engine', navigator.userAgent);
     row('secure_context', String(window.isSecureContext));
+    row('request_object', String(!!(window.rhtn && typeof rhtn.request === 'function')));
     row('peer_connection', String(typeof RTCPeerConnection !== 'undefined'));
     row('media_devices', String(!!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)));
     await reach();

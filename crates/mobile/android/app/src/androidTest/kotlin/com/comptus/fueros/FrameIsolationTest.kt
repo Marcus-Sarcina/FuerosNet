@@ -137,48 +137,8 @@ class FrameIsolationTest {
         return seen
     }
 
-    /** The origin a resource's page is given: one resource's own. */
-    private val ORIGIN = Frames.origin("c".repeat(64))
-
-    // acceptance: RSC-58
-    @Test
-    fun a_resource_page_goes_nowhere_it_is_asked_to_go() {
-        val seen = load({ Frames.resource(it) })
-        // **the engine does ask**, which is what makes the rest evidence:
-        // the first run of this file asserted no ask ever arrived, and the
-        // device said otherwise — an `iframe src="file://…"` reaches
-        // `shouldOverrideUrlLoading`. Being asked is the page trying; the
-        // answer is the frame's [2026-11-08].
-        assertTrue(
-            "the page asked for nothing at all, so this test shows nothing",
-            seen.navigations.isNotEmpty() || seen.fetches.isNotEmpty(),
-        )
-        // and the answer: everything the hostile page names is outside the
-        // resource's own origin and refused. **The engine asks for one
-        // thing inside it of its own accord** — `/favicon.ico` [found on
-        // MRK, 2026-11-16] — and that is the resource's to answer, carried
-        // like any load inside the origin, so it is classed as inside
-        val outside = (seen.navigations + seen.fetches).filterNot { it.startsWith("$ORIGIN/") }
-        assertTrue("the hostile page asked for nothing outside: nav=${seen.navigations} fetch=${seen.fetches}", outside.isNotEmpty())
-        for (where in outside) {
-            assertEquals(
-                "a resource's page reaches its own origin and nothing else: $where",
-                Frames.Going.REFUSE,
-                Frames.resourceGoing(ORIGIN, where),
-            )
-        }
-        for (where in (seen.navigations + seen.fetches) - outside.toSet()) {
-            assertEquals("inside its origin is carried: $where", Frames.Going.INSIDE, Frames.resourceGoing(ORIGIN, where))
-        }
-        // **no fetch outside the origin is served a body**: what arrives
-        // is answered empty by the screen's client
-        assertTrue(
-            "a resource's page was served something: ${seen.bodies}",
-            seen.bodies.all { it == 0 },
-        )
-        // and inside its own origin it goes, which is what the client carries
-        assertEquals(Frames.Going.INSIDE, Frames.resourceGoing(ORIGIN, "$ORIGIN/threads/42"))
-    }
+    /** The origin the hostile page is loaded under: a node's own. */
+    private val ORIGIN = "http://127.0.0.1:7449"
 
     // acceptance: PRD-12
     @Test
@@ -215,29 +175,11 @@ class FrameIsolationTest {
         )
     }
 
-    /**
-     * **The silence above is evidence only because the same page is loud
-     * when script is allowed.** Without this, a frame that rendered
-     * nothing at all would pass every assertion in this file.
-     */
-    @Test
-    fun a_page_that_runs_is_what_the_frame_is_refusing() {
-        val seen = load({ Frames.resource(it) }, script = true)
-        assertTrue(
-            "the hostile page did nothing even with script allowed, so this " +
-                "test proves nothing about the frames: nav=${seen.navigations} " +
-                "fetch=${seen.fetches}",
-            seen.navigations.isNotEmpty() || seen.fetches.isNotEmpty(),
-        )
-    }
-
     // acceptance: PRD-12
     @Test
     fun every_setting_both_frames_shut_is_shut_on_the_engines_own_object() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext
         for ((name, frame) in listOf<Pair<String, (WebView) -> Unit>>(
-            "resource" to { Frames.resource(it) },
-            "resource, allowed" to { Frames.resource(it, script = true) },
             "node" to Frames::node,
         )) {
             lateinit var got: Map<String, Boolean>
@@ -272,33 +214,8 @@ class FrameIsolationTest {
             }
             assertEquals(Frames.SHUT_UNLESS_ALLOWED.toSet(), unless.keys)
             for (which in Frames.SHUT_UNLESS_ALLOWED) {
-                assertEquals(
-                    "$name: $which follows the decision and nothing else",
-                    name == "resource, allowed",
-                    unless.getValue(which),
-                )
+                assertFalse("$name: $which is not shut", unless.getValue(which))
             }
         }
-    }
-
-    // acceptance: RSC-58
-    @Test
-    fun a_resources_frame_shuts_the_network_behind_its_client_and_a_nodes_does_not() {
-        val app = InstrumentationRegistry.getInstrumentation().targetContext
-        lateinit var resource: Pair<Boolean, Boolean>
-        lateinit var node: Pair<Boolean, Boolean>
-        InstrumentationRegistry.getInstrumentation().runOnMainSync {
-            val a = WebView(app).also { Frames.resource(it) }
-            resource = a.settings.blockNetworkLoads to a.settings.blockNetworkImage
-            val b = WebView(app).also(Frames::node)
-            node = b.settings.blockNetworkLoads to b.settings.blockNetworkImage
-        }
-        // **every load reaches the screen's client** [author, 2026-11-15],
-        // which carries the ones inside the page's own origin through the
-        // kernel and answers the rest with nothing; and the network is
-        // shut behind it, which leaves the client asked first
-        // ([MediaEgressTest] holds that it still is)
-        assertEquals("a resource's frame blocks network loads behind its client", true to false, resource)
-        assertEquals("a node's own pages are served by the instance and must load", false to false, node)
     }
 }

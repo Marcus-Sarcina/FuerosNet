@@ -33,6 +33,14 @@ release says which of the two it is. Contributions here are granted under
 Apache-2.0, as in the root repository, which is what lets the dependency be
 swapped later without anyone's permission.
 
+**The engine a resource's page is framed in is Mozilla's GeckoView, under
+MPL-2.0** [author, 2026-11-25; MPL-2.0 in a client, 2026-09-16]. It is
+shipped as Mozilla released it, with no file of it changed, so its terms
+reach nothing written here; its source is at
+https://hg.mozilla.org/releases/mozilla-release. The system's own engine
+could not be told to offer a page no peer connection, which is why this one
+is carried (`app/src/main/kotlin/com/comptus/fueros/Engine.kt`).
+
 **The boundary is `rhtn-ffi` and nothing else.** A shell that reaches past
 it into `rhtn-client` puts protocol behaviour above the boundary, where no
 other client would have it.

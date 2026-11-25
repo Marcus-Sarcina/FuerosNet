@@ -14,6 +14,9 @@
 //!    might — a form's body through the scheme, `rhtn.request`, a fetch off
 //!    its origin, a path under `/.rhtn/`, storage of its own, and a
 //!    navigation away — and writes down what happened;
+//!  - **both carrying a link that only asks for a connection to be opened
+//!    ahead of use**, to a listener of this check's own, which no request
+//!    carries and which must be reached by neither;
 //!  - **one whose page declares code the person refused**, which must run
 //!    none of it.
 //!
@@ -34,6 +37,7 @@ const REFUSED: &str = "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b
 
 /// The page whose code runs: every attempt recorded on `window.seen`.
 const TRYING: &str = r#"<h1>trying</h1>
+<link rel="preconnect" href="http://__AWAY__">
 <iframe src="/doc" hidden></iframe>
 <script>
 window.seen = {};
@@ -58,6 +62,7 @@ setTimeout(() => { note('navigating', true); location.href = 'https://example.co
 
 /// The page whose code the person refused: it must not run.
 const REFUSING: &str = r#"<h1>refused</h1>
+<link rel="preconnect" href="http://__AWAY__">
 <script>window.seen = { ran: true };</script>
 <p id="p" onclick="window.seen={ran:true}">no code here</p>"#;
 
@@ -93,13 +98,28 @@ fn main() {
     let dir = std::env::temp_dir().join(format!("rhtn-frame-check-{}", std::process::id()));
     let refusals = Arc::new(AtomicUsize::new(0));
     let carried: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    // **somewhere outside the frame**, on this machine: whatever connects
+    // here came by no request a carrier was offered
+    let away = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let at = away.local_addr().unwrap().to_string();
+    let reached = Arc::new(AtomicUsize::new(0));
+    let counting = reached.clone();
+    std::thread::spawn(move || {
+        for _ in away.incoming() {
+            counting.fetch_add(1, Ordering::Relaxed);
+        }
+    });
+    let (trying, refusing) = (
+        TRYING.replace("__AWAY__", &at),
+        REFUSING.replace("__AWAY__", &at),
+    );
 
     let mut held = Vec::new();
     for (resource, allowed, first) in [
         (
             ALLOWED,
             true,
-            page(TRYING, "script-src 'self' 'unsafe-inline'"),
+            page(&trying, "script-src 'self' 'unsafe-inline'"),
         ),
         (REFUSED, false, {
             let a = ResourceAnswer {
@@ -111,7 +131,7 @@ fn main() {
                     shape: PageShape::Page,
                     policy: Some("script-src 'self' 'unsafe-inline'".into()),
                     runs_script: true,
-                    body: REFUSING.as_bytes().to_vec(),
+                    body: refusing.as_bytes().to_vec(),
                 }),
                 unreadable: None,
                 ask: None,
@@ -191,13 +211,14 @@ fn main() {
             &got,
             refusals.load(Ordering::Relaxed),
             &carried.lock().unwrap(),
+            reached.load(Ordering::Relaxed),
         );
         let _ = std::fs::remove_dir_all(&dir);
         std::process::exit(if ok { 0 } else { 1 });
     });
 }
 
-fn verdict(got: &[(String, String)], refusals: usize, carried: &[String]) -> bool {
+fn verdict(got: &[(String, String)], refusals: usize, carried: &[String], reached: usize) -> bool {
     let mut ok = true;
     let mut check = |what: &str, held: bool| {
         println!("{} {what}", if held { "ok  " } else { "FAIL" });
@@ -263,5 +284,10 @@ fn verdict(got: &[(String, String)], refusals: usize, carried: &[String]) -> boo
             .any(|c| c.starts_with("POST /echo ") && c.ends_with("doc=false")),
     );
     println!("carried: {carried:?}");
+    println!("connections outside the frame: {reached}");
+    check(
+        "no page had the engine open a connection of its own",
+        reached == 0,
+    );
     ok
 }

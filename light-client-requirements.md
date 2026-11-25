@@ -1577,6 +1577,20 @@ to show a resource's page has to read one.
     to the same resource by the same node, and answer every other one with
     nothing. The kernel stays the only network and sees every exchange, as it
     does a form's.
+  - **Leave the frame's engine no network but that one** [author,
+    2026-11-25]. A load the engine offers you is the least of what a page can
+    ask of it: a socket, from its window, from a window it makes for itself or
+    from a worker; a link that only asks for a connection to be opened ahead
+    of use, which needs no code; a transport over datagrams; a peer
+    connection. None of those is a load, none is offered to you, and each
+    reaches an address the page chose. So give the engine one route for
+    everything it would fetch for itself, your own, and refuse there whatever
+    is not the page's own origin, this device's own loopback included; and
+    frame a page only in an engine whose peer connections you can switch off,
+    in every window a page can make. **A page streams only through a channel
+    its package declared, which its operator could read before trusting it**;
+    such a stream need not pass you. Where an engine cannot be held to this,
+    do not frame a page in it.
   - **Run script only where the page declared it and the user allowed it.** The
     declaration is the page's own `content-security-policy` naming
     `script-src`, read by the kernel and handed to the frame's engine to

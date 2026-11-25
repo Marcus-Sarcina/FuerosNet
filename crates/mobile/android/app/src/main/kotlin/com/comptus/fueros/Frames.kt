@@ -2,11 +2,9 @@ package com.comptus.fueros
 
 import android.content.Context
 import android.webkit.WebSettings
-import android.webkit.WebStorage
 import android.webkit.WebView
 import androidx.webkit.ProxyConfig
 import androidx.webkit.ProxyController
-import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 
 /**
@@ -29,7 +27,10 @@ import androidx.webkit.WebViewFeature
  * script only where the page declared it and the person allowed it
  * (`light-client-requirements.md` §8) [author, 2026-11-15]. Folding them
  * together would mean either giving a node's pages a bridge or taking a
- * resource's own storage away.
+ * resource's own storage away. **And two engines** [author, 2026-11-25]:
+ * the node's page stays in the system's, which runs none of its code; a
+ * resource's page is in one this app ships ([Engine]), because only that
+ * one can be told to offer a page no way out but this app.
  *
  * What neither permits, in both: a bridge into this app, file or content
  * access, a load from anywhere but its own origin.
@@ -46,7 +47,21 @@ object Frames {
     fun origin(resource: String): String {
         val hex = resource.lowercase()
         require(hex.length == 64 && hex.all { it in '0'..'9' || it in 'a'..'f' }) { "a resource is 64 hex digits" }
-        return "https://${hex.substring(0, 32)}.${hex.substring(32)}.rhtn.invalid"
+        return "http://${host(resource)}"
+    }
+
+    /**
+     * **The name a resource's origin goes by**: its keyhash in two labels,
+     * since one may not exceed 63 characters, under `localhost` — a name
+     * every engine holds to be this device and no network resolves. The
+     * engine reaches it through [Carrier] alone ([Engine]); it has no
+     * port, so the origin is the same at every start and what a page
+     * stored under it is still there.
+     */
+    fun host(resource: String): String {
+        val hex = resource.lowercase()
+        require(hex.length == 64 && hex.all { it in '0'..'9' || it in 'a'..'f' }) { "a resource is 64 hex digits" }
+        return "${hex.substring(0, 32)}.${hex.substring(32)}.localhost"
     }
 
     /**
@@ -62,38 +77,13 @@ object Frames {
     const val NOWHERE: String = "127.0.0.1:1"
 
     /**
-     * **What is taken from every window of a resource's page before any
-     * of its own code runs**: a peer connection sends datagrams of its
-     * own to an address the page chooses, by no proxy and by no load, so
-     * the only place to refuse one is the constructor.
-     */
-    const val NO_PEERS: String =
-        "(function(){for(const n of ['RTCPeerConnection','webkitRTCPeerConnection'])" +
-            "{try{Object.defineProperty(window,n,{value:undefined,writable:false,configurable:false})}" +
-            "catch(e){}}})();"
-
-    /**
-     * **Whether this device's engine can hold a page that runs code to
-     * its frame**: [wall] and [NO_PEERS] both. Where it cannot, a
-     * resource's page is shown without its code, whatever was allowed.
-     */
-    fun confines(): Boolean =
-        runCatching {
-            WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE) &&
-                WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
-        }.getOrDefault(false)
-
-    /**
-     * **Put the wall behind every frame of this app, and then go on**
-     * ([NOWHERE]). It is one setting for the whole process, so `through`
-     * names the one origin a node's own page is served from while that
-     * screen is in front, and nothing while it is not; this device's own
-     * loopback is walled with the rest. `then` runs on the main thread
-     * once the engine has taken it, which is when a frame may load.
-     *
-     * **What it leaves** while a node's page is in front: a resource's
-     * page still running behind it may open a connection to that one
-     * origin, which answers nothing unproved.
+     * **Put the wall behind the system engine's frames, and then go on**
+     * ([NOWHERE]). The node's own page is the one frame left on that
+     * engine, so `through` names the origin it is served from and
+     * everything else the engine would fetch goes nowhere, this device's
+     * own loopback with the rest. `then` runs on the main thread once the
+     * engine has taken it, which is when the frame may load. A resource's
+     * page is in another engine altogether ([Engine]).
      */
     fun wall(through: String? = null, then: () -> Unit) {
         val main = android.os.Handler(android.os.Looper.getMainLooper())
@@ -148,64 +138,7 @@ object Frames {
                 .remove(resource)
                 .apply()
         }
-        runCatching { WebStorage.getInstance().deleteOrigin(origin(resource)) }
-    }
-
-    /**
-     * **A resource's page** (RSC-58; `light-client-requirements.md` §8)
-     * [author, 2026-11-15]: a page in the origin [origin] mints for its
-     * resource, reaching that resource and nothing else — every load and
-     * navigation inside the origin is carried by the screen's client
-     * through the kernel, and every other one is answered with nothing —
-     * keeping storage under that origin, and running script only as
-     * `script` says: the page's own declaration and the person's answer,
-     * both decided by the screen before the frame is made. **No bridge
-     * into this app**: the one object a page that runs script is given
-     * ([ResourceBridge]) carries a request to the same resource and
-     * nothing else.
-     *
-     * The caller loads the origin's URL and serves it from the kernel's
-     * answer: the engine then enforces the page's own policy, and no
-     * document is ever handed to it with no origin.
-     */
-    fun resource(web: WebView, script: Boolean = false) {
-        web.settings.apply {
-            javaScriptEnabled = script
-            javaScriptCanOpenWindowsAutomatically = false
-            // storage of the resource's own, under its origin, where its
-            // pages run; nothing to keep where they do not. **WebSQL stays
-            // off**: the engine has removed it and reads `false` whatever
-            // is set [found on MRK, 2026-11-16], and IndexedDB comes with
-            // script and DOM storage
-            domStorageEnabled = script
-            databaseEnabled = false
-            allowFileAccess = false
-            allowContentAccess = false
-            allowFileAccessFromFileURLs = false
-            allowUniversalAccessFromFileURLs = false
-            // **loads are the screen's client's to carry or refuse, and
-            // the network is shut behind it as a second wall**: the engine
-            // still offers every load to the client first, the page's own
-            // origin is served from there, and nothing the client did not
-            // answer can reach the network [MediaEgressTest, MRK, WebView
-            // 157, 2026-11-16: media and images to an outside host asked
-            // the client, reached nothing, and the origin's own document
-            // was served with loads blocked]
-            blockNetworkLoads = true
-            blockNetworkImage = false
-            setGeolocationEnabled(false)
-            mediaPlaybackRequiresUserGesture = true
-            cacheMode = WebSettings.LOAD_NO_CACHE
-            useWideViewPort = true
-            loadWithOverviewMode = true
-            builtInZoomControls = true
-            displayZoomControls = false
-        }
-        // **and a page that runs has no peer connection to run** ([NO_PEERS]),
-        // in its own window and in each one it makes
-        if (script) {
-            WebViewCompat.addDocumentStartJavaScript(web, NO_PEERS, setOf("*"))
-        }
+        runCatching { Engine.forget(context, resource) }
     }
 
     /**

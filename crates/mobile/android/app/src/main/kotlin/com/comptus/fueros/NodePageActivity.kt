@@ -172,24 +172,14 @@ class NodePageActivity : Activity() {
                 return true
             }
         }
-        // **this origin is the one a frame of this app loads from**, so
-        // the wall behind every frame is opened for it and nothing else
-        // while this screen is in front ([Frames.wall])
+        // **this origin is the one this engine loads from**, so the wall
+        // behind it is opened for it and nothing else ([Frames.wall])
         val framed = this
         Frames.wall(origin) { if (!destroyed) go(framed, origin, "$origin/") }
     }
 
     private var destroyed = false
 
-    override fun onResume() {
-        super.onResume()
-        if (at.isNotEmpty()) Frames.wall("http://$at") {}
-    }
-
-    override fun onPause() {
-        Frames.wall {}
-        super.onPause()
-    }
 
     /**
      * **Load one page of the instance's own, proved.**

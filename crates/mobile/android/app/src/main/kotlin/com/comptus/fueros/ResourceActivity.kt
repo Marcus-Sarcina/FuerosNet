@@ -3,11 +3,6 @@ package com.comptus.fueros
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.os.Bundle
-import android.webkit.WebResourceRequest
-import android.webkit.WebResourceResponse
-import android.webkit.WebStorage
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -31,14 +26,14 @@ import android.widget.TextView
  *    that origin's URL and served from the kernel's answer, so the engine
  *    enforces the page's own policy and the document is same-origin with
  *    its resource and nothing else.
- *  - **The same resource, carried**: `shouldInterceptRequest` answers a
- *    `GET` inside the origin from the kernel, and everything outside it
- *    with nothing; `shouldOverrideUrlLoading` lets the frame go inside
- *    the origin and refuses it anywhere else, saying so.
+ *  - **The same resource, carried**: the frame's engine has one proxy
+ *    for everything, this app's own ([Carrier], [Engine]), which answers
+ *    the origin from the kernel and refuses everything else; the frame
+ *    goes inside the origin and is refused anywhere else, saying so.
  *  - **Script by declaration and consent** ([ResourcePage.runs]): the
  *    frame is made with script on only where the page declared it and
  *    the person allowed it, asked once per resource.
- *  - **One object** ([ResourceBridge]) for a page that runs, carrying a
+ *  - **One object** (`rhtn.request`, [Engine]) for a page that runs, carrying a
  *    request with a body to the same resource; no other bridge.
  *  - **No local reach**: file and content access off, both file-URL
  *    escapes off.
@@ -51,7 +46,8 @@ import android.widget.TextView
  */
 class ResourceActivity : Activity() {
 
-    private var web: WebView? = null
+    /** The frame's session in the engine, closed with the screen. */
+    private var session: org.mozilla.geckoview.GeckoSession? = null
 
     /** The identity that holds the entry this screen was opened from. */
     private var by: String? = null
@@ -788,99 +784,83 @@ class ResourceActivity : Activity() {
         addView(button("Show it without its code") { decide(false) })
     }
 
-    /** The frame, and the whole of what it permits. */
-    @SuppressLint("SetJavaScriptEnabled")
-    private fun frame(html: String, page: Gateway.Page, allowed: Boolean): WebView = WebView(this).apply {
-        web = this
-        // **code runs only where this engine can hold it to the frame**
-        // ([Frames.confines])
-        val script = allowed && Frames.confines()
-        layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.MATCH_PARENT,
-        )
+    /**
+     * **The frame, and the whole of what it permits**: a view of this
+     * app's own engine ([Engine]) on a session made for this page, its
+     * origin answered by [Carrier] as this screen's identity and node.
+     */
+    private fun frame(html: String, page: Gateway.Page, allowed: Boolean): android.view.View {
         val node = intent.getStringExtra("node").orEmpty()
         val resource = intent.getStringExtra("resource").orEmpty()
         val path = intent.getStringExtra("path") ?: "/"
         val origin = Frames.origin(resource)
-        says?.text = ResourcePage.frameSays(script)
-        // **the frame itself is [Frames.resource]**, which the
-        // instrumentation run applies to a real `WebView` of its own: one
-        // definition, so a test cannot pass while this screen drifts
-        Frames.resource(this, script)
-        if (script) {
-            // **the one object** ([ResourceBridge]): a request to the same
-            // resource through the kernel, and nothing else of this app
-            addJavascriptInterface(ResourceBridge(by, node, resource), "rhtn")
+        if (!Engine.carried()) {
+            return note("This build carries no engine for this device's processor, so a resource's page is not shown here.")
         }
+        says?.text = ResourcePage.frameSays(allowed)
         // the page as it was answered, styled, served to the first load
-        first = path to page.copy(body = html.toByteArray(Charsets.UTF_8))
-        webViewClient = object : WebViewClient() {
-            /** **Inside the origin the frame goes; anywhere else it does not.** */
-            override fun shouldOverrideUrlLoading(
-                view: WebView,
-                request: WebResourceRequest,
-            ): Boolean {
-                val going = request.url.toString()
-                if (Frames.resourceGoing(origin, going) == Frames.Going.INSIDE) return false
-                view.post {
+        Carrier.serve(
+            Carrier.Serving(resource, by, node, path to page.copy(body = html.toByteArray(Charsets.UTF_8))),
+        )
+        val view = org.mozilla.geckoview.GeckoView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.MATCH_PARENT,
+            )
+        }
+        Engine.with(this) { engine ->
+            if (isFinishing || isDestroyed) return@with
+            if (engine == null) {
+                held?.removeAllViews()
+                held?.addView(note("This device's engine could not be held to the frame, so the page is not shown."))
+                return@with
+            }
+            val made = Engine.session(allowed)
+            made.navigationDelegate = object : org.mozilla.geckoview.GeckoSession.NavigationDelegate {
+                /** **Inside the origin the frame goes; anywhere else it does not.** */
+                override fun onLoadRequest(
+                    session: org.mozilla.geckoview.GeckoSession,
+                    request: org.mozilla.geckoview.GeckoSession.NavigationDelegate.LoadRequest,
+                ): org.mozilla.geckoview.GeckoResult<org.mozilla.geckoview.AllowOrDeny> {
+                    if (Frames.resourceGoing(origin, request.uri) == Frames.Going.INSIDE) {
+                        return org.mozilla.geckoview.GeckoResult.allow()
+                    }
                     android.widget.Toast.makeText(
-                        view.context,
+                        this@ResourceActivity,
                         "a resource's page reaches its own resource and nothing else: the frame did not follow that",
                         android.widget.Toast.LENGTH_SHORT,
                     ).show()
+                    return org.mozilla.geckoview.GeckoResult.deny()
                 }
-                return true
-            }
 
-            /**
-             * **Every load inside the origin is carried through the
-             * kernel; every other one is answered with nothing**, an
-             * empty body rather than an error the page could time. The
-             * engine hands over the method and the path and never a body,
-             * so a `POST` the engine makes is answered as such: a page
-             * that posts does it through [ResourceBridge].
-             */
-            override fun shouldInterceptRequest(
-                view: WebView,
-                request: WebResourceRequest,
-            ): WebResourceResponse {
-                val url = request.url.toString()
-                if (Frames.resourceGoing(origin, url) != Frames.Going.INSIDE) {
-                    return WebResourceResponse("text/plain", "utf-8", java.io.ByteArrayInputStream(ByteArray(0)))
-                }
-                val at = url.removePrefix(origin).ifEmpty { "/" }
-                if (request.method.uppercase() != "GET") {
-                    return WebResourceResponse(
-                        "text/plain", "utf-8", 405, "Method Not Allowed", emptyMap(),
-                        java.io.ByteArrayInputStream(
-                            "this frame carries a GET as the engine asks it; a request with a body goes through rhtn.request\n".toByteArray(),
-                        ),
-                    )
-                }
-                val served = first?.takeIf { it.first == at }?.also { first = null }?.second
-                    ?: askAsHolder(node, resource, at)?.page
-                    ?: return WebResourceResponse("text/plain", "utf-8", java.io.ByteArrayInputStream(ByteArray(0)))
-                val headers = mutableMapOf<String, String>()
-                served.policy?.let { headers["content-security-policy"] = it }
-                val status = Frames.engineStatus(served.httpStatus)
-                return WebResourceResponse(
-                    served.media ?: "application/octet-stream",
-                    served.charset ?: "utf-8",
-                    status,
-                    if (status in 200..299) "OK" else "Answered",
-                    headers,
-                    java.io.ByteArrayInputStream(served.body),
-                )
+                /** A frame inside the page goes where the page may, and gets nothing elsewhere. */
+                override fun onSubframeLoadRequest(
+                    session: org.mozilla.geckoview.GeckoSession,
+                    request: org.mozilla.geckoview.GeckoSession.NavigationDelegate.LoadRequest,
+                ): org.mozilla.geckoview.GeckoResult<org.mozilla.geckoview.AllowOrDeny> =
+                    if (Frames.resourceGoing(origin, request.uri) == Frames.Going.INSIDE ||
+                        request.uri.startsWith("about:") || request.uri.startsWith("blob:")
+                    ) {
+                        org.mozilla.geckoview.GeckoResult.allow()
+                    } else {
+                        org.mozilla.geckoview.GeckoResult.deny()
+                    }
+
+                /** No window a page could open. */
+                override fun onNewSession(
+                    session: org.mozilla.geckoview.GeckoSession,
+                    uri: String,
+                ): org.mozilla.geckoview.GeckoResult<org.mozilla.geckoview.GeckoSession>? = null
             }
+            made.open(engine)
+            session = made
+            view.setSession(made)
+            // **the origin's own URL, served from the answer in hand**: the
+            // document is same-origin with its resource, and the engine
+            // holds it to the policy the resource declared
+            made.loadUri("$origin$path")
         }
-        // **the origin's own URL, served from the answer in hand**: the
-        // document is same-origin with its resource, and the engine holds
-        // it to the policy the resource declared. **Loaded once the wall
-        // is behind it** ([Frames.wall]), and not at all where the screen
-        // went first
-        val framed = this
-        Frames.wall { if (web === framed) loadUrl("$origin$path") }
+        return view
     }
 
     /** `text/plain` is not a page, so it is not framed as one. */
@@ -912,13 +892,6 @@ class ResourceActivity : Activity() {
         super.onPause()
     }
 
-    override fun onResume() {
-        super.onResume()
-        // a node's page may have opened the wall for its own origin while
-        // this screen was behind it ([Frames.wall])
-        Frames.wall {}
-    }
-
     override fun onDestroy() {
         camera?.close()
         camera = null
@@ -930,12 +903,9 @@ class ResourceActivity : Activity() {
         // **what the page stored stays, under its own origin** [author,
         // 2026-11-15]: the resource's, until the person forgets the
         // resource ([Frames.forget]); the view itself goes with the screen
-        web?.let {
-            it.stopLoading()
-            it.loadUrl("about:blank")
-            it.destroy()
-        }
-        web = null
+        session?.close()
+        session = null
+        intent.getStringExtra("resource")?.takeIf { it.length == 64 }?.let { runCatching { Carrier.stop(it) } }
         super.onDestroy()
     }
 }

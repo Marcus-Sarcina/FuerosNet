@@ -39,7 +39,7 @@ package com.comptus.fueros
  *    once and remembered ([Frames.scriptAllowed]). A page that declares
  *    nothing runs nothing, whatever its markup carries.
  *  - **One object, no bridge.** A page that runs is given
- *    [ResourceBridge]: a request to the same resource and nothing else.
+ *    `rhtn.request` ([Engine]): a request to the same resource and nothing else.
  *    Nothing of this app is published into it.
  *  - **Storage of its own, kept.** What a page stores under its origin
  *    outlives the screen and belongs to that resource; forgetting the

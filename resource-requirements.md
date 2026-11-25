@@ -407,7 +407,12 @@ path and never its body; a `GET` the page makes of its own origin is carried
 as it is. **A page sets no header** [author, 2026-11-24]: the request carries
 the type you gave it and nothing else of the page's choosing, so depend on no
 header a page would have to send, and take what you need in the path or the
-body. No bridge into the client, no reach to the device. So a capability
+body. No bridge into the client, no reach to the device. **And no route out
+but to you** [author, 2026-11-25]: a socket, a transport over datagrams, a
+peer connection or a connection opened ahead of use reaches nothing from a
+page, in whichever window or worker it is opened; what must stream goes
+through a channel you declared, which your operator could read before
+trusting you (§3). So a capability
 of their device — a scan, a photograph, a place, a tag read, a
 signature — is not yours to take from a page; **you ask for it, in one typed
 ask, and their client answers** [author, 2026-10-30]. The kernel on their

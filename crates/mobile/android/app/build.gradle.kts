@@ -27,7 +27,10 @@ val specPins: String = providers.fileContents(
 
 android {
     namespace = "com.comptus.fueros"
-    compileSdk = 37
+    // 37.2, which the frame's engine asks to be compiled against
+    compileSdk {
+        version = release(37) { minorApiLevel = 2 }
+    }
 
     defaultConfig {
         applicationId = "com.comptus.fueros"
@@ -141,11 +144,19 @@ dependencies {
     // The shell's log lines (Apache-2.0). `FuerosApp` plants a tree only in
     // the fieldtest flavour; with none planted every call is a no-op.
     implementation("com.jakewharton.timber:timber:5.0.1")
-    // What holds a resource's frame to its own resource
-    // (`light-client-requirements.md` §8): the engine's own support
-    // library, for a network wall behind every frame and a script that
-    // runs before any of a page's own (Apache-2.0) [author, 2026-11-24].
+    // What holds the node's own page to its origin (`Frames.wall`): the
+    // system engine's support library, for a proxy behind that frame
+    // (Apache-2.0) [author, 2026-11-24].
     implementation("androidx.webkit:webkit:1.14.0")
+    // **The engine a resource's page is framed in** [author, 2026-11-25]:
+    // Mozilla's, shipped in the app, because its embedder can switch peer
+    // connections off and send everything it would fetch to one proxy,
+    // where the system engine's cannot (`Engine`). MPL-2.0, used as
+    // released and unmodified, in this client alone [author, 2026-09-16];
+    // its source is at https://hg.mozilla.org/releases/mozilla-release.
+    // One processor type: the artifact for each carries the same classes,
+    // so two cannot be taken together, and the bench is arm64.
+    implementation("org.mozilla.geckoview:geckoview-arm64-v8a:161.0.20261118180411")
     // Unit tests hold the shell's own logic on the JVM; what needs a
     // device stays on the device.
     testImplementation("junit:junit:4.13.2")
