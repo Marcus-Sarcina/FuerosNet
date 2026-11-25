@@ -601,7 +601,10 @@ impl Default for Limits {
             memory: 64 << 20,
             fuel: 200_000_000,
             table_elements: 10_000,
-            response: 8 << 20,
+            // **what one message may be on the wire** (`wire-format.md`
+            // §11) [author, 2026-11-24]: a host takes no less from a
+            // package than the path to it carries
+            response: 16 << 20,
         }
     }
 }

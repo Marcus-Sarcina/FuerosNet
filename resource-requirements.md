@@ -163,7 +163,9 @@ sent them to. **No cookie is kept and none is sent**: who is asking is in the
 headers above, on every request. **No connection is upgraded or held open**
 (`wire-format.md` §11.2): say that something waits with a notice (§3.3). And
 **an answer is one message, whole**, within the bound `wire-format.md` §11
-sets. **What is larger than one message goes as parts**: a file as numbered
+sets: 16 MiB, head and body together, and your host takes no less from you
+[author, 2026-11-24]. One past it reaches nobody: the asker is told you are
+unavailable, and your operator is told why. **What is larger than one message goes as parts**: a file as numbered
 parts the page fetches in turn, audio or video as segments of a few seconds
 each, played as they arrive. That is how large and continuous content is
 carried, and nothing in it asks more of the path than a `GET`.

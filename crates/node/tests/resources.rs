@@ -554,6 +554,71 @@ fn ack(sc: &mut Scene, node: &str) {
     sc.table = t;
 }
 
+// functional: PKG-022
+#[test]
+fn one_answer_from_a_package_is_bounded_as_one_message_is() {
+    /// A backend answering with a body of the length it was made with.
+    struct Sized(usize);
+    impl Backend for Sized {
+        fn handle(&self, _: &[u8]) -> Result<Vec<u8>, String> {
+            let mut out =
+                format!("HTTP/1.1 200 OK\r\ncontent-length: {}\r\n\r\n", self.0).into_bytes();
+            out.resize(out.len() + self.0, b'x');
+            Ok(out)
+        }
+        fn running(&self) -> bool {
+            true
+        }
+    }
+    let sc = scene();
+    let bound = rhtn_codec::bounds::RESOURCE_MESSAGE_BYTES;
+    let answer_of = |bytes: usize| {
+        let mut g = Gateway::default();
+        g.bind(
+            R1,
+            Binding {
+                owner: kh("alice"),
+                authority: "r1.internal".into(),
+                backend: Some(Arc::new(Sized(bytes))),
+                declared: Manifest {
+                    roles: BTreeSet::from(["reader".to_string()]),
+                    ..Default::default()
+                },
+            },
+        );
+        g.set_row(
+            R1,
+            kh("carol"),
+            Row {
+                roles: BTreeSet::from(["reader".to_string()]),
+                connect: true,
+            },
+        )
+        .unwrap();
+        g.serve(
+            &kh("alice"),
+            &sc.table,
+            &kh("carol"),
+            &request(R1, OK_GET),
+            0,
+        )
+    };
+    // twelve mebibytes: over what a node took until 2026-11-24, under the bound
+    let r = answer_of(12 << 20);
+    assert_eq!(r.status, STATUS_DELIVERED);
+    assert!(r.body.unwrap().len() > 12 << 20);
+    // the largest body whose whole message is the bound, and one byte more
+    let head = "HTTP/1.1 200 OK\r\ncontent-length: 16777000\r\n\r\n".len();
+    let r = answer_of(bound - head);
+    assert_eq!(r.status, STATUS_DELIVERED);
+    assert!(r.body.unwrap().len() <= bound);
+    assert_eq!(
+        answer_of(bound).status,
+        STATUS_UNAVAILABLE,
+        "a message past the bound is a defect in the package, not an answer"
+    );
+}
+
 // functional: PKG-021
 #[test]
 fn a_request_is_decided_before_its_package_is_asked_and_refused_where_the_grant_moved_under_it() {

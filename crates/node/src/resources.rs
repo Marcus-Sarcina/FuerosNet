@@ -880,9 +880,25 @@ impl Handoff {
             // refusal of the asker, and the operator is the one who can
             // act on it.
             Ok(resp) => match crate::http::parse_response(&resp) {
-                Ok(parsed) => ResourceResponse {
-                    status: STATUS_DELIVERED,
-                    body: Some(crate::http::serialise_response(&parsed)),
+                // **one answer is one message, and bounded as one**
+                // (`wire-format.md` §11) [author, 2026-11-24]: what the
+                // asker would stop reading is not sent, and the operator
+                // is told which package wrote it
+                Ok(parsed) => match crate::http::serialise_response(&parsed) {
+                    whole if whole.len() > rhtn_codec::bounds::RESOURCE_MESSAGE_BYTES => {
+                        tracing::warn!(
+                            target: "node",
+                            resource8 = %crate::diag::id8(&resource),
+                            bytes = whole.len(),
+                            bound = rhtn_codec::bounds::RESOURCE_MESSAGE_BYTES,
+                            "node.resource.oversized"
+                        );
+                        ResourceResponse::code(STATUS_UNAVAILABLE)
+                    }
+                    whole => ResourceResponse {
+                        status: STATUS_DELIVERED,
+                        body: Some(whole),
+                    },
                 },
                 Err(why) => {
                     tracing::warn!(

@@ -860,11 +860,12 @@ class ResourceActivity : Activity() {
                     ?: return WebResourceResponse("text/plain", "utf-8", java.io.ByteArrayInputStream(ByteArray(0)))
                 val headers = mutableMapOf<String, String>()
                 served.policy?.let { headers["content-security-policy"] = it }
+                val status = Frames.engineStatus(served.httpStatus)
                 return WebResourceResponse(
                     served.media ?: "application/octet-stream",
                     served.charset ?: "utf-8",
-                    served.httpStatus,
-                    if (served.httpStatus in 200..299) "OK" else "Answered",
+                    status,
+                    if (status in 200..299) "OK" else "Answered",
                     headers,
                     java.io.ByteArrayInputStream(served.body),
                 )

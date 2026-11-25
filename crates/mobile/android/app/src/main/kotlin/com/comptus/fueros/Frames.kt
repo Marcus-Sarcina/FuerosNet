@@ -202,6 +202,20 @@ object Frames {
     }
 
     /**
+     * **The status the engine is handed for a resource's answer.** The
+     * platform's frame refuses to be given a status from 300 to 399 at all
+     * and throws, and a redirect is not followed here in any case
+     * (`resource-requirements.md` §3): the body it carried is what is
+     * shown, so it is handed over as an answer. A number that is no HTTP
+     * status is a bad answer, as the desktop's frame has it.
+     */
+    fun engineStatus(http: Int): Int = when (http) {
+        in 300..399 -> 200
+        in 100..599 -> http
+        else -> 502
+    }
+
+    /**
      * **Where a resource's frame will go** (RSC-58): inside the origin
      * minted for its resource, and nowhere else — the same shape as
      * [nodeGoing] without the bounce, since a resource has no acts of the

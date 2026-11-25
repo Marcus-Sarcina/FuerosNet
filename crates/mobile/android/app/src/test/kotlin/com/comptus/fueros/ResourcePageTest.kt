@@ -153,6 +153,20 @@ class ResourcePageTest {
     }
 
     @Test
+    fun a_redirect_is_handed_to_the_engine_as_the_answer_it_carried() {
+        // the platform's frame throws on any status from 300 to 399
+        for (http in listOf(300, 301, 302, 303, 307, 308, 399)) {
+            assertEquals("$http is not followed and its body is shown", 200, Frames.engineStatus(http))
+        }
+        for (http in listOf(100, 200, 204, 299, 400, 404, 500, 599)) {
+            assertEquals(http, Frames.engineStatus(http))
+        }
+        for (http in listOf(0, 99, 600, 65536, -1)) {
+            assertEquals("no HTTP status", 502, Frames.engineStatus(http))
+        }
+    }
+
+    @Test
     fun a_resources_origin_is_its_own_and_resolves_nowhere() {
         val a = "a".repeat(64)
         val b = "b".repeat(64)

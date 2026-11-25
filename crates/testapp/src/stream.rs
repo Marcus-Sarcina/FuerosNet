@@ -331,6 +331,9 @@ __SEGS__ segments played as they arrive. Nothing here is one message.</p>
   }
   (async () => {
     row('engine', navigator.userAgent);
+    row('secure_context', String(window.isSecureContext));
+    row('peer_connection', String(typeof RTCPeerConnection !== 'undefined'));
+    row('media_devices', String(!!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)));
     try { await parts(); } catch (e) { row('parts_error', e.message); }
     report();
     try { await whole(); } catch (e) { row('whole_error', e.message); }

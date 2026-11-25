@@ -18,9 +18,9 @@ is decided, built or explicitly deferred; a deferral moves to
 |---|---|---|---|
 | D-01 | Utility asks on the desktop | **Decided 2026-11-24**: `export` a file download, `import` a file upload; `notify` a desktop notification where there is one; `scan` a connected scanner, an uploaded image as the fallback; `capture` a connected camera; `live` a connected webcam; `sign` on a desktop holding the seed; `location` and whatever a desktop cannot do are offered to the signing device. `check-in` and `tag` go to the signing device. The picture he gave: the desktop is where heavy authoring, administration and assessments happen, the phone a peripheral for certain tasks as it is for a 2FA challenge, and a laptop's own webcam the preferred route for a liveness check. **`sign` stays under the per-device application key** (the 2026-10-31 rule stands) and, as policy, a restored desktop signs and a paired one declines [author, 2026-11-24]. **`capture` is the webcam or declined, never an upload** [author, 2026-11-24], the claim being that this device took it. **No ask is forwarded and there is no new frame** [author, 2026-11-24]: the desktop declines what it cannot do, as it does now, and the resource orchestrates with the two things it already has, a notice to the member (resource-requirements section 3.3) and a page on the desktop saying to do the step on the phone | all declined on the desktop until built |
 | D-02 | Request headers on `rhtn.request` | **Decided 2026-11-24: a page sets none.** Stated in resource-requirements section 3.4, light-client section 8 and CAT-027; Academy's `idempotency-key` header is the applications repository's to move | — |
-| D-03 | Plain-HTTP limits: no redirects, cookies, websockets or streaming | **Decided 2026-11-24: stated as the contract, large and continuous content going as parts** (resource-requirements section 3), **and live and streaming built now**. Open under it: where a live session's capture goes (to the resource in parts, or to an outside media service) | — |
-| D-04 | A package answer's size | (a) raise the code's 8 MiB to the documented 16 MiB; (b) lower the document | 8 MiB in code |
-| D-05 | Whether a node on the developer's own machine is a supported path | (a) yes: `local.sh` gains `resources`, `state` and the host shell so the install act works; (b) droplets only | config loads again; install act still answers 409 there |
+| D-03 | Plain-HTTP limits: no redirects, cookies, websockets or streaming | **Decided 2026-11-24: stated as the contract, large and continuous content going as parts** (resource-requirements section 3), **and live and streaming built now**. **A live session goes to a media port the package holds on the node's own host** [author, 2026-11-24], signalled through the ordinary path; the reason is his flat-fee rule (one machine, a bigger VM before a second account) | — |
+| D-04 | A package answer's size | **Decided 2026-11-24: the node is raised to 16 MiB**, the whole message held to the wire's bound (PKG-022) | — |
+| D-05 | Whether a node on the developer's own machine is a supported path | **Decided 2026-11-24: supported.** `local.sh` gains what the install act needs and goes into the gate (B-06, B-07) | — |
 
 ### Protocol and node
 
@@ -72,7 +72,7 @@ is decided, built or explicitly deferred; a deferral moves to
 | B-02 | **Done 2026-11-24** (53dc2563, PKG-021): a request is decided under the lock and its package asked holding nothing; a request the node answers itself waited 3.38 s behind a 2 s package before, under 1 s after | — |
 | B-03 | Utility asks on the desktop | D-01 |
 | B-04 | Closed with D-02: nothing to build | — |
-| B-05 | State or build the HTTP limits; the answer-size bound | D-03, D-04 |
+| B-05 | **Done 2026-11-24**: the HTTP limits stated (resource-requirements section 3) and the answer bound raised (PKG-022) | — |
 | B-06 | `local.sh`: `resources`, `state`, host shell | D-05 |
 | B-07 | Run `smoke.sh` in the gate or CI, so a renamed config key fails a build and not a developer | — |
 | B-08 | Command-line verbs to narrow or drop a grant and to read an instance's log | — |
