@@ -437,7 +437,9 @@ reaches you is submitted application data, exactly as a form would be.
 
 **To ask, answer a request with `content-type: application/vnd.rhtn.utility+json`**
 and one JSON object. Nothing else is read as an ask: a client never inspects
-a body to find out whether it might be one.
+a body to find out whether it might be one. **Any request may be answered
+so, one your own page made among them**: the question then takes that page's
+place in front of the person, and the page is given nothing of it.
 
 | Field | What it is |
 |---|---|

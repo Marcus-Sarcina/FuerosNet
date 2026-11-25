@@ -225,6 +225,30 @@ impl Stream {
                     .into_bytes(),
                 )
             }
+            // **the page's own button**: a request of the page's that is
+            // answered with the ask, for the seconds its body says where
+            // that is a number from 5 to 120 and for 30 otherwise
+            ("POST", "/go-live") => {
+                let seconds = std::str::from_utf8(&body)
+                    .ok()
+                    .and_then(|b| b.trim().parse::<u64>().ok())
+                    .filter(|s| (5..=120).contains(s))
+                    .unwrap_or(30);
+                self.said.push(format!(
+                    "{{\"what\":\"stream.asked\",\"seconds\":{seconds},\"by\":\"page\"}}"
+                ));
+                answer(
+                    200,
+                    crate::ASK_MEDIA,
+                    None,
+                    format!(
+                        "{{\"utility\":\"live\",\"ask\":\"to check a live session started from \
+                         this page's own button\",\"retention\":\"nothing is kept\",\
+                         \"return\":\"/live\",\"token\":\"live-2\",\"seconds\":{seconds}}}"
+                    )
+                    .into_bytes(),
+                )
+            }
             // the ask's answer: the page where it was given, and words
             // where it was not; either way it is not asked again
             ("POST", "/live") => {
@@ -353,6 +377,7 @@ video { width: 100%; max-width: 480px; background: #000; }
 <p>A file of __PARTS__ MiB fetched one part at a time, and a clip of
 __SEGS__ segments played as they arrive. Nothing here is one message.</p>
 <table id="t"></table>
+<p><button id="go">Go live for 30 seconds</button></p>
 <video id="v" muted playsinline controls></video>
 <script>
 (() => {
@@ -390,6 +415,17 @@ __SEGS__ segments played as they arrive. Nothing here is one message.</p>
         fetch('/report', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(out) })
           .catch(e => row('report_error', String(e)));
     } catch (e) { row('report_error', String(e)); }
+  };
+  // a request of this page's own that its resource answers with an ask
+  document.getElementById('go').onclick = () => {
+    row('go_live', 'asked');
+    try {
+      if (window.rhtn && rhtn.request)
+        rhtn.request('POST', '/go-live', 'text/plain', '30');
+      else
+        fetch('/go-live', { method: 'POST', headers: { 'content-type': 'text/plain' }, body: '30' })
+          .catch(e => row('go_live', String(e)));
+    } catch (e) { row('go_live', String(e)); }
   };
   async function parts() {
     let a = 1, b = 0, n = 0, spent = 0;

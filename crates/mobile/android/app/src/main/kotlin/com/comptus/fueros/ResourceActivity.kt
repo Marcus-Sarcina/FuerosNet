@@ -876,7 +876,12 @@ class ResourceActivity : Activity() {
         says?.text = ResourcePage.frameSays(allowed)
         // the page as it was answered, styled, served to the first load
         Carrier.serve(
-            Carrier.Serving(resource, by, node, path to page.copy(body = html.toByteArray(Charsets.UTF_8))),
+            Carrier.Serving(
+                resource, by, node, path to page.copy(body = html.toByteArray(Charsets.UTF_8)),
+                // a request of the page's own answered with an ask: the
+                // question takes the page's place, as one at opening does
+                asked = { show(it) },
+            ),
         )
         unframe()
         val live = liveFor

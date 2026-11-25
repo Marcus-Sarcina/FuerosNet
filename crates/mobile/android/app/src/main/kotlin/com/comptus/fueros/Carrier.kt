@@ -41,6 +41,10 @@ object Carrier {
         val node: String,
         /** The page already in hand, served to the first load of its path. */
         @Volatile var first: Pair<String, Gateway.Page>?,
+        /** **Where an ask goes**: an answer to a page's own request that
+         *  is a question for the person is the screen's to put, and never
+         *  the page's to read (`light-client-requirements.md` §8.1). */
+        val asked: ((Gateway.Answered) -> Unit)? = null,
     )
 
     /** The methods a frame carries, as the desktop's does. */
@@ -214,6 +218,16 @@ object Carrier {
         return message(Frames.engineStatus(p.httpStatus), headers, p.body)
     }
 
+    /** **Whether an answer is an ask**: delivered, read, and a question
+     *  for the person in place of a page. */
+    fun asks(a: Gateway.Answered?): Boolean =
+        a != null && a.status.toInt() == 0 && a.unreadable == null && a.ask != null
+
+    /** **What a page gets of a request answered with an ask**: nothing.
+     *  The question is the person's, and what follows it is the screen's
+     *  to show. */
+    fun asking(): ByteArray = message(204, emptyList(), ByteArray(0))
+
     /** What the kernel's answer comes to, for the engine. */
     fun answered(a: Gateway.Answered?): ByteArray {
         if (a == null) return notCarried("the kernel did not carry the request")
@@ -274,6 +288,15 @@ object Carrier {
             asked.type.takeIf { asked.length > 0 },
             body.takeIf { asked.length > 0 },
         )
+        // **an ask is put by the screen that framed the page**, whichever
+        // request of the page's it answered; with no screen to put it,
+        // the page is told nothing came, as before
+        val put = s.asked
+        if (asks(carried) && put != null) {
+            out.write(asking())
+            carried?.let(put)
+            return
+        }
         out.write(answered(carried))
     }
 

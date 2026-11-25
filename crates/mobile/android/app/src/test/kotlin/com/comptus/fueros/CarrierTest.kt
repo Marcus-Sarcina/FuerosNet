@@ -149,6 +149,33 @@ class CarrierTest {
         assertTrue(text(Carrier.page(page.copy(policy = "a\r\nset-cookie: x=1"))).contains("content-security-policy: a  set-cookie: x=1\r\n"))
     }
 
+    /**
+     * **An ask is an ask whichever request it answers**
+     * (`light-client-requirements.md` §8.1): one that answers a page's own
+     * request is the screen's to put, and the page is given nothing of it.
+     */
+    // functional: CAT-026
+    @Test
+    fun an_ask_answered_to_a_pages_own_request_is_the_screens_and_not_the_pages() {
+        val ask = Gateway.Ask(
+            id = 7u, utility = "live", purpose = "p", retention = "r",
+            resource = "c".repeat(64), node = "n", payload = null, precision = null,
+            media = emptyList(), channel = null, seconds = 30u,
+        )
+        val asked = Gateway.Answered(status = 0u, page = null, unreadable = null, ask = ask)
+        assertTrue(Carrier.asks(asked))
+        // undelivered, unreadable, or a page: not an ask
+        assertTrue(!Carrier.asks(null))
+        assertTrue(!Carrier.asks(asked.copy(status = 1u)))
+        assertTrue(!Carrier.asks(asked.copy(unreadable = "a field")))
+        assertTrue(!Carrier.asks(asked.copy(ask = null)))
+        // the page is told nothing: no body, no type, no words of the ask
+        val said = text(Carrier.asking())
+        assertTrue(said, said.startsWith("HTTP/1.1 204 "))
+        assertTrue(said.contains("content-length: 0\r\n"))
+        assertTrue(said.endsWith("\r\n\r\n"))
+    }
+
     @Test
     fun an_answer_that_carried_nothing_says_why_where_the_pages_object_reads_it() {
         val said = text(Carrier.answered(null))

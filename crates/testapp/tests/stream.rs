@@ -190,3 +190,36 @@ fn what_the_page_measured_is_kept_as_one_line_and_nothing_else_is_taken() {
         vec!["{\"what\":\"stream.media\",\"at\":\"203.0.113.7:7462\"}"]
     );
 }
+
+#[test]
+fn the_pages_own_button_is_answered_with_a_live_ask_for_the_seconds_it_names() {
+    let mut s = Stream::new();
+    let (_, page) = get(&mut s, "/");
+    let page = String::from_utf8(page).unwrap();
+    assert!(page.contains("rhtn.request('POST', '/go-live'"));
+    let post = |s: &mut Stream, body: &str| {
+        let out = s.handle(
+            format!(
+                "POST /go-live HTTP/1.1\r\nhost: x\r\ncontent-type: text/plain\r\ncontent-length: {}\r\n\r\n{body}",
+                body.len()
+            )
+            .as_bytes(),
+        );
+        String::from_utf8(out).unwrap()
+    };
+    let asked = post(&mut s, "45");
+    assert!(asked.starts_with("HTTP/1.1 200"), "{asked}");
+    assert!(asked.contains("content-type: application/vnd.rhtn.utility+json"));
+    assert!(asked.contains("\"utility\":\"live\""));
+    assert!(asked.contains("\"return\":\"/live\""));
+    assert!(asked.contains("\"seconds\":45}"));
+    // no number, or one outside 5 to 120: thirty
+    for body in ["", "soon", "4", "121", "-1"] {
+        assert!(post(&mut s, body).contains("\"seconds\":30}"), "{body}");
+    }
+    assert!(
+        s.said
+            .iter()
+            .any(|l| l == "{\"what\":\"stream.asked\",\"seconds\":45,\"by\":\"page\"}")
+    );
+}

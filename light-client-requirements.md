@@ -1633,7 +1633,9 @@ client carried would be.
 - **An ask is a resource's answer declared `application/vnd.rhtn.utility+json`**,
   and only that declaration makes it one — the rule above holds, and a
   body under any other type or none is never inspected to find out whether
-  it might be a question. The body is one JSON object: `utility`, one of
+  it might be a question. **Whichever request it answers**: one that
+  answers a request a framed page made is put to the person in that page's
+  place, and the page is given nothing of it. The body is one JSON object: `utility`, one of
   the names in the table; `ask`, what it is for, in the resource's words;
   `retention`, how long the resource keeps what it gets, in its words;
   `return`, a rooted path on the same resource the answer goes to; `token`,
