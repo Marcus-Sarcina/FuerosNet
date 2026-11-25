@@ -612,99 +612,13 @@ fn r02_backup_install_must_not_accept_another_identitys_blob() {
     );
 }
 
-// **Not run since 2026-11-25, and what it asserts is unchanged.** The
-// author ruled that day that a node keeps, for each relationship in its
-// horizon, the record in force, and a departure in the place of the
-// adoption it ended (`infra-client-requirements.md` §4.3). Of the two
-// bodies this looks for, the adoption is gone from disk as it requires
-// and the departure is kept, which is the half the ruling contradicts.
-// Whether the assertion is withdrawn is his to say and was put to him
-// the same day.
-#[test]
-#[ignore = "its departure half is contradicted by the ruling of 2026-11-25 on the record in force; awaiting the author's withdrawal"]
-fn r09_topology_persistence_must_not_keep_foreign_transaction_history() {
-    use network_fixture::*;
-    use rhtn_node::store::{Decision, KIND_TRANSACTION};
-    struct Quiet;
-    impl rhtn_node::Adjacency for Quiet {
-        fn peers(&self) -> Vec<[u8; 32]> {
-            vec![]
-        }
-        fn send(&self, _: &[u8; 32], _: u64, _: &[u8]) {}
-        fn request(&self, _: &[u8; 32], _: u64, _: &[u8]) -> bool {
-            false
-        }
-    }
-    let mut sg = Signers::new();
-    let parent = sg.adopt("bob", "alice", "alice", &[0], 1);
-    let foreign = sg.adopt("carol", "bob", "alice", &[0, 0], 2);
-    let mut view = view_of(
-        "alice",
-        table_of("alice", &sg, &[&parent, &foreign], &["alice", "bob"]),
-        "alice",
-        &[],
-        sg.clock,
-    );
-    assert!(
-        !foreign.signers.contains(&kh("alice")),
-        "control: observer did not sign this act"
-    );
-    assert_eq!(
-        view.take_object(&Quiet, &kh("bob"), KIND_TRANSACTION, &foreign.bytes, &ids()),
-        Decision::Stored
-    );
-    let c = id("carol");
-    let departure = Record::parse(&envelope(
-        TYPE_DEPARTURE,
-        &departure_body(
-            &[foreign.txid],
-            &kh("carol"),
-            &kh("bob"),
-            Seqno {
-                series: 2,
-                counter: 1,
-            },
-            sg.clock + 1,
-            None,
-        ),
-        &[&c],
-    ))
-    .unwrap();
-    assert_eq!(
-        view.take_object(
-            &Quiet,
-            &kh("bob"),
-            KIND_TRANSACTION,
-            &departure.bytes,
-            &ids()
-        ),
-        Decision::Stored
-    );
-    let dir = std::env::temp_dir().join(format!("fueros-review-history-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    view.store.save(&dir).unwrap();
-    fn every_file(dir: &std::path::Path, out: &mut Vec<Vec<u8>>) {
-        if let Ok(rd) = std::fs::read_dir(dir) {
-            for entry in rd.flatten() {
-                let path = entry.path();
-                if path.is_dir() {
-                    every_file(&path, out);
-                } else if let Ok(bytes) = std::fs::read(path) {
-                    out.push(bytes);
-                }
-            }
-        }
-    }
-    let mut files = Vec::new();
-    every_file(&dir, &mut files);
-    let retained =
-        files.iter().any(|b| b == &foreign.bytes) || files.iter().any(|b| b == &departure.bytes);
-    std::fs::remove_dir_all(dir).unwrap();
-    assert!(
-        !retained,
-        "I 4.3: persisted full third-party adoption/departure history instead of the seen fact and current topology"
-    );
-}
+// **r09, `r09_topology_persistence_must_not_keep_foreign_transaction_history`:
+// withdrawn by the author, 2026-11-25.** It asserted that a node keeps on
+// disk neither another party's adoption nor their departure. He ruled that
+// day that a node keeps, for each relationship in its horizon, the record
+// in force, a departure or a disavowal in the place of the adoption it
+// ended (`infra-client-requirements.md` §4.3), and withdrew this in so many
+// words: "Withdraw r09". The number is not used again.
 
 #[test]
 fn r02_ownerless_backup_must_still_be_bound_to_an_identity() {

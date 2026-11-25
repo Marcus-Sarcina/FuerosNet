@@ -1265,9 +1265,13 @@ impl Service {
     }
 
     fn write_back(&self) -> Result<(), std::io::Error> {
-        let view = self.node.view.lock().unwrap();
+        let mut view = self.node.view.lock().unwrap();
         view.profiles.save(&self.keys)?;
         view.archive.save(&self.archive)?;
+        // what is kept of a relationship nobody in the horizon is party to
+        // any longer goes before the write (`infra-client-requirements.md`
+        // §4.3)
+        view.settle_kept();
         view.store.save(&self.topology)?;
         std::fs::write(self.topology.join(DOWNLINE), view.downline.encode())?;
         // the derived state last, so it is never newer than the store it

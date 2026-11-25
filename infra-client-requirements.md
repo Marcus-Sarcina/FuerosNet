@@ -218,15 +218,22 @@ guarantee, which is a floor rather than a ceiling.
 - **Keep, for each relationship in your horizon, the record in force and
   nothing behind it** [author, 2026-11-25]. Out to the two-hop boundary your
   store is drawn at (`wire-format.md` §10.1.1), and whoever signed it: the
-  adoption that placed a member under a patron; beside it the series reissue
-  that moved that relationship (`wire-format.md` §4.6), where one is later
-  than the adoption; and once a departure or a disavowal has ended it, that
-  record in the place of both. A key rotation is an adoption (design §9.0)
-  and is kept as one, standing too for the key it superseded. A later record
-  takes an earlier one's place on disk as in memory, so what you hold is the
-  current state of every identity in your horizon at the smallest archive
-  that proves it, and never the sequence that led there: topology persists
-  as the updated topology [author, 2026-09-21].
+  adoption that placed a member under a patron, the most recent alone; and
+  once a departure or a disavowal has ended it, that record in the
+  adoption's place. A key rotation is an adoption (design §9.0) and is kept
+  as one, standing too for the key it superseded. **A series reissue
+  (`wire-format.md` §4.6) is not kept**: the series a relationship stands in
+  is your table's to say. **A relationship is one member under one patron,
+  which is one subnet**, so what ends in one touches nothing you keep of
+  another. A later record takes an earlier one's place on disk as in memory,
+  so what you hold is the current state of every identity in your horizon at
+  the smallest archive that proves it, and never the sequence that led
+  there: topology persists as the updated topology [author, 2026-09-21].
+- **Keep an ending for as long as either party to it is in your horizon, and
+  drop what you keep of a relationship when neither is** [author,
+  2026-11-25]. No clock ends it. A departure or a disavowal is a deliberate
+  act of consequence: forgetting a disavowal costs more than holding it, and
+  such acts are slow to accumulate.
 - **Those records are proof of where an identity stands, and your table is
   still the reference** [author, 2026-11-25]. Do not fold them, and do not
   rebuild a table you have lost from them. One of them is what you answer an

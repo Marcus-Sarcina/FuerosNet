@@ -92,10 +92,11 @@ pub fn subjects(rec: &Record) -> Vec<Keyhash> {
 
 /// **The relationship a record states something of**, as `(member,
 /// patron)`: an adoption's, a departure's, a disavowal's, a series
-/// reissue's.  These are the kinds a node keeps one current record of per
+/// reissue's.  Of the first three a node keeps one current record per
 /// relationship, as proof of where that identity stands
-/// (`infra-client-requirements.md` §4.3) [author, 2026-11-25]; the store
-/// takes them only out to the two-hop boundary [`stores`] draws.
+/// (`infra-client-requirements.md` §4.3) [author, 2026-11-25]; a series
+/// reissue is never one, and is named here so that whatever is about a
+/// relationship and not in force is told apart from what is about none.
 pub fn relationship(rec: &Record) -> Option<(Keyhash, Keyhash)> {
     match rec.tx_type {
         TYPE_ADOPTION | TYPE_DEPARTURE | TYPE_REISSUE => {
@@ -219,9 +220,9 @@ pub struct TopologyStore {
     transactions: BTreeMap<Txid, Record>,
     /// **The record in force for each relationship the table holds, and
     /// nothing behind it** [author, 2026-11-25]: the adoption that opened
-    /// it, with the series reissue that moved it where one is later; or,
-    /// once it has ended, the departure or disavowal that ended it in
-    /// their place.  Kept across a restart as proof of where an identity
+    /// it or, once it has ended, the departure or disavowal that ended it
+    /// in that adoption's place, for as long as either party to it is
+    /// within this node's horizon.  Kept across a restart as proof of where an identity
     /// stands, whoever signed it.  **Not what the table is made from**:
     /// the table is the reference and this is never folded
     /// (`infra-client-requirements.md` §4.3).  A record this node signed
@@ -330,20 +331,6 @@ impl TopologyStore {
                 self.kept.insert(*t, r.clone());
             }
         }
-    }
-
-    /// The series reissue that moved `member`'s relationship under
-    /// `patron` into `series`, where this store holds it.
-    pub fn reissue_into(&self, member: &Keyhash, patron: &Keyhash, series: u32) -> Option<Txid> {
-        self.transactions
-            .values()
-            .chain(self.kept.values())
-            .find(|r| {
-                r.tx_type == TYPE_REISSUE
-                    && relationship(r) == Some((*member, *patron))
-                    && r.seqno().is_some_and(|s| s.series == series)
-            })
-            .map(|r| r.txid)
     }
 
     /// The records in force this node keeps of other parties.

@@ -188,11 +188,6 @@ fn kept_on_disk(n: &rhtn_node::view::NodeView, tag: &str) -> Vec<Vec<u8>> {
     out
 }
 
-fn sorted(mut bodies: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
-    bodies.sort();
-    bodies
-}
-
 // acceptance: TOP-45
 // functional: TOP-035
 #[test]
@@ -216,7 +211,8 @@ fn what_is_kept_of_a_relationship_is_the_record_in_force_and_nothing_behind_it()
     // own acts and not repeated among these
     assert_eq!(kept_on_disk(&n, "force"), vec![a_w.bytes.clone()]);
 
-    // **and the series reissue that moved it, the latest alone**
+    // **a series reissue is not kept**: the series a relationship stands
+    // in is the table's to say, and the adoption is still what is in force
     let r1 = w.reissue(
         "w1",
         "carol",
@@ -227,10 +223,7 @@ fn what_is_kept_of_a_relationship_is_the_record_in_force_and_nothing_behind_it()
         5,
     );
     take(&mut n, &r1);
-    assert_eq!(
-        kept_on_disk(&n, "force"),
-        sorted(vec![a_w.bytes.clone(), r1.bytes.clone()])
-    );
+    assert_eq!(kept_on_disk(&n, "force"), vec![a_w.bytes.clone()]);
     let r2 = w.reissue(
         "w1",
         "carol",
@@ -241,10 +234,15 @@ fn what_is_kept_of_a_relationship_is_the_record_in_force_and_nothing_behind_it()
         6,
     );
     take(&mut n, &r2);
+    assert_eq!(kept_on_disk(&n, "force"), vec![a_w.bytes.clone()]);
     assert_eq!(
-        kept_on_disk(&n, "force"),
-        sorted(vec![a_w.bytes.clone(), r2.bytes.clone()]),
-        "the reissue it left behind is gone from disk"
+        n.table
+            .bindings()
+            .iter()
+            .find(|b| b.node == kh("w1") && b.open())
+            .map(|b| b.series),
+        Some(6),
+        "and the table says where the series stands"
     );
 
     // **a restart holds the same**, and the table is not made from them:
@@ -256,10 +254,7 @@ fn what_is_kept_of_a_relationship_is_the_record_in_force_and_nothing_behind_it()
     again.store = TopologyStore::load(&dir).unwrap();
     again.restore_materialised(Some(&derived), &ids());
     assert!(again.table.patrons(&kh("w1")).contains(&kh("carol")));
-    assert_eq!(
-        kept_on_disk(&again, "force-again"),
-        sorted(vec![a_w.bytes.clone(), r2.bytes.clone()])
-    );
+    assert_eq!(kept_on_disk(&again, "force-again"), vec![a_w.bytes.clone()]);
     let mut bare = view("bob", table_with(kh("bob"), &w, &[], &["bob"]), "bob", &[]);
     bare.store = TopologyStore::load(&dir).unwrap();
     assert_eq!(
@@ -272,11 +267,11 @@ fn what_is_kept_of_a_relationship_is_the_record_in_force_and_nothing_behind_it()
     );
     assert_eq!(
         kept_on_disk(&bare, "force-bare"),
-        sorted(vec![a_w.bytes.clone(), r2.bytes.clone()]),
+        vec![a_w.bytes.clone()],
         "and a table that says nothing of a relationship drops nothing of it"
     );
 
-    // **a departure takes the place of both**
+    // **a departure takes the adoption's place**
     let d = w.depart(
         "w1",
         "carol",
@@ -302,6 +297,69 @@ fn what_is_kept_of_a_relationship_is_the_record_in_force_and_nothing_behind_it()
             std::env::temp_dir().join(format!("rhtn-store-{tag}-{}", std::process::id())),
         );
     }
+}
+
+// acceptance: TOP-45
+// functional: TOP-035
+#[test]
+fn what_is_kept_goes_when_neither_party_to_it_is_in_the_horizon_any_longer() {
+    // bob runs the node; carol is his and w1 is carol's, two hops out
+    let mut w = World::new();
+    let (a_c, _) = w.adopt("carol", "bob", 1);
+    let (a_w, _) = w.adopt("w1", "carol", 1);
+    let fab = Fabric::with(&[kh("carol")]);
+    let mut n = view("bob", table_with(kh("bob"), &w, &[], &["bob"]), "bob", &[]);
+    for r in [&a_c, &a_w] {
+        assert_eq!(
+            n.take_object(&*fab, &kh("carol"), KIND_TRANSACTION, &r.bytes, &ids()),
+            Decision::Stored
+        );
+    }
+    n.settle_kept();
+    assert_eq!(kept_on_disk(&n, "gone"), vec![a_w.bytes.clone()]);
+
+    // **w1 leaves carol, and the ending is kept while carol is in view**:
+    // one party to it remains
+    let d_w = w.depart(
+        "w1",
+        "carol",
+        Seqno {
+            series: 1,
+            counter: 1,
+        },
+    );
+    assert_eq!(
+        n.take_object(&*fab, &kh("carol"), KIND_TRANSACTION, &d_w.bytes, &ids()),
+        Decision::Stored
+    );
+    n.settle_kept();
+    assert_eq!(kept_on_disk(&n, "gone"), vec![d_w.bytes.clone()]);
+
+    // **carol leaves bob, and neither party to that ending is in bob's
+    // horizon any longer**: it goes, and what is kept is carol's own
+    // ending under bob, a party to which is bob
+    let d_c = w.depart(
+        "carol",
+        "bob",
+        Seqno {
+            series: 1,
+            counter: 1,
+        },
+    );
+    assert_eq!(
+        n.take_object(&*fab, &kh("carol"), KIND_TRANSACTION, &d_c.bytes, &ids()),
+        Decision::Stored
+    );
+    assert!(
+        kept_on_disk(&n, "gone").contains(&d_w.bytes),
+        "nothing goes until the node settles what it keeps"
+    );
+    n.settle_kept();
+    assert_eq!(kept_on_disk(&n, "gone"), vec![d_c.bytes.clone()]);
+
+    let _ = std::fs::remove_dir_all(
+        std::env::temp_dir().join(format!("rhtn-store-gone-{}", std::process::id())),
+    );
 }
 
 // acceptance: PRP-20

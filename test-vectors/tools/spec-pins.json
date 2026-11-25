@@ -1,7 +1,7 @@
 {
  "specs": {
   "wire-format.md": "cb6b70929a80a44bd7c0b31a8df2634888bf6d3ff6a25963fc569038d473bee3",
-  "network-design.md": "27a178243ce80808f5445db3f94335e612d212c9d5ec5d024cd3c6a94940b19f",
+  "network-design.md": "9ed966d7bfb3d4f1ee2b13061f63e1dd6f86e70149780dcc9ea047734fab5f7a",
   "light-client-requirements.md": "76e0172c15f05c4480d07b39479d6d57445b1075a0c1c0f6fd09aa487b6c8a73"
  },
  "generator": "4e391820576b72457c610537cfb27eee2bdb61f94d757a1adddb640ed96abe07",
@@ -11,15 +11,15 @@
   "cryptography": "41.0.7"
  },
  "outputs": {
-  "keys.md": "058bee97900c0c1ceacae343bfc9ab8f99f8ad90027d8477f67365b8c64fb3aa",
-  "primitives.md": "68d2e6bd31b076f9b95d4b4bcdf718ba646ee19aecab536e599bc55e0c0f36a5",
-  "transactions.md": "87e25b26c82ffac496a5060622f288f2172f1cd9f9541a728416bef87e91ce2e",
-  "records.md": "0615ffee0ea846267e2a58479c0994a0eaabf4007689b4eb37f53bdabe2f5882",
-  "verifier-selection.md": "0a40968fdbc462fa18b5dd35ce0912905f20219441ea65789f547f8d3cfda590",
-  "messages.md": "f74fe2bfe27e19e977967c08da33845f06d9211456135c0a8b2b6f756eba9ca1",
-  "local-interfaces.md": "4cdd9a48c2f0b7df23583662254c58e6717b236e6a90110bd569d81e454272ee",
-  "corpus.json": "98eee7ce4901ba9d4b7bd9b8c17e6826db20131f9cb2a8b7e865d4c018d36233",
-  "README.md": "6879e37c47513ff0b3dc02ef7d0823a610df977501cccb8fbdf89e7fe48e89d5",
-  "negative-vectors.md": "e8aa8c713d1185ca199588e13e120469e8f7ebdee008f204923258282d25ef10"
+  "keys.md": "f60932d1e93786e931152df392eb7319796b9000f4c3dd0a200fb072c56710ec",
+  "primitives.md": "90578a24a3b2fdb0f7e65e4879bdd9b75257e7d0408def1b3819de685bb28167",
+  "transactions.md": "e9a0ebd8ae19b22ce2b8b1b6473f2d15a16e144960be638dbe8d8d817ede6c33",
+  "records.md": "6cfbe4ecd30dca7a2b908d41a6529ae71667367b00601e3499f14d11521cd566",
+  "verifier-selection.md": "85896547fa0c63c4415469ea470b97a9c878ca395b586f7f671496d1500c12d2",
+  "messages.md": "3efa7a80df6de4f2c466daaa2e55dd8a0245def023ee5e9e9d7909a22850baf0",
+  "local-interfaces.md": "4c82fa7fadb0a2a664c5251868ddd5b6f4b69b1f698c4dd5a40ec7becc42c501",
+  "corpus.json": "940a6098c58ad66da65738cdb39db8ab99a2dd6db5796e81962431e6dd0acc3f",
+  "README.md": "859c88c0d98b08c911534c274db475fca91a3ef7963818c6069bb0491ce59c2a",
+  "negative-vectors.md": "9f9916b98b784a27d2c020e5ac026703365a0870befc25f94507db94c0bf46ff"
  }
 }

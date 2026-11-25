@@ -7031,9 +7031,10 @@ folded, which is enough to say whether the copy still accounts for what was
 accepted and not enough to reconstruct it.
 
 **A node keeps one thing more** [author, 2026-11-25]. For each relationship in
-its horizon, out to two hops, it keeps the record in force: the adoption, with a
-later series reissue beside it, or the departure or disavowal that ended it in
-their place (`infra-client-requirements.md` §4.3). That is proof of the current
+its horizon, out to two hops, it keeps the record in force: the most recent
+adoption, or the departure or disavowal that ended it in that adoption's place,
+for as long as either party to it is within that horizon
+(`infra-client-requirements.md` §4.3). That is proof of the current
 state of every identity in its horizon, at the smallest archive that gives it.
 **It is not the fold's input**: the table is still the reference, and a copy the
 node discards is repaired as the next paragraph has it, never folded again from

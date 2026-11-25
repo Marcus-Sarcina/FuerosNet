@@ -622,9 +622,9 @@ impl NodeView {
     /// says of them now** (`infra-client-requirements.md` §4.3) [author,
     /// 2026-11-25]: for each patron the table has bound them under, the
     /// record in force for the newest of those bindings and no other.  An
-    /// open one keeps its adoption, and with it the series reissue that
-    /// moved it where the series is no longer the one it opened in; an
-    /// ended one keeps what ended it, in their place.
+    /// open one keeps its adoption and an ended one what ended it, in that
+    /// adoption's place.  **A series reissue is not kept**: the series a
+    /// relationship stands in is the table's to say.
     ///
     /// **The table decides and the records follow**, never the reverse: a
     /// relationship the table holds nothing of is left as it was kept.
@@ -640,12 +640,10 @@ impl NodeView {
             .into_iter()
             .map(|(patron, b)| {
                 let in_force = match &b.end {
-                    Some((ending, _, _)) => vec![*ending],
-                    None => std::iter::once(b.adoption)
-                        .chain(self.store.reissue_into(member, &patron, b.series))
-                        .collect(),
+                    Some((ending, _, _)) => *ending,
+                    None => b.adoption,
                 };
-                (patron, in_force)
+                (patron, vec![in_force])
             })
             .collect();
         for (patron, in_force) in settled {
@@ -653,16 +651,43 @@ impl NodeView {
         }
     }
 
-    /// The same, for every identity a kept record is about: what a restart
-    /// owes once its table is in hand.
-    fn keep_all_in_force(&mut self) {
-        let members: BTreeSet<Keyhash> = self
+    /// **The same for every identity a kept record is about, and then
+    /// whatever has left the horizon goes** [author, 2026-11-25]: a kept
+    /// record neither of whose parties is within two hops any longer is
+    /// dropped, so what is kept of an ending lasts as long as someone it
+    /// concerns is still in view and no longer.  What a restart owes once
+    /// its table is in hand, and what a write-back owes before it writes.
+    ///
+    /// **Only where the table speaks of the relationship**: one it holds
+    /// nothing of is left as kept, since a table lost and not yet repaired
+    /// has no horizon to judge by.
+    pub fn settle_kept(&mut self) {
+        let pairs: BTreeSet<(Keyhash, Keyhash)> = self
             .store
             .kept()
-            .filter_map(|r| crate::store::relationship(r).map(|(m, _)| m))
+            .filter_map(crate::store::relationship)
             .collect();
+        let members: BTreeSet<Keyhash> = pairs.iter().map(|(m, _)| *m).collect();
         for m in members {
             self.keep_in_force(&m);
+        }
+        let me = self.me();
+        let near = self.table.horizon(&me, 2);
+        let within = |x: &Keyhash| *x == me || self.attached.contains(x) || near.contains(x);
+        let gone: Vec<(Keyhash, Keyhash)> = pairs
+            .into_iter()
+            .filter(|(m, p)| {
+                !within(m)
+                    && !within(p)
+                    && self
+                        .table
+                        .bindings()
+                        .iter()
+                        .any(|b| b.node == *m && b.patron == *p)
+            })
+            .collect();
+        for (m, p) in gone {
+            self.store.keep_in_force(&m, &p, &[]);
         }
     }
 
@@ -1707,7 +1732,7 @@ impl NodeView {
         let restored = self.restored_from(usable, ids);
         // what is kept follows the table that came back, whichever way it
         // came
-        self.keep_all_in_force();
+        self.settle_kept();
         restored
     }
 
