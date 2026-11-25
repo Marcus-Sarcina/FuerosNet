@@ -85,6 +85,29 @@ fn the_page_declares_its_script_and_the_clip_is_an_init_segment_and_ten_fragment
 }
 
 #[test]
+fn the_page_is_told_where_to_aim_a_probe_only_where_the_instance_was_and_only_an_address() {
+    let (_, plain) = get(&mut Stream::new(), "/");
+    assert!(
+        String::from_utf8(plain)
+            .unwrap()
+            .contains("const PROBE = \"\";")
+    );
+    let (_, told) = get(&mut Stream::new().probing("192.0.2.7:7462"), "/");
+    assert!(
+        String::from_utf8(told)
+            .unwrap()
+            .contains("const PROBE = \"192.0.2.7:7462\";")
+    );
+    // what is written into a script is an address and nothing else
+    let (_, odd) = get(&mut Stream::new().probing("x\";alert(1);//"), "/");
+    assert!(
+        String::from_utf8(odd)
+            .unwrap()
+            .contains("const PROBE = \"\";")
+    );
+}
+
+#[test]
 fn what_the_page_measured_is_kept_as_one_line_and_nothing_else_is_taken() {
     let mut s = Stream::new();
     let body = "{\"parts_check\":\"matches\",\"parts_bytes\":33554432}";

@@ -143,6 +143,7 @@ is decided, built or explicitly deferred; a deferral moves to
 
 | # | Fault |
 |---|---|
+| B-50 | **A resource's page reaches outside the frame by a peer connection** (found 2026-11-24, GXV, Android WebView 157): with its code allowed, the page's `RTCPeerConnection` sent five STUN packets to an address and port of its choosing, by no request the kernel carried, and a `webrtc 'block'` policy did not stop them. Against light-client section 8. Fix: remove the constructors at document start in every window (`androidx.webkit`), verified by the streaming page's `reach` and `reach_inner` rows and the package's `stream.datagram` log; the desktop's engine to be checked the same way |
 | B-46 | MRK's node-key request went unanswered and its profile requests were refused |
 | B-47 | After accepting a node two levels up, a member's records still name its patron as the node serving it |
 | B-48 | GXV's card for MRK shows 1 unread beside "no messages" |

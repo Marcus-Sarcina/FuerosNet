@@ -101,6 +101,11 @@ pub fn clip() -> Vec<u8> {
 /// The streaming face: the page's own figures, and what it has to say.
 pub struct Stream {
     want: u32,
+    /// Where the page is told to try a peer connection's first packet,
+    /// `address:port`, where this instance listens for one ([`probing`]).
+    ///
+    /// [`probing`]: Stream::probing
+    probe: Option<String>,
     /// What happened, one JSON line each: the socket's caller prints them.
     pub said: Vec<String>,
 }
@@ -117,8 +122,24 @@ impl Stream {
     pub fn new() -> Stream {
         Stream {
             want: wanted_check(),
+            probe: None,
             said: Vec::new(),
         }
+    }
+
+    /// **Have the page try to reach `address:port` outside the kernel's
+    /// path**: a peer connection told that is its STUN server sends its
+    /// first packet there, with no request for the frame to carry or
+    /// refuse. Whether one arrives is what the socket's owner logs; the
+    /// page can only say it asked.
+    #[must_use]
+    pub fn probing(mut self, at: &str) -> Stream {
+        let plain = !at.is_empty()
+            && at
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | ':' | '-'));
+        self.probe = plain.then(|| at.to_string());
+        self
     }
 
     /// **One request in, one response out** (`wire-format.md` §11).
@@ -142,7 +163,7 @@ impl Stream {
                     200,
                     "text/html; charset=utf-8",
                     Some(POLICY),
-                    page(self.want).into_bytes(),
+                    page(self.want, self.probe.as_deref()).into_bytes(),
                 )
             }
             ("GET", "/clip.mp4") => answer(200, "video/mp4", None, clip()),
@@ -210,8 +231,9 @@ fn answer(status: u16, media: &str, policy: Option<&str>, body: Vec<u8>) -> Vec<
 /// asked for in one piece, the segments appended to a media source and
 /// played; every figure shown in a table and posted to `/report`.
 #[must_use]
-pub fn page(want: u32) -> String {
-    PAGE.replace("__PARTS__", &PARTS.to_string())
+pub fn page(want: u32, probe: Option<&str>) -> String {
+    PAGE.replace("__PROBE__", probe.unwrap_or(""))
+        .replace("__PARTS__", &PARTS.to_string())
         .replace("__WANT__", &want.to_string())
         .replace("__SEGS__", &SEGMENTS.len().to_string())
         .replace("__CODEC__", &CODEC.replace('"', "\\\""))
@@ -234,6 +256,7 @@ __SEGS__ segments played as they arrive. Nothing here is one message.</p>
 <script>
 (() => {
   const PARTS = __PARTS__, WANT = __WANT__, SEGS = __SEGS__, CODEC = "__CODEC__";
+  const PROBE = "__PROBE__";
   const out = {};
   const row = (k, v) => {
     out[k] = v;
@@ -329,11 +352,40 @@ __SEGS__ segments played as they arrive. Nothing here is one message.</p>
     await new Promise(r => setTimeout(r, 5000));
     row('played_seconds', v.currentTime.toFixed(2));
   }
+  async function aim(PC, k) {
+    try {
+      const pc = new PC({ iceServers: [{ urls: 'stun:' + PROBE }] });
+      pc.createDataChannel('probe');
+      let n = 0;
+      pc.onicecandidate = e => { if (e.candidate) n++; };
+      await pc.setLocalDescription(await pc.createOffer());
+      await new Promise(r => setTimeout(r, 4000));
+      row(k, 'asked ' + PROBE + ', ' + n + ' candidates gathered');
+      pc.close();
+    } catch (e) { row(k, 'refused: ' + e.message); }
+  }
+  async function reach() {
+    if (!PROBE) { row('reach', 'not asked'); return; }
+    // the page's own window, and then a window it made for itself: a
+    // frame that only hid the constructor would be given away by the second
+    const own = window.RTCPeerConnection || window.webkitRTCPeerConnection;
+    if (own) await aim(own, 'reach'); else row('reach', 'no peer connection here');
+    try {
+      const f = document.createElement('iframe');
+      f.style.display = 'none';
+      document.body.appendChild(f);
+      const inner = f.contentWindow.RTCPeerConnection || f.contentWindow.webkitRTCPeerConnection;
+      if (inner) await aim(inner, 'reach_inner'); else row('reach_inner', 'no peer connection there');
+      f.remove();
+    } catch (e) { row('reach_inner', 'refused: ' + e.message); }
+  }
   (async () => {
     row('engine', navigator.userAgent);
     row('secure_context', String(window.isSecureContext));
     row('peer_connection', String(typeof RTCPeerConnection !== 'undefined'));
     row('media_devices', String(!!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)));
+    await reach();
+    report();
     try { await parts(); } catch (e) { row('parts_error', e.message); }
     report();
     try { await whole(); } catch (e) { row('whole_error', e.message); }

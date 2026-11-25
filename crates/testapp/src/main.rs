@@ -50,6 +50,18 @@ fn main() -> std::process::ExitCode {
     let mut streaming: Option<rhtn_testapp::stream::Stream> =
         (std::env::var("RHTN_TESTAPP_FACE").as_deref() == Ok("stream"))
             .then(rhtn_testapp::stream::Stream::new);
+    // **a bench probe, where an image names one**: listen on a port of
+    // this host's for a packet that came by no request, and tell the page
+    // where to aim a peer connection's first one. Nothing is answered.
+    if let Ok(at) = std::env::var("RHTN_TESTAPP_PROBE")
+        && !at.is_empty()
+        && let Some(face) = streaming.take()
+    {
+        if let Some(port) = at.rsplit(':').next().and_then(|p| p.parse::<u16>().ok()) {
+            std::thread::spawn(move || listen_for_datagrams(port));
+        }
+        streaming = Some(face.probing(&at));
+    }
     let mut i = 0usize;
     while i < args.len() {
         match args[i].as_str() {
@@ -234,6 +246,35 @@ fn tell(url: &str, secret: &[u8; 32], n: &rhtn_testapp::Notice) -> Result<u16, S
         .nth(1)
         .and_then(|c| c.parse().ok())
         .ok_or_else(|| "no status came back".to_string())
+}
+
+/// **Say what arrives on `port` by no request, and answer none of it**: the
+/// sender's address, the size, and whether it opens as a STUN binding
+/// request does. The first thirty-two, so a flood fills no log.
+fn listen_for_datagrams(port: u16) {
+    let socket = match std::net::UdpSocket::bind(("0.0.0.0", port)) {
+        Ok(s) => s,
+        Err(e) => {
+            println!(
+                "{{\"what\":\"stream.probe\",\"port\":{port},\"bound\":false,\"why\":\"{e}\"}}"
+            );
+            return;
+        }
+    };
+    println!("{{\"what\":\"stream.probe\",\"port\":{port},\"bound\":true}}");
+    let _ = std::io::stdout().flush();
+    let mut buf = [0u8; 2048];
+    for _ in 0..32 {
+        let Ok((n, from)) = socket.recv_from(&mut buf) else {
+            return;
+        };
+        // RFC 8489: a binding request is type 0x0001 under the magic cookie
+        let stun = n >= 20 && buf[..2] == [0, 1] && buf[4..8] == [0x21, 0x12, 0xa4, 0x42];
+        println!(
+            "{{\"what\":\"stream.datagram\",\"from\":\"{from}\",\"bytes\":{n},\"stun\":{stun}}}"
+        );
+        let _ = std::io::stdout().flush();
+    }
 }
 
 /// `keyhash <hex>` and nothing else takes a positional argument.

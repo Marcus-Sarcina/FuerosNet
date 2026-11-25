@@ -63,5 +63,9 @@ EXPOSE 7460/tcp
 # arguments, so the image is where the difference can live.
 ARG FACE=walk
 ENV RHTN_TESTAPP_FACE=${FACE}
+# a bench probe for the streaming face (`crates/testapp/src/main.rs`): the
+# public address and port it listens on for a packet that came by no request
+ARG PROBE=
+ENV RHTN_TESTAPP_PROBE=${PROBE}
 
 ENTRYPOINT ["/usr/local/bin/rhtn-testapp"]
