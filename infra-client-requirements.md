@@ -212,32 +212,36 @@ guarantee, which is a floor rather than a ceiling.
   `wire-format.md` §2.3 orders every series).
 - **Keep the topology store across a restart; it is your seen-set.** Forwarding is
   *forward if and only if you stored it* (`wire-format.md` §10.1), so duplicate
-  suppression is a property of the store rather than of a separate cache. What
-  it holds of another party's transaction is that you stored it and the table
-  it produced, not the transaction as a history: topology persists as the
-  updated topology, and only a signer's own archive keeps the act
-  [author, 2026-09-21]. A node
+  suppression is a property of the store rather than of a separate cache. A node
   that forgets what it held replays a forwarding wave into every cycle in its
   horizon, which is correct behaviour and a cost your neighbours pay for you.
-- **Evaluate a transaction you are no party to, and keep what the evaluation
-  came to rather than the act** [author, 2026-09-23]. Its effect on the
-  topology, the counterparties it adds to what you can reach, and what it
-  moves in your own representation of their trust: those you keep. The
-  transaction you do not. Where a key is later rotated, what
-  connects to the new key is those accumulated representations and not a
-  history of the acts behind them.
+- **Keep every record you see that bears on who is in your horizon**
+  [author, 2026-11-25]: an adoption, a departure, a disavowal, a rotation,
+  out to the two-hop boundary your store is drawn at (`wire-format.md`
+  §10.1.1), whoever signed it. The record itself, and across a restart. It
+  is what your table is folded from again, and what you answer an attach
+  with where the member was placed by a patron that runs no node
+  (`wire-format.md` §8.2).
+- **Evaluate any other transaction you are no party to, and keep what the
+  evaluation came to rather than the act** [author, 2026-09-23]. That you
+  stored it, its effect on the topology, the counterparties it adds to what
+  you can reach, and what it moves in your own representation of their
+  trust: those you keep. The transaction you do not. Where a key is later
+  rotated, what connects to the new key is those accumulated
+  representations and not a history of the acts behind them.
 - **A copy of a transaction sits in the archive of every node party to it,
   and none is authoritative over the others** [author, 2026-09-23]. So file
   what you co-signed in your own archive, and read your own position from
-  there; and where you need an act you were no party to, fetch it from one
-  of them (`wire-format.md` §7.9) rather than expecting a neighbour to have
-  kept it for you.
+  there; and where you need an act you were no party to and did not keep,
+  fetch it from one of them (`wire-format.md` §7.9) rather than expecting a
+  neighbour to have kept it for you.
 - **Replay your current state and your own acts, and nothing else**
   [author, 2026-09-23]. `wire-format.md` §10.1.3 makes reconciliation a
   replay of the same frames; what you have to replay is the current-state
   objects you hold — endpoint records, delegations, acknowledgements — and
-  the transactions you signed. A party that attaches after a flood has
-  passed is not handed it again from here.
+  the transactions you signed. A record of other parties that you keep is
+  kept and not replayed, and a party that attaches after a flood has passed
+  is not handed it again from here.
 - **Keep the derived view too, and keep it beside the store** (design §15.1.1).
   Your table, your routing slots and your own position are a fold over the
   records you hold, and folding them again is work paid on every start. Store

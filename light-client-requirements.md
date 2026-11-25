@@ -479,6 +479,12 @@ job.
   still yours (`wire-format.md` §8.2). Check both signatures yourself and
   compile your position from its locator, which is standing and not history
   (design §23.3); the subnet's profile reaches you as it reaches any member.
+  **And from the node that serves you, where your patron runs none**
+  [author, 2026-11-25]: it hands you the adoption you and your patron
+  signed. Take one naming another patron from no node but the one that
+  answers as serving you, and keep it only once your patron's signature
+  checks: their material comes in that node's replay, carried in its own
+  adoption of them, and until it does the record is kept nowhere.
 
 - **A seed phrase, if you offer one, is a feature of its own and nothing
   depends on it** [author, 2026-10-17]. It encodes the identity's key material
@@ -1017,10 +1023,11 @@ nothing below reaches across them.
   which transactions produced it, and on waking fold in only what arrived
   since.
 - **Evaluate a transaction you are no party to, and keep what the evaluation
-  came to rather than the act** [author, 2026-09-23], as a node does
-  (`infra-client-requirements.md` §4.3): the shape, the parties you can now
-  reach, what a patron's determination moved. The transaction is the archive's
-  of everyone party to it, and not yours to retain.
+  came to rather than the act** [author, 2026-09-23]: the shape, the parties
+  you can now reach, what a patron's determination moved. The transaction is
+  the archive's of everyone party to it, and not yours to retain. A node keeps
+  more, the records that compose its horizon
+  (`infra-client-requirements.md` §4.3); that is a node's and not yours.
 - **Discard the copy whole when its watermark cannot account for what you
   hold.** A cache that cannot prove it is current is one you have to earn
   again, and keeping a partial one to save the work is how a client comes to
@@ -2089,7 +2096,7 @@ one that is true.
   for them and materialise no role row, so the subnet would be invisible
   on its own infrastructure. **Your own acts and nothing else**: what you
   keep of a transaction you were no party to is that you took it and the
-  shape it produced (`infra-client-requirements.md` §4.3), and the party
+  shape it produced (§4.2), and the party
   that was there replays the body when it attaches. Replay at every
   attach, including a failover to a sibling: what the node drops as
   outside its store is offered again next time, by which point it may be

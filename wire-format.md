@@ -4430,10 +4430,12 @@ AttachAck = {
                        ;   §23.3), so the key it presents is not the one a
                        ;   client pinned, and this is what binds the two
   7: ? Envelope        ; the adoption (§4.1) that placed the identity
-                       ;   `Attach` field 1 names under this node, the newest
-                       ;   in that relationship. PRESENT where this node is
-                       ;   that identity's patron and the slot is still its
-                       ;   own [author, 2026-11-20]
+                       ;   `Attach` field 1 names, the newest in that
+                       ;   relationship. PRESENT where this node is that
+                       ;   identity's patron and the slot is still its own
+                       ;   [author, 2026-11-20], and where its patron is a
+                       ;   party holding a slot under this node that runs
+                       ;   no node of its own [author, 2026-11-25]
   8: ? [ 1*256 keyhash ]
                        ; the packages this node hosts whose storage is
                        ;   sealed and closed (`infra-client-requirements.md`
@@ -4508,10 +4510,24 @@ from (design §23.3): an adoption both parties signed, so the device verifies
 both signatures, that field 1 is its own identity and field 2 the node it
 attached to, and holds field 3 as its position under that node, believing the
 node about nothing the identity did not sign. A device whose own archive
-records that relationship reads the archive first. A node that is not the
-identity's patron, a sibling answering in failover among them, sends none, and
-that silence says nothing; the patron's silence says the identity no longer
-holds its slot there.
+records that relationship reads the archive first. A node that is neither the
+identity's patron nor serving it as the next paragraph has it, a sibling
+answering in failover among them, sends none, and that silence says nothing;
+the patron's silence says the identity no longer holds its slot there.
+
+**And a member the node serves from above is handed theirs** [author,
+2026-11-25]. Where the identity's patron holds a slot under this node and runs
+no node of its own, nobody else is there to answer, so this node sends the
+adoption that patron and the identity signed, which it holds as a record
+composing its horizon (`infra-client-requirements.md` §4.3); where two such
+patrons are open in its table it sends none. The device takes an adoption
+naming another patron only from a node that answered in mode 0, verifies both
+signatures, and holds field 3 as its position under the patron field 2 names.
+The patron's material may not be held yet. The record then waits, kept nowhere,
+until material hashing to field 2 arrives, which the node's own adoption of
+that patron carries (§4.1 field 5) in the replay an attach brings (§10.1.3),
+and is checked then. From such a node silence in mode 0 says nothing, and
+silence in any other mode drops what was held from it.
 
 **A receiver checks field 1 against the key the handshake actually presented and
 refuses the session if they differ.** That check is the whole of what makes a
@@ -5114,7 +5130,7 @@ optimisation**: a node newly enrolled into a subnet that already exists has hear
 of none of it, and a node that learned only from acts made after it started could
 never serve a subnet older than itself. What a client replays is what it was party
 to; of a transaction it was not, it keeps the fact and not the body
-(`infra-client-requirements.md` §4.3), so there is nothing further it could offer
+(`light-client-requirements.md` §4.2), so there is nothing further it could offer
 and nothing further it needs to — the party that was there offers the body when it
 attaches, and the union of a subnet's members is the subnet. A client replays at
 **every** attach, so an object dropped as out of store because the node had not

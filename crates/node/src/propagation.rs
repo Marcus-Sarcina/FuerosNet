@@ -820,9 +820,8 @@ impl NodeView {
             .filter_map(|b| {
                 // **its own adoption is its own act**, and a party to a
                 // transaction keeps a copy in its archive
-                // [author, 2026-09-23]; the store holds the body only while
-                // this process runs, so the archive is what answers after a
-                // restart (`infra-client-requirements.md` §4.3)
+                // [author, 2026-09-23]; the archive answers where the
+                // store does not (`infra-client-requirements.md` §4.3)
                 let mut loc = self
                     .store
                     .transaction(&b.adoption)
@@ -980,9 +979,8 @@ impl NodeView {
     /// reconciliation (`wire-format.md` §10.1.3).
     ///
     /// **What is replayed is the current state this node holds and the acts
-    /// it is itself a party to** [author, 2026-09-23].  A node keeps no
-    /// third party's history to replay: what it holds of another's
-    /// transaction is that it stored it and the table it produced
+    /// it is itself a party to** [author, 2026-09-23].  A record of other
+    /// parties that it keeps is kept and not replayed
     /// (`infra-client-requirements.md` §4.3), and a peer that missed the
     /// act fetches it from a participant's archive (§7.9), where every
     /// party to it keeps a copy and none is authoritative.
@@ -1623,12 +1621,12 @@ impl NodeView {
         // the ones this node did not sign go now that the identity is known
         let me = self.me();
         self.store.prune_own(&me);
-        // **the watermark is taken over the seen-set**, which survives a
-        // restart where the acts do not (`infra-client-requirements.md`
-        // §4.3 [author, 2026-09-23]).  What a snapshot cannot account for
-        // it cannot be caught up with either: the bodies are gone, so the
-        // view is discarded and the node repairs by reconciliation rather
-        // than by a replay it has no input for.
+        // **the watermark is taken over the seen-set**, which holds every
+        // stored fact where the bodies kept are the ones composing the
+        // horizon (`infra-client-requirements.md` §4.3
+        // [author, 2026-09-23, 2026-11-25]).  A snapshot is caught up
+        // with from the bodies in hand; where one it would need is not
+        // held, the view is discarded and folded again from what is.
         let all: Vec<(u64, Txid)> = self.store.seen();
         let usable = snap.and_then(|s| {
             let later = unfolded(s, &all, |k| *k)?;
@@ -1637,8 +1635,8 @@ impl NodeView {
             // ordinary case where the store was written and the snapshot
             // was not — and a copy that cannot account for the facts is
             // discarded whole, never certified current with the gap
-            // dropped on the floor.  The rebuild below is the repair by
-            // reconciliation §15.1.1 names.
+            // dropped on the floor.  The rebuild below folds the records
+            // this node kept, and reconciliation brings the rest (§15.1.1).
             let mut held = Vec::with_capacity(later.len());
             for i in later {
                 held.push(self.store.transaction(&all[i].1)?.bytes.clone());

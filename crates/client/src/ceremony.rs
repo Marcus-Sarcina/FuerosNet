@@ -865,6 +865,17 @@ pub struct Client {
     /// This process's memory alone: a start attaches again and records it
     /// anew.
     attached_through: BTreeMap<Keyhash, Vec<String>>,
+    /// **A placement a serving node handed whose patron's material is not
+    /// held yet**, by that node (`wire-format.md` §8.2 field 7): checked
+    /// when the material comes, and kept nowhere until it has been. This
+    /// process's memory alone: the next attach is handed it again.
+    placement_waiting: BTreeMap<Keyhash, Vec<u8>>,
+}
+
+/// The patron an adoption handed as a placement names (`wire-format.md`
+/// §4.1 field 2), where it parses.
+fn placing_patron(adoption: &[u8]) -> Option<Keyhash> {
+    Record::parse(adoption).ok()?.field_hash(2)
 }
 
 /// Two devices of one identity paired for a dataset hand-over
@@ -1165,6 +1176,7 @@ impl Client {
             engaged: BTreeMap::new(),
             pairing: None,
             attached_through: BTreeMap::new(),
+            placement_waiting: BTreeMap::new(),
         }
     }
 
@@ -1827,6 +1839,44 @@ impl Client {
                 rhtn_model::Noun::Meetings,
             ]);
         }
+        // and a placement that waited on this patron is checked now
+        let waited: Vec<Keyhash> = self
+            .placement_waiting
+            .iter()
+            .filter(|(_, b)| placing_patron(b) == Some(who))
+            .map(|(node, _)| *node)
+            .collect();
+        for node in waited {
+            if let Some(bytes) = self.placement_waiting.remove(&node)
+                && let Err(why) = self.placed_by(node, Some(bytes), true)
+            {
+                tracing::info!(target: "attach", node = %crate::diag::id8(&node), why = %why, "attach.placement_refused");
+            }
+        }
+    }
+
+    /// **A record the serving node propagated** (design §15.1.1), into the
+    /// horizon. **Where a placement waits on its patron's material and
+    /// this record carries it, the material is taken first**: a record
+    /// introduces an identity under its own hash and no other
+    /// (`Record::carried_identity`), and the hash is the one this
+    /// identity's own adoption names.
+    pub fn take_propagated(&mut self, object: &[u8]) -> crate::horizon::Took {
+        if !self.placement_waiting.is_empty()
+            && let Some(id) = Record::parse(object)
+                .ok()
+                .and_then(|r| r.carried_identity())
+            && self
+                .placement_waiting
+                .values()
+                .any(|b| placing_patron(b) == Some(id.keyhash))
+            && !self.known.iter().any(|k| k.keyhash == id.keyhash)
+        {
+            let who = id.keyhash;
+            self.known.push(id);
+            self.learned(who);
+        }
+        self.horizon.ingest(object, &self.known)
     }
 
     /// This client's own `SignedLocator` for the subnet it acts in: its
@@ -5836,26 +5886,31 @@ impl Client {
         // for a relationship the archive says nothing of: a device restored
         // from the phrase holds no archive, and where it does, the
         // archive's own word on that patron stands
-        for (patron, bytes) in &self.store.placements {
-            if last.contains_key(patron) {
-                continue;
-            }
+        // **under the patron the record names**, which is the node that
+        // handed it or a patron that node serves this identity through
+        for bytes in self.store.placements.values() {
             let Ok(rec) = Record::parse(bytes) else {
                 continue;
             };
+            let Some(patron) = rec.field_hash(2) else {
+                continue;
+            };
+            if last.contains_key(&patron) {
+                continue;
+            }
             let (Some(l), Some(seq)) = (rec.locator(), rec.seqno()) else {
                 continue;
             };
             if let Some(s) = rec.carried_scope() {
-                carried.insert(*patron, s);
+                carried.insert(patron, s);
             }
             let subnet = l.subnet.unwrap_or(rec.txid);
-            subnet_under.insert(*patron, subnet);
+            subnet_under.insert(patron, subnet);
             let at = Locator {
                 subnet: Some(subnet),
                 ..l
             };
-            last.insert(*patron, (seq.series, seq.counter, Some(at)));
+            last.insert(patron, (seq.series, seq.counter, Some(at)));
         }
         self.root_subnet = first.get(&None).map(|(_, t)| *t);
         self.scopes = first
@@ -7007,7 +7062,7 @@ impl Client {
         self.attached_through.insert(node, addresses);
     }
 
-    /// **What `node` said placed this identity under it**, at attach
+    /// **What `node` said placed this identity**, at attach
     /// (`wire-format.md` §8.2 field 7, design §23.3): the adoption both
     /// signed, or nothing. Kept where it is an adoption of this identity
     /// by that node and its signatures verify, so the node is believed
@@ -7015,21 +7070,57 @@ impl Client {
     /// was held from it, a party that left being no longer there. Either
     /// way the positions are folded again. Err names why a placement was
     /// not kept, and what was held stays.
-    pub fn placed_by(&mut self, node: Keyhash, placement: Option<Vec<u8>>) -> Result<(), String> {
+    ///
+    /// **And under a patron that runs no node, from the node serving this
+    /// identity** [author, 2026-11-25]: `serving` is that node having
+    /// answered the attach as the one this identity is served by, and an
+    /// adoption naming another patron is taken from no other. It is kept
+    /// once both signatures verify, which waits where the patron's
+    /// material has not come ([`Client::take_propagated`]). Such a one is
+    /// dropped when the node says nothing and no longer answers as
+    /// serving; while it does, its silence says nothing.
+    pub fn placed_by(
+        &mut self,
+        node: Keyhash,
+        placement: Option<Vec<u8>>,
+        serving: bool,
+    ) -> Result<(), String> {
         let Some(bytes) = placement else {
+            self.placement_waiting.remove(&node);
+            let above = self
+                .store
+                .placements
+                .get(&node)
+                .is_some_and(|b| placing_patron(b) != Some(node));
+            if above && serving {
+                return Ok(());
+            }
             if self.store.placements.remove(&node).is_some() {
                 self.adopt_own_positions();
             }
             return Ok(());
         };
         let rec = Record::parse(&bytes).map_err(|e| e.to_string())?;
+        let patron = rec.field_hash(2);
         if rec.tx_type != TYPE_ADOPTION
             || rec.field_hash(1) != Some(self.keyhash())
-            || rec.field_hash(2) != Some(node)
+            || !(patron == Some(node) || (serving && patron.is_some()))
         {
-            return Err("not an adoption of this identity by that node".into());
+            return Err(
+                "not an adoption of this identity by that node, or under it by a node serving it"
+                    .into(),
+            );
         }
-        verify::envelope(&self.known, &bytes).map_err(|e| e.to_string())?;
+        match verify::envelope(&self.known, &bytes) {
+            Ok(_) => {}
+            Err(verify::Failure::MissingKey(_)) if patron != Some(node) => {
+                tracing::info!(target: "attach", node = %crate::diag::id8(&node), "attach.placement_waits");
+                self.placement_waiting.insert(node, bytes);
+                return Ok(());
+            }
+            Err(e) => return Err(e.to_string()),
+        }
+        self.placement_waiting.remove(&node);
         if self.store.placements.get(&node) != Some(&bytes) {
             self.store.placements.insert(node, bytes);
             self.adopt_own_positions();

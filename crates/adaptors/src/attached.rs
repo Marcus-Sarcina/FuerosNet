@@ -327,7 +327,7 @@ pub fn follow(
                 .with(move |c| {
                     let known = c.known.clone();
                     match kind {
-                        rhtn_node::store::KIND_TRANSACTION => c.horizon.ingest(&object, &known),
+                        rhtn_node::store::KIND_TRANSACTION => c.take_propagated(&object),
                         // **and one for the node serving this client, at an
                         // address it has not agreed, is an invitation**
                         // [author, 2026-11-17]: proved and asked as a link's

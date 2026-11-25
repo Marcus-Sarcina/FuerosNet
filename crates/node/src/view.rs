@@ -405,9 +405,30 @@ impl NodeView {
     /// §8.2 field 7): the newest adoption that placed it under this node,
     /// while it holds a slot here. A departure empties the slot, and a
     /// party that left is not told it is still here.
+    ///
+    /// **And a member this node serves from above is handed theirs**
+    /// [author, 2026-11-25]: one whose patron holds a slot here and runs
+    /// no node, so that nobody else is there to say it. The record is that
+    /// patron's and the member's own, kept here as every record composing
+    /// this node's horizon is. Nothing where two such patrons are open in
+    /// the table: one position is what this says, and it does not choose.
     pub fn placement_of(&self, occupant: &Keyhash) -> Option<Vec<u8>> {
-        self.slot_of(occupant)?;
-        self.store.placement_of(&self.me(), occupant)
+        let me = self.me();
+        if self.slot_of(occupant).is_some() {
+            return self.store.placement_of(&me, occupant);
+        }
+        if *occupant == me {
+            return None;
+        }
+        let mut above = self
+            .table
+            .patrons(occupant)
+            .into_iter()
+            .filter(|p| self.slot_of(p).is_some() && !self.table.is_infra(p));
+        let (Some(patron), None) = (above.next(), above.next()) else {
+            return None;
+        };
+        self.store.placement_of(&patron, occupant)
     }
 
     /// The child index an adoption under this node assigns: the last nibble

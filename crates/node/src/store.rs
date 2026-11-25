@@ -90,6 +90,18 @@ pub fn subjects(rec: &Record) -> Vec<Keyhash> {
     }
 }
 
+/// **Whether a stored transaction is kept as the record itself, across a
+/// restart**: the ones that compose this node's horizon — an adoption, a
+/// departure, a disavowal, a rotation — which the store takes only out to
+/// the two-hop boundary [`stores`] draws (`infra-client-requirements.md`
+/// §4.3) [author, 2026-11-25].
+pub fn composes_horizon(tx_type: u64) -> bool {
+    matches!(
+        tx_type,
+        TYPE_ADOPTION | TYPE_DEPARTURE | TYPE_DISAVOWAL | TYPE_REISSUE
+    )
+}
+
 /// Whether a transaction type travels in the topology class at all.
 pub fn is_topology_class(tx_type: u64) -> bool {
     matches!(
@@ -183,11 +195,10 @@ pub struct HeldDelegation {
 #[derive(Default)]
 pub struct TopologyStore {
     /// **The seen-set: what this node stored, by identifier.**  This is
-    /// what survives a restart and what the forwarding rule consults
-    /// (`wire-format.md` §10.1.1), and it is all a node keeps of a
-    /// transaction it is not a party to: that it stored it, and the table
-    /// it produced (`infra-client-requirements.md` §4.3)
-    /// [author, 2026-09-23].
+    /// what the forwarding rule consults (`wire-format.md` §10.1.1), and
+    /// of a stored transaction that composes no horizon it is all that
+    /// survives a restart: that it was stored, and the table it produced
+    /// (`infra-client-requirements.md` §4.3) [author, 2026-09-23].
     seen: BTreeMap<Txid, u64>,
     /// **This node's own acts**: the transactions it signed, kept and
     /// replayed because they are its own to keep — a copy of a transaction
@@ -196,11 +207,13 @@ pub struct TopologyStore {
     /// chain and refuses a record whose predecessors it lacks; what is
     /// wanted here is the act, not the chain.
     own: BTreeMap<Txid, Vec<u8>>,
-    /// The bodies of what this node stored, held while the process runs so
-    /// the fold can dereference an adoption's evidence and read a peering
-    /// or a disavowal's band.  **Never written**: a node is not entitled to
-    /// a third party's sequence of signed acts, and a restart leaves the
-    /// seen-set and the topology it produced.
+    /// The bodies of what this node stored, which the fold dereferences
+    /// an adoption's evidence through and reads a peering or a
+    /// disavowal's band from.  **The ones that compose the horizon are
+    /// written** ([`composes_horizon`]) [author, 2026-11-25]: the node
+    /// keeps every such record it sees, its signers' or not.  The rest are
+    /// held while the process runs, and a restart leaves their seen fact
+    /// and the topology they produced.
     transactions: BTreeMap<Txid, Record>,
     /// One endpoint record per subject per series (`wire-format.md` §7.6:
     /// one record per patron relationship).
@@ -271,11 +284,10 @@ impl TopologyStore {
     /// what the derived view's watermark is taken over, so the view can
     /// still say whether it accounts for the store when the acts
     /// themselves are gone.
-    /// Drop from the retained acts anything this node did not sign: what a
-    /// migration from the preceding format takes in bulk, before the
-    /// identity is known, and keeps only where it is this node's own
-    /// (`infra-client-requirements.md` §4.3).  Returns how many were
-    /// dropped.
+    /// Drop from this node's own acts anything it did not sign: what a
+    /// load takes in bulk, before the identity is known, and keeps there
+    /// only where it is this node's own (`infra-client-requirements.md`
+    /// §4.3).  Returns how many were dropped.
     pub fn prune_own(&mut self, me: &Keyhash) -> usize {
         let before = self.own.len();
         self.own
@@ -288,18 +300,20 @@ impl TopologyStore {
         self.own.insert(txid, bytes);
     }
 
-    /// **The adoption that placed `subordinate` under `me`**, the newest in
-    /// the relationship, from this node's own acts: what an attach by that
-    /// identity is answered with (`wire-format.md` §8.2 field 7). Both
-    /// signed it, so it tells the identity nothing about anyone else.
-    pub fn placement_of(&self, me: &Keyhash, subordinate: &Keyhash) -> Option<Vec<u8>> {
+    /// **The adoption that placed `subordinate` under `patron`**, the
+    /// newest in the relationship, from this node's own acts and the
+    /// records it keeps: what an attach by that identity is answered with
+    /// (`wire-format.md` §8.2 field 7). The two of them signed it, so it
+    /// tells the identity nothing about anyone else.
+    pub fn placement_of(&self, patron: &Keyhash, subordinate: &Keyhash) -> Option<Vec<u8>> {
         self.own
             .values()
             .filter_map(|b| Record::parse(b).ok())
+            .chain(self.transactions.values().cloned())
             .filter(|r| {
                 r.tx_type == TYPE_ADOPTION
                     && r.field_hash(1) == Some(*subordinate)
-                    && r.field_hash(2) == Some(*me)
+                    && r.field_hash(2) == Some(*patron)
             })
             .max_by_key(|r| r.seqno().map(|s| (s.series, s.counter)))
             .map(|r| r.bytes)
@@ -416,8 +430,8 @@ impl TopologyStore {
     /// §10.1.3): **the current-state objects it holds, and nothing of a
     /// third party's history** [author, 2026-09-23].  A node that missed a
     /// transaction fetches the subject's archive from a participant
-    /// (§7.9), which is where the act lives; what this node holds of one
-    /// it was not party to is the table it produced.  Its own acts ride
+    /// (§7.9); the records of other parties this node keeps are kept and
+    /// not replayed.  Its own acts ride
     /// with these, from its own archive, which `NodeView::replay_to` adds.
     pub fn objects(&self) -> Vec<(u64, Vec<u8>)> {
         let mut out: Vec<(u64, Vec<u8>)> = self
@@ -759,19 +773,23 @@ impl TopologyStore {
     /// replays a forwarding wave into every cycle in the horizon
     /// (`infra-client-requirements.md` §4.3).
     pub fn save(&self, dir: &std::path::Path) -> std::io::Result<()> {
-        for sub in ["ep", "deleg", "ack", "own"] {
+        for sub in ["ep", "deleg", "ack", "own", "tx"] {
             std::fs::create_dir_all(dir.join(sub))?;
         }
-        // **the seen fact, not the act** [author, 2026-09-23]: a node holds
-        // of another party's transaction that it stored it and the table it
-        // produced, and the transaction itself lives in the archives of the
-        // parties to it.  An earlier version wrote the bodies under `tx/`
-        // and the evidence under `presence/`; an upgrade removes what the
-        // current rules forbid rather than merely stopping the write
-        for gone in ["tx", "presence"] {
-            if dir.join(gone).is_dir() {
-                std::fs::remove_dir_all(dir.join(gone))?;
+        // **the records that compose the horizon, kept as records**
+        // [author, 2026-11-25]: a body is fixed by its identifier, so one
+        // already written is not written again
+        for (t, r) in &self.transactions {
+            let at = dir.join("tx").join(hex(t));
+            if composes_horizon(r.tx_type) && !at.exists() {
+                std::fs::write(at, &r.bytes)?;
             }
+        }
+        // the evidence an adoption cited is not such a record: an earlier
+        // version wrote it under `presence/`, and an upgrade removes what
+        // the current rules forbid rather than merely stopping the write
+        if dir.join("presence").is_dir() {
+            std::fs::remove_dir_all(dir.join("presence"))?;
         }
         for (t, b) in &self.own {
             std::fs::write(dir.join("own").join(hex(t)), b)?;
@@ -836,20 +854,28 @@ impl TopologyStore {
     /// held was waiting on a prerequisite the restart may have lost too.
     pub fn load(dir: &std::path::Path) -> std::io::Result<TopologyStore> {
         let mut st = TopologyStore::new();
-        // **the preceding format, migrated** (OPS-016's shape: an upgrade
-        // moves what the current rules allow and removes only what they
-        // forbid).  An earlier version wrote every stored body under `tx/`;
-        // each one's identifier and effective time are the seen fact this
-        // node keeps, and a body it signed is its own act.  Whose they are
-        // is not known here, so all are taken and the foreign ones are
-        // dropped by `prune_own` as soon as the node's identity is at hand.
+        // **the records that compose the horizon**, each with its seen
+        // fact.  **And the preceding format, migrated** (OPS-016's shape:
+        // an upgrade moves what the current rules allow and removes only
+        // what they forbid): an earlier version wrote every stored body
+        // under `tx/` and had no `own/`, so in a directory without one a
+        // body here may be this node's own act.  Whose they are is not
+        // known here, so there all are taken as that too and the foreign
+        // ones are dropped from it by `prune_own` as soon as the node's
+        // identity is at hand.
+        let preceding = !dir.join("own").is_dir();
         if let Ok(rd) = std::fs::read_dir(dir.join("tx")) {
             for e in rd.flatten() {
                 if let Ok(bytes) = std::fs::read(e.path())
                     && let Ok(rec) = Record::parse(&bytes)
                 {
                     st.seen.insert(rec.txid, rec.effective);
-                    st.own.insert(rec.txid, bytes);
+                    if preceding {
+                        st.own.insert(rec.txid, bytes);
+                    }
+                    if composes_horizon(rec.tx_type) {
+                        st.transactions.insert(rec.txid, rec);
+                    }
                 }
             }
         }

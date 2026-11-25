@@ -626,18 +626,22 @@ fn a_restored_device_takes_its_place_from_the_adoption_its_node_hands_back() {
     assert!(desk.subnets().is_empty(), "nothing until a node says");
     assert_eq!(desk.position_in(&subnet), None);
 
-    // a record the identity did not sign, or one naming another node, is
-    // refused and changes nothing
-    assert!(desk.placed_by(kh("alice"), Some(carols)).is_err());
-    assert!(desk.placed_by(kh("w1"), Some(adoption.clone())).is_err());
+    // a record the identity did not sign, or one naming another node
+    // from a node that does not answer as serving it, is refused and
+    // changes nothing
+    assert!(desk.placed_by(kh("alice"), Some(carols), true).is_err());
+    assert!(
+        desk.placed_by(kh("w1"), Some(adoption.clone()), false)
+            .is_err()
+    );
     let mut forged = adoption.clone();
     let n = forged.len();
     forged[n - 1] ^= 1;
-    assert!(desk.placed_by(kh("alice"), Some(forged)).is_err());
+    assert!(desk.placed_by(kh("alice"), Some(forged), true).is_err());
     assert!(desk.subnets().is_empty(), "nothing refused was kept");
 
     // **the adoption both signed puts it where the phone is**
-    desk.placed_by(kh("alice"), Some(adoption.clone()))
+    desk.placed_by(kh("alice"), Some(adoption.clone()), true)
         .expect("an adoption of this identity by this node, both signatures good");
     assert_eq!(desk.position_in(&subnet), Some(held.clone()));
     assert_eq!(desk.subnets(), vec![subnet]);
@@ -646,16 +650,92 @@ fn a_restored_device_takes_its_place_from_the_adoption_its_node_hands_back() {
     let back = ClientStore::decode(&desk.store.encode()).expect("the store round-trips");
     assert_eq!(back.placements, desk.store.placements);
 
-    // **the patron's silence drops it**: a party that left is not there
-    desk.placed_by(kh("alice"), None).unwrap();
+    // **the patron's silence drops it**: a party that left is not there,
+    // whatever the patron's node answers as
+    desk.placed_by(kh("alice"), None, true).unwrap();
     assert_eq!(desk.position_in(&subnet), None);
 
     // and a device whose own archive records the relationship reads that
     // first: the phone's position is unmoved by being handed the record
     s.client("bob")
-        .placed_by(kh("alice"), Some(adoption))
+        .placed_by(kh("alice"), Some(adoption), true)
         .unwrap();
     assert_eq!(s.client("bob").position_in(&subnet), Some(held));
+}
+
+// acceptance: TOP-56
+// functional: APP-019
+#[test]
+fn a_restored_device_served_from_above_takes_its_place_once_its_patrons_material_comes() {
+    use common::harness::device;
+    use rhtn_client::ceremony::{Client, Config};
+    use rhtn_client::horizon::Took;
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    // alice runs the node; bob sits under her and runs none; carol is
+    // bob's, so alice's node is the one carol is served by
+    let mut s = setup(&PARTIES);
+    let above = s.adopted("bob", "alice", "w1", 1);
+    let placed = s.adopted("carol", "bob", "w2", 1);
+    let subnet = subnet_under(&mut s, "alice");
+    let held = s
+        .client("carol")
+        .position_in(&subnet)
+        .expect("the phone knows where it was put");
+    let bobs = s.client("bob").archive.get(&above).unwrap().bytes.clone();
+    let carols = s
+        .client("carol")
+        .archive
+        .get(&placed)
+        .unwrap()
+        .bytes
+        .clone();
+
+    // **restored from the phrase**, holding its node's material and
+    // nobody else's: not its patron's
+    let clock = Rc::new(Cell::new(1_790_000_000_000u64));
+    let known = vec![id("carol").public, id("alice").public];
+    let mut desk = Client::new(
+        id("carol"),
+        known,
+        Config::default(),
+        device(clock, 78, 0).0,
+    );
+    assert_eq!(desk.position_in(&subnet), None);
+
+    // an adoption under another patron is taken from the node serving
+    // this identity and from no other
+    assert!(
+        desk.placed_by(kh("alice"), Some(carols.clone()), false)
+            .is_err()
+    );
+    // **from the serving node it waits**: the patron's signature cannot
+    // be checked yet, and nothing unchecked is kept
+    desk.placed_by(kh("alice"), Some(carols.clone()), true)
+        .expect("held for the patron's material");
+    assert_eq!(desk.position_in(&subnet), None);
+    assert!(desk.store.placements.is_empty());
+
+    // **the node's replay brings its own adoption of the patron**, which
+    // carries the patron's material under the hash carol's adoption names
+    assert_eq!(desk.take_propagated(&bobs), Took::Applied);
+    assert_eq!(desk.position_in(&subnet), Some(held.clone()));
+    assert_eq!(desk.subnets(), vec![subnet]);
+
+    // one whose signature fails is refused, and what is held stays
+    let mut forged = carols.clone();
+    let n = forged.len();
+    forged[n - 1] ^= 1;
+    assert!(desk.placed_by(kh("alice"), Some(forged), true).is_err());
+    assert_eq!(desk.position_in(&subnet), Some(held.clone()));
+
+    // **the serving node's silence says nothing while it serves**
+    desk.placed_by(kh("alice"), None, true).unwrap();
+    assert_eq!(desk.position_in(&subnet), Some(held));
+    // and drops it once the node no longer answers as serving
+    desk.placed_by(kh("alice"), None, false).unwrap();
+    assert_eq!(desk.position_in(&subnet), None);
 }
 
 // acceptance: CER-74

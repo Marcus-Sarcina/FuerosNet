@@ -1085,11 +1085,14 @@ impl Net {
             // (`wire-format.md` §8.2 field 7): a sibling answering in
             // failover is not its patron, and its silence says nothing
             let placement = (serving_node == node).then(|| session.ack.placement.clone());
+            // and whether it answered as the node this identity is served
+            // by, which is whom a placement under another patron is from
+            let serving = session.ack.mode == 0;
             handle_for_task
                 .with(move |c| {
                     c.attached_through(serving_node, vec![landed]);
                     if let Some(p) = placement
-                        && let Err(why) = c.placed_by(serving_node, p)
+                        && let Err(why) = c.placed_by(serving_node, p, serving)
                     {
                         tracing::info!(target: "attach", node = %rhtn_client::diag::id8(&serving_node), why = %why, "attach.placement_refused");
                     }

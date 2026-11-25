@@ -14275,7 +14275,7 @@
   "id": "TOP-45",
   "area": "topology",
   "gap": "topology",
-  "title": "Persist the seen fact and the table it produced, never a transaction the node was no party to",
+  "title": "Persist the records that compose the node's horizon, and of any other transaction it was no party to the seen fact and the table it produced",
   "milestone": "after-5",
   "kind": "positive",
   "spec": [
@@ -14285,7 +14285,11 @@
   "rule": [
    {
     "where": "infra-client-requirements.md §4.3",
-    "text": "Evaluate a transaction you are no party to, and keep what the evaluation came to rather than the act"
+    "text": "Keep every record you see that bears on who is in your horizon"
+   },
+   {
+    "where": "infra-client-requirements.md §4.3",
+    "text": "Evaluate any other transaction you are no party to, and keep what the evaluation came to rather than the act"
    },
    {
     "where": "infra-client-requirements.md §4.3",
@@ -14294,7 +14298,7 @@
   ],
   "given": "Node P holds an adoption and a departure by parties it did not sign, a current endpoint line for its own child, and a derived view written beside them.",
   "when": "P is stopped and started again, and a party attaches to it and reconciles.",
-  "then": "What P wrote of the foreign acts is their identifiers alone: neither body nor the evidence they cited survives, and an upgrade removes what an earlier version wrote under those names. The identifiers still suppress a second forwarding wave. P replays the endpoint line byte for byte and no foreign act, and its derived view still accounts for what it accepted; a view that cannot is discarded and leaves nothing to fold.",
+  "then": "What P wrote of the foreign adoption and departure is each record whole, and after the restart P holds both and folds its table from them; the evidence they cited does not survive, nor the body of a stored transaction of another kind, whose identifier alone is kept, and an upgrade removes what an earlier version wrote under those names. The identifiers still suppress a second forwarding wave. P replays the endpoint line byte for byte and no foreign act, kept or not, and its derived view still accounts for what it accepted; a view that cannot is discarded and folded again from the records kept.",
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
@@ -17793,7 +17797,7 @@
   "id": "TOP-56",
   "area": "topology",
   "gap": "topology",
-  "title": "A restored device takes its place under a node from the adoption the node answers its attach with",
+  "title": "A restored device takes its place from the adoption the node answers its attach with, under that node or under a patron the node serves it through",
   "milestone": 3,
   "kind": "positive",
   "spec": [
@@ -17804,11 +17808,15 @@
    {
     "where": "wire-format.md §8.2",
     "text": "the device verifies\nboth signatures, that field 1 is its own identity and field 2 the node it\nattached to, and holds field 3 as its position under that node"
+   },
+   {
+    "where": "wire-format.md §8.2",
+    "text": "The device takes an adoption naming another patron only from a node that answered in mode 0, verifies both signatures, and holds field 3 as its position under the patron field 2 names"
    }
   ],
-  "given": "A node N that adopted identity B, B holding the slot; B's phone holding the adoption in its archive; a desktop restored from B's phrase holding no archive.",
-  "when": "The desktop attaches to N; separately, it is handed an adoption naming another identity, one naming another node, and one whose signature fails; and later N answers an attach with no field 7.",
-  "then": "N's AttachAck carries the adoption in force for B in field 7 and none for an identity holding no slot there, a departed one included. The desktop holds the position the phone holds once the good adoption verifies, refuses each of the other three and keeps nothing from them, and drops the position when N says nothing. The phone, whose archive records the relationship, is unmoved by being handed the record.",
+  "given": "A node N that adopted identity B, B holding the slot; B's phone holding the adoption in its archive; a desktop restored from B's phrase holding no archive. And an identity C adopted by B, B running no node, so that N serves C; a desktop restored from C's phrase holding N's material and not B's.",
+  "when": "The desktop attaches to N; separately, it is handed an adoption naming another identity, one naming another node, and one whose signature fails; and later N answers an attach with no field 7. And C's desktop attaches to N, before and after N restarts, and N's replay then reaches it; and N later answers it in failover with no field 7.",
+  "then": "N's AttachAck carries the adoption in force for B in field 7 and none for an identity holding no slot there, a departed one included. The desktop holds the position the phone holds once the good adoption verifies, refuses each of the other three and keeps nothing from them, and drops the position when N says nothing. The phone, whose archive records the relationship, is unmoved by being handed the record. N's AttachAck to C carries the adoption C and B signed, the same after N restarts, and none once B runs a node or C has left. C's desktop refuses that adoption from a node not answering in mode 0, keeps nothing of it while B's material is missing, holds the position once N's own adoption of B arrives carrying that material, keeps it through N's silence in mode 0 and drops it at N's silence in another mode.",
   "oracle": "behaviour",
   "interpretation": null,
   "families": [

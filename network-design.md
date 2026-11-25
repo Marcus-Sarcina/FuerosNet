@@ -7030,6 +7030,12 @@ again from: what is kept alongside the copy is the set of identifiers it
 folded, which is enough to say whether the copy still accounts for what was
 accepted and not enough to reconstruct it.
 
+**A node keeps more** [author, 2026-11-25]. Every record it sees that bears on
+who is in its horizon — an adoption, a departure, a disavowal, a rotation, out
+to two hops — it keeps as the record (`infra-client-requirements.md` §4.3). For
+those its fold has its input, and a copy it discards is folded again from them;
+of anything else it holds what the paragraph above says.
+
 **A materialised copy carries enough to say whether it is still current**, and
 is discarded whole when it cannot. **The honest failure is then repair rather
 than replay**: a party whose copy cannot account for what it accepted asks its
@@ -9410,7 +9416,12 @@ adoption that placed the identity under it, which both signed. The node answers
 every attach by the identity with it (`wire-format.md` §8.2), and the device
 checks both signatures itself and takes its position from the record's locator
 as it would from its own archive, so the node is believed about nothing the
-identity did not sign and nothing of anyone else's crosses. The subnet's
+identity did not sign and nothing of anyone else's crosses. **A member whose
+patron runs no node is answered by the node that serves them both** [author,
+2026-11-25], with the adoption the member and that patron signed, which that
+node keeps among the records composing its horizon
+(`infra-client-requirements.md` §4.3); the device checks it the same way, the
+patron's signature under material the node's replay brings. The subnet's
 profile and the node's siblings reach it as they reach any member (§14.1.2,
 `wire-format.md` §7.11). **This returns standing and not history**, the distinction §10.2
 draws for a rotation, and it reaches only as far as the subnets of the nodes
