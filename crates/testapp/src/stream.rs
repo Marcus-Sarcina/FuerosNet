@@ -51,6 +51,13 @@ pub const SEGMENTS: [&[u8]; 10] = [
 pub const POLICY: &str = "default-src 'self' blob:; script-src 'unsafe-inline'; \
                           style-src 'unsafe-inline'; media-src 'self' blob:";
 
+/// **The policy of the page that probes**: the same, and every connection
+/// its own script might open allowed by it, so that what stops one is the
+/// frame and not this declaration.
+pub const POLICY_PROBING: &str = "default-src 'self' blob:; script-src 'unsafe-inline'; \
+                                  style-src 'unsafe-inline'; media-src 'self' blob:; \
+                                  connect-src * wss: https:; worker-src blob:";
+
 /// **Part `n` of the file**: [`PART_BYTES`] of a generator seeded by the
 /// part's number, so every part differs, none compresses, and the page's
 /// check fails on a part repeated, dropped or cut short.
@@ -106,6 +113,9 @@ pub struct Stream {
     ///
     /// [`probing`]: Stream::probing
     probe: Option<String>,
+    /// **Where its host said its media port is reached**
+    /// (`resource-requirements.md` §3.3's `rhtn-media`), as last told.
+    pub media: Option<String>,
     /// What happened, one JSON line each: the socket's caller prints them.
     pub said: Vec<String>,
 }
@@ -123,6 +133,7 @@ impl Stream {
         Stream {
             want: wanted_check(),
             probe: None,
+            media: None,
             said: Vec::new(),
         }
     }
@@ -144,7 +155,7 @@ impl Stream {
 
     /// **One request in, one response out** (`wire-format.md` §11).
     pub fn handle(&mut self, request: &[u8]) -> Vec<u8> {
-        let Some((method, target, _, body)) = read_request(request) else {
+        let Some((method, target, headers, body)) = read_request(request) else {
             return answer(
                 400,
                 "text/plain",
@@ -154,15 +165,39 @@ impl Stream {
         };
         match (method.as_str(), target.as_str()) {
             // its host's facts, taken so that nothing else is held back
-            // (`resource-requirements.md` §3.3); this face uses none
-            ("PUT", "/.rhtn/relationships") => answer(204, "text/plain", None, Vec::new()),
+            // (`resource-requirements.md` §3.3). The one this face reads
+            // is where its media port is reached, said once each time it
+            // moves and only as addresses are written
+            ("PUT", "/.rhtn/relationships") => {
+                let told = headers
+                    .iter()
+                    .find(|(n, _)| n == "rhtn-media")
+                    .map(|(_, v)| v.clone())
+                    .filter(|v| {
+                        v.chars().all(|c| {
+                            c.is_ascii_hexdigit() || matches!(c, '.' | ':' | '[' | ']' | ' ')
+                        })
+                    });
+                if told != self.media {
+                    self.said.push(format!(
+                        "{{\"what\":\"stream.media\",\"at\":\"{}\"}}",
+                        told.as_deref().unwrap_or("")
+                    ));
+                    self.media = told;
+                }
+                answer(204, "text/plain", None, Vec::new())
+            }
             ("GET", ICON_PATH) => answer(200, "image/png", None, ICON.to_vec()),
             ("GET", "/") => {
                 self.said.push("{\"what\":\"stream.page\"}".into());
                 answer(
                     200,
                     "text/html; charset=utf-8",
-                    Some(POLICY),
+                    Some(if self.probe.is_some() {
+                        POLICY_PROBING
+                    } else {
+                        POLICY
+                    }),
                     page(self.want, self.probe.as_deref()).into_bytes(),
                 )
             }
@@ -364,8 +399,69 @@ __SEGS__ segments played as they arrive. Nothing here is one message.</p>
       pc.close();
     } catch (e) { row(k, 'refused: ' + e.message); }
   }
+  // the streams beside the datagrams: the ports above the probe's, one
+  // for each way of asking, where the instance says what connected to it
+  const beside = n => PROBE.replace(/:(\d+)$/, (_, p) => ':' + (Number(p) + n));
+  function socket(WS, k, at) {
+    return new Promise(done => {
+      try {
+        const ws = new WS('wss://' + at + '/');
+        const end = said => { row(k, said); try { ws.close(); } catch (e) {} done(); };
+        ws.onopen = () => end('opened ' + at);
+        ws.onerror = () => end('asked ' + at + ', and it failed');
+        setTimeout(() => end('asked ' + at + ', and nothing came of it'), 4000);
+      } catch (e) { row(k, 'refused: ' + e.message); done(); }
+    });
+  }
+  // a socket opened where no window is: a worker the page made of its
+  // own text
+  function worker(at) {
+    return new Promise(done => {
+      try {
+        const text = "try{const ws=new WebSocket('wss://" + at + "/');" +
+          "ws.onopen=()=>postMessage('opened " + at + "');" +
+          "ws.onerror=()=>postMessage('asked " + at + ", and it failed');}" +
+          "catch(e){postMessage('refused: '+e.message)}";
+        const w = new Worker(URL.createObjectURL(new Blob([text], { type: 'text/javascript' })));
+        let over = false;
+        const end = said => { if (over) return; over = true; row('socket_worker', said); w.terminate(); done(); };
+        w.onmessage = e => end(String(e.data));
+        w.onerror = e => end('the worker was refused: ' + (e.message || ''));
+        setTimeout(() => end('asked ' + at + ', and nothing came of it'), 4000);
+      } catch (e) { row('socket_worker', 'refused: ' + e.message); done(); }
+    });
+  }
+  async function others() {
+    const BESIDE = beside(5);
+    if (window.WebSocket) await socket(window.WebSocket, 'socket', beside(1)); else row('socket', 'no socket here');
+    await worker(beside(3));
+    try {
+      const l = document.createElement('link');
+      l.rel = 'preconnect'; l.href = 'https://' + beside(4);
+      document.head.appendChild(l);
+      row('preconnect', 'asked ' + beside(4));
+    } catch (e) { row('preconnect', 'refused: ' + e.message); }
+    if (window.WebTransport) {
+      try {
+        const wt = new WebTransport('https://' + PROBE + '/');
+        await Promise.race([wt.ready.catch(() => {}), new Promise(r => setTimeout(r, 3000))]);
+        row('transport', 'asked ' + PROBE);
+        try { wt.close(); } catch (e) {}
+      } catch (e) { row('transport', 'refused: ' + e.message); }
+    } else row('transport', 'no transport here');
+    try {
+      await Promise.race([
+        fetch('https://' + BESIDE + '/', { mode: 'no-cors' }),
+        new Promise((_, no) => setTimeout(() => no(new Error('nothing came of it')), 4000)),
+      ]);
+      row('fetch_outside', 'answered');
+    } catch (e) { row('fetch_outside', 'refused: ' + e.message); }
+    try { row('beacon', String(navigator.sendBeacon('https://' + BESIDE + '/', 'x'))); }
+    catch (e) { row('beacon', 'refused: ' + e.message); }
+  }
   async function reach() {
     if (!PROBE) { row('reach', 'not asked'); return; }
+    await others();
     // the page's own window, and then a window it made for itself: a
     // frame that only hid the constructor would be given away by the second
     const own = window.RTCPeerConnection || window.webkitRTCPeerConnection;
@@ -376,6 +472,8 @@ __SEGS__ segments played as they arrive. Nothing here is one message.</p>
       document.body.appendChild(f);
       const inner = f.contentWindow.RTCPeerConnection || f.contentWindow.webkitRTCPeerConnection;
       if (inner) await aim(inner, 'reach_inner'); else row('reach_inner', 'no peer connection there');
+      if (f.contentWindow.WebSocket) await socket(f.contentWindow.WebSocket, 'socket_inner', beside(2));
+      else row('socket_inner', 'no socket there');
       f.remove();
     } catch (e) { row('reach_inner', 'refused: ' + e.message); }
   }

@@ -457,6 +457,10 @@ pub struct Applied {
     /// no federation plane, so an envelope for one is refused and its
     /// sender keeps it.
     pub closed: Vec<Keyhash>,
+    /// **The media port each package declared**
+    /// (`infra-client-requirements.md` §9.3) [author, 2026-11-24], so
+    /// [`Applied::reached`] can tell it where this machine is reached.
+    pub media: Vec<(Keyhash, u16)>,
 }
 
 /// **A sealed package whose key is not in the host's kernel**
@@ -505,6 +509,57 @@ impl Applied {
             own.push(("rhtn-secret".into(), crate::host::hex_secret(&secret)));
         }
     }
+
+    /// **Tell each package that declared a media port where this machine
+    /// is reached** (`infra-client-requirements.md` §9.3) [author,
+    /// 2026-11-24]: `rhtn-media`, its port at each address this node's
+    /// own endpoint record names, in the record's order. A package
+    /// composes what it offers a member's client from that, having no
+    /// other way to learn an address its operator never typed.
+    ///
+    /// **A node that publishes no address tells none**, and the package
+    /// has nowhere to offer.
+    pub fn reached(&mut self, at: &[std::net::IpAddr]) {
+        if at.is_empty() {
+            return;
+        }
+        for (res, port) in &self.media {
+            let said = at
+                .iter()
+                .map(|ip| std::net::SocketAddr::new(*ip, *port).to_string())
+                .collect::<Vec<_>>()
+                .join(" ");
+            let fact = ("rhtn-media".to_string(), said);
+            match self.facts.iter_mut().find(|(r, _)| r == res) {
+                Some((_, own)) => own.push(fact),
+                None => self.facts.push((*res, vec![fact])),
+            }
+        }
+    }
+}
+
+/// **The addresses this node's own endpoint record names**, in its order
+/// and each once: where a member's client reaches this machine, and so
+/// where it reaches a media port held on it ([`Applied::reached`]).
+/// Nothing where the node holds no record or cannot read the one it has,
+/// which its start and its surface each refuse in their own words.
+pub fn reached_at(record: Option<&Path>) -> Vec<std::net::IpAddr> {
+    let Some(bytes) = record.and_then(|p| std::fs::read(p).ok()) else {
+        return Vec::new();
+    };
+    let Ok(record) = rhtn_node::store::EndpointRecord::parse(&bytes) else {
+        return Vec::new();
+    };
+    let mut at = Vec::new();
+    for point in &record.endpoints {
+        if let Ok(np) = rhtn_node::resolution::NetworkPoint::decode_bytes(point) {
+            let ip = np.socket().ip();
+            if !at.contains(&ip) {
+                at.push(ip);
+            }
+        }
+    }
+    at
 }
 
 /// A block's ceiling where the manifest imports the block and budgets
@@ -528,12 +583,13 @@ pub fn apply(
     grants_dir: Option<&Path>,
     state: Option<&Path>,
 ) -> Result<Applied, Refused> {
-    apply_in(gateway, path, limits, grants_dir, state, None)
+    apply_in(gateway, path, limits, grants_dir, state, None, &[])
 }
 
 /// [`apply`], with the directory the node keeps federation custody in, so
 /// an open sealed resource's plane is linked into its sealed directory
-/// beside its block, its log and its jobs (§9.4).
+/// beside its block, its log and its jobs (§9.4); and with the UDP ports
+/// this node itself holds, which no package's media port may be (§9.3).
 pub fn apply_in(
     gateway: &mut Gateway,
     path: &Path,
@@ -541,6 +597,7 @@ pub fn apply_in(
     grants_dir: Option<&Path>,
     state: Option<&Path>,
     federation: Option<&Path>,
+    held: &[u16],
 ) -> Result<Applied, Refused> {
     let text =
         std::fs::read_to_string(path).map_err(|e| at(0, format!("{}: {e}", path.display())))?;
@@ -577,6 +634,7 @@ pub fn apply_in(
     // table it will assign into.
     let mut addresses: Vec<(std::net::SocketAddr, String)> = Vec::new();
     let mut closed: Vec<Keyhash> = Vec::new();
+    let mut media: Vec<(Keyhash, u16)> = Vec::new();
 
     for h in &file.host {
         let named = |what: &str| format!("{}: {what}", h.manifest.display());
@@ -593,6 +651,42 @@ pub fn apply_in(
         }
         let (manifest, component) = read_manifest(&h.manifest).map_err(|e| at(0, named(&e)))?;
         instantiate(&manifest).map_err(|e| at(0, named(&e)))?;
+        // **one media port is one package's** (`infra-client-requirements.md`
+        // §9.3) [author, 2026-11-24]: declared by a package on a socket
+        // of its own, the only kind with a network to hold one on, and
+        // refused where this node or another package already holds it.
+        // The same reasoning as an address below: nothing partitions
+        // ports across package authors, so this is where a clash is seen
+        if let Some(port) = manifest.media {
+            if h.address.is_none() {
+                return Err(at(
+                    0,
+                    named(
+                        "the package declares a media port, and only a package on a socket \
+                         of its own has a network to hold one on",
+                    ),
+                ));
+            }
+            if held.contains(&port) {
+                return Err(at(
+                    0,
+                    named(&format!(
+                        "the package declares media port {port}, which this node itself holds"
+                    )),
+                ));
+            }
+            if let Some((first, _)) = media.iter().find(|(_, p)| *p == port) {
+                return Err(at(
+                    0,
+                    named(&format!(
+                        "the package declares media port {port}, which `{}` already holds: \
+                         one port is one package's",
+                        hex_of(first)
+                    )),
+                ));
+            }
+            media.push((res, port));
+        }
         // **sealed storage is served only while it is open** (§9.4): its
         // directory sealed at installation, its key in the kernel since
         // the machine started; open, what it keeps is linked into it
@@ -919,6 +1013,7 @@ pub fn apply_in(
         provisioned,
         notices,
         closed,
+        media,
     })
 }
 
@@ -981,6 +1076,9 @@ pub(crate) fn read_manifest(path: &Path) -> Result<(Manifest, Option<std::path::
         /// The destinations it may fetch from, delivered with the package.
         #[serde(default)]
         fetch: Vec<String>,
+        /// The one UDP port it holds on its host's machine for media
+        /// (`resource-requirements.md` §3) [author, 2026-11-24].
+        media_port: Option<u16>,
         #[serde(default)]
         admin: Vec<Op>,
         #[serde(default)]
@@ -1110,6 +1208,7 @@ pub(crate) fn read_manifest(path: &Path) -> Result<(Manifest, Option<std::path::
             job_seconds_per_day: f.budget.job_seconds_per_day,
         },
         fetch: f.fetch,
+        media: f.media_port,
     };
     // relative to the manifest, so a package is a directory an operator
     // can move without rewriting what is inside it

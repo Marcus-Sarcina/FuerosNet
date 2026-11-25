@@ -59,6 +59,12 @@ fn main() -> std::process::ExitCode {
     {
         if let Some(port) = at.rsplit(':').next().and_then(|p| p.parse::<u16>().ok()) {
             std::thread::spawn(move || listen_for_datagrams(port));
+            // one port for each way a page might open a stream: its own
+            // socket, a window's it made, a worker's, a preconnect, and a
+            // fetch or a beacon
+            for beside in (1..=5u16).filter_map(|n| port.checked_add(n)) {
+                std::thread::spawn(move || listen_for_connections(beside));
+            }
         }
         streaming = Some(face.probing(&at));
     }
@@ -272,6 +278,40 @@ fn listen_for_datagrams(port: u16) {
         let stun = n >= 20 && buf[..2] == [0, 1] && buf[4..8] == [0x21, 0x12, 0xa4, 0x42];
         println!(
             "{{\"what\":\"stream.datagram\",\"from\":\"{from}\",\"bytes\":{n},\"stun\":{stun}}}"
+        );
+        let _ = std::io::stdout().flush();
+    }
+}
+
+/// **Say what connects to `port`, and answer none of it**: the caller's
+/// address and the first byte it sent, which is 22 where it opens as TLS
+/// does. The first thirty-two.
+fn listen_for_connections(port: u16) {
+    let listener = match TcpListener::bind(("0.0.0.0", port)) {
+        Ok(l) => l,
+        Err(e) => {
+            println!(
+                "{{\"what\":\"stream.probe\",\"port\":{port},\"bound\":false,\"why\":\"{e}\"}}"
+            );
+            return;
+        }
+    };
+    println!("{{\"what\":\"stream.probe\",\"port\":{port},\"bound\":true}}");
+    let _ = std::io::stdout().flush();
+    for stream in listener.incoming().take(32) {
+        let Ok(mut stream) = stream else { continue };
+        let from = stream
+            .peer_addr()
+            .map(|a| a.to_string())
+            .unwrap_or_default();
+        let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(2)));
+        let mut first = [0u8; 1];
+        let first = match stream.read(&mut first) {
+            Ok(1) => i32::from(first[0]),
+            _ => -1,
+        };
+        println!(
+            "{{\"what\":\"stream.connect\",\"port\":{port},\"from\":\"{from}\",\"first\":{first}}}"
         );
         let _ = std::io::stdout().flush();
     }

@@ -141,6 +141,11 @@ dependencies {
     // The shell's log lines (Apache-2.0). `FuerosApp` plants a tree only in
     // the fieldtest flavour; with none planted every call is a no-op.
     implementation("com.jakewharton.timber:timber:5.0.1")
+    // What holds a resource's frame to its own resource
+    // (`light-client-requirements.md` §8): the engine's own support
+    // library, for a network wall behind every frame and a script that
+    // runs before any of a page's own (Apache-2.0) [author, 2026-11-24].
+    implementation("androidx.webkit:webkit:1.14.0")
     // Unit tests hold the shell's own logic on the JVM; what needs a
     // device stays on the device.
     testImplementation("junit:junit:4.13.2")

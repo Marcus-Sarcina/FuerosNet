@@ -1637,7 +1637,7 @@ client carried would be.
 | `check-in` | presence at a place, read from a tag on a proximity channel |
 | `tag` | a tag read: the code on a thing |
 | `sign` | a signature over the exact payload the ask carried, authorised by the person — the platform's own unlock where it has one |
-| `live` | a live session: capture pushed to a service the resource names, for the seconds asked, with its own consent, duration and indicator |
+| `live` | a live session: a real-time connection to the port the resource's package holds on its host (`resource-requirements.md` §3), for the seconds asked, whether or not anything of this device's is sent [author, 2026-11-24], with its own consent, duration and indicator |
 | `notify` | standing permission to be shown that resource's notifications |
 | `export` | a copy of what the resource holds, handed to the person as a file |
 | `import` | a file the person picks, handed to the resource |

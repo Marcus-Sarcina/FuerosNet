@@ -1198,7 +1198,16 @@ pub struct Manifest {
     /// package, read by the operator at installation, replaced whole by
     /// an update [author, 2026-10-30].
     pub fetch: Vec<String>,
+    /// **The one UDP port it holds on its host's own machine for what must
+    /// arrive as it happens** (`resource-requirements.md` §3) [author,
+    /// 2026-11-24]: declared, so the operator reads it at installation,
+    /// and above [`MEDIA_PORT_FLOOR`]. Absent where it holds none.
+    pub media: Option<u16>,
 }
+
+/// The lowest port a package may declare for its media: above the ports
+/// an operating system keeps for itself [author, 2026-11-24].
+pub const MEDIA_PORT_FLOOR: u16 = 1024;
 
 /// What a package declares it needs of its host, and is bounded at
 /// (`infra-client-requirements.md` §9.3): each absent where the package
@@ -1314,6 +1323,13 @@ pub fn instantiate(m: &Manifest) -> Result<Package, String> {
     }
     if m.imports.iter().any(|i| i == "rhtn/1:fetch") && m.fetch.is_empty() {
         return Err("the package imports fetch and names no destination".into());
+    }
+    if let Some(p) = m.media
+        && p < MEDIA_PORT_FLOOR
+    {
+        return Err(format!(
+            "a media port is {MEDIA_PORT_FLOOR} or above, not {p}"
+        ));
     }
     if m.admin.len() > MAX_OPERATIONS {
         return Err(format!(

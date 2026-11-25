@@ -167,6 +167,19 @@ class ResourcePageTest {
     }
 
     @Test
+    fun the_wall_behind_a_frame_is_a_port_of_this_device_that_nothing_may_hold() {
+        val (host, port) = Frames.NOWHERE.split(":").let { it[0] to it[1].toInt() }
+        assertEquals("127.0.0.1", host)
+        // below 1024 is the system's to bind, so no other app listens there
+        assertTrue(port in 1..1023)
+        // and both names a peer connection is made under are taken
+        for (name in listOf("'RTCPeerConnection'", "'webkitRTCPeerConnection'")) {
+            assertTrue(name, Frames.NO_PEERS.contains(name))
+        }
+        assertTrue(Frames.NO_PEERS.contains("configurable:false"))
+    }
+
+    @Test
     fun a_resources_origin_is_its_own_and_resolves_nowhere() {
         val a = "a".repeat(64)
         val b = "b".repeat(64)

@@ -412,6 +412,7 @@ impl Service {
                     tokio::spawn(
                         crate::administration::Surface {
                             listen: a.listen,
+                            transport: cfg.listen.port(),
                             // **the token acts are proved under**: the
                             // replacement where the operator's client has
                             // set one, and the configuration's until then
@@ -719,11 +720,15 @@ impl Service {
                     cfg.grants.as_deref(),
                     cfg.state.as_deref(),
                     cfg.federation.as_ref().and_then(|f| f.store.as_deref()),
+                    &[cfg.listen.port()],
                 )
                 .map_err(|e| Startup::Hosting(format!("{}: {e}", path.display())))?;
                 // where each instance reaches its block and its log, and
                 // the secret that says which instance is asking (§9.3)
                 applied.over(&packages);
+                // and where this machine is reached, for a package that
+                // holds a media port on it
+                applied.reached(&crate::hosting::reached_at(cfg.endpoint_record.as_deref()));
                 let bound = applied.bound;
                 // **configuring roles is one of §10.2's four moments**, so
                 // the grants this file wrote are expanded now rather than

@@ -1387,6 +1387,7 @@ fn apply_sealed(d: &Dir, f: &Path) -> (Gateway, Result<rhtn_daemon::hosting::App
         Some(&d.0.join("grants")),
         Some(&d.0.join("state")),
         Some(&d.0.join("federation")),
+        &[],
     )
     .map_err(|e| e.to_string());
     (g, applied)
@@ -1518,4 +1519,127 @@ fn a_sealed_entry_is_refused_with_a_mounted_block_or_over_unsealed_storage() {
     let f = sealed_entry(&e, "");
     let (_, over) = apply_sealed(&e, &f);
     assert!(refused(over).contains("provisioned unsealed"));
+}
+
+/// One socket-backed `[[host]]` entry, at a loopback port of its own.
+fn socket_host(resource: &str, manifest: &Path, port: u16) -> String {
+    format!(
+        "[[host]]\nresource = \"{resource}\"\nowner = \"{WHO}\"\nauthority = \"live.internal\"\n\
+         manifest = \"{}\"\naddress = \"127.0.0.1:{port}\"\n",
+        manifest.display()
+    )
+}
+
+/// **A package holds one media port on its host's machine, and a clash is
+/// a refused install** (`infra-client-requirements.md` §9.3) [author,
+/// 2026-11-24]: declared in the manifest, 1024 or above, by a package on
+/// a socket of its own; refused where this node or another package holds
+/// it; and the package is told where the machine is reached.
+// functional: PKG-023
+#[test]
+fn a_package_holds_one_media_port_and_a_clash_is_a_refused_install() {
+    const OTHER: &str = "0808080808080808080808080808080808080808080808080808080808080808";
+    let d = Dir::new("media-port");
+    let m = d.put("live.manifest", "roles = [\"reader\"]\nmedia_port = 7462\n");
+    let apply_held = |text: &str, held: &[u16]| {
+        let f = d.put("hosting", text);
+        let mut g = Gateway::default();
+        rhtn_daemon::hosting::apply_in(
+            &mut g,
+            Path::new(&f),
+            Limits::default(),
+            Some(&d.0.join("grants")),
+            Some(&d.0.join("state")),
+            None,
+            held,
+        )
+        .map_err(|e| e.to_string())
+    };
+
+    // held, and told where the machine is reached: each address once, in
+    // the order given, with the port the package declared
+    let mut applied = apply_held(&socket_host(RES, &m, 9), &[7431]).expect("bound");
+    let res: [u8; 32] = [9; 32];
+    assert_eq!(applied.media, vec![(res, 7462)]);
+    applied.reached(&[
+        "203.0.113.7".parse().expect("an address"),
+        "2001:db8::7".parse().expect("an address"),
+    ]);
+    let (_, facts) = &applied.facts[0];
+    let told = facts
+        .iter()
+        .find(|(k, _)| k == "rhtn-media")
+        .map(|(_, v)| v.as_str());
+    assert_eq!(told, Some("203.0.113.7:7462 [2001:db8::7]:7462"));
+
+    // a node that publishes no address tells none
+    let mut quiet = apply_held(&socket_host(RES, &m, 9), &[7431]).expect("bound");
+    quiet.reached(&[]);
+    assert!(
+        !quiet
+            .facts
+            .iter()
+            .any(|(_, own)| own.iter().any(|(k, _)| k == "rhtn-media")),
+        "nothing told where nothing is known"
+    );
+
+    // the addresses are the endpoint record's own
+    let bob = rhtn_crypto::identity::testkit::test_identity("bob");
+    let record = rhtn_node::resolution::endpoint_record(
+        &bob,
+        &[
+            rhtn_node::resolution::NetworkPoint::new([203, 0, 113, 7], Some(7431)),
+            rhtn_node::resolution::NetworkPoint::new([203, 0, 113, 7], Some(7432)),
+        ],
+        rhtn_archive::tx::Seqno {
+            series: 1,
+            counter: 1,
+        },
+    );
+    let at = d.put("endpoint.record", &record);
+    assert_eq!(
+        rhtn_daemon::hosting::reached_at(Some(&at)),
+        vec![
+            "203.0.113.7"
+                .parse::<std::net::IpAddr>()
+                .expect("an address")
+        ]
+    );
+    assert!(rhtn_daemon::hosting::reached_at(None).is_empty());
+    assert!(rhtn_daemon::hosting::reached_at(Some(&d.0.join("absent"))).is_empty());
+
+    // the port this node itself serves on is not a package's to declare
+    let why = refused(apply_held(&socket_host(RES, &m, 9), &[7462]));
+    assert!(why.contains("this node itself holds"), "{why}");
+
+    // one port is one package's
+    let both = format!("{}{}", socket_host(RES, &m, 9), socket_host(OTHER, &m, 10));
+    let why = refused(apply_held(&both, &[]));
+    assert!(why.contains("one port is one package's"), "{why}");
+    assert!(why.contains(RES), "and names who holds it: {why}");
+    // and two packages at two ports are two packages
+    let m2 = d.put(
+        "other.manifest",
+        "roles = [\"reader\"]\nmedia_port = 7463\n",
+    );
+    let apart = format!("{}{}", socket_host(RES, &m, 9), socket_host(OTHER, &m2, 10));
+    assert_eq!(apply_held(&apart, &[]).map(|a| a.bound), Ok(2));
+
+    // below 1024 is the operating system's
+    let low = d.put("low.manifest", "roles = [\"reader\"]\nmedia_port = 443\n");
+    let why = refused(apply_held(&socket_host(RES, &low, 9), &[]));
+    assert!(why.contains("1024 or above"), "{why}");
+    // and a port is a port
+    let wide = d.put(
+        "wide.manifest",
+        "roles = [\"reader\"]\nmedia_port = 70000\n",
+    );
+    assert!(apply_held(&socket_host(RES, &wide, 9), &[]).is_err());
+
+    // a package this node runs or brokers has no network to hold one on
+    assert!(
+        run(&d, &host(&m))
+            .expect_err("brokered")
+            .contains("a socket of its own")
+    );
 }

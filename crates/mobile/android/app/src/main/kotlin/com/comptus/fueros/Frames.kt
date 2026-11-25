@@ -4,6 +4,10 @@ import android.content.Context
 import android.webkit.WebSettings
 import android.webkit.WebStorage
 import android.webkit.WebView
+import androidx.webkit.ProxyConfig
+import androidx.webkit.ProxyController
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 
 /**
  * **The two frames this app puts somebody else's markup in**, in one place
@@ -43,6 +47,69 @@ object Frames {
         val hex = resource.lowercase()
         require(hex.length == 64 && hex.all { it in '0'..'9' || it in 'a'..'f' }) { "a resource is 64 hex digits" }
         return "https://${hex.substring(0, 32)}.${hex.substring(32)}.rhtn.invalid"
+    }
+
+    /**
+     * **Where a frame's engine is sent with everything it would fetch for
+     * itself: nowhere** [found on GXV, WebView 157, 2026-11-24]. A load
+     * the engine offers the screen's client is carried or refused there,
+     * but a page has ways out that are never offered: a socket, from a
+     * window or a worker; a transport over datagrams; a link that only
+     * asks for a connection to be opened ahead of use. Each reached a
+     * listener outside. So the engine is given a proxy for all of it, and
+     * the proxy is a port of this device's own that nothing may listen on.
+     */
+    const val NOWHERE: String = "127.0.0.1:1"
+
+    /**
+     * **What is taken from every window of a resource's page before any
+     * of its own code runs**: a peer connection sends datagrams of its
+     * own to an address the page chooses, by no proxy and by no load, so
+     * the only place to refuse one is the constructor.
+     */
+    const val NO_PEERS: String =
+        "(function(){for(const n of ['RTCPeerConnection','webkitRTCPeerConnection'])" +
+            "{try{Object.defineProperty(window,n,{value:undefined,writable:false,configurable:false})}" +
+            "catch(e){}}})();"
+
+    /**
+     * **Whether this device's engine can hold a page that runs code to
+     * its frame**: [wall] and [NO_PEERS] both. Where it cannot, a
+     * resource's page is shown without its code, whatever was allowed.
+     */
+    fun confines(): Boolean =
+        runCatching {
+            WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE) &&
+                WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
+        }.getOrDefault(false)
+
+    /**
+     * **Put the wall behind every frame of this app, and then go on**
+     * ([NOWHERE]). It is one setting for the whole process, so `through`
+     * names the one origin a node's own page is served from while that
+     * screen is in front, and nothing while it is not; this device's own
+     * loopback is walled with the rest. `then` runs on the main thread
+     * once the engine has taken it, which is when a frame may load.
+     *
+     * **What it leaves** while a node's page is in front: a resource's
+     * page still running behind it may open a connection to that one
+     * origin, which answers nothing unproved.
+     */
+    fun wall(through: String? = null, then: () -> Unit) {
+        val main = android.os.Handler(android.os.Looper.getMainLooper())
+        val supported = runCatching {
+            WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)
+        }.getOrDefault(false)
+        if (!supported) {
+            main.post(then)
+            return
+        }
+        val config = ProxyConfig.Builder()
+            .addProxyRule(NOWHERE)
+            .removeImplicitRules()
+            .apply { through?.let { addBypassRule(it) } }
+            .build()
+        ProxyController.getInstance().setProxyOverride(config, { main.post(it) }, then)
     }
 
     /** The per-resource store of what the person allowed a page to run. */
@@ -133,6 +200,11 @@ object Frames {
             loadWithOverviewMode = true
             builtInZoomControls = true
             displayZoomControls = false
+        }
+        // **and a page that runs has no peer connection to run** ([NO_PEERS]),
+        // in its own window and in each one it makes
+        if (script) {
+            WebViewCompat.addDocumentStartJavaScript(web, NO_PEERS, setOf("*"))
         }
     }
 

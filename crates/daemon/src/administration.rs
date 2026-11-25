@@ -207,6 +207,10 @@ pub const PACKAGE_TIMEOUT: Duration = Duration::from_secs(300);
 pub struct Surface {
     /// Where it listens, from the configuration's `[administration]`.
     pub listen: SocketAddr,
+    /// **The UDP port this node itself serves its sessions on**, which no
+    /// package's media port may be (`infra-client-requirements.md` §9.3)
+    /// [author, 2026-11-24].
+    pub transport: u16,
     /// **The token, used as a MAC key and never sent**: the instance
     /// proves it holds it when a client fetches, and a client proves it
     /// holds it on every act that does not arrive on the loopback.
@@ -1895,11 +1899,13 @@ impl Surface {
             self.grants.as_deref(),
             self.state.as_deref(),
             self.federation.as_deref(),
+            &[self.transport],
         ) {
             Ok(mut applied) => {
                 let n = applied.bound;
                 // the same facts a start would have told it (§9.3)
                 applied.over(&self.packages);
+                applied.reached(&crate::hosting::reached_at(self.endpoint_record.as_deref()));
                 for (res, facts) in applied.facts {
                     view.federation.set_host(res, facts);
                 }
@@ -2319,6 +2325,12 @@ impl Surface {
             what = %what,
             "daemon.lifecycle"
         );
+        // **where this machine is reached has moved, and a package that
+        // holds a media port on it is told** (§9.3): the hosting file is
+        // re-read, which tells every instance its host's facts again
+        if which == Signed::Endpoint && self.hosting.is_some() && self.running().is_some() {
+            let _ = self.reload();
+        }
         (200, format!("taken {} {what}\n", which.key()))
     }
 

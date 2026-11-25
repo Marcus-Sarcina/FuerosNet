@@ -164,8 +164,8 @@ class ResourceActivity : Activity() {
                     val resource = intent.getStringExtra("resource").orEmpty()
                     when (ResourcePage.runs(showing.page, Frames.scriptAllowed(this, resource))) {
                         null -> held.addView(consenting(showing))
-                        true -> held.addView(frame(showing.html, showing.page, script = true))
-                        false -> held.addView(frame(showing.html, showing.page, script = false))
+                        true -> held.addView(frame(showing.html, showing.page, allowed = true))
+                        false -> held.addView(frame(showing.html, showing.page, allowed = false))
                     }
                 }
                 is ResourcePage.Showing.Text -> held.addView(text(showing.text))
@@ -781,7 +781,7 @@ class ResourceActivity : Activity() {
             Diag.event("resource.script", "resource" to resource.take(12), "allowed" to allowed.toString())
             held?.let {
                 it.removeAllViews()
-                it.addView(frame(showing.html, showing.page, script = allowed))
+                it.addView(frame(showing.html, showing.page, allowed = allowed))
             }
         }
         addView(button("Allow its code for this resource") { decide(true) })
@@ -790,8 +790,11 @@ class ResourceActivity : Activity() {
 
     /** The frame, and the whole of what it permits. */
     @SuppressLint("SetJavaScriptEnabled")
-    private fun frame(html: String, page: Gateway.Page, script: Boolean): WebView = WebView(this).apply {
+    private fun frame(html: String, page: Gateway.Page, allowed: Boolean): WebView = WebView(this).apply {
         web = this
+        // **code runs only where this engine can hold it to the frame**
+        // ([Frames.confines])
+        val script = allowed && Frames.confines()
         layoutParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.MATCH_PARENT,
@@ -873,8 +876,11 @@ class ResourceActivity : Activity() {
         }
         // **the origin's own URL, served from the answer in hand**: the
         // document is same-origin with its resource, and the engine holds
-        // it to the policy the resource declared
-        loadUrl("$origin$path")
+        // it to the policy the resource declared. **Loaded once the wall
+        // is behind it** ([Frames.wall]), and not at all where the screen
+        // went first
+        val framed = this
+        Frames.wall { if (web === framed) loadUrl("$origin$path") }
     }
 
     /** `text/plain` is not a page, so it is not framed as one. */
@@ -904,6 +910,13 @@ class ResourceActivity : Activity() {
         // left on belongs to a screen nobody is looking at
         stopReading()
         super.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // a node's page may have opened the wall for its own origin while
+        // this screen was behind it ([Frames.wall])
+        Frames.wall {}
     }
 
     override fun onDestroy() {

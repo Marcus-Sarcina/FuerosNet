@@ -1008,6 +1008,31 @@ Neither where you bound it nor what it is called is a secret, and a port a
 local process can open is on its own proof of nothing
 (`resource-requirements.md` §3.3).
 
+**A package may hold one port of your machine for what must arrive as it
+happens** [author, 2026-11-24]. A call, or a broadcast watched as it is made,
+cannot go as one request and one answer (`resource-requirements.md` §3), so a
+package on a socket of its own may declare one UDP port in its manifest,
+`media_port`, 1024 or above: a member's client reaches it there directly, and
+nothing on it passes you. **It is held on your own machine so that one machine
+is all your operator runs**: what they are asked to do when their members
+outgrow it is to take a larger one, never to keep a second service for a
+package's media. **One port is one package's, and a clash is a refused
+installation**: refuse a manifest declaring the port you serve your own
+sessions on, or one a package you already host declared, naming which; and
+refuse one from a package you run in your sandbox or only broker, which has no
+network to hold a port on. You assign nothing: the port is the package's
+declaration, read by your operator at installation with the rest of its
+manifest. **Tell the instance where your machine is reached**, as `rhtn-media`
+with the facts above: its port at each address your endpoint record names, in
+the record's order, and again when the record moves; where you publish no
+record you tell it nothing, and it has nowhere to offer. **You carry none of it
+and you bound none of it**: no credential is inserted there, no budget of the
+package's is counted, and your queue never sees it, so what the machine can
+carry is the ceiling. **And the declaration is not a confinement.** A package
+on a socket of its own has its own network (above), and you do not hold it to
+the port it declared: the declaration is what your operator reads and what you
+check for a clash.
+
 **You are not always older than the subnet you serve** [2026-11-01]. An
 instance is launched into a subnet that already exists, replaces a machine,
 or takes over hosting from another; its store starts empty either way, and

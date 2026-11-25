@@ -140,4 +140,23 @@ fn what_the_page_measured_is_kept_as_one_line_and_nothing_else_is_taken() {
         s.handle(b"PUT /.rhtn/relationships HTTP/1.1\r\nhost: x\r\n\r\n")
             .starts_with(b"HTTP/1.1 204")
     );
+    // and where its host says its media port is reached is kept, and said
+    // once each time it moves
+    assert_eq!(s.media, None);
+    for _ in 0..2 {
+        assert!(
+            s.handle(
+                b"PUT /.rhtn/relationships HTTP/1.1\r\nhost: x\r\nrhtn-media: 203.0.113.7:7462\r\n\r\n"
+            )
+            .starts_with(b"HTTP/1.1 204")
+        );
+    }
+    assert_eq!(s.media.as_deref(), Some("203.0.113.7:7462"));
+    assert_eq!(
+        s.said
+            .iter()
+            .filter(|l| l.contains("stream.media"))
+            .collect::<Vec<_>>(),
+        vec!["{\"what\":\"stream.media\",\"at\":\"203.0.113.7:7462\"}"]
+    );
 }

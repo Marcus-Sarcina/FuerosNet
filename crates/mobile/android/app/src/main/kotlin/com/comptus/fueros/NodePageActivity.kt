@@ -172,7 +172,23 @@ class NodePageActivity : Activity() {
                 return true
             }
         }
-        go(this, origin, "$origin/")
+        // **this origin is the one a frame of this app loads from**, so
+        // the wall behind every frame is opened for it and nothing else
+        // while this screen is in front ([Frames.wall])
+        val framed = this
+        Frames.wall(origin) { if (!destroyed) go(framed, origin, "$origin/") }
+    }
+
+    private var destroyed = false
+
+    override fun onResume() {
+        super.onResume()
+        if (at.isNotEmpty()) Frames.wall("http://$at") {}
+    }
+
+    override fun onPause() {
+        Frames.wall {}
+        super.onPause()
     }
 
     /**
@@ -205,6 +221,7 @@ class NodePageActivity : Activity() {
         // ([Frames.origin]) is the resource's to keep [2026-11-15]
         if (at.isNotEmpty()) runCatching { WebStorage.getInstance().deleteOrigin("http://$at") }
         android.webkit.CookieManager.getInstance().removeAllCookies(null)
+        destroyed = true
         super.onDestroy()
     }
 }

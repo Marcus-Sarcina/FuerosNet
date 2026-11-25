@@ -170,6 +170,23 @@ parts the page fetches in turn, audio or video as segments of a few seconds
 each, played as they arrive. That is how large and continuous content is
 carried, and nothing in it asks more of the path than a `GET`.
 
+**What must arrive as it happens goes to a port of your own** [author,
+2026-11-24]. A call, or a broadcast watched as it is made, is neither one
+answer nor parts fetched in turn. Declare one UDP port in your manifest (§8)
+and hold it on your host's own machine; your host tells you where that machine
+is reached (§3.3's `rhtn-media`). A member's client opens a real-time
+connection to it inside a live session the person approved (§3.4), **whether or
+not anything of theirs is sent**: watching is a live session too. **Agree the
+session by requests like any other**, an offer and an answer each one request,
+**and that is where you learn who it is**: nothing on the port passed your
+host, so no header there says who is sending and no budget of yours is counted.
+What you accept on it is yours to tie to a principal you were given on the path
+above. **On that port you see the address a member's device sends from**,
+which on the path above only your host sees. It is on your host's machine so
+that one machine is all an operator runs: when your members outgrow it they
+take a larger one, and are never asked to keep a second service for your
+media.
+
 ### 3.1 The header-spoofing hazard
 
 This pattern has one characteristic failure, so both halves are
@@ -253,7 +270,7 @@ operator bound and `rhtn-audience` naming you.
 
 | Request | Carries | Your answer |
 |---|---|---|
-| `PUT /.rhtn/relationships` | the instances your operator configured yours to federate with: a patron's instance, subordinates' instances, named kin, each a resource keyhash; **and what your host provides you** [2026-10-30], as headers — `rhtn-host`, the surface versions it offers; `rhtn-block` and `rhtn-block-bytes`, where your storage block is and its ceiling; `rhtn-log` and `rhtn-log-bytes`, your log and its retention (`infra-client-requirements.md` §9.3); `rhtn-notices`, where you say what waits for a member (below) [author, 2026-11-23]; and `rhtn-secret`, what you present to reach any of them | 2xx once taken; it is repeated until then, and again whenever they or the host's facts change. **Nothing else is delivered to you until you take it** [2026-10-27]: a directive is acted on under a snapshot of who may send you one, and until you answer you have accepted no snapshot |
+| `PUT /.rhtn/relationships` | the instances your operator configured yours to federate with: a patron's instance, subordinates' instances, named kin, each a resource keyhash; **and what your host provides you** [2026-10-30], as headers — `rhtn-host`, the surface versions it offers; `rhtn-block` and `rhtn-block-bytes`, where your storage block is and its ceiling; `rhtn-log` and `rhtn-log-bytes`, your log and its retention (`infra-client-requirements.md` §9.3); `rhtn-notices`, where you say what waits for a member (below) [author, 2026-11-23]; `rhtn-media`, where the machine your media port is on is reached, where you declared one and your host publishes an address: your port at each of its addresses, as `address:port`, space-separated (§3) [author, 2026-11-24]; and `rhtn-secret`, what you present to reach any of them | 2xx once taken; it is repeated until then, and again whenever they or the host's facts change. **Nothing else is delivered to you until you take it** [2026-10-27]: a directive is acted on under a snapshot of who may send you one, and until you answer you have accepted no snapshot |
 | `PUT /.rhtn/envelope` | one **envelope** from a related instance, with `rhtn-origin` (that instance, hex) and `rhtn-relation` (`patron`, `subordinate` or `kin:<name>`, the node's reading of your operator's configuration) | 2xx to take it, which the node remembers; the body may carry envelopes to send (below) |
 | `GET /.rhtn/outbox` | **the items the node has taken**, as `?taken=a,b` [2026-10-27] | 2xx with `{"emit": [{"item": …, "to": …, "envelope": …}, …]}`, empty where you have nothing to send; `to` is `patron`, `subordinates`, `kin:<name>` or one related instance in hex |
 
@@ -921,7 +938,9 @@ destinations you may reach outward, each `https://host` or `https://host:port`
 exactly and nothing with a path, a wildcard or the node's own machine in it —
 delivered with the package so the operator reads it at installation, and replaced
 whole by an update, since an allow-list a package could grow at run time is no
-list. A host that offers none of your versions, or cannot keep a block, refuses you
+list; and **`media_port`**, the one UDP port you hold on your host's machine for
+a live session (§3), 1024 or above [author, 2026-11-24], refused at installation
+where your host or another package it hosts already holds that port. A host that offers none of your versions, or cannot keep a block, refuses you
 at installation with the reason; one that can tells your instance where its block
 and its log are on the relationships exchange (§3.3) — a filesystem of your own
 where the host can bound one, its surface otherwise [author, 2026-11-15].
