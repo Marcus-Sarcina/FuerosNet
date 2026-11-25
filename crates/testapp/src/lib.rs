@@ -15,6 +15,8 @@
 //! own `utility` module and parse it here, which is what holds the two
 //! halves of §3.4 against each other without a phone in the room.
 
+pub mod stream;
+
 use rhtn_codec::cose::sha256;
 use std::collections::BTreeMap;
 

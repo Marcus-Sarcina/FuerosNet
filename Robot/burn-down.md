@@ -69,7 +69,7 @@ is decided, built or explicitly deferred; a deferral moves to
 | # | Work | Waits on |
 |---|---|---|
 | B-01 | Write the developer procedure (build, push by digest, mint, install, grant, open, logs) and the container contract (`--listen`, `--resource`, `--secret`, user, read-only root, `/rhtn-block`), with the block and log verbs | — |
-| B-02 | Release the node's state lock before a package is called; today one slow handler stalls the node, against infra section 9.2 | — |
+| B-02 | **Done 2026-11-24** (53dc2563, PKG-021): a request is decided under the lock and its package asked holding nothing; a request the node answers itself waited 3.38 s behind a 2 s package before, under 1 s after | — |
 | B-03 | Utility asks on the desktop | D-01 |
 | B-04 | Closed with D-02: nothing to build | — |
 | B-05 | State or build the HTTP limits; the answer-size bound | D-03, D-04 |
@@ -124,7 +124,7 @@ is decided, built or explicitly deferred; a deferral moves to
 | # | Test |
 |---|---|
 | B-36 | A sender holding only a card, end to end |
-| B-37 | A script page and a form against a real package; an answer over 8 MiB; a slow package; a federated package |
+| B-37 | A form against a real package; an answer over the node's bound; a federated package. **Done 2026-11-24**: a slow package (PKG-021's end-to-end test), and a script page against a real package on GXV (the streaming face, `stream.internal`: 32 MiB in 32 parts at 1.76 MiB/s with the check matching, ten segments appended in 0.95 s and played to the end). The desktop's run of the same page is owed |
 
 ### Bench runs never made
 

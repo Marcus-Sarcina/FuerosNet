@@ -4,7 +4,7 @@
 //! §10.6).
 //!
 //! ```text
-//! rhtn-testapp --listen 127.0.0.1:7460 --resource <hex> [--log <path>]
+//! rhtn-testapp [--stream] --listen 127.0.0.1:7460 --resource <hex> [--log <path>]
 //! rhtn-testapp keyhash <material-hex>
 //! ```
 //!
@@ -13,6 +13,9 @@
 //! checked and the application says so rather than passing them.
 //! `keyhash` is the one convenience it carries for the bench: the keyhash
 //! of a phone's key material, which the hosting file needs as the owner.
+//! `--stream`, or `RHTN_TESTAPP_FACE=stream` in the environment, serves the
+//! other face, [`rhtn_testapp::stream`]: content in parts, in place of the
+//! walk through the utilities.
 
 use rhtn_testapp::{App, hex, unhex, wanted};
 use std::io::{Read, Write};
@@ -40,6 +43,13 @@ fn main() -> std::process::ExitCode {
     let mut resource = String::new();
     let mut log: Option<String> = None;
     let mut secret: Option<[u8; 32]> = None;
+    // **which face an image serves is the image's own fact**: a host
+    // starts every package with the same arguments
+    // (`infra-client-requirements.md` §9.1), so an image built to serve
+    // the other face says so in its environment
+    let mut streaming: Option<rhtn_testapp::stream::Stream> =
+        (std::env::var("RHTN_TESTAPP_FACE").as_deref() == Ok("stream"))
+            .then(rhtn_testapp::stream::Stream::new);
     let mut i = 0usize;
     while i < args.len() {
         match args[i].as_str() {
@@ -54,6 +64,10 @@ fn main() -> std::process::ExitCode {
             "--log" => {
                 log = args.get(i + 1).cloned();
                 i += 2;
+            }
+            "--stream" => {
+                streaming = Some(rhtn_testapp::stream::Stream::new());
+                i += 1;
             }
             "--secret" => {
                 let Some(s) = args
@@ -136,6 +150,20 @@ fn main() -> std::process::ExitCode {
             }
         }
         if buf.is_empty() {
+            continue;
+        }
+        // **the other face**: content in parts, which reads nothing of the
+        // node's and owes no notice
+        if let Some(face) = streaming.as_mut() {
+            let before = face.said.len();
+            let out = face.handle(&buf);
+            let _ = stream.write_all(&out);
+            let _ = stream.flush();
+            drop(stream);
+            for line in &face.said[before..] {
+                println!("{line}");
+            }
+            let _ = std::io::stdout().flush();
             continue;
         }
         let before = app.said.len();

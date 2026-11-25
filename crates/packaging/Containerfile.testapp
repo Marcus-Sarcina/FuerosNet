@@ -57,4 +57,11 @@ WORKDIR /tmp
 # where the node reaches it, on the loopback of the host network they share
 EXPOSE 7460/tcp
 
+# **Which face this image serves** (`crates/testapp/src/stream.rs`): the walk
+# through the utilities, or `--build-arg FACE=stream` for content in parts.
+# In the environment because a host starts every package with the same
+# arguments, so the image is where the difference can live.
+ARG FACE=walk
+ENV RHTN_TESTAPP_FACE=${FACE}
+
 ENTRYPOINT ["/usr/local/bin/rhtn-testapp"]
