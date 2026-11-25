@@ -613,13 +613,15 @@ fn r02_backup_install_must_not_accept_another_identitys_blob() {
 }
 
 // **Not run since 2026-11-25, and what it asserts is unchanged.** The
-// author ruled that day that a node keeps every record composing its
-// horizon, an adoption and a departure it did not sign among them
-// (`infra-client-requirements.md` §4.3), which is the opposite of what
-// this holds the node to. Whether the assertion is withdrawn is his to
-// say and was put to him the same day.
+// author ruled that day that a node keeps, for each relationship in its
+// horizon, the record in force, and a departure in the place of the
+// adoption it ended (`infra-client-requirements.md` §4.3). Of the two
+// bodies this looks for, the adoption is gone from disk as it requires
+// and the departure is kept, which is the half the ruling contradicts.
+// Whether the assertion is withdrawn is his to say and was put to him
+// the same day.
 #[test]
-#[ignore = "contradicted by the ruling of 2026-11-25 on what a node keeps; awaiting the author's withdrawal"]
+#[ignore = "its departure half is contradicted by the ruling of 2026-11-25 on the record in force; awaiting the author's withdrawal"]
 fn r09_topology_persistence_must_not_keep_foreign_transaction_history() {
     use network_fixture::*;
     use rhtn_node::store::{Decision, KIND_TRANSACTION};

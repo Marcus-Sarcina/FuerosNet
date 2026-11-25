@@ -639,9 +639,11 @@ fn bare(cfg: &rhtn_daemon::config::Config) -> rhtn_node::view::NodeView {
 /// The routing slots as a view holds them: the number and who is in it.
 type Slots = Vec<(u64, Option<[u8; 32]>)>;
 
-/// What a view restored from the derived copy holds, with whatever the
-/// store holds past it folded in (`infra-client-requirements.md` §4.3,
-/// design §15.1.1).
+/// The table and the slots a full replay of the whole store produces.
+/// What a view restored from the derived copy holds.  **Not a replay**: a
+/// node keeps the seen-set and the table it produced, never a third
+/// party's acts (`infra-client-requirements.md` §4.3, design §15.1.1
+/// [author, 2026-09-23]), so there is no record set to fold again.
 fn restored(cfg: &rhtn_daemon::config::Config) -> (Vec<[u8; 32]>, Slots) {
     let mut view = bare(cfg);
     let snap = std::fs::read(cfg.topology.join("derived"))
@@ -787,17 +789,17 @@ async fn a_derived_view_that_cannot_account_for_the_store_is_discarded_whole() {
         s.persist().expect("persists");
     }
     let good = Snapshot::decode(&std::fs::read(cfg.topology.join("derived")).unwrap()).unwrap();
-    // **a discarded view is folded again from the records the node
-    // kept** (design §15.1.1, `infra-client-requirements.md` §4.3
-    // [author, 2026-11-25]): the adoption is one that composes its
-    // horizon, so the fold has its input and comes to what a node with no
-    // view at all would hold.  What the good view restores is the control
+    // **a discarded view leaves nothing**, where it once left a replay:
+    // a node keeps the seen-set and the table it produced, never a third
+    // party's acts, so the fold has no input to run again (design §15.1.1,
+    // `infra-client-requirements.md` §4.3 [author, 2026-09-23]).  What the
+    // good view restores is the control
     assert_eq!(
         restored(&cfg).0,
         vec![kh("carol")],
         "control: the view restores it"
     );
-    let expected: Vec<[u8; 32]> = vec![kh("carol")];
+    let expected: Vec<[u8; 32]> = Vec::new();
     let fresh = || bare(&cfg);
     // a view whose table bytes do not read
     let damaged = Snapshot {
@@ -807,7 +809,7 @@ async fn a_derived_view_that_cannot_account_for_the_store_is_discarded_whole() {
     let mut v = fresh();
     assert_eq!(
         v.restore_materialised(Some(&damaged), &ids()),
-        Restored::Replayed { replayed: 1 }
+        Restored::Replayed { replayed: 0 }
     );
     assert_eq!(
         v.table
@@ -815,7 +817,7 @@ async fn a_derived_view_that_cannot_account_for_the_store_is_discarded_whole() {
             .into_iter()
             .collect::<Vec<_>>(),
         expected,
-        "the damaged view is discarded and the fold of what was kept stands in for it"
+        "the damaged view is discarded and nothing stands in for it"
     );
     // a view claiming more records than the store holds
     let other_input = Snapshot {
@@ -825,7 +827,7 @@ async fn a_derived_view_that_cannot_account_for_the_store_is_discarded_whole() {
     let mut v = fresh();
     assert_eq!(
         v.restore_materialised(Some(&other_input), &ids()),
-        Restored::Replayed { replayed: 1 }
+        Restored::Replayed { replayed: 0 }
     );
     assert_eq!(
         v.table
@@ -857,7 +859,7 @@ async fn a_derived_view_that_cannot_account_for_the_store_is_discarded_whole() {
     let mut v = fresh();
     assert_eq!(
         v.restore_materialised(None, &ids()),
-        Restored::Replayed { replayed: 1 }
+        Restored::Replayed { replayed: 0 }
     );
     assert_eq!(
         v.table
@@ -1038,14 +1040,11 @@ async fn a_derived_view_belonging_to_another_identity_is_discarded() {
     let foreign: Snapshot = theirs.materialise();
 
     // **whose view this is, is this node's own answer.**  Installing
-    // carol's would replace bob's slots with carol's, which are empty; so
-    // it is discarded, and the view is folded again from the one record
-    // this node kept (`infra-client-requirements.md` §4.3
-    // [author, 2026-11-25])
+    // carol's would replace bob's slots with carol's, which are empty
     let mut v = bare(&cfg);
     assert_eq!(
         v.restore_materialised(Some(&foreign), &ids()),
-        Restored::Replayed { replayed: 1 },
+        Restored::Replayed { replayed: 0 },
         "another identity's derived view is discarded"
     );
     assert_eq!(
@@ -1053,16 +1052,16 @@ async fn a_derived_view_belonging_to_another_identity_is_discarded() {
             .subordinates(&kh("bob"))
             .into_iter()
             .collect::<Vec<_>>(),
-        expected.0,
-        "and what is held is this node's own fold, not theirs"
+        Vec::<[u8; 32]>::new(),
+        "and nothing of theirs is installed under this node"
     );
     assert_eq!(
         v.slots
             .iter()
             .map(|(n, s)| (*n, s.occupant))
             .collect::<Slots>(),
-        expected.1,
-        "with this node's own routing slots, where theirs were empty"
+        Slots::new(),
+        "and none of their routing slots either"
     );
     let _ = std::fs::remove_dir_all(&l.dir);
 }

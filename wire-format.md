@@ -4518,8 +4518,8 @@ the patron's silence says the identity no longer holds its slot there.
 **And a member the node serves from above is handed theirs** [author,
 2026-11-25]. Where the identity's patron holds a slot under this node and runs
 no node of its own, nobody else is there to answer, so this node sends the
-adoption that patron and the identity signed, which it holds as a record
-composing its horizon (`infra-client-requirements.md` §4.3); where two such
+adoption that patron and the identity signed, which it holds as the record in
+force for that relationship (`infra-client-requirements.md` §4.3); where two such
 patrons are open in its table it sends none. The device takes an adoption
 naming another patron only from a node that answered in mode 0, verifies both
 signatures, and holds field 3 as its position under the patron field 2 names.

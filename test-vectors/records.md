@@ -1,6 +1,6 @@
 # Standalone signed records (`wire-format.md` §7)
 
-Generated against `wire-format.md` `6312670314486df8…`, `network-design.md` `d96fe7ea873a882e…` and `light-client-requirements.md` `481a9a613e0f0083…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `cb6b70929a80a44b…`, `network-design.md` `27a178243ce80808…` and `light-client-requirements.md` `76e0172c15f05c44…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Canonical. Spec-derived, reproduced by the independent harness.** See
 [README.md](README.md). Each **signed** §7 object is a standalone `COSE_Sign1`

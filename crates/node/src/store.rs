@@ -90,16 +90,20 @@ pub fn subjects(rec: &Record) -> Vec<Keyhash> {
     }
 }
 
-/// **Whether a stored transaction is kept as the record itself, across a
-/// restart**: the ones that compose this node's horizon — an adoption, a
-/// departure, a disavowal, a rotation — which the store takes only out to
-/// the two-hop boundary [`stores`] draws (`infra-client-requirements.md`
-/// §4.3) [author, 2026-11-25].
-pub fn composes_horizon(tx_type: u64) -> bool {
-    matches!(
-        tx_type,
-        TYPE_ADOPTION | TYPE_DEPARTURE | TYPE_DISAVOWAL | TYPE_REISSUE
-    )
+/// **The relationship a record states something of**, as `(member,
+/// patron)`: an adoption's, a departure's, a disavowal's, a series
+/// reissue's.  These are the kinds a node keeps one current record of per
+/// relationship, as proof of where that identity stands
+/// (`infra-client-requirements.md` §4.3) [author, 2026-11-25]; the store
+/// takes them only out to the two-hop boundary [`stores`] draws.
+pub fn relationship(rec: &Record) -> Option<(Keyhash, Keyhash)> {
+    match rec.tx_type {
+        TYPE_ADOPTION | TYPE_DEPARTURE | TYPE_REISSUE => {
+            Some((rec.field_hash(1)?, rec.field_hash(2)?))
+        }
+        TYPE_DISAVOWAL => Some((rec.field_hash(2)?, rec.field_hash(1)?)),
+        _ => None,
+    }
 }
 
 /// Whether a transaction type travels in the topology class at all.
@@ -196,9 +200,10 @@ pub struct HeldDelegation {
 pub struct TopologyStore {
     /// **The seen-set: what this node stored, by identifier.**  This is
     /// what the forwarding rule consults (`wire-format.md` §10.1.1), and
-    /// of a stored transaction that composes no horizon it is all that
-    /// survives a restart: that it was stored, and the table it produced
-    /// (`infra-client-requirements.md` §4.3) [author, 2026-09-23].
+    /// of a stored transaction that is not the record in force for its
+    /// relationship it is all that survives a restart: that it was stored,
+    /// and the table it produced (`infra-client-requirements.md` §4.3)
+    /// [author, 2026-09-23].
     seen: BTreeMap<Txid, u64>,
     /// **This node's own acts**: the transactions it signed, kept and
     /// replayed because they are its own to keep — a copy of a transaction
@@ -207,14 +212,21 @@ pub struct TopologyStore {
     /// chain and refuses a record whose predecessors it lacks; what is
     /// wanted here is the act, not the chain.
     own: BTreeMap<Txid, Vec<u8>>,
-    /// The bodies of what this node stored, which the fold dereferences
-    /// an adoption's evidence through and reads a peering or a
-    /// disavowal's band from.  **The ones that compose the horizon are
-    /// written** ([`composes_horizon`]) [author, 2026-11-25]: the node
-    /// keeps every such record it sees, its signers' or not.  The rest are
-    /// held while the process runs, and a restart leaves their seen fact
-    /// and the topology they produced.
+    /// The bodies of what this node stored, held while the process runs so
+    /// the fold can dereference an adoption's evidence and read a peering
+    /// or a disavowal's band.  **Never written**: a restart leaves the
+    /// seen-set, the topology it produced and the records in force.
     transactions: BTreeMap<Txid, Record>,
+    /// **The record in force for each relationship the table holds, and
+    /// nothing behind it** [author, 2026-11-25]: the adoption that opened
+    /// it, with the series reissue that moved it where one is later; or,
+    /// once it has ended, the departure or disavowal that ended it in
+    /// their place.  Kept across a restart as proof of where an identity
+    /// stands, whoever signed it.  **Not what the table is made from**:
+    /// the table is the reference and this is never folded
+    /// (`infra-client-requirements.md` §4.3).  A record this node signed
+    /// is among its own acts and not repeated here.
+    kept: BTreeMap<Txid, Record>,
     /// One endpoint record per subject per series (`wire-format.md` §7.6:
     /// one record per patron relationship).
     endpoints: BTreeMap<(Keyhash, u32), HeldEndpoint>,
@@ -300,16 +312,55 @@ impl TopologyStore {
         self.own.insert(txid, bytes);
     }
 
+    /// **Hold, for the relationship of `member` under `patron`, the
+    /// records `in_force` and no other**: whatever else was kept of that
+    /// relationship goes, and each one named is taken from what this run
+    /// stored where it is not already kept or this node's own act.  One
+    /// whose body is not in hand is not kept, which is what a record taken
+    /// in an earlier run and superseded since comes to.
+    pub fn keep_in_force(&mut self, member: &Keyhash, patron: &Keyhash, in_force: &[Txid]) {
+        let pair = Some((*member, *patron));
+        self.kept
+            .retain(|t, r| relationship(r) != pair || in_force.contains(t));
+        for t in in_force {
+            if !self.kept.contains_key(t)
+                && !self.own.contains_key(t)
+                && let Some(r) = self.transactions.get(t)
+            {
+                self.kept.insert(*t, r.clone());
+            }
+        }
+    }
+
+    /// The series reissue that moved `member`'s relationship under
+    /// `patron` into `series`, where this store holds it.
+    pub fn reissue_into(&self, member: &Keyhash, patron: &Keyhash, series: u32) -> Option<Txid> {
+        self.transactions
+            .values()
+            .chain(self.kept.values())
+            .find(|r| {
+                r.tx_type == TYPE_REISSUE
+                    && relationship(r) == Some((*member, *patron))
+                    && r.seqno().is_some_and(|s| s.series == series)
+            })
+            .map(|r| r.txid)
+    }
+
+    /// The records in force this node keeps of other parties.
+    pub fn kept(&self) -> impl Iterator<Item = &Record> {
+        self.kept.values()
+    }
+
     /// **The adoption that placed `subordinate` under `patron`**, the
     /// newest in the relationship, from this node's own acts and the
-    /// records it keeps: what an attach by that identity is answered with
-    /// (`wire-format.md` §8.2 field 7). The two of them signed it, so it
-    /// tells the identity nothing about anyone else.
+    /// records in force it keeps: what an attach by that identity is
+    /// answered with (`wire-format.md` §8.2 field 7). The two of them
+    /// signed it, so it tells the identity nothing about anyone else.
     pub fn placement_of(&self, patron: &Keyhash, subordinate: &Keyhash) -> Option<Vec<u8>> {
         self.own
             .values()
             .filter_map(|b| Record::parse(b).ok())
-            .chain(self.transactions.values().cloned())
+            .chain(self.kept.values().cloned())
             .filter(|r| {
                 r.tx_type == TYPE_ADOPTION
                     && r.field_hash(1) == Some(*subordinate)
@@ -776,12 +827,26 @@ impl TopologyStore {
         for sub in ["ep", "deleg", "ack", "own", "tx"] {
             std::fs::create_dir_all(dir.join(sub))?;
         }
-        // **the records that compose the horizon, kept as records**
-        // [author, 2026-11-25]: a body is fixed by its identifier, so one
+        // **the records in force, and nothing behind them** [author,
+        // 2026-11-25]: one superseded since the last save must not outlive
+        // it on disk, and a body is fixed by its identifier, so one
         // already written is not written again
-        for (t, r) in &self.transactions {
+        if let Ok(rd) = std::fs::read_dir(dir.join("tx")) {
+            for e in rd.flatten() {
+                let held = e
+                    .file_name()
+                    .to_str()
+                    .and_then(unhex)
+                    .and_then(|v| <[u8; 32]>::try_from(v).ok())
+                    .is_some_and(|t| self.kept.contains_key(&t));
+                if !held {
+                    std::fs::remove_file(e.path())?;
+                }
+            }
+        }
+        for (t, r) in &self.kept {
             let at = dir.join("tx").join(hex(t));
-            if composes_horizon(r.tx_type) && !at.exists() {
+            if !at.exists() {
                 std::fs::write(at, &r.bytes)?;
             }
         }
@@ -854,15 +919,15 @@ impl TopologyStore {
     /// held was waiting on a prerequisite the restart may have lost too.
     pub fn load(dir: &std::path::Path) -> std::io::Result<TopologyStore> {
         let mut st = TopologyStore::new();
-        // **the records that compose the horizon**, each with its seen
-        // fact.  **And the preceding format, migrated** (OPS-016's shape:
-        // an upgrade moves what the current rules allow and removes only
-        // what they forbid): an earlier version wrote every stored body
-        // under `tx/` and had no `own/`, so in a directory without one a
-        // body here may be this node's own act.  Whose they are is not
-        // known here, so there all are taken as that too and the foreign
-        // ones are dropped from it by `prune_own` as soon as the node's
-        // identity is at hand.
+        // **the records in force**, each with its seen fact.  **And the
+        // preceding format, migrated** (OPS-016's shape: an upgrade moves
+        // what the current rules allow and removes only what they
+        // forbid): an earlier version wrote every stored body under `tx/`
+        // and had no `own/`, so in a directory without one a body here is
+        // a history and may be this node's own act.  Whose they are is
+        // not known here, so there all are taken as that and the foreign
+        // ones are dropped by `prune_own` as soon as the node's identity
+        // is at hand.
         let preceding = !dir.join("own").is_dir();
         if let Ok(rd) = std::fs::read_dir(dir.join("tx")) {
             for e in rd.flatten() {
@@ -872,9 +937,8 @@ impl TopologyStore {
                     st.seen.insert(rec.txid, rec.effective);
                     if preceding {
                         st.own.insert(rec.txid, bytes);
-                    }
-                    if composes_horizon(rec.tx_type) {
-                        st.transactions.insert(rec.txid, rec);
+                    } else if relationship(&rec).is_some() {
+                        st.kept.insert(rec.txid, rec);
                     }
                 }
             }

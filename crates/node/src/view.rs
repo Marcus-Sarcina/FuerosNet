@@ -409,8 +409,8 @@ impl NodeView {
     /// **And a member this node serves from above is handed theirs**
     /// [author, 2026-11-25]: one whose patron holds a slot here and runs
     /// no node, so that nobody else is there to say it. The record is that
-    /// patron's and the member's own, kept here as every record composing
-    /// this node's horizon is. Nothing where two such patrons are open in
+    /// patron's and the member's own, kept here as the record in force
+    /// for their relationship. Nothing where two such patrons are open in
     /// the table: one position is what this says, and it does not choose.
     pub fn placement_of(&self, occupant: &Keyhash) -> Option<Vec<u8>> {
         let me = self.me();

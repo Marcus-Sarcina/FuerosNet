@@ -215,19 +215,29 @@ guarantee, which is a floor rather than a ceiling.
   suppression is a property of the store rather than of a separate cache. A node
   that forgets what it held replays a forwarding wave into every cycle in its
   horizon, which is correct behaviour and a cost your neighbours pay for you.
-- **Keep every record you see that bears on who is in your horizon**
-  [author, 2026-11-25]: an adoption, a departure, a disavowal, a rotation,
-  out to the two-hop boundary your store is drawn at (`wire-format.md`
-  §10.1.1), whoever signed it. The record itself, and across a restart. It
-  is what your table is folded from again, and what you answer an attach
-  with where the member was placed by a patron that runs no node
+- **Keep, for each relationship in your horizon, the record in force and
+  nothing behind it** [author, 2026-11-25]. Out to the two-hop boundary your
+  store is drawn at (`wire-format.md` §10.1.1), and whoever signed it: the
+  adoption that placed a member under a patron; beside it the series reissue
+  that moved that relationship (`wire-format.md` §4.6), where one is later
+  than the adoption; and once a departure or a disavowal has ended it, that
+  record in the place of both. A key rotation is an adoption (design §9.0)
+  and is kept as one, standing too for the key it superseded. A later record
+  takes an earlier one's place on disk as in memory, so what you hold is the
+  current state of every identity in your horizon at the smallest archive
+  that proves it, and never the sequence that led there: topology persists
+  as the updated topology [author, 2026-09-21].
+- **Those records are proof of where an identity stands, and your table is
+  still the reference** [author, 2026-11-25]. Do not fold them, and do not
+  rebuild a table you have lost from them. One of them is what you answer an
+  attach with where the member was placed by a patron that runs no node
   (`wire-format.md` §8.2).
-- **Evaluate any other transaction you are no party to, and keep what the
-  evaluation came to rather than the act** [author, 2026-09-23]. That you
-  stored it, its effect on the topology, the counterparties it adds to what
-  you can reach, and what it moves in your own representation of their
-  trust: those you keep. The transaction you do not. Where a key is later
-  rotated, what connects to the new key is those accumulated
+- **Evaluate a transaction you are no party to, and keep what the evaluation
+  came to rather than the act** [author, 2026-09-23]. That you stored it,
+  its effect on the topology, the counterparties it adds to what you can
+  reach, and what it moves in your own representation of their trust: those
+  you keep. The transaction you do not, past the record in force. Where a
+  key is later rotated, what connects to the new key is those accumulated
   representations and not a history of the acts behind them.
 - **A copy of a transaction sits in the archive of every node party to it,
   and none is authoritative over the others** [author, 2026-09-23]. So file

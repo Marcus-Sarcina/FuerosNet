@@ -14275,7 +14275,7 @@
   "id": "TOP-45",
   "area": "topology",
   "gap": "topology",
-  "title": "Persist the records that compose the node's horizon, and of any other transaction it was no party to the seen fact and the table it produced",
+  "title": "Persist the record in force for each relationship in the node's horizon, and of any other transaction it was no party to the seen fact and the table it produced",
   "milestone": "after-5",
   "kind": "positive",
   "spec": [
@@ -14285,20 +14285,20 @@
   "rule": [
    {
     "where": "infra-client-requirements.md §4.3",
-    "text": "Keep every record you see that bears on who is in your horizon"
+    "text": "Keep, for each relationship in your horizon, the record in force and nothing behind it"
    },
    {
     "where": "infra-client-requirements.md §4.3",
-    "text": "Evaluate any other transaction you are no party to, and keep what the evaluation came to rather than the act"
+    "text": "Those records are proof of where an identity stands, and your table is still the reference"
    },
    {
     "where": "infra-client-requirements.md §4.3",
     "text": "Replay your current state and your own acts, and nothing else"
    }
   ],
-  "given": "Node P holds an adoption and a departure by parties it did not sign, a current endpoint line for its own child, and a derived view written beside them.",
+  "given": "Node P holds, of parties it did not sign for, an adoption, two series reissues of that relationship in turn, then a departure, a later adoption and a disavowal; a current endpoint line for its own child; and a derived view written beside them.",
   "when": "P is stopped and started again, and a party attaches to it and reconciles.",
-  "then": "What P wrote of the foreign adoption and departure is each record whole, and after the restart P holds both and folds its table from them; the evidence they cited does not survive, nor the body of a stored transaction of another kind, whose identifier alone is kept, and an upgrade removes what an earlier version wrote under those names. The identifiers still suppress a second forwarding wave. P replays the endpoint line byte for byte and no foreign act, kept or not, and its derived view still accounts for what it accepted; a view that cannot is discarded and folded again from the records kept.",
+  "then": "What P wrote of that relationship is at each step the record in force and no other: the adoption; the adoption and the later reissue alone; the departure in the place of both; the later adoption in the departure's; the disavowal in that adoption's. A record superseded is gone from disk at the next write. After the restart P holds the same, its table comes back from the derived view, and with no derived view it holds nothing of that relationship in its table and still keeps the record. The evidence an adoption cited does not survive, and an upgrade removes what an earlier version wrote. The identifiers still suppress a second forwarding wave. P replays the endpoint line byte for byte and no foreign act, kept or not.",
   "oracle": "behaviour",
   "interpretation": null,
   "families": [

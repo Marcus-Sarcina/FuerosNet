@@ -604,8 +604,66 @@ impl NodeView {
             .map(|a| (a.adoption, a.grandpatron))
             .collect();
         self.store.retain_acks(|a, g| held.contains(&(*a, *g)));
+        // and the record in force for whoever this one is about follows
+        // what the table settled on, the key a recovery superseded among
+        // them, since its relationships are the ones that ended
+        if let Some((member, _)) = crate::store::relationship(&rec) {
+            self.keep_in_force(&member);
+        }
+        if let rhtn_archive::topology::Applied::Replaced { prior, .. } = &outcome.applied {
+            let prior = *prior;
+            self.keep_in_force(&prior);
+        }
         let issued = outcome.acks.clone();
         (self.fold_slot(&rec, me, &outcome), issued)
+    }
+
+    /// **Bring what is kept of `member`'s relationships to what the table
+    /// says of them now** (`infra-client-requirements.md` §4.3) [author,
+    /// 2026-11-25]: for each patron the table has bound them under, the
+    /// record in force for the newest of those bindings and no other.  An
+    /// open one keeps its adoption, and with it the series reissue that
+    /// moved it where the series is no longer the one it opened in; an
+    /// ended one keeps what ended it, in their place.
+    ///
+    /// **The table decides and the records follow**, never the reverse: a
+    /// relationship the table holds nothing of is left as it was kept.
+    fn keep_in_force(&mut self, member: &Keyhash) {
+        let mut newest: BTreeMap<Keyhash, &rhtn_archive::topology::Binding> = BTreeMap::new();
+        for b in self.table.bindings().iter().filter(|b| b.node == *member) {
+            let at = newest.entry(b.patron).or_insert(b);
+            if (b.open(), b.from) > (at.open(), at.from) {
+                *at = b;
+            }
+        }
+        let settled: Vec<(Keyhash, Vec<Txid>)> = newest
+            .into_iter()
+            .map(|(patron, b)| {
+                let in_force = match &b.end {
+                    Some((ending, _, _)) => vec![*ending],
+                    None => std::iter::once(b.adoption)
+                        .chain(self.store.reissue_into(member, &patron, b.series))
+                        .collect(),
+                };
+                (patron, in_force)
+            })
+            .collect();
+        for (patron, in_force) in settled {
+            self.store.keep_in_force(member, &patron, &in_force);
+        }
+    }
+
+    /// The same, for every identity a kept record is about: what a restart
+    /// owes once its table is in hand.
+    fn keep_all_in_force(&mut self) {
+        let members: BTreeSet<Keyhash> = self
+            .store
+            .kept()
+            .filter_map(|r| crate::store::relationship(r).map(|(m, _)| m))
+            .collect();
+        for m in members {
+            self.keep_in_force(&m);
+        }
     }
 
     /// The slot of this node's own a folded transaction changed, if any.
@@ -1621,12 +1679,14 @@ impl NodeView {
         // the ones this node did not sign go now that the identity is known
         let me = self.me();
         self.store.prune_own(&me);
-        // **the watermark is taken over the seen-set**, which holds every
-        // stored fact where the bodies kept are the ones composing the
-        // horizon (`infra-client-requirements.md` §4.3
-        // [author, 2026-09-23, 2026-11-25]).  A snapshot is caught up
-        // with from the bodies in hand; where one it would need is not
-        // held, the view is discarded and folded again from what is.
+        // **the watermark is taken over the seen-set**, which survives a
+        // restart where the acts do not (`infra-client-requirements.md`
+        // §4.3 [author, 2026-09-23]).  What a snapshot cannot account for
+        // it cannot be caught up with either: the bodies are gone, so the
+        // view is discarded and the node repairs by reconciliation rather
+        // than by a replay it has no input for.  **The records in force
+        // are no such input** [author, 2026-11-25]: they are proof of
+        // where an identity stands, and the table is the reference.
         let all: Vec<(u64, Txid)> = self.store.seen();
         let usable = snap.and_then(|s| {
             let later = unfolded(s, &all, |k| *k)?;
@@ -1635,8 +1695,8 @@ impl NodeView {
             // ordinary case where the store was written and the snapshot
             // was not — and a copy that cannot account for the facts is
             // discarded whole, never certified current with the gap
-            // dropped on the floor.  The rebuild below folds the records
-            // this node kept, and reconciliation brings the rest (§15.1.1).
+            // dropped on the floor.  The rebuild below is the repair by
+            // reconciliation §15.1.1 names.
             let mut held = Vec::with_capacity(later.len());
             for i in later {
                 held.push(self.store.transaction(&all[i].1)?.bytes.clone());
@@ -1644,6 +1704,20 @@ impl NodeView {
             self.take_snapshot(s)?;
             Some(held)
         });
+        let restored = self.restored_from(usable, ids);
+        // what is kept follows the table that came back, whichever way it
+        // came
+        self.keep_all_in_force();
+        restored
+    }
+
+    /// The table from a usable snapshot and what arrived after it, or
+    /// from nothing where there is none.
+    fn restored_from<L: Lookup + ?Sized>(
+        &mut self,
+        usable: Option<Vec<Vec<u8>>>,
+        ids: &L,
+    ) -> Restored {
         match usable {
             Some(later) => {
                 for bytes in &later {

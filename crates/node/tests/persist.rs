@@ -59,16 +59,18 @@ fn a_saved_store_is_the_seen_set_after_a_restart() {
     let loaded = TopologyStore::load(&dir).unwrap();
     assert!(loaded.holds_txid(&a_x.txid));
     assert_eq!(loaded.endpoint(&kh("carol")).unwrap().bytes, er);
-    // **a record composing the horizon is kept as the record**
-    // (`infra-client-requirements.md` §4.3 [author, 2026-11-25]): the
-    // adoption survives the restart whole, though this node signed none
-    // of it, and its identifier still means no second forwarding wave
-    // leaves here.  The presence record it cited is not such a record,
-    // and does not
+    // **the record in force is kept, as proof and apart from what the
+    // table is made of** (`infra-client-requirements.md` §4.3 [author,
+    // 2026-11-25]): the adoption that places w1 now survives the restart
+    // whole, though this node signed none of it, and its identifier still
+    // means no second forwarding wave leaves here.  The bodies this run
+    // folded are not read back, and the presence record the adoption
+    // cited is no such record
     assert_eq!(loaded.presence(&pop.txid), None);
+    assert!(loaded.transaction(&a_x.txid).is_none());
     assert_eq!(
-        loaded.transaction(&a_x.txid).map(|r| r.bytes.clone()),
-        Some(a_x.bytes.clone())
+        loaded.kept().map(|r| r.bytes.clone()).collect::<Vec<_>>(),
+        vec![a_x.bytes.clone()]
     );
     assert!(loaded.series_proved(&kh("carol"), 2));
     assert_eq!(loaded.objects().len(), n.store.objects().len());
@@ -133,14 +135,19 @@ fn a_member_served_from_above_is_handed_their_adoption_before_and_after_a_restar
     );
     assert_eq!(n.placement_of(&kh("alice")), None, "nobody else's");
 
-    // **the node stops and starts**: the record is one it kept, so the
-    // answer is the same, and the record coming round again is a duplicate
+    // **the node stops and starts**: its table comes back from the
+    // derived view and the record is one it kept, so the answer is the
+    // same, and the record coming round again is a duplicate
     let dir = std::env::temp_dir().join(format!("rhtn-store-above-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     n.store.save(&dir).unwrap();
+    let derived = n.materialise();
     let mut again = view("bob", table_with(kh("bob"), &w, &[], &["bob"]), "bob", &[]);
     again.store = TopologyStore::load(&dir).unwrap();
-    again.restore_materialised(None, &ids());
+    assert_eq!(
+        again.restore_materialised(Some(&derived), &ids()),
+        rhtn_archive::topology::Restored::Current
+    );
     let _ = std::fs::remove_dir_all(&dir);
     assert_eq!(again.placement_of(&kh("w1")), Some(a_w.bytes.clone()));
     assert_eq!(again.placement_of(&kh("carol")), Some(a_c.bytes.clone()));
@@ -167,6 +174,134 @@ fn a_member_served_from_above_is_handed_their_adoption_before_and_after_a_restar
         Decision::Stored
     );
     assert_eq!(n.placement_of(&kh("w1")), None);
+}
+
+/// What a saved store holds of other parties' records, as bodies.
+fn kept_on_disk(n: &rhtn_node::view::NodeView, tag: &str) -> Vec<Vec<u8>> {
+    let dir = std::env::temp_dir().join(format!("rhtn-store-{tag}-{}", std::process::id()));
+    n.store.save(&dir).unwrap();
+    let mut out: Vec<Vec<u8>> = files_under(&dir.join("tx"))
+        .iter()
+        .map(|f| std::fs::read(f).unwrap())
+        .collect();
+    out.sort();
+    out
+}
+
+fn sorted(mut bodies: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
+    bodies.sort();
+    bodies
+}
+
+// acceptance: TOP-45
+// functional: TOP-035
+#[test]
+fn what_is_kept_of_a_relationship_is_the_record_in_force_and_nothing_behind_it() {
+    // bob runs the node; carol is his, and w1 is carol's, so every record
+    // of w1 under carol is one bob's node signed none of
+    let mut w = World::new();
+    let (a_c, _) = w.adopt("carol", "bob", 1);
+    let (a_w, _) = w.adopt("w1", "carol", 1);
+    let fab = Fabric::with(&[kh("carol")]);
+    let mut n = view("bob", table_with(kh("bob"), &w, &[], &["bob"]), "bob", &[]);
+    let take = |n: &mut rhtn_node::view::NodeView, r: &rhtn_archive::record::Record| {
+        assert_eq!(
+            n.take_object(&*fab, &kh("carol"), KIND_TRANSACTION, &r.bytes, &ids()),
+            Decision::Stored
+        );
+    };
+    take(&mut n, &a_c);
+    take(&mut n, &a_w);
+    // **the adoption in force**; bob's own adoption of carol is among his
+    // own acts and not repeated among these
+    assert_eq!(kept_on_disk(&n, "force"), vec![a_w.bytes.clone()]);
+
+    // **and the series reissue that moved it, the latest alone**
+    let r1 = w.reissue(
+        "w1",
+        "carol",
+        Seqno {
+            series: 1,
+            counter: 1,
+        },
+        5,
+    );
+    take(&mut n, &r1);
+    assert_eq!(
+        kept_on_disk(&n, "force"),
+        sorted(vec![a_w.bytes.clone(), r1.bytes.clone()])
+    );
+    let r2 = w.reissue(
+        "w1",
+        "carol",
+        Seqno {
+            series: 5,
+            counter: 1,
+        },
+        6,
+    );
+    take(&mut n, &r2);
+    assert_eq!(
+        kept_on_disk(&n, "force"),
+        sorted(vec![a_w.bytes.clone(), r2.bytes.clone()]),
+        "the reissue it left behind is gone from disk"
+    );
+
+    // **a restart holds the same**, and the table is not made from them:
+    // with its derived view the node holds w1, and without it holds
+    // nothing of w1 and still keeps the proof
+    let dir = std::env::temp_dir().join(format!("rhtn-store-force-{}", std::process::id()));
+    let derived = n.materialise();
+    let mut again = view("bob", table_with(kh("bob"), &w, &[], &["bob"]), "bob", &[]);
+    again.store = TopologyStore::load(&dir).unwrap();
+    again.restore_materialised(Some(&derived), &ids());
+    assert!(again.table.patrons(&kh("w1")).contains(&kh("carol")));
+    assert_eq!(
+        kept_on_disk(&again, "force-again"),
+        sorted(vec![a_w.bytes.clone(), r2.bytes.clone()])
+    );
+    let mut bare = view("bob", table_with(kh("bob"), &w, &[], &["bob"]), "bob", &[]);
+    bare.store = TopologyStore::load(&dir).unwrap();
+    assert_eq!(
+        bare.restore_materialised(None, &ids()),
+        rhtn_archive::topology::Restored::Replayed { replayed: 0 }
+    );
+    assert!(
+        bare.table.patrons(&kh("w1")).is_empty(),
+        "a kept record is proof and never the table's input"
+    );
+    assert_eq!(
+        kept_on_disk(&bare, "force-bare"),
+        sorted(vec![a_w.bytes.clone(), r2.bytes.clone()]),
+        "and a table that says nothing of a relationship drops nothing of it"
+    );
+
+    // **a departure takes the place of both**
+    let d = w.depart(
+        "w1",
+        "carol",
+        Seqno {
+            series: 6,
+            counter: 1,
+        },
+    );
+    take(&mut n, &d);
+    assert_eq!(kept_on_disk(&n, "force"), vec![d.bytes.clone()]);
+
+    // **a later adoption takes the departure's**, and a disavowal that
+    // adoption's
+    let (a_w2, _) = w.adopt("w1", "carol", 7);
+    take(&mut n, &a_w2);
+    assert_eq!(kept_on_disk(&n, "force"), vec![a_w2.bytes.clone()]);
+    let x = w.disavow("carol", "w1", None);
+    take(&mut n, &x);
+    assert_eq!(kept_on_disk(&n, "force"), vec![x.bytes.clone()]);
+
+    for tag in ["force", "force-again", "force-bare"] {
+        let _ = std::fs::remove_dir_all(
+            std::env::temp_dir().join(format!("rhtn-store-{tag}-{}", std::process::id())),
+        );
+    }
 }
 
 // acceptance: PRP-20

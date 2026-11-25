@@ -1026,7 +1026,7 @@ nothing below reaches across them.
   came to rather than the act** [author, 2026-09-23]: the shape, the parties
   you can now reach, what a patron's determination moved. The transaction is
   the archive's of everyone party to it, and not yours to retain. A node keeps
-  more, the records that compose its horizon
+  one thing more, the record in force for each relationship in its horizon
   (`infra-client-requirements.md` §4.3); that is a node's and not yours.
 - **Discard the copy whole when its watermark cannot account for what you
   hold.** A cache that cannot prove it is current is one you have to earn
