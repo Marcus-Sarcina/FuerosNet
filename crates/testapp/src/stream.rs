@@ -316,8 +316,13 @@ __SEGS__ segments played as they arrive. Nothing here is one message.</p>
   });
   const report = () => {
     try {
+      // by the client's own object where it gave one, and as a request
+      // of the page's own where its frame carries those with their bodies
       if (window.rhtn && rhtn.request)
         rhtn.request('POST', '/report', 'application/json', JSON.stringify(out));
+      else
+        fetch('/report', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(out) })
+          .catch(e => row('report_error', String(e)));
     } catch (e) { row('report_error', String(e)); }
   };
   async function parts() {
