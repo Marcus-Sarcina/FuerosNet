@@ -146,6 +146,7 @@ class ResourceActivity : Activity() {
         const val PERMISSION = 71
         const val PICK = 72
         const val SAVE = 73
+        const val ENGINE = 74
     }
 
     /** Draw what the resource answered, from any thread. */
@@ -154,8 +155,15 @@ class ResourceActivity : Activity() {
             if (isFinishing) return@runOnUiThread
             val held = held ?: return@runOnUiThread
             last = answered?.page
+            // whatever was framed goes with what it showed, a live
+            // session's connection included
+            unframe()
             held.removeAllViews()
-            when (val showing = ResourcePage.showing(answered)) {
+            val showing = ResourcePage.showing(answered)
+            // a live session the person approved is for the page that
+            // answers the approval, and for nothing else
+            if (showing !is ResourcePage.Showing.Page) liveFor = null
+            when (showing) {
                 is ResourcePage.Showing.Page -> {
                     val resource = intent.getStringExtra("resource").orEmpty()
                     when (ResourcePage.runs(showing.page, Frames.scriptAllowed(this, resource))) {
@@ -233,6 +241,7 @@ class ResourceActivity : Activity() {
         Giving.Way.UNLOCK -> "Read it and sign"
         Giving.Way.NOTIFY -> "Allow"
         Giving.Way.RECEIVE -> "Take the file"
+        Giving.Way.LIVE -> "Start the live session"
         Giving.Way.NONE -> "Decline"
     }
 
@@ -278,6 +287,14 @@ class ResourceActivity : Activity() {
         grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == ENGINE) {
+            val asked = engineAsked
+            engineAsked = null
+            val all = grantResults.isNotEmpty() &&
+                grantResults.all { it == android.content.pm.PackageManager.PERMISSION_GRANTED }
+            if (all) asked?.grant() else asked?.reject()
+            return
+        }
         val (ask, plan) = waiting ?: return
         waiting = null
         val refused = permissions.indices.filter {
@@ -318,8 +335,67 @@ class ResourceActivity : Activity() {
             // **the person agrees to be handed the file**; what comes
             // back next carries it, and the answer below saves it
             Giving.Way.RECEIVE -> answer(ask, uniffi.rhtn_ffi.UtilityOutcome.Approved)
+            // **the person agrees to a live session**; the page that
+            // comes back next is the one framed with a peer connection,
+            // for the seconds asked ([frame])
+            Giving.Way.LIVE -> {
+                liveFor = ask.seconds?.toLong()
+                answer(ask, uniffi.rhtn_ffi.UtilityOutcome.Approved)
+            }
             Giving.Way.NONE -> answer(ask, declined(plan.says))
         }
+    }
+
+    // ---- a live session -----------------------------------------------
+
+    /** The seconds of a live session the person approved, until the page
+     *  it is for is framed; nothing where none is waiting. */
+    private var liveFor: Long? = null
+
+    /** When the running live session ends, by the device's own clock that
+     *  does not jump; 0 where none runs. */
+    private var liveUntil: Long = 0
+
+    private val clock = android.os.Handler(android.os.Looper.getMainLooper())
+
+    /** What the engine is waiting on while the platform asks the person. */
+    private var engineAsked: org.mozilla.geckoview.GeckoSession.PermissionDelegate.Callback? = null
+
+    /** **Say how long is left, and end it when nothing is**: the
+     *  indicator a live session carries (§8.1). */
+    private fun counting() {
+        if (liveUntil == 0L) return
+        val left = (liveUntil - android.os.SystemClock.elapsedRealtime() + 999) / 1000
+        if (left <= 0) {
+            endLive()
+            return
+        }
+        says?.text = "LIVE, ${Giving.lasting(left)} left: this page is connected past this app, " +
+            "to where its package streams. Leave the page to end it now."
+        says?.setTextColor(Palette.now.ink)
+        clock.postDelayed({ counting() }, 1000)
+    }
+
+    /** **One frame to a screen**: the one in place is shut with whatever
+     *  it had. */
+    private fun unframe() {
+        endLive()
+        session?.let { Engine.closed(it); it.close() }
+        session = null
+    }
+
+    /** **End the live session**: pages are given no peer connection again,
+     *  and the page that had one is loaded afresh, which is what takes its
+     *  connection away. */
+    private fun endLive() {
+        if (liveUntil == 0L) return
+        liveUntil = 0
+        clock.removeCallbacksAndMessages(null)
+        Diag.event("live", "state" to "ended")
+        says?.setTextColor(Palette.now.sub)
+        says?.text = "The live session has ended. " + ResourcePage.frameSays(true)
+        val had = session
+        Engine.peers(false) { if (had != null && had === session && had.isOpen) had.reload() }
     }
 
     // ---- a photograph -------------------------------------------------
@@ -802,6 +878,9 @@ class ResourceActivity : Activity() {
         Carrier.serve(
             Carrier.Serving(resource, by, node, path to page.copy(body = html.toByteArray(Charsets.UTF_8))),
         )
+        unframe()
+        val live = liveFor
+        liveFor = null
         val view = org.mozilla.geckoview.GeckoView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -852,13 +931,84 @@ class ResourceActivity : Activity() {
                     uri: String,
                 ): org.mozilla.geckoview.GeckoResult<org.mozilla.geckoview.GeckoSession>? = null
             }
-            made.open(engine)
-            session = made
-            view.setSession(made)
-            // **the origin's own URL, served from the answer in hand**: the
-            // document is same-origin with its resource, and the engine
-            // holds it to the policy the resource declared
-            made.loadUri("$origin$path")
+            made.permissionDelegate = object : org.mozilla.geckoview.GeckoSession.PermissionDelegate {
+                /** The camera and the microphone, to a page in a live
+                 *  session and to no other. */
+                override fun onMediaPermissionRequest(
+                    session: org.mozilla.geckoview.GeckoSession,
+                    uri: String,
+                    video: Array<out org.mozilla.geckoview.GeckoSession.PermissionDelegate.MediaSource>?,
+                    audio: Array<out org.mozilla.geckoview.GeckoSession.PermissionDelegate.MediaSource>?,
+                    callback: org.mozilla.geckoview.GeckoSession.PermissionDelegate.MediaCallback,
+                ) {
+                    if (liveUntil == 0L) callback.reject() else callback.grant(video?.firstOrNull(), audio?.firstOrNull())
+                }
+
+                /** The platform's own question, put to the person by the platform. */
+                override fun onAndroidPermissionsRequest(
+                    session: org.mozilla.geckoview.GeckoSession,
+                    permissions: Array<out String>?,
+                    callback: org.mozilla.geckoview.GeckoSession.PermissionDelegate.Callback,
+                ) {
+                    if (liveUntil == 0L || permissions.isNullOrEmpty()) {
+                        callback.reject()
+                        return
+                    }
+                    engineAsked = callback
+                    requestPermissions(permissions, ENGINE)
+                }
+
+                /** Sound without a tap, in a live session: a call is heard when it connects. */
+                override fun onContentPermissionRequest(
+                    session: org.mozilla.geckoview.GeckoSession,
+                    perm: org.mozilla.geckoview.GeckoSession.PermissionDelegate.ContentPermission,
+                ): org.mozilla.geckoview.GeckoResult<Int> {
+                    val sound = perm.permission ==
+                        org.mozilla.geckoview.GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_AUDIBLE ||
+                        perm.permission ==
+                        org.mozilla.geckoview.GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_INAUDIBLE
+                    return org.mozilla.geckoview.GeckoResult.fromValue(
+                        if (sound && liveUntil != 0L) {
+                            org.mozilla.geckoview.GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
+                        } else {
+                            org.mozilla.geckoview.GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
+                        },
+                    )
+                }
+            }
+            val load = {
+                made.open(engine)
+                session = made
+                Engine.opened(made)
+                view.setSession(made)
+                // **the origin's own URL, served from the answer in hand**:
+                // the document is same-origin with its resource, and the
+                // engine holds it to the policy the resource declared
+                made.loadUri("$origin$path")
+            }
+            if (live == null) {
+                load()
+            } else {
+                // **a live session the person approved** (§8.1): every
+                // other frame is shut, pages are given a peer connection,
+                // and this one is loaded with the time it has
+                Engine.only(made)
+                Engine.peers(true) { on ->
+                    if (isFinishing || isDestroyed) {
+                        Engine.peers(false) {}
+                        return@peers
+                    }
+                    if (!on) {
+                        held?.removeAllViews()
+                        held?.addView(note("This device's engine did not take the live session, so it was not started."))
+                        return@peers
+                    }
+                    Diag.event("live", "state" to "started", "seconds" to live.toString())
+                    liveUntil = android.os.SystemClock.elapsedRealtime() + live * 1000
+                    load()
+                    counting()
+                }
+            }
         }
         return view
     }
@@ -892,6 +1042,20 @@ class ResourceActivity : Activity() {
         super.onPause()
     }
 
+    override fun onStop() {
+        // **leaving the page ends a live session**: nothing is connected
+        // past this app for a screen nobody is looking at
+        endLive()
+        super.onStop()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // another screen's live session shut this frame ([Engine.only]):
+        // made again now that this one is in front
+        if (session?.isOpen == false) recreate()
+    }
+
     override fun onDestroy() {
         camera?.close()
         camera = null
@@ -903,8 +1067,7 @@ class ResourceActivity : Activity() {
         // **what the page stored stays, under its own origin** [author,
         // 2026-11-15]: the resource's, until the person forgets the
         // resource ([Frames.forget]); the view itself goes with the screen
-        session?.close()
-        session = null
+        unframe()
         intent.getStringExtra("resource")?.takeIf { it.length == 64 }?.let { runCatching { Carrier.stop(it) } }
         super.onDestroy()
     }

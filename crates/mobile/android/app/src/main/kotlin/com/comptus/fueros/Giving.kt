@@ -20,6 +20,13 @@ package com.comptus.fueros
  */
 object Giving {
 
+    /** A length of time in the words a person reads it in. */
+    fun lasting(seconds: Long): String = when {
+        seconds < 120 -> "$seconds seconds"
+        seconds < 7200 -> "${seconds / 60} minutes"
+        else -> "${seconds / 3600} hours"
+    }
+
     /** What the shell does to get the result. */
     enum class Way {
         /** A photograph, taken here, as JPEG ([Still]). */
@@ -45,6 +52,10 @@ object Giving {
 
         /** Agreement to be handed a file, which the next answer carries. */
         RECEIVE,
+
+        /** **A live session**: the page the resource answers with next is
+         *  given a real-time connection for the seconds asked. */
+        LIVE,
 
         /** **Not on this device**, with [Plan.says] as the reason. */
         NONE,
@@ -174,11 +185,20 @@ object Giving {
                         "here is authorised by one",
                 )
             }
-            "live" -> Plan(
-                Way.NONE,
-                listOf(),
-                "this app carries no live audio or video; it is not built yet",
-            )
+            // **any real-time connection, whether or not this device sends
+            // anything** [author, 2026-11-24]: the camera and the microphone
+            // are asked for only if the page then wants them
+            "live" -> when (val seconds = ask.seconds?.toLong()) {
+                null, 0L -> Plan(Way.NONE, listOf(), "it asks for a live session and says no length for it")
+                else -> Plan(
+                    Way.LIVE,
+                    listOf(),
+                    "For ${lasting(seconds)}, this resource's page may connect directly to where " +
+                        "its package streams, past this app, and may ask for the camera and the " +
+                        "microphone. Whoever it connects to sees this device's network address. " +
+                        "It ends at that time or when you leave the page.",
+                )
+            }
             "notify" -> Plan(
                 Way.NOTIFY,
                 if (has.notifyNeedsPermission) listOf(NOTIFICATIONS) else listOf(),

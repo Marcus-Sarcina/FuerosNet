@@ -1675,6 +1675,21 @@ client carried would be.
   that as its reason rather than a silence. A live session is the
   one stated exception to *results, not streams*, and is a distinct ask
   with its own display rather than a quiet relaxation of the rule.
+- **A live session is the page that answers its approval, and nothing
+  wider** [author, 2026-11-25]. Put it to the person with its length and
+  with what it opens: for that many seconds the resource's page may connect
+  past you, and whoever it connects to sees this device's network address.
+  Where they agree, the page the resource answers the approval with is
+  framed with a peer connection; no other page has one, then or ever, and
+  **every other resource's frame is shut while the session runs**, since an
+  engine's peer connections are on for every page it holds or for none.
+  **Say that it is live for as long as it is, with the time left**, and end
+  it when the time is up or the person leaves the page, whichever is first:
+  take the connection away and load the page again without one. **The
+  camera and the microphone are given to a page in a live session and to no
+  other**, when it first wants one, by the platform's own question. Take no
+  permission for either ahead of that: a session in which the person only
+  watches needs neither.
 - **Declining is an answer the resource sees**, with a reason — the
   person said no, or this device has no such utility — never a silence it
   has to interpret or an error loop. An ask is spent by its answer, whatever

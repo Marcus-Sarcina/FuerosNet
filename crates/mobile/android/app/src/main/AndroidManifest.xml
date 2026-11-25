@@ -12,6 +12,13 @@
     <!-- The optical channel's two QRs (`wire-format.md` §14.3.1): the
          bootstrap one read rear-camera, the anchor exchange selfie-camera. -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- The microphone, for a live session the person approved
+         (light-client-requirements.md §8.1): asked for by the platform
+         when a page in one first wants it, and given to no other page. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- With it, so the engine can route a call's sound; normal, granted
+         at install, and already brought by the engine's own manifest. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <!-- Bluetooth LE as a bearer, first in §14.3.1's hierarchy. The
          neverForLocation flag is the truthful one: this derives no location
          and offers Bluetooth as no evidence of nearness (the design uses

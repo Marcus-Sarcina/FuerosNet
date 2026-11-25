@@ -163,10 +163,32 @@ class GivingTest {
         val unsigned = Giving.plan(ask("sign", payload = byteArrayOf(1)), phone.copy(unlock = false))
         assertEquals(Giving.Way.NONE, unsigned.way)
         assertTrue(unsigned.says, unsigned.says.contains("lock"))
-        // live is not built at all, on any device
-        val live = Giving.plan(ask("live", seconds = 60UL), phone)
-        assertEquals(Giving.Way.NONE, live.way)
-        assertTrue(live.says, live.says.contains("not built"))
+        // a live session that says no length is not one to agree to
+        for (unsaid in listOf(null, 0UL)) {
+            val live = Giving.plan(ask("live", seconds = unsaid), phone)
+            assertEquals(Giving.Way.NONE, live.way)
+            assertTrue(live.says, live.says.contains("no length"))
+        }
+    }
+
+    /**
+     * **A live session is put to the person with its length and with what
+     * it lets a page do** (`light-client-requirements.md` §8.1): connect
+     * past this app, and ask for the camera and the microphone, which no
+     * permission is taken for until a page wants one.
+     */
+    // functional: CAT-032
+    @Test
+    fun a_live_session_is_offered_with_its_length_and_what_it_opens() {
+        val live = Giving.plan(ask("live", seconds = 90UL), bare)
+        assertEquals(Giving.Way.LIVE, live.way)
+        assertTrue("nothing is asked of the platform ahead of need", live.permissions.isEmpty())
+        for (word in listOf("90 seconds", "directly", "camera", "microphone", "network address")) {
+            assertTrue("$word: ${live.says}", live.says.contains(word))
+        }
+        assertEquals("45 seconds", Giving.lasting(45))
+        assertEquals("5 minutes", Giving.lasting(300))
+        assertEquals("2 hours", Giving.lasting(7200))
     }
 
     @Test

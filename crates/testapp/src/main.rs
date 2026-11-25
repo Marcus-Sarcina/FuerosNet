@@ -68,6 +68,15 @@ fn main() -> std::process::ExitCode {
         }
         streaming = Some(face.probing(&at));
     }
+    // **and a live session asked for before the page**, where an image
+    // names its seconds
+    if let Some(seconds) = std::env::var("RHTN_TESTAPP_LIVE")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        && let Some(face) = streaming.take()
+    {
+        streaming = Some(face.living(seconds));
+    }
     let mut i = 0usize;
     while i < args.len() {
         match args[i].as_str() {

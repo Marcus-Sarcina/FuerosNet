@@ -140,6 +140,36 @@ fn what_the_page_measured_is_kept_as_one_line_and_nothing_else_is_taken() {
         s.handle(b"PUT /.rhtn/relationships HTTP/1.1\r\nhost: x\r\n\r\n")
             .starts_with(b"HTTP/1.1 204")
     );
+    // a face that asks for a live session asks once, before its page, and
+    // the page is what answers the approval
+    let mut l = rhtn_testapp::stream::Stream::new().living(40);
+    let asked = l.handle(b"GET / HTTP/1.1\r\nhost: x\r\n\r\n");
+    let asked = String::from_utf8_lossy(&asked).to_string();
+    assert!(
+        asked.contains("content-type: application/vnd.rhtn.utility+json"),
+        "{asked}"
+    );
+    assert!(asked.contains("\"utility\":\"live\""), "{asked}");
+    assert!(asked.contains("\"return\":\"/live\""), "{asked}");
+    assert!(asked.contains("\"seconds\":40"), "{asked}");
+    let body = b"--b\r\ncontent-disposition: form-data; name=\"outcome\"\r\n\r\ngiven\r\n--b--\r\n";
+    let mut post = format!(
+        "POST /live HTTP/1.1\r\nhost: x\r\ncontent-type: multipart/form-data; boundary=b\r\ncontent-length: {}\r\n\r\n",
+        body.len()
+    )
+    .into_bytes();
+    post.extend_from_slice(body);
+    let page = l.handle(&post);
+    assert!(String::from_utf8_lossy(&page).contains("Content in parts"));
+    // and loaded again, it is the page and not the question
+    let again = l.handle(b"GET / HTTP/1.1\r\nhost: x\r\n\r\n");
+    assert!(String::from_utf8_lossy(&again).contains("Content in parts"));
+    assert!(
+        l.said
+            .iter()
+            .any(|s| s.contains("\"stream.live\",\"given\":true"))
+    );
+
     // and where its host says its media port is reached is kept, and said
     // once each time it moves
     assert_eq!(s.media, None);

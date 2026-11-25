@@ -67,5 +67,7 @@ ENV RHTN_TESTAPP_FACE=${FACE}
 # public address and port it listens on for a packet that came by no request
 ARG PROBE=
 ENV RHTN_TESTAPP_PROBE=${PROBE}
+ARG LIVE=
+ENV RHTN_TESTAPP_LIVE=${LIVE}
 
 ENTRYPOINT ["/usr/local/bin/rhtn-testapp"]

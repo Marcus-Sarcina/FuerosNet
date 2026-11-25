@@ -127,6 +127,9 @@ class ManifestTest {
             "BLUETOOTH_SCAN",
             "CAMERA",
             "INTERNET",
+            // the microphone and its routing, for a live session the person
+            // approved (light-client-requirements.md §8.1) [author, 2026-11-25]
+            "MODIFY_AUDIO_SETTINGS",
             "NFC",
             "POST_NOTIFICATIONS",
             // the standing a process that keeps a connection asks for, and the
@@ -135,6 +138,7 @@ class ManifestTest {
             "FOREGROUND_SERVICE",
             "FOREGROUND_SERVICE_REMOTE_MESSAGING",
             "READ_PHONE_NUMBERS",
+            "RECORD_AUDIO",
             // the platform's own unlock behind a `sign` ask
             // (light-client-requirements.md §8.1); normal, granted at install
             "USE_BIOMETRIC",

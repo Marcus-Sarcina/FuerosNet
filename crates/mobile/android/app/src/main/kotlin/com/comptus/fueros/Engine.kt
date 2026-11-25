@@ -184,6 +184,45 @@ object Engine {
             }
         }
 
+    /**
+     * **Give pages a peer connection, or take it away**, and say whether
+     * the engine then reads as told. It is one setting for the engine, so
+     * it is on only while one live session runs
+     * (`light-client-requirements.md` §8.1) and every other resource's
+     * frame is shut first ([only]); a page made while it is on keeps its
+     * connection until that page is gone, which is why the session's end
+     * loads its page again.
+     */
+    fun peers(on: Boolean, then: (Boolean) -> Unit) {
+        GeckoPreferenceController
+            .setGeckoPref("media.peerconnection.enabled", on, GeckoPreferenceController.PREF_BRANCH_USER)
+            .then { GeckoPreferenceController.getGeckoPref("media.peerconnection.enabled") }
+            .accept({ then(it?.value == on) }, { then(false) })
+    }
+
+    private val open = mutableSetOf<GeckoSession>()
+
+    /** A frame's session, kept so a live session can shut the others. */
+    fun opened(session: GeckoSession) {
+        open += session
+    }
+
+    /** That session is gone. */
+    fun closed(session: GeckoSession) {
+        open -= session
+    }
+
+    /** **Shut every frame but this one**: no page but the one a live
+     *  session was approved for is running while pages are given a peer
+     *  connection. A screen whose frame was shut makes it again when it
+     *  is next in front. */
+    fun only(session: GeckoSession) {
+        for (other in open.filter { it !== session }) {
+            runCatching { other.close() }
+            open -= other
+        }
+    }
+
     /** Wipe what a resource's pages stored under its origin. */
     fun forget(context: Context, resource: String) {
         if (!carried()) return

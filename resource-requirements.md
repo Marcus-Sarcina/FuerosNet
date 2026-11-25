@@ -458,6 +458,18 @@ so a return path that is never reached means you asked badly, not that the
 person is slow. Ask once per answer; what you answer the post with may be a
 page or another ask.
 
+**A live session is the page you answer its approval with** [author,
+2026-11-25]. Ask `live` with the seconds you want; where the person agrees,
+what you answer the post with is framed with a real-time connection, which
+your pages have at no other time (§3), and it is that page which opens the
+session, through a channel you declared. It may ask its frame's engine for the
+camera and the microphone as any page would, and is given them in a session
+and never outside one. **When the seconds are up, or the person leaves the
+page, the connection is taken away and the page is loaded again without it**,
+so serve at that path what a member should see once a session is over, and
+ask again for another. A member's client shows that a session is live for as
+long as it is.
+
 **The answer is one `POST` to your return path**, `multipart/form-data`,
 composed by the kernel and not by any page — so its parts are these and in
 this order, each once:

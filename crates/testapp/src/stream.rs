@@ -113,6 +113,14 @@ pub struct Stream {
     ///
     /// [`probing`]: Stream::probing
     probe: Option<String>,
+    /// **The seconds of a live session it asks for before it shows its
+    /// page**, where it asks at all ([`living`]), and whether that ask has
+    /// been answered: asked once, so that the page loaded again when the
+    /// session ends is the page and not the question.
+    ///
+    /// [`living`]: Stream::living
+    live: Option<u64>,
+    answered: bool,
     /// **Where its host said its media port is reached**
     /// (`resource-requirements.md` §3.3's `rhtn-media`), as last told.
     pub media: Option<String>,
@@ -133,6 +141,8 @@ impl Stream {
         Stream {
             want: wanted_check(),
             probe: None,
+            live: None,
+            answered: false,
             media: None,
             said: Vec::new(),
         }
@@ -150,6 +160,16 @@ impl Stream {
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | ':' | '-'));
         self.probe = plain.then(|| at.to_string());
+        self
+    }
+
+    /// **Ask for a live session of `seconds` before showing the page**
+    /// (`resource-requirements.md` §3.4): the first `GET /` is answered
+    /// with the ask, and the page is what answers its approval, so the
+    /// page a member's client frames next is one in a live session.
+    #[must_use]
+    pub fn living(mut self, seconds: u64) -> Stream {
+        self.live = (seconds > 0).then_some(seconds);
         self
     }
 
@@ -188,6 +208,52 @@ impl Stream {
                 answer(204, "text/plain", None, Vec::new())
             }
             ("GET", ICON_PATH) => answer(200, "image/png", None, ICON.to_vec()),
+            ("GET", "/") if self.live.is_some() && !self.answered => {
+                let seconds = self.live.unwrap_or(0);
+                self.said.push(format!(
+                    "{{\"what\":\"stream.asked\",\"seconds\":{seconds}}}"
+                ));
+                answer(
+                    200,
+                    crate::ASK_MEDIA,
+                    None,
+                    format!(
+                        "{{\"utility\":\"live\",\"ask\":\"to check a live session against this \
+                         package's media port\",\"retention\":\"nothing is kept\",\
+                         \"return\":\"/live\",\"token\":\"live-1\",\"seconds\":{seconds}}}"
+                    )
+                    .into_bytes(),
+                )
+            }
+            // the ask's answer: the page where it was given, and words
+            // where it was not; either way it is not asked again
+            ("POST", "/live") => {
+                self.answered = true;
+                let given = body
+                    .windows(b"name=\"outcome\"\r\n\r\ngiven".len())
+                    .any(|w| w == b"name=\"outcome\"\r\n\r\ngiven");
+                self.said
+                    .push(format!("{{\"what\":\"stream.live\",\"given\":{given}}}"));
+                if given {
+                    answer(
+                        200,
+                        "text/html; charset=utf-8",
+                        Some(if self.probe.is_some() {
+                            POLICY_PROBING
+                        } else {
+                            POLICY
+                        }),
+                        page(self.want, self.probe.as_deref()).into_bytes(),
+                    )
+                } else {
+                    answer(
+                        200,
+                        "text/plain; charset=utf-8",
+                        None,
+                        b"The live session was declined, so nothing was started.\n".to_vec(),
+                    )
+                }
+            }
             ("GET", "/") => {
                 self.said.push("{\"what\":\"stream.page\"}".into());
                 answer(
