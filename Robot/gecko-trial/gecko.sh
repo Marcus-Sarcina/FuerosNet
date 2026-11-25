@@ -13,7 +13,7 @@ grep -c '"bound":true' $SP/probe/local.log
 adb -s $S shell input keyevent KEYCODE_WAKEUP; adb -s $S shell wm dismiss-keyguard
 adb -s $S shell am force-stop com.comptus.geckotrial
 adb -s $S logcat -c
-adb -s $S shell am start -n com.comptus.geckotrial/.Main --ez walled $1 --es upstream 192.168.0.11:7461 > /dev/null
+adb -s $S shell am start -n com.comptus.geckotrial/.Main --es mode $1 ${PERMIT:+--es permit $PERMIT} --es upstream 192.168.0.11:7461 > /dev/null
 sleep ${2:-80}
-adb -s $S logcat -d -s geckotrial | tail -6
+adb -s $S logcat -d -s geckotrial | grep -v "carried" | sed "s/^.*geckotrial: /  phone: /" | tail -${LINES_SHOWN:-12}
 python3 $SP/probe/sum.py $SP/probe/local.log

@@ -60,9 +60,9 @@ fn main() -> std::process::ExitCode {
         if let Some(port) = at.rsplit(':').next().and_then(|p| p.parse::<u16>().ok()) {
             std::thread::spawn(move || listen_for_datagrams(port));
             // one port for each way a page might open a stream: its own
-            // socket, a window's it made, a worker's, a preconnect, and a
-            // fetch or a beacon
-            for beside in (1..=5u16).filter_map(|n| port.checked_add(n)) {
+            // socket, a window's it made, a worker's, a preconnect, a
+            // fetch or a beacon, and a relay a peer connection asks
+            for beside in (1..=6u16).filter_map(|n| port.checked_add(n)) {
                 std::thread::spawn(move || listen_for_connections(beside));
             }
         }

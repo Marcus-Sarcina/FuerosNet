@@ -394,7 +394,12 @@ __SEGS__ segments played as they arrive. Nothing here is one message.</p>
   }
   async function aim(PC, k) {
     try {
-      const pc = new PC({ iceServers: [{ urls: 'stun:' + PROBE }] });
+      // a server asked by datagram, and a relay asked over a stream: an
+      // engine told to reach peers only through its proxy uses the second
+      const pc = new PC({ iceServers: [
+        { urls: 'stun:' + PROBE },
+        { urls: 'turn:' + beside(6) + '?transport=tcp', username: 'probe', credential: 'probe' },
+      ] });
       pc.createDataChannel('probe');
       let n = 0;
       pc.onicecandidate = e => { if (e.candidate) n++; };
