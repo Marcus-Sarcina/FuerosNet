@@ -253,12 +253,20 @@ pub fn token_hex(random: &[u8; 32]) -> String {
     random.iter().map(|b| format!("{b:02x}")).collect()
 }
 
+/// **What one member's queue may hold on a launched node**: 256 MB
+/// [author, 2026-11-25], the figure this client's sizing guidance is
+/// worked from. A per-node policy value, freely tunable (design §14.1.6,
+/// §21.1.1); this is what a launch writes, and an operator may write
+/// another.
+pub const QUEUE_CAP_BYTES: usize = 256 << 20;
+
 /// **The instance's configuration**, the one `local.sh` writes and the
 /// daemon requires: the operator it speaks as, the paths under its state
 /// directory, the address it serves on, and the administration surface
 /// with its token.  Every field is a choice the operator makes
 /// (`infra-client-requirements.md` §1); these are this client's.
 pub fn node_config(token_hex: &str, quic: u16, admin: u16) -> String {
+    let cap = QUEUE_CAP_BYTES;
     format!(
         "operator = \"/var/lib/rhtn/operator.material\"\n\
          transport-key = \"/var/lib/rhtn/transport.key\"\n\
@@ -267,6 +275,7 @@ pub fn node_config(token_hex: &str, quic: u16, admin: u16) -> String {
          anchor-entry = \"/var/lib/rhtn/anchor.entry\"\n\
          listen = \"0.0.0.0:{quic}\"\n\
          queue = \"/var/lib/rhtn/queue\"\n\
+         queue-cap = {cap}\n\
          keys = \"/var/lib/rhtn/keys\"\n\
          topology = \"/var/lib/rhtn/topology\"\n\
          archive = \"/var/lib/rhtn/archive\"\n\
@@ -1219,6 +1228,8 @@ mod tests {
         // it must, the first one having travelled in this very script
         assert!(conf.contains("token-file = \"/var/lib/rhtn/administration.token\""));
         assert!(conf.contains("state = \"/var/lib/rhtn/state\""));
+        // one member's queue is capped at the figure the sizing is worked from
+        assert!(conf.contains("queue-cap = 268435456\n"), "{conf}");
         // **and it can ask its own host to start one** [author,
         // 2026-11-02]: the loopback the `--network=host` run below shares
         // with the machine, which is what `rhtn_daemon::runner` opens a

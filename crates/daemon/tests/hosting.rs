@@ -1536,6 +1536,7 @@ fn socket_host(resource: &str, manifest: &Path, port: u16) -> String {
 /// a socket of its own; refused where this node or another package holds
 /// it; and the package is told where the machine is reached.
 // functional: PKG-023
+// functional: PKG-024
 #[test]
 fn a_package_holds_one_media_port_and_a_clash_is_a_refused_install() {
     const OTHER: &str = "0808080808080808080808080808080808080808080808080808080808080808";
@@ -1635,6 +1636,48 @@ fn a_package_holds_one_media_port_and_a_clash_is_a_refused_install() {
         "roles = [\"reader\"]\nmedia_port = 70000\n",
     );
     assert!(apply_held(&socket_host(RES, &wide, 9), &[]).is_err());
+
+    // **what else a package says of where its pages stream** [author,
+    // 2026-11-25]: endpoints elsewhere, and its members' own devices. Its
+    // own statements, taken where they are well formed and held to nothing
+    let said = d.put(
+        "said.manifest",
+        "roles = [\"reader\"]\nmedia_endpoints = [\"relay.example:3478\", \"203.0.113.9:7462\"]\nmedia_members = true\n",
+    );
+    assert_eq!(
+        apply_held(&socket_host(RES, &said, 9), &[]).map(|a| a.bound),
+        Ok(1)
+    );
+    // and a package this node runs may say them too, holding no port
+    assert_eq!(run(&d, &host(&said)), Ok(1));
+    for (endpoint, word) in [
+        ("https://relay.example:3478", "host:port"),
+        ("relay.example", "host:port"),
+        ("relay.example:0", "names a port"),
+        ("relay.example:port", "names a port"),
+        ("relay.example:3478/path", "host:port"),
+        ("127.0.0.1:3478", "private network"),
+        ("10.0.0.5:3478", "private network"),
+        ("localhost:3478", "private network"),
+    ] {
+        let m = d.put(
+            "bad.manifest",
+            format!("roles = [\"reader\"]\nmedia_endpoints = [\"{endpoint}\"]\n"),
+        );
+        let why = refused(apply_held(&socket_host(RES, &m, 9), &[]));
+        assert!(why.contains(word), "{endpoint}: {why}");
+    }
+    let many = d.put(
+        "many.manifest",
+        format!(
+            "roles = [\"reader\"]\nmedia_endpoints = [{}]\n",
+            (0..17)
+                .map(|n| format!("\"relay{n}.example:3478\""))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    );
+    assert!(refused(apply_held(&socket_host(RES, &many, 9), &[])).contains("at most 16"));
 
     // a package this node runs or brokers has no network to hold one on
     assert!(

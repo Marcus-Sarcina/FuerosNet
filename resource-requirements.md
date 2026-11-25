@@ -170,22 +170,34 @@ parts the page fetches in turn, audio or video as segments of a few seconds
 each, played as they arrive. That is how large and continuous content is
 carried, and nothing in it asks more of the path than a `GET`.
 
-**What must arrive as it happens goes to a port of your own** [author,
-2026-11-24]. A call, or a broadcast watched as it is made, is neither one
-answer nor parts fetched in turn. Declare one UDP port in your manifest (§8)
-and hold it on your host's own machine; your host tells you where that machine
-is reached (§3.3's `rhtn-media`). A member's client opens a real-time
-connection to it inside a live session the person approved (§3.4), **whether or
-not anything of theirs is sent**: watching is a live session too. **Agree the
-session by requests like any other**, an offer and an answer each one request,
-**and that is where you learn who it is**: nothing on the port passed your
-host, so no header there says who is sending and no budget of yours is counted.
-What you accept on it is yours to tie to a principal you were given on the path
-above. **On that port you see the address a member's device sends from**,
-which on the path above only your host sees. It is on your host's machine so
-that one machine is all an operator runs: when your members outgrow it they
-take a larger one, and are never asked to keep a second service for your
-media.
+**What must arrive as it happens goes through a channel you declared**
+[author, 2026-11-24, 2026-11-25]. A call, or a broadcast watched as it is made,
+is neither one answer nor parts fetched in turn, and it does not pass your host:
+a member's client opens a real-time connection for it inside a live session the
+person approved (§3.4), **whether or not anything of theirs is sent**: watching
+is a live session too. **Say in your manifest (§8) where your pages stream**, so
+that your operator reads it before deciding to trust you:
+
+- **a port you hold on your host's own machine** (`media_port`), whose address
+  your host tells you (§3.3's `rhtn-media`);
+- **endpoints elsewhere**, each named (`media_endpoints`);
+- **your members' own devices**, one to another (`media_members`), where the
+  endpoints are ones you verified as belonging to members you authorise.
+
+**These are your statements, and your operator's judgement is what holds you to
+them.** A member's client gives a page a real-time connection for the session
+the person approved and for its seconds; it cannot confine where that session's
+datagrams go, and does not pretend to (design §1.1). **Agree a session by
+requests like any other**, an offer and an answer each one request, **and that
+is where you learn who it is**: nothing on your port passed your host, so no
+header there says who is sending and no budget of yours is counted. What you
+accept on it is yours to tie to a principal you were given on the path above.
+**Whoever a session reaches sees the address the member's device sends from**:
+you on your port, which on the path above only your host sees, and another
+member on theirs, as two members who message each other directly already do
+[author, 2026-11-25]. The port is on your host's machine so that one machine is
+all an operator runs: when your members outgrow it they take a larger one, and
+are never asked to keep a second service for your media.
 
 ### 3.1 The header-spoofing hazard
 
@@ -412,7 +424,11 @@ but to you** [author, 2026-11-25]: a socket, a transport over datagrams, a
 peer connection or a connection opened ahead of use reaches nothing from a
 page, in whichever window or worker it is opened; what must stream goes
 through a channel you declared, which your operator could read before
-trusting you (§3). So a capability
+trusting you (§3). **What this is against is content that rides in your pages
+without your meaning it**, a tracking pixel grown up, in an application its
+operator had every reason to trust; it is not against you [author, 2026-11-25].
+A package written to deceive is its operator's to judge and its community's to
+vet. So a capability
 of their device — a scan, a photograph, a place, a tag read, a
 signature — is not yours to take from a page; **you ask for it, in one typed
 ask, and their client answers** [author, 2026-10-30]. The kernel on their
@@ -943,9 +959,14 @@ destinations you may reach outward, each `https://host` or `https://host:port`
 exactly and nothing with a path, a wildcard or the node's own machine in it —
 delivered with the package so the operator reads it at installation, and replaced
 whole by an update, since an allow-list a package could grow at run time is no
-list; and **`media_port`**, the one UDP port you hold on your host's machine for
-a live session (§3), 1024 or above [author, 2026-11-24], refused at installation
-where your host or another package it hosts already holds that port. A host that offers none of your versions, or cannot keep a block, refuses you
+list; and **where your pages stream** (§3): **`media_port`**, the one UDP port
+you hold on your host's machine for a live session, 1024 or above [author,
+2026-11-24], refused at installation where your host or another package it
+hosts already holds that port; **`media_endpoints`**, the endpoints elsewhere,
+each `host:port` with the host a name or a public address, at most 16; and
+**`media_members`**, set where your pages stream between your members' own
+devices [author, 2026-11-25]. The last two are your statements to your
+operator, checked for their shape and for nothing else. A host that offers none of your versions, or cannot keep a block, refuses you
 at installation with the reason; one that can tells your instance where its block
 and its log are on the relationships exchange (§3.3) — a filesystem of your own
 where the host can bound one, its surface otherwise [author, 2026-11-15].

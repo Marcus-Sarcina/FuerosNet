@@ -1589,8 +1589,13 @@ to show a resource's page has to read one.
     frame a page only in an engine whose peer connections you can switch off,
     in every window a page can make. **A page streams only through a channel
     its package declared, which its operator could read before trusting it**;
-    such a stream need not pass you. Where an engine cannot be held to this,
-    do not frame a page in it.
+    such a stream need not pass you, and what you hold it to is the person's
+    approval and its seconds (§8.1), never where it goes. Where an engine
+    cannot be held to this, do not frame a page in it. **What this secures
+    against is content riding in an application its operator had reason to
+    trust**, a tracking pixel grown up, and not a package written to deceive:
+    the core's packages are trusted, and one from elsewhere is its operator's
+    to judge and its community's to vet [author, 2026-11-25].
   - **Run script only where the page declared it and the user allowed it.** The
     declaration is the page's own `content-security-policy` naming
     `script-src`, read by the kernel and handed to the frame's engine to
@@ -1651,7 +1656,7 @@ client carried would be.
 | `check-in` | presence at a place, read from a tag on a proximity channel |
 | `tag` | a tag read: the code on a thing |
 | `sign` | a signature over the exact payload the ask carried, authorised by the person — the platform's own unlock where it has one |
-| `live` | a live session: a real-time connection to the port the resource's package holds on its host (`resource-requirements.md` §3), for the seconds asked, whether or not anything of this device's is sent [author, 2026-11-24], with its own consent, duration and indicator |
+| `live` | a live session: a real-time connection through a channel the resource's package declared (`resource-requirements.md` §3) — the port it holds on its host, an endpoint it named, or another member's device — for the seconds asked, whether or not anything of this device's is sent [author, 2026-11-24, 2026-11-25], with its own consent, duration and indicator |
 | `notify` | standing permission to be shown that resource's notifications |
 | `export` | a copy of what the resource holds, handed to the person as a file |
 | `import` | a file the person picks, handed to the resource |

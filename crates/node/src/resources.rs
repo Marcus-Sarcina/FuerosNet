@@ -1203,6 +1203,42 @@ pub struct Manifest {
     /// 2026-11-24]: declared, so the operator reads it at installation,
     /// and above [`MEDIA_PORT_FLOOR`]. Absent where it holds none.
     pub media: Option<u16>,
+    /// **The endpoints elsewhere its pages stream with**, each `host:port`
+    /// ([`endpoint_refused`]) [author, 2026-11-25]: its own statement,
+    /// which its operator reads before trusting it and no host checks
+    /// beyond its shape.
+    pub media_endpoints: Vec<String>,
+    /// **Whether its pages stream between its members' own devices**
+    /// [author, 2026-11-25]: its statement likewise, that the endpoints
+    /// are ones it verified as belonging to its authorised users.
+    pub media_members: bool,
+}
+
+/// The most endpoints a package may declare its pages stream with.
+pub const MAX_MEDIA_ENDPOINTS: usize = 16;
+
+/// Why a declared media endpoint is refused, or nothing where it is one a
+/// package may name: `host:port`, the host a name or a public address and
+/// never the node's own machine or a private network, the port a port.
+#[must_use]
+pub fn endpoint_refused(e: &str) -> Option<String> {
+    let said = |why: &str| Some(format!("`{e}`: {why}"));
+    if e.contains(['/', '?', '#', '@', '*', ' ']) || e.contains("://") {
+        return said("a media endpoint is host:port, with no scheme, path, user or wildcard");
+    }
+    let Some((host, port)) = e.rsplit_once(':') else {
+        return said("a media endpoint is host:port");
+    };
+    if port.parse::<u16>().map_or(true, |p| p == 0) {
+        return said("a media endpoint names a port");
+    }
+    // the rule for a host is the one a fetch destination is held to
+    destination_refused(&format!("https://{host}")).map(|_| {
+        format!(
+            "`{e}`: a media endpoint is a name or a public address, never the node's own \
+             machine or a private network"
+        )
+    })
 }
 
 /// The lowest port a package may declare for its media: above the ports
@@ -1323,6 +1359,15 @@ pub fn instantiate(m: &Manifest) -> Result<Package, String> {
     }
     if m.imports.iter().any(|i| i == "rhtn/1:fetch") && m.fetch.is_empty() {
         return Err("the package imports fetch and names no destination".into());
+    }
+    if m.media_endpoints.len() > MAX_MEDIA_ENDPOINTS {
+        return Err(format!(
+            "a manifest declares at most {MAX_MEDIA_ENDPOINTS} media endpoints, not {}",
+            m.media_endpoints.len()
+        ));
+    }
+    if let Some(why) = m.media_endpoints.iter().find_map(|e| endpoint_refused(e)) {
+        return Err(why);
     }
     if let Some(p) = m.media
         && p < MEDIA_PORT_FLOOR

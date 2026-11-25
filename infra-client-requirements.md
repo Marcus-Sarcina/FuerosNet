@@ -1031,7 +1031,15 @@ package's is counted, and your queue never sees it, so what the machine can
 carry is the ceiling. **And the declaration is not a confinement.** A package
 on a socket of its own has its own network (above), and you do not hold it to
 the port it declared: the declaration is what your operator reads and what you
-check for a clash.
+check for a clash. **What else a manifest says of where its pages stream is the
+package's statement, and yours only to read back** [author, 2026-11-25]:
+`media_endpoints`, the endpoints elsewhere, and `media_members`, that its pages
+stream between its members' own devices. Refuse a manifest whose endpoints are
+ill formed — each is `host:port`, the host a name or a public address and never
+your own machine or a private network, at most 16 — and hold the package to
+none of it. Your operator reads them at installation with the rest: whether to
+trust a package that streams is theirs to decide, and vetting one that nobody
+wrote for this network's core is their community's.
 
 **You are not always older than the subnet you serve** [2026-11-01]. An
 instance is launched into a subnet that already exists, replaces a machine,

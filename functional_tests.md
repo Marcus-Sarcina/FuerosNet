@@ -732,6 +732,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | PKG-021 | C | **A member's request is decided from the node's state and its package asked holding nothing of it.** Every step of the gateway's order but the handoff is taken first; the package is then asked with no lock of the node's held, so one slow to answer delays no other request, the queue or the operator's surface; and its answer goes back only where the resource is still bound and the requester's row still grants `connect`, the status otherwise being the one that step yields. Test: a request to a package two seconds in answering, and during it a request the node answers itself, which returns in under a second; a handoff decided and not yet carried has asked the package nothing; a row withdrawn while the package answers is reported as moved, and so is a resource no longer bound. | I §9.2; W §11 |
 | PKG-022 | C | **One answer from a package is bounded as one message is** [author, 2026-11-24]: 16 MiB, head and body together, the node taking no less from a package than the path to it carries (W §11). A message past the bound is not sent: the asker is answered unavailable and the operator's surface names the package and the size. Test: an answer of 12 MiB is delivered; the largest whose whole message is the bound is delivered; one byte more is unavailable. | W §11; R §3; I §9.2 |
 | PKG-023 | C | **A package holds one media port on its host's machine, and a clash is a refused installation** [author, 2026-11-24]: a manifest's `media_port` is one UDP port, 1024 or above, declared by a package on a socket of its own; a host refuses a manifest declaring the port it serves its own sessions on, one a package it already hosts declared (naming that package), one below 1024, and one from a package it runs in its sandbox or brokers; it assigns none. The instance is told `rhtn-media` on the relationships exchange: its port at each address the host's endpoint record names, each address once and in the record's order, as `address:port` space-separated, and nothing where the host holds no record. Test: each refusal; two packages at two ports are both bound; the fact as told for an IPv4 and an IPv6 address; a record naming one address at two ports yields that address once. | I §9.3; R §3, §3.3, §8 |
+| PKG-024 | C | **A manifest says where a package's pages stream, and a host checks the saying and nothing more** [author, 2026-11-25]: beside `media_port`, `media_endpoints` names the endpoints elsewhere, each `host:port` with the host a name or a public address, at most 16, and `media_members` says its pages stream between its members' own devices. A host refuses a manifest whose endpoint carries a scheme, a path, no port or port 0, the host's own machine or a private network, or that names more than 16; it takes a well-formed one from any package, holding a port or not, and holds the package to none of it. Test: each refusal by its reason; a manifest declaring two endpoints and its members is bound, from a package on a socket of its own and from one that holds no port. | I §9.3; R §3, §8 |
 
 ## 3.7 Application boundary, mobile product, storage and operator tools
 
@@ -1129,7 +1130,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **627 numbered requirement/test families** across **27 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **628 numbered requirement/test families** across **27 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -1151,7 +1152,7 @@ This specification contains **627 numbered requirement/test families** across **
 | POL | 22 |
 | CAT | 31 |
 | GAT | 43 |
-| PKG | 23 |
+| PKG | 24 |
 | APP | 20 |
 | UX | 34 |
 | OPS | 34 |

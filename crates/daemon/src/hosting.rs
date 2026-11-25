@@ -1079,6 +1079,13 @@ pub(crate) fn read_manifest(path: &Path) -> Result<(Manifest, Option<std::path::
         /// The one UDP port it holds on its host's machine for media
         /// (`resource-requirements.md` §3) [author, 2026-11-24].
         media_port: Option<u16>,
+        /// The endpoints elsewhere its pages stream with, and whether
+        /// they stream between its members' devices: its own statements,
+        /// read by its operator [author, 2026-11-25].
+        #[serde(default)]
+        media_endpoints: Vec<String>,
+        #[serde(default)]
+        media_members: bool,
         #[serde(default)]
         admin: Vec<Op>,
         #[serde(default)]
@@ -1209,6 +1216,8 @@ pub(crate) fn read_manifest(path: &Path) -> Result<(Manifest, Option<std::path::
         },
         fetch: f.fetch,
         media: f.media_port,
+        media_endpoints: f.media_endpoints,
+        media_members: f.media_members,
     };
     // relative to the manifest, so a package is a directory an operator
     // can move without rewriting what is inside it
