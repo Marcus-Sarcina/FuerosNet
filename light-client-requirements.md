@@ -1586,8 +1586,9 @@ to show a resource's page has to read one.
   - **Publish one object into a page that runs, and no other**: a request to
     the same resource, with a body where there is one — since a frame's engine
     hands the client a request's method and path and never its body, a page
-    that posts has nowhere else to go. Nothing of the client is reachable
-    through it.
+    that posts has nowhere else to go. It takes a method, a path, a type and
+    a body, and **no header of the page's choosing** [author, 2026-11-24].
+    Nothing of the client is reachable through it.
   - **Keep what a page stores, under its origin**, across screens, and wipe it
     when the user forgets the resource. Nothing of one resource reaches
     another.

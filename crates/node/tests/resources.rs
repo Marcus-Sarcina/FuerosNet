@@ -554,6 +554,54 @@ fn ack(sc: &mut Scene, node: &str) {
     sc.table = t;
 }
 
+// functional: PKG-021
+#[test]
+fn a_request_is_decided_before_its_package_is_asked_and_refused_where_the_grant_moved_under_it() {
+    let sc = scene();
+    let backend = Arc::new(Fake::new());
+    let mut g = gateway_with(&sc, backend.clone());
+    let me = kh("alice");
+    let reader = |connect| Row {
+        roles: BTreeSet::from(["reader".to_string()]),
+        connect,
+    };
+    g.set_row(R1, kh("carol"), reader(true)).unwrap();
+
+    // admitted, and the package has not been asked
+    let Decided::Handoff(first) = g.decide(&me, &sc.table, &kh("carol"), &request(R1, OK_GET), 0)
+    else {
+        panic!("a member holding connect is handed off");
+    };
+    assert_eq!(backend.calls.load(Ordering::SeqCst), 0);
+    // the gateway is free while that one is outstanding: a second is
+    // decided, and a stranger is refused here without the package
+    let Decided::Handoff(second) = g.decide(&me, &sc.table, &kh("carol"), &request(R1, OK_GET), 0)
+    else {
+        panic!("and so is the next");
+    };
+    assert!(matches!(
+        g.decide(&me, &sc.table, &kh("w2"), &request(R1, OK_GET), 0),
+        Decided::Answered(r) if r.status == STATUS_REFUSED
+    ));
+    assert_eq!(backend.calls.load(Ordering::SeqCst), 0);
+
+    // carried holding nothing of the gateway's
+    let answer = first.carry();
+    assert_eq!(answer.status, STATUS_DELIVERED);
+    assert_eq!(backend.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(g.moved_under(&R1, &kh("carol")), None, "the grant stands");
+
+    // the grant withdrawn while the second was with the package: the
+    // package answered, and the answer is not the member's any more
+    g.set_row(R1, kh("carol"), reader(false)).unwrap();
+    assert_eq!(second.carry().status, STATUS_DELIVERED);
+    assert_eq!(g.moved_under(&R1, &kh("carol")), Some(STATUS_NO_ROLE));
+    assert_eq!(
+        g.moved_under(&[0x77; 32], &kh("carol")),
+        Some(STATUS_REFUSED)
+    );
+}
+
 // acceptance: RSC-12
 #[test]
 fn a_request_is_evaluated_in_the_normative_order_and_answered_with_the_one_code_its_step_yields() {

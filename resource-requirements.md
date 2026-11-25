@@ -154,6 +154,20 @@ hosting path; you observe it as requests ceasing to arrive under that identifier
 
 **Responses are ordinary HTTP.** The node relays them; it does not interpret them.
 
+**One request, one answer, and nothing of a browser's around it** [author,
+2026-11-24]. Where a member's client frames your page (§3.4), what reaches the
+frame of your answer is its status, its declared type and charset, its
+`content-security-policy` and its body; every other header stops at their
+client. So **a redirect is not followed**: answer with the page you would have
+sent them to. **No cookie is kept and none is sent**: who is asking is in the
+headers above, on every request. **No connection is upgraded or held open**
+(`wire-format.md` §11.2): say that something waits with a notice (§3.3). And
+**an answer is one message, whole**, within the bound `wire-format.md` §11
+sets. **What is larger than one message goes as parts**: a file as numbered
+parts the page fetches in turn, audio or video as segments of a few seconds
+each, played as they arrive. That is how large and continuous content is
+carried, and nothing in it asks more of the path than a `GET`.
+
 ### 3.1 The header-spoofing hazard
 
 This pattern has one characteristic failure, so both halves are
@@ -371,7 +385,10 @@ member has allowed it**, asked once per resource. A page that runs is given one
 object, `rhtn.request(method, path, type, body)`, carrying a request to you
 with a body, since a frame's engine hands the client a request's method and
 path and never its body; a `GET` the page makes of its own origin is carried
-as it is. No bridge into the client, no reach to the device. So a capability
+as it is. **A page sets no header** [author, 2026-11-24]: the request carries
+the type you gave it and nothing else of the page's choosing, so depend on no
+header a page would have to send, and take what you need in the path or the
+body. No bridge into the client, no reach to the device. So a capability
 of their device — a scan, a photograph, a place, a tag read, a
 signature — is not yours to take from a page; **you ask for it, in one typed
 ask, and their client answers** [author, 2026-10-30]. The kernel on their

@@ -397,6 +397,102 @@ async fn a_daemon_answers_a_resolution_from_the_topology_it_was_pushed() {
     );
 }
 
+// functional: PKG-021
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_package_slow_to_answer_holds_nothing_of_the_node_meanwhile() {
+    use rhtn_archive::catalog::{
+        REQUEST_RESOURCE, ResourceRequest, ResourceResponse, STATUS_DELIVERED, STATUS_REFUSED,
+    };
+    use std::io::{Read, Write};
+    use std::time::Instant;
+
+    // the resource: a server on a socket of its own that takes two seconds
+    // over every answer
+    const SLOW: Duration = Duration::from_secs(2);
+    let l = std::net::TcpListener::bind("127.0.0.1:0").expect("a port of its own");
+    let slow = l.local_addr().expect("its address");
+    std::thread::spawn(move || {
+        for c in l.incoming() {
+            let Ok(mut c) = c else { return };
+            let mut buf = [0u8; 8192];
+            let _ = c.read(&mut buf);
+            std::thread::sleep(SLOW);
+            let _ = c.write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 4\r\n\r\nslow");
+        }
+    });
+
+    let mut set = Daemons::new(env!("CARGO_BIN_EXE_rhtnd"), "slow");
+    let manifest = set.dir("alice").join("slow.manifest");
+    std::fs::write(&manifest, "roles = [\"reader\"]\n").expect("its manifest");
+    let shop = [9u8; 32];
+    let absent = [5u8; 32];
+    set.hosting(
+        "alice",
+        &format!(
+            "[[host]]\nresource = \"{}\"\nowner = \"{}\"\nauthority = \"slow.internal\"\nmanifest = \"{}\"\naddress = \"{slow}\"\n",
+            hex(&shop),
+            hex(&kh("w1")),
+            manifest.display()
+        ),
+    );
+    set.grants(
+        "alice",
+        &shop,
+        &format!(
+            "[[grant]]\nroles = [\"reader\"]\n\n[[grant.where]]\nof = \"named\"\nwho = \"{}\"\n",
+            hex(&kh("w1"))
+        ),
+    );
+    let addr = set.start("alice", &CAST, None);
+    let s = attach_to("w1", kh("alice"), addr).await;
+
+    let to_the_package = ResourceRequest {
+        resource: shop,
+        message: b"GET / HTTP/1.1\r\nhost: ignored\r\n\r\n".to_vec(),
+    }
+    .encode();
+    // answered out of the node's own state: nothing is bound for it
+    let of_the_node = ResourceRequest {
+        resource: absent,
+        message: b"GET / HTTP/1.1\r\n\r\n".to_vec(),
+    }
+    .encode();
+
+    let asked = Instant::now();
+    let slow_one = s.request(REQUEST_RESOURCE, &to_the_package);
+    let meanwhile = async {
+        // the first is with the package by now
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        let began = Instant::now();
+        let bytes = s
+            .request(REQUEST_RESOURCE, &of_the_node)
+            .await
+            .expect("answered");
+        (
+            ResourceResponse::decode(&bytes).expect("a reply").status,
+            began.elapsed(),
+        )
+    };
+    let (carried, (status, took)) = tokio::join!(slow_one, meanwhile);
+
+    assert_eq!(status, STATUS_REFUSED, "the node's own answer");
+    assert!(
+        took < Duration::from_secs(1),
+        "a request the node answers itself waited {took:?} behind a package that had not \
+         answered: its state was held while the package was asked"
+    );
+    let carried = ResourceResponse::decode(&carried.expect("answered")).expect("a reply");
+    assert_eq!(
+        carried.status, STATUS_DELIVERED,
+        "and the slow answer arrives"
+    );
+    assert!(
+        asked.elapsed() >= SLOW,
+        "the package took its time, so the first was outstanding throughout"
+    );
+    assert!(carried.body.expect("a body").ends_with(b"slow"));
+}
+
 // acceptance: DMN-19
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_daemon_hosts_the_package_its_configuration_names_and_serves_a_request_to_it() {

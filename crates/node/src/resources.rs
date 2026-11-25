@@ -584,14 +584,31 @@ impl Gateway {
         body: &[u8],
         now: u64,
     ) -> ResourceResponse {
-        let response = self.evaluate(me, table, requester, body, now);
-        tracing::debug!(
-            target: "node",
-            requester8 = %crate::diag::id8(requester),
-            status = response.status,
-            "node.resource"
-        );
-        response
+        match self.decide(me, table, requester, body, now) {
+            Decided::Answered(r) => r,
+            Decided::Handoff(h) => h.carry(),
+        }
+    }
+
+    /// **Whether a request decided a moment ago would still be handed
+    /// off**: the resource is bound here and the requester's row still
+    /// grants `connect`. What a caller that carried a [`Handoff`] holding
+    /// no lock checks before it answers
+    /// (`infra-client-requirements.md` §9.2), and the status to answer
+    /// with where it would not.
+    #[must_use]
+    pub fn moved_under(&self, resource: &Keyhash, requester: &Keyhash) -> Option<u64> {
+        if !self.bindings.contains_key(resource) {
+            return Some(STATUS_REFUSED);
+        }
+        if !self
+            .rows
+            .get(&(*resource, *requester))
+            .is_some_and(|r| r.connect)
+        {
+            return Some(STATUS_NO_ROLE);
+        }
+        None
     }
 
     /// How many requests a resource has answered under its
@@ -654,6 +671,35 @@ impl Gateway {
         None
     }
 
+    /// **Decide one request from the state read now, and call nothing**
+    /// (`infra-client-requirements.md` §9.2): every step of [`serve`]'s
+    /// order but the handoff itself, which is returned for the caller to
+    /// carry once it holds no lock of this node's. A package may take as
+    /// long as its patience allows, and a request decided and carried
+    /// under one lock stopped the node's topology, queue and
+    /// administration for that long.
+    ///
+    /// [`serve`]: Gateway::serve
+    pub fn decide(
+        &mut self,
+        me: &Keyhash,
+        table: &Table,
+        requester: &Keyhash,
+        body: &[u8],
+        now: u64,
+    ) -> Decided {
+        let decided = self.evaluate(me, table, requester, body, now);
+        if let Decided::Answered(response) = &decided {
+            tracing::debug!(
+                target: "node",
+                requester8 = %crate::diag::id8(requester),
+                status = response.status,
+                "node.resource"
+            );
+        }
+        decided
+    }
+
     fn evaluate(
         &mut self,
         me: &Keyhash,
@@ -661,15 +707,16 @@ impl Gateway {
         requester: &Keyhash,
         body: &[u8],
         now: u64,
-    ) -> ResourceResponse {
+    ) -> Decided {
+        let answered = |code| Decided::Answered(ResourceResponse::code(code));
         let Ok(req) = ResourceRequest::decode(body) else {
-            return ResourceResponse::code(STATUS_MALFORMED);
+            return answered(STATUS_MALFORMED);
         };
         let Some(binding) = self.bindings.get(&req.resource) else {
-            return ResourceResponse::code(STATUS_REFUSED);
+            return answered(STATUS_REFUSED);
         };
         if !table.horizon(&binding.owner, 2).contains(requester) {
-            return ResourceResponse::code(STATUS_REFUSED);
+            return answered(STATUS_REFUSED);
         }
         // above the patron level: this host's own acknowledgement
         let below_me = table.downline_contains(me, requester)
@@ -681,7 +728,7 @@ impl Gateway {
                 .iter()
                 .any(|a| a.node == *requester && a.grandpatron == *me)
         {
-            return ResourceResponse::code(STATUS_NO_ACK);
+            return answered(STATUS_NO_ACK);
         }
         let Some(row) = self
             .rows
@@ -689,29 +736,29 @@ impl Gateway {
             .filter(|r| r.connect)
             .cloned()
         else {
-            return ResourceResponse::code(STATUS_NO_ROLE);
+            return answered(STATUS_NO_ROLE);
         };
         let parsed = match http::parse(&req.message) {
             Ok(p) => p,
-            Err(_) => return ResourceResponse::code(STATUS_MALFORMED),
+            Err(_) => return answered(STATUS_MALFORMED),
         };
         // **a path under `/.rhtn/` is the node's own**
         // ([`crate::federation`]): a member's request naming one is
         // refused here, so a resource that sees such a path is seeing its
         // host and nothing else
         if parsed.target.starts_with(crate::federation::PATH_PREFIX) {
-            return ResourceResponse::code(STATUS_REFUSED);
+            return answered(STATUS_REFUSED);
         }
         let Some(backend) = binding.backend.clone() else {
-            return ResourceResponse::code(STATUS_UNAVAILABLE);
+            return answered(STATUS_UNAVAILABLE);
         };
         if !backend.running() {
-            return ResourceResponse::code(STATUS_UNAVAILABLE);
+            return answered(STATUS_UNAVAILABLE);
         }
         let authority = binding.authority.clone();
         let limit = binding.declared.budget.requests_per_minute;
         if let Some(spent) = self.over_budget(&req.resource, limit, now) {
-            return spent;
+            return Decided::Answered(spent);
         }
         let session = self.session_for(*requester, req.resource);
         let cred = Credential {
@@ -722,51 +769,12 @@ impl Gateway {
         };
         let message = http::serialise(&parsed, &authority, &cred);
         *self.attempts.entry(req.resource).or_insert(0) += 1;
-        match backend.handle(&message) {
-            // **the answer is parsed and written back, not relayed**
-            // [2026-10-28]. `wire-format.md` §11 field 2 carries *same
-            // reasoning as the request*, and the request's own reasoning
-            // is that opaque means this node does not interpret the
-            // application's semantics — *not that it forwards unexamined
-            // input*. Until this, it forwarded the backend's bytes, so a
-            // package emitting two HTTP messages reached the asking
-            // client with both: §11.2's own *that is the attack*, on the
-            // one leg of the exchange that had no parser.
-            //
-            // **A package whose answer cannot be read is unavailable**,
-            // which is what that status already means here for a trap or
-            // an oversized reply: a defect in the package rather than a
-            // refusal of the asker, and the operator is the one who can
-            // act on it.
-            Ok(resp) => match crate::http::parse_response(&resp) {
-                Ok(parsed) => ResourceResponse {
-                    status: STATUS_DELIVERED,
-                    body: Some(crate::http::serialise_response(&parsed)),
-                },
-                Err(why) => {
-                    tracing::warn!(
-                        target: "node",
-                        resource8 = %crate::diag::id8(&req.resource),
-                        why = ?why,
-                        "node.resource.unreadable"
-                    );
-                    ResourceResponse::code(STATUS_UNAVAILABLE)
-                }
-            },
-            // one attempt, never a retry: the requester decides.  The
-            // sandbox's refusal (exhausted, trapped, oversized) is known
-            // here and nowhere later, since the wire carries one code
-            Err(refusal) => {
-                tracing::debug!(
-                    target: "node",
-                    requester8 = %crate::diag::id8(requester),
-                    resource8 = %crate::diag::id8(&req.resource),
-                    refusal = %refusal,
-                    "node.resource.refused"
-                );
-                ResourceResponse::code(STATUS_UNAVAILABLE)
-            }
-        }
+        Decided::Handoff(Handoff {
+            backend,
+            message,
+            resource: req.resource,
+            requester: *requester,
+        })
     }
 
     /// **The catalog page for `viewer`** (design §11.5, `wire-format.md`
@@ -814,6 +822,99 @@ impl Gateway {
             })
             .take(rhtn_codec::bounds::CATALOG_REPLY_ENTRIES)
             .collect()
+    }
+}
+
+/// **What a request came to once this node's own state was read**
+/// (`infra-client-requirements.md` §9.2): an answer the node composed
+/// itself, or a handoff still to be carried.
+pub enum Decided {
+    /// Answered here: a refusal, or a budget's 429.
+    Answered(ResourceResponse),
+    /// Admitted, and the package not yet asked.
+    Handoff(Handoff),
+}
+
+/// **One admitted request, on its way to the package**: the backend, and
+/// the message as this node re-serialised it with the credential. It holds
+/// nothing of the node's, so it is carried with no lock held.
+pub struct Handoff {
+    backend: Arc<dyn Backend>,
+    message: Vec<u8>,
+    resource: Keyhash,
+    requester: Keyhash,
+}
+
+impl Handoff {
+    /// The resource asked.
+    #[must_use]
+    pub fn resource(&self) -> &Keyhash {
+        &self.resource
+    }
+
+    /// Who asked.
+    #[must_use]
+    pub fn requester(&self) -> &Keyhash {
+        &self.requester
+    }
+
+    /// **Ask the package, once.** Blocks for as long as the backend's
+    /// patience allows.
+    #[must_use]
+    pub fn carry(self) -> ResourceResponse {
+        let (requester, resource) = (self.requester, self.resource);
+        let response = match self.backend.handle(&self.message) {
+            // **the answer is parsed and written back, not relayed**
+            // [2026-10-28]. `wire-format.md` §11 field 2 carries *same
+            // reasoning as the request*, and the request's own reasoning
+            // is that opaque means this node does not interpret the
+            // application's semantics — *not that it forwards unexamined
+            // input*. Until this, it forwarded the backend's bytes, so a
+            // package emitting two HTTP messages reached the asking
+            // client with both: §11.2's own *that is the attack*, on the
+            // one leg of the exchange that had no parser.
+            //
+            // **A package whose answer cannot be read is unavailable**,
+            // which is what that status already means here for a trap or
+            // an oversized reply: a defect in the package rather than a
+            // refusal of the asker, and the operator is the one who can
+            // act on it.
+            Ok(resp) => match crate::http::parse_response(&resp) {
+                Ok(parsed) => ResourceResponse {
+                    status: STATUS_DELIVERED,
+                    body: Some(crate::http::serialise_response(&parsed)),
+                },
+                Err(why) => {
+                    tracing::warn!(
+                        target: "node",
+                        resource8 = %crate::diag::id8(&resource),
+                        why = ?why,
+                        "node.resource.unreadable"
+                    );
+                    ResourceResponse::code(STATUS_UNAVAILABLE)
+                }
+            },
+            // one attempt, never a retry: the requester decides.  The
+            // sandbox's refusal (exhausted, trapped, oversized) is known
+            // here and nowhere later, since the wire carries one code
+            Err(refusal) => {
+                tracing::debug!(
+                    target: "node",
+                    requester8 = %crate::diag::id8(&requester),
+                    resource8 = %crate::diag::id8(&resource),
+                    refusal = %refusal,
+                    "node.resource.refused"
+                );
+                ResourceResponse::code(STATUS_UNAVAILABLE)
+            }
+        };
+        tracing::debug!(
+            target: "node",
+            requester8 = %crate::diag::id8(&requester),
+            status = response.status,
+            "node.resource"
+        );
+        response
     }
 }
 

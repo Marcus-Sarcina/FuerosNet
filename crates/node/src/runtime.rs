@@ -787,15 +787,43 @@ impl LiveNode {
                         // never in early data: the transport defers every
                         // request stream past the handshake; one request
                         // per stream: the transport reads one and answers
-                        let mut view = v.lock().unwrap();
-                        let me = view.me();
-                        let table = view.table.clone_for(me);
-                        let now = view.now();
-                        Some(
-                            view.resources
-                                .serve(&me, &table, &peer, &body, now)
-                                .encode(),
-                        )
+                        //
+                        // **decided under the lock, carried holding nothing**
+                        // (`infra-client-requirements.md` §9.2): a package
+                        // may take all of its patience to answer, and under
+                        // the lock that stopped every other request, the
+                        // queue and the operator's page for as long. The
+                        // call blocks, so it is off the runtime's workers
+                        // too; and what it brought back is answered only if
+                        // the grant it was admitted under still stands
+                        let decided = {
+                            let mut view = v.lock().unwrap();
+                            let me = view.me();
+                            let table = view.table.clone_for(me);
+                            let now = view.now();
+                            view.resources.decide(&me, &table, &peer, &body, now)
+                        };
+                        let response = match decided {
+                            crate::resources::Decided::Answered(r) => r,
+                            crate::resources::Decided::Handoff(h) => {
+                                let (resource, requester) = (*h.resource(), *h.requester());
+                                let carried = tokio::task::spawn_blocking(move || h.carry())
+                                    .await
+                                    .unwrap_or_else(|_| {
+                                        rhtn_archive::catalog::ResourceResponse::code(
+                                            rhtn_archive::catalog::STATUS_UNAVAILABLE,
+                                        )
+                                    });
+                                let view = v.lock().unwrap();
+                                match view.resources.moved_under(&resource, &requester) {
+                                    Some(code) => {
+                                        rhtn_archive::catalog::ResourceResponse::code(code)
+                                    }
+                                    None => carried,
+                                }
+                            }
+                        };
+                        Some(response.encode())
                     }
                     // what a client hands a node (`wire-format.md` §7.10): a
                     // sealed message from nobody it can name, and the wake
