@@ -16,6 +16,6 @@ for l in sys.stdin:
 for o in other: print(o)
 for k in sorted(c): print(c[k],k)
 if last:
-    for k in ('engine','peer_connection','socket','socket_inner','socket_worker','preconnect','transport','fetch_outside','beacon','reach','reach_inner','parts','whole_clip','segments','played_seconds'):
+    for k in ('engine','peer_connection','live','live_media','live_ice','live_state','live_channel','live_echoed','live_sent_audio','live_sent_video','socket','socket_inner','socket_worker','preconnect','transport','fetch_outside','beacon','reach','reach_inner','parts','whole_clip','segments','played_seconds'):
         if k in last: print('  ',k,'=',last[k])
 "

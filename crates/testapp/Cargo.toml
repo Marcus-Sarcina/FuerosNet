@@ -16,6 +16,11 @@ publish = false
 [dependencies]
 rhtn-codec = { path = "../codec" }
 rhtn-crypto = { path = "../crypto" }
+# **the media face** (`src/media.rs`): a live session's other end, so the
+# bench measures one that was really made. MIT OR Apache-2.0, on the crypto
+# provider the workspace already builds [author, 2026-11-25: its download].
+# Nothing a node or a client links.
+str0m = "0.26"
 
 [dev-dependencies]
 rhtn-client = { path = "../client" }

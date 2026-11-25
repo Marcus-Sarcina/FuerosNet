@@ -105,6 +105,12 @@ pub fn clip() -> Vec<u8> {
     out
 }
 
+/// **Who answers a live session's offer**: given the offer's SDP and
+/// where the host said the media port is reached, the answer's SDP or why
+/// there is none. The socket's owner supplies it ([`crate::media`]); this
+/// face stays one request in and one response out.
+pub type Answerer = Box<dyn FnMut(&str, &str) -> Result<String, String> + Send>;
+
 /// The streaming face: the page's own figures, and what it has to say.
 pub struct Stream {
     want: u32,
@@ -124,6 +130,10 @@ pub struct Stream {
     /// **Where its host said its media port is reached**
     /// (`resource-requirements.md` §3.3's `rhtn-media`), as last told.
     pub media: Option<String>,
+    /// Who answers an offer ([`answering`]), where anyone does.
+    ///
+    /// [`answering`]: Stream::answering
+    answerer: Option<Answerer>,
     /// What happened, one JSON line each: the socket's caller prints them.
     pub said: Vec<String>,
 }
@@ -144,8 +154,21 @@ impl Stream {
             live: None,
             answered: false,
             media: None,
+            answerer: None,
             said: Vec::new(),
         }
+    }
+
+    /// **Answer a live session's offer through `by`**
+    /// (`resource-requirements.md` §3.3): the page posts its offer as a
+    /// request of its own, and what `by` gives is that request's answer.
+    #[must_use]
+    pub fn answering(
+        mut self,
+        by: impl FnMut(&str, &str) -> Result<String, String> + Send + 'static,
+    ) -> Stream {
+        self.answerer = Some(Box::new(by));
+        self
     }
 
     /// **Have the page try to reach `address:port` outside the kernel's
@@ -301,6 +324,42 @@ impl Stream {
                 Ok(n) if n < SEGMENTS.len() => answer(200, "video/mp4", None, SEGMENTS[n].to_vec()),
                 _ => answer(404, "text/plain", None, b"no such segment\n".to_vec()),
             },
+            // **a live session's offer**, answered with the session's
+            // other end at this package's media port: the signalling goes
+            // by the ordinary path, and nothing of the session does
+            ("POST", "/offer") => {
+                let offer = String::from_utf8(body).unwrap_or_default();
+                let said = match (self.answerer.as_mut(), self.media.as_deref()) {
+                    (None, _) => Err("this instance holds no media port".to_string()),
+                    (_, None) => {
+                        Err("the host has not said where the media port is reached".to_string())
+                    }
+                    (Some(by), Some(at)) => by(&offer, at),
+                };
+                match said {
+                    Ok(sdp) => {
+                        self.said
+                            .push("{\"what\":\"stream.offer\",\"answered\":true}".into());
+                        answer(200, "application/sdp", None, sdp.into_bytes())
+                    }
+                    Err(why) => {
+                        let plain: String = why
+                            .chars()
+                            .filter(|c| !c.is_control() && *c != '"' && *c != '\\')
+                            .take(200)
+                            .collect();
+                        self.said.push(format!(
+                            "{{\"what\":\"stream.offer\",\"answered\":false,\"why\":\"{plain}\"}}"
+                        ));
+                        answer(
+                            400,
+                            "text/plain; charset=utf-8",
+                            None,
+                            format!("{plain}\n").into_bytes(),
+                        )
+                    }
+                }
+            }
             // **what the page measured**, kept as the page said it where
             // it is one line of JSON and named as unreadable otherwise
             ("POST", "/report") => {
@@ -379,6 +438,7 @@ __SEGS__ segments played as they arrive. Nothing here is one message.</p>
 <table id="t"></table>
 <p><button id="go">Go live for 30 seconds</button></p>
 <video id="v" muted playsinline controls></video>
+<video id="me" muted playsinline autoplay></video>
 <script>
 (() => {
   const PARTS = __PARTS__, WANT = __WANT__, SEGS = __SEGS__, CODEC = "__CODEC__";
@@ -571,6 +631,66 @@ __SEGS__ segments played as they arrive. Nothing here is one message.</p>
     try { row('beacon', String(navigator.sendBeacon('https://' + BESIDE + '/', 'x'))); }
     catch (e) { row('beacon', 'refused: ' + e.message); }
   }
+  // **a live session with this package's media port**: the offer goes as
+  // a request of this page's own and the answer is that request's body;
+  // the session itself goes by no request at all. A channel says a line
+  // every half second and counts what comes back, and the camera and the
+  // microphone are sent where the person's client gives them
+  async function live() {
+    const PC = window.RTCPeerConnection;
+    if (!PC) { row('live', 'no peer connection here'); return; }
+    try {
+      const pc = new PC({ iceServers: [] });
+      let sent = 0, echoed = 0;
+      const ch = pc.createDataChannel('echo');
+      ch.onopen = () => {
+        row('live_channel', 'open');
+        const t = setInterval(() => {
+          if (ch.readyState !== 'open') { clearInterval(t); return; }
+          ch.send('line ' + (sent++));
+        }, 500);
+      };
+      ch.onmessage = () => { echoed++; row('live_echoed', echoed + ' of ' + sent); };
+      ch.onclose = () => row('live_channel', 'closed');
+      pc.oniceconnectionstatechange = () => row('live_ice', pc.iceConnectionState);
+      pc.onconnectionstatechange = () => row('live_state', pc.connectionState);
+      // both where both are given, the camera alone where the microphone
+      // is not, and neither where the person is still being asked after
+      // six seconds: the session does not wait on a question
+      let media = 'none offered';
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const video = { width: 320, height: 240 };
+        const asked = want => Promise.race([
+          navigator.mediaDevices.getUserMedia(want),
+          new Promise((_, no) => setTimeout(() => no({ name: 'no answer in 6 s' }), 6000)),
+        ]);
+        let why = '';
+        for (const want of [{ audio: true, video }, { video }]) {
+          try {
+            const s = await asked(want);
+            s.getTracks().forEach(t => pc.addTrack(t, s));
+            media = s.getTracks().map(t => t.kind).join(' and ') + why;
+            document.getElementById('me').srcObject = s;
+            why = '';
+            break;
+          } catch (e) { why += ' (' + Object.keys(want).join(' and ') + ' not given: ' + e.name + ')'; }
+        }
+        if (why) media = 'none' + why;
+      }
+      row('live_media', media);
+      await pc.setLocalDescription(await pc.createOffer());
+      const r = await fetch('/offer', { method: 'POST', headers: { 'content-type': 'application/sdp' }, body: pc.localDescription.sdp });
+      const said = await r.text();
+      if (r.status !== 200) { row('live', 'the offer was answered ' + r.status + ': ' + said.trim()); return; }
+      await pc.setRemoteDescription({ type: 'answer', sdp: said });
+      row('live', 'answer taken');
+      await new Promise(r => setTimeout(r, 10000));
+      const stats = await pc.getStats();
+      stats.forEach(s => {
+        if (s.type === 'outbound-rtp') row('live_sent_' + s.kind, s.packetsSent + ' packets, ' + s.bytesSent + ' bytes');
+      });
+    } catch (e) { row('live', 'failed: ' + e.message); }
+  }
   async function reach() {
     if (!PROBE) { row('reach', 'not asked'); return; }
     await others();
@@ -595,6 +715,8 @@ __SEGS__ segments played as they arrive. Nothing here is one message.</p>
     row('request_object', String(!!(window.rhtn && typeof rhtn.request === 'function')));
     row('peer_connection', String(typeof RTCPeerConnection !== 'undefined'));
     row('media_devices', String(!!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)));
+    // first, while the session's seconds last
+    if (typeof RTCPeerConnection !== 'undefined') { await live(); report(); }
     await reach();
     report();
     try { await parts(); } catch (e) { row('parts_error', e.message); }

@@ -50,6 +50,10 @@ fn main() -> std::process::ExitCode {
     let mut streaming: Option<rhtn_testapp::stream::Stream> =
         (std::env::var("RHTN_TESTAPP_FACE").as_deref() == Ok("stream"))
             .then(rhtn_testapp::stream::Stream::new);
+    // **the media port, held when it is first known** (`media`): at once
+    // where an image names a probe at it, and otherwise when the host
+    // says where it is reached and a page's offer needs it
+    let mut held: Option<rhtn_testapp::media::Media> = None;
     // **a bench probe, where an image names one**: listen on a port of
     // this host's for a packet that came by no request, and tell the page
     // where to aim a peer connection's first one. Nothing is answered.
@@ -58,7 +62,14 @@ fn main() -> std::process::ExitCode {
         && let Some(face) = streaming.take()
     {
         if let Some(port) = at.rsplit(':').next().and_then(|p| p.parse::<u16>().ok()) {
-            std::thread::spawn(move || listen_for_datagrams(port));
+            // the datagrams are the media port's to say: a packet no
+            // session accepts is one that came by no request
+            match rhtn_testapp::media::Media::start(port) {
+                Ok(m) => held = Some(m),
+                Err(e) => println!(
+                    "{{\"what\":\"stream.probe\",\"port\":{port},\"bound\":false,\"why\":\"{e}\"}}"
+                ),
+            }
             // one port for each way a page might open a stream: its own
             // socket, a window's it made, a worker's, a preconnect, a
             // fetch or a beacon, and a relay a peer connection asks
@@ -67,6 +78,32 @@ fn main() -> std::process::ExitCode {
             }
         }
         streaming = Some(face.probing(&at));
+    }
+    // **a live session's offer is answered at the media port**, at the
+    // first address the host said it is reached by
+    if let Some(face) = streaming.take() {
+        streaming = Some(face.answering(move |offer, at| {
+            let at: std::net::SocketAddr = at
+                .split(' ')
+                .find_map(|a| a.parse().ok())
+                .ok_or("the host named no address this instance can read")?;
+            let media = match held.take() {
+                Some(m) => m,
+                None => rhtn_testapp::media::Media::start(at.port())
+                    .map_err(|e| format!("port {}: {e}", at.port()))?,
+            };
+            let said = if media.port() == at.port() {
+                media.answer(offer, at)
+            } else {
+                Err(format!(
+                    "the host says port {} and this instance holds {}",
+                    at.port(),
+                    media.port()
+                ))
+            };
+            held = Some(media);
+            said
+        }));
     }
     // **and a live session asked for before the page**, where an image
     // names its seconds
@@ -261,35 +298,6 @@ fn tell(url: &str, secret: &[u8; 32], n: &rhtn_testapp::Notice) -> Result<u16, S
         .nth(1)
         .and_then(|c| c.parse().ok())
         .ok_or_else(|| "no status came back".to_string())
-}
-
-/// **Say what arrives on `port` by no request, and answer none of it**: the
-/// sender's address, the size, and whether it opens as a STUN binding
-/// request does. The first thirty-two, so a flood fills no log.
-fn listen_for_datagrams(port: u16) {
-    let socket = match std::net::UdpSocket::bind(("0.0.0.0", port)) {
-        Ok(s) => s,
-        Err(e) => {
-            println!(
-                "{{\"what\":\"stream.probe\",\"port\":{port},\"bound\":false,\"why\":\"{e}\"}}"
-            );
-            return;
-        }
-    };
-    println!("{{\"what\":\"stream.probe\",\"port\":{port},\"bound\":true}}");
-    let _ = std::io::stdout().flush();
-    let mut buf = [0u8; 2048];
-    for _ in 0..32 {
-        let Ok((n, from)) = socket.recv_from(&mut buf) else {
-            return;
-        };
-        // RFC 8489: a binding request is type 0x0001 under the magic cookie
-        let stun = n >= 20 && buf[..2] == [0, 1] && buf[4..8] == [0x21, 0x12, 0xa4, 0x42];
-        println!(
-            "{{\"what\":\"stream.datagram\",\"from\":\"{from}\",\"bytes\":{n},\"stun\":{stun}}}"
-        );
-        let _ = std::io::stdout().flush();
-    }
 }
 
 /// **Say what connects to `port`, and answer none of it**: the caller's
