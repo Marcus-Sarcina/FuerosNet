@@ -3200,6 +3200,7 @@ impl Participant {
                 }
             });
             let took = took.map_err(Refused::new)?;
+            self.pin_known();
             self.save()?;
             Ok(took)
         })

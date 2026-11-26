@@ -835,9 +835,24 @@ impl Net {
             let inlet = Inlet::default();
             let gate: Gate = {
                 let h = handle_for_task.clone();
+                let pins = cfg.pins.clone();
                 Arc::new(move |peer| {
                     let peer = *peer;
-                    h.with_blocking(move |c| c.store.contacts.contains_key(&peer))
+                    let held = h.with_blocking(move |c| {
+                        c.store
+                            .contacts
+                            .contains_key(&peer)
+                            .then(|| c.known.iter().find(|i| i.keyhash == peer).cloned())
+                    });
+                    // **a contact's key is pinned by the time a dial of it
+                    // is decided**: one made on arrival, by the card a
+                    // stranger's first message carried, has passed through
+                    // no call of the shell's that pins, and its candidates
+                    // are dialled as they arrive
+                    if let Some(Some(id)) = &held {
+                        pins.pin_identity(id);
+                    }
+                    held.is_some()
                 })
             };
             // the control stream (`wire-format.md` §9.1): this side's

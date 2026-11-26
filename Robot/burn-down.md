@@ -123,7 +123,7 @@ is decided, built or explicitly deferred; a deferral moves to
 
 | # | Test |
 |---|---|
-| B-36 | A sender holding only a card, end to end |
+| B-36 | A sender holding only a card, end to end. **Done 2026-11-26** (`a_sender_with_no_node_reaches_a_stranger_by_their_card`, sim), and it found two defects: a client that had never attached carried nothing in the seal, so its first message showed unverified and its address offer was dropped; and a recipient dialled a cold caller's candidates before its key was pinned, so the path never opened. Measured after both fixes: attributed, path held on one host, an own-kind message delivered device to device, a message back accepted by the sender's client and never delivered |
 | B-37 | A form against a real package; an answer over the node's bound; a federated package. **Done 2026-11-24**: a slow package (PKG-021's end-to-end test), and a script page against a real package on GXV (the streaming face, `stream.internal`: 32 MiB in 32 parts at 1.76 MiB/s with the check matching, ten segments appended in 0.95 s and played to the end). The desktop's run of the same page is owed |
 
 ### Bench runs never made

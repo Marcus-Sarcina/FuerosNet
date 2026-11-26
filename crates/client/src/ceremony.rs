@@ -7454,6 +7454,12 @@ impl Client {
         let waiting = self.payload.pending.remove(to).unwrap_or_default();
         let me = self.keyhash();
         let alias = self.seal_alias();
+        // a client that has never attached and whose positions never
+        // moved has refreshed nothing: what it can say of itself is
+        // composed here, so its first message is attributed too
+        if self.payload.card.is_none() {
+            self.refresh_card();
+        }
         let card = (!self.payload.heard_from.contains(to))
             .then(|| self.payload.card.clone())
             .flatten();

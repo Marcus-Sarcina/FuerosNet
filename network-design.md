@@ -5679,6 +5679,14 @@ where it answers itself. An identity that runs no node and is in no subnet
 that has one is reachable nowhere and has no card, until it launches a node or
 is adopted into a subnet with one.
 
+**Having no card does not stop an identity writing** [author, 2026-11-26]. One
+that holds another's card may write to them from nowhere, *"we do not need to
+prevent it"*, and what it writes is attributed by the introduction it carries.
+It cannot be written back to as a member is: a message is delivered through
+its recipient's serving node (§14.2.2), and it has none. Where it offered the
+address its device answers at, the recipient's device may dial it, and the two
+hold a direct path (§12.6.3) for as long as both are there.
+
 **Everything above in this section, and the sessions of §14, is said of one
 address.** The resolution walk, the mailbox, the attach, the failover to a
 sibling: each is one client and one node, and an identity holding several

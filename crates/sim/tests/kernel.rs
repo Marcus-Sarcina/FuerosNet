@@ -585,3 +585,156 @@ async fn the_kernel_joins_the_direct_path_honours_the_override_and_sweeps_the_ca
         "sealed, and waiting for carol at bob"
     );
 }
+
+/// **A sender with no node, holding only a card** [author, 2026-11-26:
+/// *"it is fine for an unattached identity holding a user's card to
+/// contact that user, we do not need to prevent it"*]: w1 is in no subnet
+/// and has never attached anywhere, and holds carol's card and nothing
+/// else. Its message reaches carol through carol's node, which holds no
+/// session with it, and carol attributes it by the introduction inside
+/// the seal. The sender offered where its device answers beside that
+/// message, so carol, who holds it as a contact from then, dials it and
+/// what is not a message goes between the two devices. **A message back
+/// does not arrive**: it goes through its recipient's serving node in
+/// every case (design §14.2.2), and this recipient has none.
+// functional: PAY-021
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_sender_with_no_node_reaches_a_stranger_by_their_card() {
+    let _serial = serial().await;
+    let mut sg = Signers::new();
+    let a_c = sg.adopt("carol", "bob", "bob", &[0], 1);
+    let records = [&a_c];
+    let mut view = view_of(
+        "bob",
+        table_of("bob", &sg, &records, &["bob"]),
+        "bob",
+        &[],
+        sg.clock,
+    );
+    view.set_slot(0, Some(kh("carol")), sg.clock);
+    view.attached.insert(kh("carol"));
+    let n = LiveNode::start(node_cfg("bob", 30), view, ids(), anchors());
+    for r in records {
+        n.originate_transaction(&r.bytes);
+    }
+    let seeds = |name: &str| {
+        let mut b =
+            rhtn_codec::cose::sha256(format!("rhtn-test-vectors:{name}:ed25519-seed").as_bytes())
+                .to_vec();
+        b.extend_from_slice(&rhtn_codec::cose::sha256(
+            format!("rhtn-test-vectors:{name}:ml-dsa-65-seed").as_bytes(),
+        ));
+        b
+    };
+    let start = |name: &'static str, known: Vec<Vec<u8>>| {
+        let seeds = seeds(name);
+        tokio::task::spawn_blocking(move || {
+            Participant::start(seeds, known, platform_of(Arc::new(Shell::default())))
+                .expect("starts")
+        })
+    };
+    // carol is bob's member: she holds where bob answers, and attaches
+    let carol = Arc::new(
+        start("carol", vec![material("carol"), material("bob")])
+            .await
+            .unwrap(),
+    );
+    let std::net::SocketAddr::V4(at) = n.addr else {
+        panic!("the node answers on IPv4");
+    };
+    let mut point = Vec::new();
+    NetworkPoint::new(at.ip().octets(), Some(u64::from(at.port()))).encode(&mut point);
+    let record = rhtn_archive::endpoint::endpoint_record(
+        &id("bob"),
+        &[point],
+        rhtn_archive::tx::Seqno {
+            series: 1,
+            counter: 1,
+        },
+    );
+    {
+        let (q, record, addr) = (carol.clone(), record.clone(), n.addr.to_string());
+        tokio::task::spawn_blocking(move || {
+            q.take_endpoint(record).expect("bob's own record");
+            q.attach(idv("bob"), vec![addr], vec![])
+        })
+        .await
+        .unwrap()
+        .expect("carol attaches");
+    }
+    assert!(
+        until(8000, || carol.own_card().is_ok()).await,
+        "carol has a card once she sits under bob and holds where bob answers: {:?}",
+        carol.own_card().err()
+    );
+    let card = carol.own_card().unwrap();
+
+    // w1 knows nobody: the card is everything it holds of carol or of bob
+    let lone = Arc::new(start("w1", vec![material("w1")]).await.unwrap());
+    {
+        let q = lone.clone();
+        let took = tokio::task::spawn_blocking(move || q.take_intake(card))
+            .await
+            .unwrap()
+            .expect("the card is taken");
+        assert_eq!(took.who, idv("carol"));
+    }
+    let next_payload = |p: Arc<Participant>| {
+        tokio::task::spawn_blocking(move || {
+            loop {
+                match p.next_event(5000) {
+                    Some(Event::Payload { from, kind, bytes }) => break Some((from, kind, bytes)),
+                    Some(_) => continue,
+                    None => break None,
+                }
+            }
+        })
+    };
+    let send = |p: Arc<Participant>, to: Vec<u8>, kind: u64, what: &'static [u8]| {
+        tokio::task::spawn_blocking(move || p.send(to, kind, what.to_vec()))
+    };
+    send(lone.clone(), idv("carol"), KIND_APPLICATION, b"cold")
+        .await
+        .unwrap()
+        .expect("sent, with no node of its own");
+    assert_eq!(
+        next_payload(carol.clone()).await.unwrap(),
+        Some((idv("w1"), 0, b"cold".to_vec())),
+        "carol attributes it to a party she never held"
+    );
+    assert!(
+        !n.node.sessions().contains(&kh("w1")),
+        "carol's node holds no session with the sender"
+    );
+
+    // **what carol can send back**. The sender offered where its device
+    // answers beside its first message, and both are on one host here, so
+    // carol's dial of that address opens: she pins the key of a party she
+    // took as a contact on arrival before she dials it
+    assert!(
+        until(6000, || carol.direct_to(idv("w1"))).await,
+        "carol holds a path to the device that wrote to her"
+    );
+    const SHELL: u64 = 100;
+    let relayed = n.node.relayed();
+    send(carol.clone(), idv("w1"), SHELL, b"own kind")
+        .await
+        .unwrap()
+        .expect("sent");
+    assert_eq!(
+        next_payload(lone.clone()).await.unwrap(),
+        Some((idv("carol"), SHELL, b"own kind".to_vec())),
+        "what is not a message goes between the two devices"
+    );
+    assert_eq!(n.node.relayed(), relayed, "and bob relayed none of it");
+    // a message is the recipient's node's to deliver, and there is none
+    send(carol.clone(), idv("w1"), KIND_APPLICATION, b"back")
+        .await
+        .unwrap()
+        .expect("taken by her own client");
+    assert_eq!(
+        next_payload(lone.clone()).await.unwrap(),
+        None,
+        "a message back waits for a node its recipient does not have"
+    );
+}
