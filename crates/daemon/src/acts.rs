@@ -224,10 +224,12 @@ pub fn node_acts(acknowledging: bool) -> Vec<Act> {
         act(
             "install",
             "Install a package on this machine",
-            "The image is fetched before anything is written and this node re-reads its own \
-             configuration before the package is started, so a manifest it will not admit \
-             leaves nothing running. Nobody may reach the package until a role is granted on \
-             it.",
+            // **what sealing costs, said where it is chosen**
+            // (`light-client-requirements.md` §10): this package alone,
+            // after a restart or a restore, until the operator attaches
+            "The image is fetched and the manifest admitted before it starts, so a refusal \
+             leaves nothing running. Nobody reaches it until a role is granted. Sealed, this \
+             package alone is closed after a restart or a restore from backup until you attach.",
             About::Node,
             Brings::HostKey,
             vec![
@@ -260,7 +262,7 @@ pub fn node_acts(acknowledging: bool) -> Vec<Act> {
                 ),
                 p(
                     "sealed",
-                    "seal it: unavailable after the machine restarts, until your device attaches",
+                    "seal its storage: closed after a restart or a restore, until you attach",
                     Kind::Flag,
                 ),
             ],

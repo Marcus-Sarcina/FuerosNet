@@ -81,7 +81,7 @@ is decided, built or explicitly deferred; a deferral moves to
 | B-11 | Phone: form posts, a file picker, binary bodies; check a 3xx answer does not crash the frame | — |
 | B-12 | `live` on the phone: **built 2026-11-25** (see B-55); video capture, PDF scan and `uwb` are still declined there | — |
 | B-13 | Install and offering screens on the desktop (phone only today) | — |
-| B-14 | The install act's seal warning says less than light-client section 10 requires | — |
+| B-14 | **Done 2026-11-26**: the install act's help and its seal flag now say this package alone is closed after a restart or a restore from backup until the operator attaches; before, it named only a restart and "your device" | — |
 | B-15 | **Done 2026-11-26** with B-01: the passage now says the page shows and the declared acts ask | — |
 
 ### Protocol and node
