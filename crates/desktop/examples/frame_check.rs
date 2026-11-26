@@ -139,8 +139,11 @@ fn main() {
             frame::served(&a, false)
         }),
     ] {
-        let origin = frame::origin(resource).unwrap();
-        let mut context = wry::WebContext::new(Some(frame::dir(&dir, resource).join("web")));
+        // **one identity's frame**, since an origin is per identity and
+        // resource [author, 2026-11-26]; the check needs only the one
+        let by = "11".repeat(32);
+        let origin = frame::origin(&by, resource).unwrap();
+        let mut context = wry::WebContext::new(Some(frame::storage(&dir, &by, resource)));
         let w = WindowBuilder::new()
             .with_title(format!("frame check: {}", &resource[..4]))
             .build(&event_loop)

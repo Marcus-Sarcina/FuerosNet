@@ -213,6 +213,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     process = "rhtn-desktop",
                     "diag.anchor"
                 );
+                SIGNS.store(d == Device::Restored, Ordering::Relaxed);
                 *up.device.lock().unwrap() = Some(d);
                 draw(&up, &back, true);
                 for i in &idents {
@@ -1518,7 +1519,7 @@ fn open(
     name: String,
 ) {
     let first = frame::compose("GET", "/", None, b"");
-    let answer = match carry(p, &node, &resource, first, &name, back) {
+    let answer = match carry(p, root, &node, &resource, first, &name, back) {
         Ok(a) => a,
         Err(why) => {
             let _ = back.send_event(Said::ToPage(false, format!("{name}: {why}")));
@@ -1570,13 +1571,22 @@ fn open(
     }));
 }
 
+/// **Whether this desktop signs** [author, 2026-11-24]: restored from the
+/// phrase it does, paired from the phone it declines. Set once, when the
+/// start decides which it is.
+static SIGNS: AtomicBool = AtomicBool::new(false);
+
 /// **One request carried to a resource**, and every ask it answers with
-/// answered (§8.1): `import` is put to the person and a file picked
-/// [author, 2026-11-26]; every other device utility is declined with this
-/// desktop's not having it as the reason — an answer the resource sees,
-/// never a silence — and the person is told what was asked.
+/// answered (§8.1) as D-01 has the desktop answer them [author,
+/// 2026-11-24]: `import` a file picked [2026-11-26], `export` a file
+/// saved, `notify` a standing permission, `sign` on a restored desktop,
+/// `scan` from a connected scanner or an image picked. Every other device
+/// utility is declined with this desktop's not having it as the reason —
+/// an answer the resource sees, never a silence — and the person is told
+/// what was asked.
 fn carry(
     p: &Participant,
+    root: &Path,
     node: &[u8],
     resource: &[u8],
     message: Vec<u8>,
@@ -1594,19 +1604,13 @@ fn carry(
         let Some(ask) = a.ask.take() else {
             return Ok(a);
         };
-        let outcome = if ask.utility == "import" {
-            importing(back, name, &ask)
-        } else {
-            let _ = back.send_event(Said::ToPage(
-                false,
-                format!(
-                    "{name} asked for `{}`, which this desktop has not got; it was told so",
-                    ask.utility
-                ),
-            ));
-            UtilityOutcome::Declined {
-                reason: frame::NO_UTILITY.into(),
-            }
+        let outcome = match ask.utility.as_str() {
+            "import" => importing(back, name, &ask),
+            "export" => exporting(back, name, &ask),
+            "notify" => allowing(back, root, name, &ask),
+            "sign" => signing(back, name, &ask),
+            "scan" => scanning(back, name, &ask),
+            _ => declining(back, name, &ask),
         };
         a = p
             .answer_utility(ask.id, outcome)
@@ -1615,6 +1619,255 @@ fn carry(
     Err(format!(
         "it asked {ASKS_RUNNING} times running, and nothing was shown"
     ))
+}
+
+/// **What this desktop has not got**, declined with that as the reason and
+/// the person told what was asked: a resource wanting it of the phone
+/// says so on its own page [author, 2026-11-24].
+fn declining(
+    back: &EventLoopProxy<Said>,
+    name: &str,
+    ask: &rhtn_ffi::client::UtilityAsk,
+) -> UtilityOutcome {
+    let _ = back.send_event(Said::ToPage(
+        false,
+        format!(
+            "{name} asked for `{}`, which this desktop has not got; it was told so",
+            ask.utility
+        ),
+    ));
+    UtilityOutcome::Declined {
+        reason: frame::NO_UTILITY.into(),
+    }
+}
+
+/// **The question put, and its yes**: a refusal of the asking is a no.
+fn asked_yes(back: &EventLoopProxy<Said>, question: String) -> bool {
+    let (tx, rx) = channel();
+    back.send_event(Said::Ask(question, tx)).is_ok() && rx.recv().unwrap_or(false)
+}
+
+/// **A copy of what the resource holds, handed over as a file** (§8.1's
+/// `export`): the person's yes is the answer, and the file the resource
+/// then answers with is offered for saving as any file it answers with is
+/// ([`offer`]).
+fn exporting(
+    back: &EventLoopProxy<Said>,
+    name: &str,
+    ask: &rhtn_ffi::client::UtilityAsk,
+) -> UtilityOutcome {
+    let q = frame::question(
+        name,
+        "to hand you a copy of what it holds, as a file you then choose where to keep",
+        &ask.purpose,
+        &ask.retention,
+        "Take the file",
+    );
+    if asked_yes(back, q) {
+        UtilityOutcome::Approved
+    } else {
+        UtilityOutcome::Declined {
+            reason: "declined".into(),
+        }
+    }
+}
+
+/// **Standing permission to show this resource's notifications** (§8.1's
+/// `notify`), given where this desktop has a notification service and
+/// kept per resource as the phone keeps it.
+fn allowing(
+    back: &EventLoopProxy<Said>,
+    root: &Path,
+    name: &str,
+    ask: &rhtn_ffi::client::UtilityAsk,
+) -> UtilityOutcome {
+    let declined = |why: &str| UtilityOutcome::Declined { reason: why.into() };
+    if !notifications_shown() {
+        return declined("this desktop has no notification service running");
+    }
+    let q = frame::question(
+        name,
+        "for standing permission to show you its notifications",
+        &ask.purpose,
+        &ask.retention,
+        "Allow it",
+    );
+    if !asked_yes(back, q) {
+        return declined("declined");
+    }
+    if let Err(why) = frame::keep_notify(root, &hex(&ask.resource)) {
+        let _ = back.send_event(Said::ToPage(false, format!("not kept: {why}")));
+        return declined("this desktop could not keep the permission");
+    }
+    UtilityOutcome::Approved
+}
+
+/// **A signature over the resource's exact bytes** (§8.1's `sign`), under
+/// the key this device holds for that resource alone, **on a restored
+/// desktop only** [author, 2026-11-24]: a paired one declines, the phone
+/// being the signing device. The person reads what they sign.
+fn signing(
+    back: &EventLoopProxy<Said>,
+    name: &str,
+    ask: &rhtn_ffi::client::UtilityAsk,
+) -> UtilityOutcome {
+    let declined = |why: &str| UtilityOutcome::Declined { reason: why.into() };
+    if !SIGNS.load(Ordering::Relaxed) {
+        let _ = back.send_event(Said::ToPage(
+            false,
+            format!(
+                "{name} asked for a signature, which a paired desktop does not give; it was told so"
+            ),
+        ));
+        return declined(frame::PAIRED_SIGNS_NOT);
+    }
+    let Some(payload) = ask.payload.as_deref() else {
+        return declined("it named nothing to sign");
+    };
+    let q = frame::question(
+        name,
+        &format!(
+            "you to sign {}, under this desktop's key for it and not your network identity",
+            frame::payload_shown(payload)
+        ),
+        &ask.purpose,
+        &ask.retention,
+        "Sign it",
+    );
+    if asked_yes(back, q) {
+        UtilityOutcome::Approved
+    } else {
+        declined("declined")
+    }
+}
+
+/// **A document scanned** (§8.1's `scan`) [author, 2026-11-24]: from the
+/// scanner this computer has connected where it has one, and an image the
+/// person picks where it has none. Handed over as an image either way,
+/// since this desktop reads no text out of it and makes no PDF.
+fn scanning(
+    back: &EventLoopProxy<Said>,
+    name: &str,
+    ask: &rhtn_ffi::client::UtilityAsk,
+) -> UtilityOutcome {
+    let declined = |why: String| UtilityOutcome::Declined { reason: why };
+    let images = frame::scan_media(&ask.media);
+    if images.is_empty() {
+        return declined(format!(
+            "it asks for {} and this desktop hands a scan over as an image",
+            ask.media.join(" or ")
+        ));
+    }
+    let scanner = scanner();
+    let what = match &scanner {
+        Some((_, model)) => format!("for a document scanned on {model}"),
+        None => "for a document scanned. This computer has no scanner connected, so it is an \
+                 image of the document you pick"
+            .to_string(),
+    };
+    let act = if scanner.is_some() {
+        "Put the document in and scan it"
+    } else {
+        "Pick an image"
+    };
+    if !asked_yes(
+        back,
+        frame::question(name, &what, &ask.purpose, &ask.retention, act),
+    ) {
+        return declined("declined".into());
+    }
+    let (media, bytes) = match scanner {
+        Some((device, _)) => {
+            let format = if frame::takes(&images, "image/png") {
+                "png"
+            } else {
+                "jpeg"
+            };
+            match scan(&device, format) {
+                Ok(b) => (format!("image/{format}"), b),
+                Err(why) => return declined(format!("the scanner did not scan: {why}")),
+            }
+        }
+        None => {
+            let (tx, rx) = channel();
+            if back.send_event(Said::Pick(images.clone(), tx)).is_err() {
+                return declined("this desktop offers no file picker".into());
+            }
+            let Some(path) = rx.recv().ok().flatten() else {
+                return declined("no image was picked".into());
+            };
+            let Ok(bytes) = std::fs::read(&path) else {
+                return declined("this desktop would not open that file".into());
+            };
+            (media_of(&path, &bytes), bytes)
+        }
+    };
+    if bytes.len() > rhtn_client::utility::RESULT_BYTES {
+        return declined("the scan is larger than this desktop can send".into());
+    }
+    if !frame::takes(&images, &media) || !frame::takes(&ask.media, &media) {
+        return declined(format!("the image is {media}, which it did not ask for"));
+    }
+    let _ = back.send_event(Said::ToPage(true, format!("{name} was handed a scan")));
+    UtilityOutcome::Bytes { media, bytes }
+}
+
+/// **The scanner this computer has connected**, as SANE lists it, or
+/// none: the first device `scanimage -L` names, and what it says the
+/// device is, which is what a person recognises.
+fn scanner() -> Option<(String, String)> {
+    let out = std::process::Command::new("scanimage")
+        .arg("-L")
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()?;
+    String::from_utf8_lossy(&out.stdout).lines().find_map(|l| {
+        let rest = l.strip_prefix("device `")?;
+        let (device, said) = rest.split_once('\'')?;
+        let model = said.trim().strip_prefix("is a ").unwrap_or(said.trim());
+        Some((device.to_string(), model.to_string()))
+    })
+}
+
+/// One page scanned on `device`, as `format`.
+fn scan(device: &str, format: &str) -> Result<Vec<u8>, String> {
+    let out = std::process::Command::new("scanimage")
+        .args(["-d", device, &format!("--format={format}")])
+        .stdin(std::process::Stdio::null())
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !out.status.success() || out.stdout.is_empty() {
+        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+    }
+    Ok(out.stdout)
+}
+
+/// **Whether this desktop has a notification service**, by asking the
+/// freedesktop one on the session bus to name itself.
+#[cfg(target_os = "linux")]
+fn notifications_shown() -> bool {
+    use gtk::gio;
+    let Ok(bus) = gio::bus_get_sync(gio::BusType::Session, None::<&gio::Cancellable>) else {
+        return false;
+    };
+    bus.call_sync(
+        Some("org.freedesktop.Notifications"),
+        "/org/freedesktop/Notifications",
+        "org.freedesktop.Notifications",
+        "GetServerInformation",
+        None,
+        None,
+        gio::DBusCallFlags::NONE,
+        2000,
+        None::<&gio::Cancellable>,
+    )
+    .is_ok()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn notifications_shown() -> bool {
+    false
 }
 
 /// **Offer what a resource answered with for saving** (the phone's "Save
@@ -1814,10 +2067,11 @@ fn open_frame(
 
     let carry: rhtn_desktop::window::Carrier = {
         let back = Mutex::new(back.clone());
+        let root = root.to_path_buf();
         Arc::new(move |method, path, media, body, document| {
             let message = frame::compose(method, path, media, body);
             let back = back.lock().unwrap().clone();
-            match carry(&p, &node, &resource, message, &name, &back) {
+            match carry(&p, &root, &node, &resource, message, &name, &back) {
                 // **the page moving to something it cannot show** is
                 // named there, and the bytes offered for keeping here,
                 // as the phone's save does; a script's own request gets

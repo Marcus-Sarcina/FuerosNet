@@ -363,7 +363,9 @@ member is visible.
 
 ---
 
-## 7. A socket-backed package has nowhere to keep its data [queued, author, 2026-11-04]
+## 7. A socket-backed package has nowhere to keep its data [queued, author, 2026-11-04] — **built 2026-11-15**
+
+**Built** as the host's block: the runner mounts a filesystem of the package's own, bounded by a project quota, and the node tells the instance `rhtn-block` (`infra-client-requirements.md` §9.3, PKG-020). What follows is as it was asked for.
 
 **Specified and not implemented.** `infra-client-requirements.md` §9.3 gives
 each hosted instance a storage block — *"a durable region of your own
@@ -402,3 +404,34 @@ features, and this is one — written down, relied on by
 to keep anything. It is not on the acceptance catalogue's owed list because
 the two entries that name a block are satisfied by the wasm path, so nothing
 currently counts this as missing.
+
+---
+
+## 8. Third-party federation on a port of the package's own [author, 2026-11-26]
+
+**Asked for as a future release feature**, when the operator's `relate` act
+was built (B-09): *"it should still be possible for a resource with a non-FN
+federation function to take an open port on install and use it for
+federation ... we should not try to enforce all federation to go through our
+permission structure."* He chose for now that no new mechanism is built, and
+asked for declared support to be listed here.
+
+**What already holds, so nothing is enforced today.** A package on a socket of
+its own runs on its host's network (`package-runner.sh` starts it with
+`--network=host`; `infra-client-requirements.md` §9.2: it "has its own
+network"); a declared port is not a confinement (`infra-client-requirements.md`
+§9.3, of the media port); a launched node sets no firewall; and design §11.0.1
+leaves instance-to-instance connection to "the resource application ... in its
+own architecture". The built-in plane (`/.rhtn/relationships`, envelopes,
+`relate`) is what the core applications use.
+
+**What declared support would add**, on the media port's pattern
+(`infra-client-requirements.md` §9.3, PKG-023): the port named in the
+manifest so the operator reads it at installation; a clash with the node's own
+ports or another package's refused, naming which; and the instance told where
+its port is reached, as `rhtn-media` tells a media port's addresses.
+
+**Open when it is taken up**, each his: TCP, UDP or either; one port or
+several (XMPP between servers uses 5269, Matrix 8448); and whether ports below
+1024 may be declared, which the media port refuses and an ActivityPub server
+in practice wants (443).

@@ -255,11 +255,82 @@ pub fn import_question(name: &str, purpose: &str, retention: &str, media: &[Stri
     } else {
         media.join(" or ")
     };
-    format!(
-        "{name} asks for a file you pick ({types}). It says it is for: \u{201c}{purpose}\u{201d}, \
-         and that it keeps it: \u{201c}{retention}\u{201d}. Those are its words, which this desktop \
-         cannot hold it to. Pick a file?"
+    question(
+        name,
+        &format!("for a file you pick ({types})"),
+        purpose,
+        retention,
+        "Pick a file",
     )
+}
+
+/// **One ask put to the person**: what it asks for, then its purpose and
+/// its retention as the resource's own words, marked as words this
+/// desktop cannot hold it to, then the act.
+pub fn question(name: &str, what: &str, purpose: &str, retention: &str, act: &str) -> String {
+    format!(
+        "{name} asks {what}. It says it is for: \u{201c}{purpose}\u{201d}, and that it keeps it: \
+         \u{201c}{retention}\u{201d}. Those are its words, which this desktop cannot hold it to. \
+         {act}?"
+    )
+}
+
+/// **What the person reads of a payload they are asked to sign**: the
+/// text itself where it is text, and otherwise its size and its first
+/// bytes, never a summary of the resource's.
+pub fn payload_shown(payload: &[u8]) -> String {
+    match std::str::from_utf8(payload) {
+        Ok(t) if !t.chars().any(|c| c.is_control() && c != '\n' && c != '\t') => {
+            format!("\u{201c}{t}\u{201d}")
+        }
+        _ => {
+            let head: String = payload
+                .iter()
+                .take(32)
+                .map(|b| format!("{b:02x}"))
+                .collect();
+            format!(
+                "{} bytes that are not text, beginning {head}{}",
+                payload.len(),
+                if payload.len() > 32 { "\u{2026}" } else { "" }
+            )
+        }
+    }
+}
+
+/// **Why a paired desktop declines a signature** [author, 2026-11-24]: a
+/// restored desktop signs and a paired one does not, the signing device
+/// being the phone.
+pub const PAIRED_SIGNS_NOT: &str = "this desktop was paired from the phone and signs nothing; \
+                                     the phone signs";
+
+/// **The media types a scan may be handed over as here**: the images the
+/// ask takes, or every image where it names none or takes anything.
+pub fn scan_media(asked: &[String]) -> Vec<String> {
+    if asked.is_empty() || asked.iter().any(|a| a == "*/*") {
+        return vec!["image/*".into()];
+    }
+    asked
+        .iter()
+        .filter(|a| a.starts_with("image/"))
+        .cloned()
+        .collect()
+}
+
+/// **Whether this resource holds the person's standing permission to
+/// show its notifications** (§8.1's `notify`), kept per resource as the
+/// phone keeps it.
+pub fn notify_allowed(state: &Path, resource: &str) -> bool {
+    std::fs::read_to_string(dir(state, resource).join("notify"))
+        .map(|t| t.trim() == "allowed")
+        .unwrap_or(false)
+}
+
+/// The permission, kept for the resource.
+pub fn keep_notify(state: &Path, resource: &str) -> Result<(), String> {
+    let d = dir(state, resource);
+    crate::platform::create_private(&d)?;
+    std::fs::write(d.join("notify"), "allowed\n").map_err(|e| format!("{}: {e}", d.display()))
 }
 
 /// **Whether an ask takes `media`**, as the phone decides it: an ask
@@ -737,6 +808,35 @@ mod tests {
             "{q}"
         );
         assert!(import_question("Ledger", "p", "r", &[]).contains("any type"));
+    }
+
+    #[test]
+    fn a_payload_is_shown_as_it_is_and_a_scan_is_an_image() {
+        assert_eq!(payload_shown(b"pay 4 EUR"), "\u{201c}pay 4 EUR\u{201d}");
+        let raw = payload_shown(&[0u8, 1, 2]);
+        assert!(
+            raw.starts_with("3 bytes that are not text, beginning 000102"),
+            "{raw}"
+        );
+        assert!(!raw.contains('\u{2026}'));
+        assert!(payload_shown(&[0xffu8; 40]).ends_with('\u{2026}'));
+        assert_eq!(scan_media(&[]), vec!["image/*".to_string()]);
+        assert_eq!(
+            scan_media(&["application/pdf".into(), "image/png".into()]),
+            vec!["image/png".to_string()]
+        );
+        assert!(scan_media(&["application/pdf".into()]).is_empty());
+    }
+
+    #[test]
+    fn a_notify_permission_is_kept_for_its_resource() {
+        let d = std::env::temp_dir().join(format!("rhtn-desktop-notify-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        assert!(!notify_allowed(&d, R));
+        keep_notify(&d, R).unwrap();
+        assert!(notify_allowed(&d, R));
+        assert!(!notify_allowed(&d, ME), "another resource holds none");
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]
