@@ -357,7 +357,7 @@ elsewhere waits on TLS for that leg.
 ### A node on this machine
 
 ```bash
-packaging/local.sh up      # build, run, enrol, and print the page's URL
+packaging/local.sh up      # build, run, enrol, start its host shell, print the page's URL
 packaging/local.sh down
 ```
 
@@ -367,6 +367,41 @@ instrument. **The operator's key is kept outside the mounted volume**
 (`runs/local-node/operator/`, against `runs/local-node/instance/`), which is
 the whole of design §23.3: an instance that could read its operator's seed
 would be the arrangement this design exists to avoid.
+
+### A package on a node on this machine
+
+For a package's author who wants a node of their own while developing. Linux,
+with docker, or podman with its socket running (`systemctl --user start
+podman.socket`).
+
+1. **`packaging/local.sh up`.** The node runs on this machine's network with
+   both of its ports on 127.0.0.1, as a launched node runs on its host's, and
+   beside it the host shell answers on 127.0.0.1:7450. The operator's key is
+   `runs/local-node/operator/operator.key`; its keyhash is the `keyhash` line
+   of `operator.txt` beside it.
+2. **Push the image and take its digest**, as in the procedure below. A
+   registry on this machine will do: one on `localhost:5000` is pulled from
+   over plain HTTP, which both engines allow for localhost.
+3. **Install, grant and read it as the procedure below says**, with
+   `--at 127.0.0.1:7449 --identity runs/local-node/operator/operator.key` and
+   no token, since the act arrives on the node's own loopback.
+4. **Open it as its owner**: `rhtn resource
+   runs/local-node/operator/operator.key <operator keyhash> 127.0.0.1:7447
+   <resource keyhash> /`, the operator's keyhash naming the node it serves as.
+
+`local.sh down` removes the node, its host shell, every `rhtn-pkg-` container
+on this machine, and the state; `up` again is a new node with a new identity.
+
+**What the host shell is** (`Containerfile.hostshell`): sshd, the engine's
+client and `package-runner.sh`, taking the one restricted line `rhtn keys ssh
+<operator key> --runner` prints, so the node asks it for exactly what a rented
+node's host gives. The engine's socket is mounted into it, which is root on
+this machine as much as being in the engine's group already is: it is for a
+developer's own machine, never a rented one, which has a real host. Two things
+it does not give: a bounded block, since the runner wants ext4 with project
+quotas and says `block none` without them, so a package's block is a surface
+of the host's instead; and the node's own restart and upgrade, which name a
+launched node's container. `local.sh up` again is the local way to both.
 
 ### Why only one leg carries a secret
 
@@ -437,10 +472,9 @@ second install of one resource is an upgrade, keeping its block and its
 secret. `rhtn node remove` stops it and leaves the block, which only its
 operator destroys.
 
-**A node from `local.sh` has no shell on this machine to start a package
-with**, so steps 3 and 6's `node logs` are refused there and say which line
-is missing. `testapp.sh install` is the route on this machine meanwhile: it
-writes the hosting entry itself and restarts the node.
+**On a node on this machine** the procedure is the same, from `local.sh`'s
+operator key and with no token ([A package on a node on this
+machine](#a-package-on-a-node-on-this-machine)).
 
 ### The container contract
 

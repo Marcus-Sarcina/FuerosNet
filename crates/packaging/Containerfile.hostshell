@@ -1,0 +1,35 @@
+# =============================================================================
+#  The host shell a node on a developer's own machine asks (`local.sh`).
+#
+#  A launched node installs a package by asking its host's
+#  `rhtn-package-runner` over ssh on the loopback they share, with a key its
+#  operator's client hands it for that act (`package-runner.sh`). A
+#  developer's machine has no such login and should not be given one: this
+#  is that host, in a container of its own, so the install a developer
+#  drives is the install a rented node runs and not a script standing in
+#  for it.
+#
+#  It holds sshd, the engine's client, and the runner, and nothing else.
+#  root's `authorized_keys` is the one restricted line `rhtn keys ssh
+#  <operator key> --runner` prints, so the only login it takes runs the
+#  runner. **What it starts, it starts on the machine's own engine**, whose
+#  socket is mounted: that is root on this machine as much as being in the
+#  engine's group already is, and why it is for a developer's machine and
+#  never a rented one, which has a real host.
+# =============================================================================
+
+#  pinned by digest, as the node's own bases are
+ARG BASE=alpine:3@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
+FROM ${BASE}
+
+RUN apk add --no-cache openssh-server docker-cli
+
+COPY packaging/package-runner.sh /usr/local/bin/rhtn-package-runner
+COPY packaging/hostshell.sh /usr/local/bin/rhtn-hostshell
+RUN chmod 0755 /usr/local/bin/rhtn-package-runner /usr/local/bin/rhtn-hostshell
+
+#  the runner drives the engine it is given, through that engine's
+#  docker-compatible socket
+ENV RHTN_ENGINE=docker
+
+ENTRYPOINT ["/usr/local/bin/rhtn-hostshell"]
