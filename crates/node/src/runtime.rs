@@ -506,15 +506,18 @@ impl LiveNode {
         let attached = view.clone();
         let reconcile = adjacency.clone();
         // a client is attached while any of its devices holds a session
-        // (`wire-format.md` §8.2): the set of devices per client is what
-        // says when the last has gone
-        let devices: Arc<Mutex<HashMap<Keyhash, std::collections::BTreeSet<[u8; 32]>>>> =
-            Arc::default();
+        // (`wire-format.md` §8.2): the sessions each device holds are what
+        // say when the last has gone. **Counted, not a set** [review,
+        // 2026-11-25]: a device that attaches again before its earlier
+        // session is seen to end holds two, and the earlier one ending
+        // took the client out of the view while the later one was live
+        type Sessions = std::collections::BTreeMap<[u8; 32], usize>;
+        let devices: Arc<Mutex<HashMap<Keyhash, Sessions>>> = Arc::default();
         cfg.on_attach = Some(Arc::new(move |peer, device, up| {
             let mut v = attached.lock().unwrap();
             let mut ds = devices.lock().unwrap();
             if up {
-                ds.entry(peer).or_default().insert(device);
+                *ds.entry(peer).or_default().entry(device).or_insert(0) += 1;
                 v.attached.insert(peer);
                 // **a node that says nothing about this cannot explain an
                 // `OutOfStore`** [bench, 2026-11-10]: an attached client
@@ -531,7 +534,12 @@ impl LiveNode {
                 );
             } else {
                 let left = ds.get_mut(&peer).map(|s| {
-                    s.remove(&device);
+                    if let Some(n) = s.get_mut(&device) {
+                        *n = n.saturating_sub(1);
+                        if *n == 0 {
+                            s.remove(&device);
+                        }
+                    }
                     s.len()
                 });
                 if left.unwrap_or(0) == 0 {

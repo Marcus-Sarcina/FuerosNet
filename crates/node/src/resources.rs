@@ -126,7 +126,6 @@ pub struct Gateway {
     /// Hosted sessions: the identifier under which a resource sees a
     /// principal, minted per (member, resource).
     sessions: BTreeMap<(Keyhash, Keyhash), [u8; 16]>,
-    minted: u64,
     /// When the expiry pass last looked ([`Gateway::lapsed`]), so a grant's
     /// expiry is acted on once, on the first pass at or after it.
     passed: u64,
@@ -558,12 +557,12 @@ impl Gateway {
         if let Some(s) = self.sessions.get(&(member, resource)) {
             return *s;
         }
-        self.minted += 1;
-        let mut pre = b"rhtn/1:hosted-session".to_vec();
-        pre.extend_from_slice(&member);
-        pre.extend_from_slice(&resource);
-        pre.extend_from_slice(&self.minted.to_be_bytes());
-        let id: [u8; 16] = rhtn_codec::cose::sha256(&pre)[..16].try_into().unwrap();
+        // **drawn, never derived** [review, 2026-11-25]: an identifier
+        // made from the member, the resource and a count came out the same
+        // from a gateway started again, so a package was handed a session
+        // it had seen end as though it were new, under whatever roles the
+        // member held by then; and anyone could compute it
+        let id = rhtn_transport::tls::random_bytes::<16>();
         self.sessions.insert((member, resource), id);
         id
     }

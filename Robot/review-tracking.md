@@ -22921,3 +22921,18 @@ is pushed by c3's operator in the test (`Plan::late`, `Subnet::late`,
 - Look: `crates/brand/tokens.toml` → `crates/desktop/ui/tokens.css`; Geist
   and Geist Mono (OFL-1.1, acceptable [author, 2026-11-18]) under
   `crates/brand/res/font/`.
+
+## Reviewer probes of 2026-11-25 (`Robot/reviews/2026-11-25-probes/`)
+
+Seven counterexample tests, no prose. All seven reproduced on 2026-11-25
+against `2865fd0d` (five Rust, two Android) before anything was changed.
+
+| # | Probe | What it shows | Disposition |
+|---|---|---|---|
+| P1 | `review_20261125_missing_relation_must_refuse_start` | A store holding five of its six relations and no blob was taken for no state: a fresh client started over what was left, and its next save wrote the rest away | **Fixed**: some relations and not all refuses the start, naming what is missing (`Participant::open`); `stored_state_missing_one_of_its_parts_refuses_the_start`. The probe passes |
+| P2 | `review_20261125_idle_key_must_expire` | A recipient's newest node key was accepted for ever: rotation happens at a fetch, so a key nobody asked after stayed acceptable for months, against design section 14.2.4.3's "cannot be replayed into the queue past its key's day" | **Fixed**: the newest is accepted for its rotation interval and the grace after (`NodeKeyService::accepts`). The probe passes. **Residual, not the probe's**: the private half of an idle key past its day stays held until a fetch rotates it; deleting it needs a number that survives the deletion |
+| P3 | `review_20261125_published_key_must_survive_restart` | A key the service could not write was published and accepted, and gone after a restart | **Fixed otherwise than the probe asks**: a service that cannot make its directory does not start, and a key whose write fails is not held and the asker is refused (`try_newest`, `FAIL_REFUSED`). The probe as written cannot pass where nothing can be written: it now stops at the service refusing to start |
+| P4 | `review_20261125_old_session_must_not_detach_replacement` | A device attaching again before its earlier session was seen to end was detached when the earlier one closed: the runtime kept a set of devices, not a count of sessions | **Fixed**: sessions counted per device (`runtime.rs`). The probe passes |
+| P5 | `review_20261125_hosted_session_must_be_fresh_after_restart` | The hosted session identifier was a hash of member, resource and a count, so it repeated after a restart and anyone could compute it | **Fixed**: sixteen random bytes. The probe passes |
+| P6 | `another_registered_resource_is_not_this_pages_resource` | The phone's frame proxy carries a request for any resource being served, whichever frame asked: with two framed at once, one page reaches the other's resource as the member | **Open**: the engine's proxy and its credential are one for the whole runtime, so the proxy cannot tell frames apart by them. Proposed: refuse a request whose fetch metadata says it crossed a site, and one whose origin is not the host asked; to be measured with the frame probe |
+| P7 | `opening_the_same_resource_as_another_identity_does_not_replace_the_first_frame` | A resource's origin is its keyhash alone, so a second identity opening it replaces the first's serving, and the two share the page's storage | **Open, put to the author**: an origin per identity and resource |

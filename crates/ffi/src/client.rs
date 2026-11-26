@@ -1018,6 +1018,24 @@ impl Participant {
         let blob = self.storage.read(STATE.into()).filter(|b| b.len() > 1);
         let from_parts = parts.len() == rhtn_client::ceremony::RELATIONS.len();
         let had_blob = blob.is_some();
+        // **some of the relations and not all of them is state that does
+        // not open** [review, 2026-11-25], and refuses the start as a blob
+        // that does not open does: taken for no state at all, it began a
+        // fresh client over what was left and the next save wrote the
+        // rest away
+        if !from_parts && !had_blob && !parts.is_empty() {
+            let missing: Vec<&str> = rhtn_client::ceremony::RELATIONS
+                .iter()
+                .copied()
+                .filter(|n| !parts.iter().any(|(held, _)| held == n))
+                .collect();
+            return Err(Refused::new(format!(
+                "the stored state does not open: it holds {} of its {} parts, and `{}` is missing",
+                parts.len(),
+                rhtn_client::ceremony::RELATIONS.len(),
+                missing.join("`, `")
+            )));
+        }
         if !from_parts && !had_blob {
             return Ok(());
         }

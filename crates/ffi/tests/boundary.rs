@@ -1911,3 +1911,32 @@ async fn a_sender_attached_to_the_recipients_node_fetches_and_submits_as_nobody(
         "her introduction rides until carol has written back, and not after"
     );
 }
+
+// functional: APP-011
+/// **Stored state that is some of its parts and not all of them refuses
+/// the start** [review, 2026-11-25]: a client begun fresh over what was
+/// left would write the rest away at its next save.
+#[test]
+fn stored_state_missing_one_of_its_parts_refuses_the_start() {
+    let shell = Arc::new(Shell::default());
+    let p = Participant::start(seeds("alice"), vec![], platform_of(shell.clone())).unwrap();
+    p.hold_contact(material("bob")).unwrap();
+    p.save().unwrap();
+    assert_eq!(p.contacts().len(), 1);
+    drop(p);
+    let held = shell
+        .store
+        .lock()
+        .unwrap()
+        .remove("payload")
+        .expect("it was written");
+    let refused = match Participant::start(seeds("alice"), vec![], platform_of(shell.clone())) {
+        Ok(_) => panic!("an incomplete store became a fresh client"),
+        Err(e) => e.to_string(),
+    };
+    assert!(refused.contains("`payload` is missing"), "{refused}");
+    // nothing was written over what is left, and with the part back it opens
+    shell.store.lock().unwrap().insert("payload".into(), held);
+    let again = Participant::start(seeds("alice"), vec![], platform_of(shell)).unwrap();
+    assert_eq!(again.contacts().len(), 1);
+}

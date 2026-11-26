@@ -96,6 +96,10 @@ impl NodeKeyService {
     pub fn at(dir: &Path, cfg: NodeKeyConfig) -> std::io::Result<NodeKeyService> {
         let mut s = NodeKeyService::new(cfg);
         let root = dir.join("node-keys");
+        // **a service that cannot keep its keys does not start** [review,
+        // 2026-11-25]: a key published and never written is one whose
+        // queued messages a restart leaves unopenable
+        std::fs::create_dir_all(&root)?;
         if let Ok(rd) = std::fs::read_dir(&root) {
             for e in rd.flatten() {
                 let Some(recipient) = unhex32(&e.file_name().to_string_lossy()) else {
@@ -126,14 +130,16 @@ impl NodeKeyService {
             .map(|d| d.join("node-keys").join(hex(recipient)).join(n.to_string()))
     }
 
-    fn write(&self, recipient: &Keyhash, h: &Held) {
+    /// Write one key where this service keeps them: done where it keeps
+    /// none on disk, and an error where it does and could not.
+    fn write(&self, recipient: &Keyhash, h: &Held) -> std::io::Result<()> {
         let Some(p) = self.path(recipient, h.fields.n) else {
-            return;
+            return Ok(());
         };
         if let Some(parent) = p.parent() {
-            let _ = std::fs::create_dir_all(parent);
+            std::fs::create_dir_all(parent)?;
         }
-        let _ = std::fs::write(&p, write_held(h));
+        std::fs::write(&p, write_held(h))
     }
 
     fn unlink(&self, recipient: &Keyhash, n: u64) {
@@ -150,7 +156,27 @@ impl NodeKeyService {
     /// replaced where the newest is a rotation old; the one replaced is
     /// retired, accepted for its grace and kept while anything sealed to
     /// it is queued. Signed by `node`.
+    ///
+    /// For a caller that keeps its keys in memory, or holds that a write
+    /// here cannot fail; one serving a request asks [`try_newest`].
+    ///
+    /// [`try_newest`]: NodeKeyService::try_newest
     pub fn newest(&mut self, node: &dyn Sign1, recipient: &Keyhash, now: u64) -> Vec<u8> {
+        self.try_newest(node, recipient, now)
+            .expect("a node key is written where it is kept")
+    }
+
+    /// **The same, or why no key is published**: a key this service could
+    /// not write where it keeps them is not held and not served [review,
+    /// 2026-11-25], since a sender would seal to it, the message would be
+    /// queued, and a restart would leave it unopenable. The key before is
+    /// as it was.
+    pub fn try_newest(
+        &mut self,
+        node: &dyn Sign1,
+        recipient: &Keyhash,
+        now: u64,
+    ) -> std::io::Result<Vec<u8>> {
         let due = self
             .keys
             .get(recipient)
@@ -179,22 +205,25 @@ impl NodeKeyService {
                 record,
                 retired_at: None,
             };
+            // written before it is held, so what cannot be kept is never
+            // published
+            self.write(recipient, &held)?;
             let keys = self.keys.entry(*recipient).or_default();
             if let Some(prev) = keys.last_mut() {
                 prev.retired_at = Some(now);
             }
             keys.push(held);
-            let h = self.keys[recipient].last().expect("just pushed");
-            self.write(recipient, h);
             if let Some(prev) = self.keys[recipient].iter().rev().nth(1) {
-                self.write(recipient, prev);
+                // the retirement is the grace's start: one not written is
+                // a key accepted for longer after a restart, never one lost
+                let _ = self.write(recipient, prev);
             }
         }
-        self.keys[recipient]
+        Ok(self.keys[recipient]
             .last()
             .expect("one is held")
             .record
-            .clone()
+            .clone())
     }
 
     /// **Answer a request** (`wire-format.md` §7.8): the newest key for
@@ -215,7 +244,15 @@ impl NodeKeyService {
             .map(|r| NodeKeyReply {
                 nonce,
                 outcome: if serves(r) {
-                    Ok(self.newest(node, r, now))
+                    self.try_newest(node, r, now).map_err(|why| {
+                        tracing::warn!(
+                            target: "node",
+                            recipient8 = %crate::diag::id8(r),
+                            %why,
+                            "node.key.unwritten"
+                        );
+                        FAIL_REFUSED
+                    })
                 } else {
                     Err(FAIL_NOT_SERVED)
                 },
@@ -228,7 +265,17 @@ impl NodeKeyService {
     }
 
     /// **Whether a message sealed to key `n` is taken** (design
-    /// §14.2.4.3): the newest, or the one before within its grace.
+    /// §14.2.4.3): the newest within its day, or the one before within its
+    /// grace.
+    ///
+    /// **The newest is not accepted for ever** [review, 2026-11-25]. A key
+    /// is replaced when somebody asks for one after its day has run, so a
+    /// recipient nobody wrote to kept one key for as long as nobody did,
+    /// and a message sealed to it could be put into the queue months
+    /// later — where §14.2.4.3 has a rotation ensure "a sealed message
+    /// cannot be replayed into the queue past its key's day". So the
+    /// newest is taken for its rotation interval and the grace after it,
+    /// and a sender refused fetches the key that asking then makes.
     pub fn accepts(&self, recipient: &Keyhash, n: u64, now: u64) -> bool {
         let Some(keys) = self.keys.get(recipient) else {
             return false;
@@ -237,7 +284,8 @@ impl NodeKeyService {
             return false;
         };
         if newest.fields.n == n {
-            return true;
+            return now.saturating_sub(newest.fields.published_at)
+                < self.cfg.rotate_secs.saturating_add(self.cfg.grace_secs);
         }
         keys.iter().rev().nth(1).is_some_and(|prev| {
             prev.fields.n == n

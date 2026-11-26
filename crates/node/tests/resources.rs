@@ -3070,3 +3070,49 @@ fn a_request_past_the_minutes_budget_is_answered_as_the_application_would_and_de
     }
     assert_eq!(free.throttled(&R1), 0);
 }
+
+// functional: PKG-013
+/// **A hosted session's identifier is drawn, and a gateway started again
+/// hands out none it handed out before** [review, 2026-11-25]: derived
+/// from the member, the resource and a count, it came out the same after a
+/// restart, under whatever roles the member held by then.
+#[test]
+fn a_hosted_session_identifier_is_fresh_after_a_restart() {
+    let sc = scene();
+    let backend = Arc::new(Fake::new());
+    let serve_as = |role: &str| {
+        let mut g = gateway_with(&sc, backend.clone());
+        g.set_row(
+            R1,
+            kh("carol"),
+            Row {
+                roles: BTreeSet::from([role.to_string()]),
+                connect: true,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            g.serve(
+                &kh("alice"),
+                &sc.table,
+                &kh("carol"),
+                &request(R1, OK_GET),
+                0
+            )
+            .status,
+            STATUS_DELIVERED
+        );
+        let first = g.session(&kh("carol"), &R1).unwrap();
+        // within one run it is the same session, request after request
+        g.serve(
+            &kh("alice"),
+            &sc.table,
+            &kh("carol"),
+            &request(R1, OK_GET),
+            0,
+        );
+        assert_eq!(g.session(&kh("carol"), &R1), Some(first));
+        first
+    };
+    assert_ne!(serve_as("writer"), serve_as("reader"));
+}

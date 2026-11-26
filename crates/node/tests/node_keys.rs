@@ -328,3 +328,127 @@ async fn a_node_keys_private_half_leaves_the_disk_with_its_last_message() {
     assert_eq!(again.node_key(&r).await, newer);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// functional: MAIL-003
+/// **A key nobody rotated is not accepted past its day** [review,
+/// 2026-11-25]: a rotation happens when somebody asks after the interval,
+/// so a recipient nobody writes to keeps one key, and a message sealed to
+/// it must not be put into the queue months later (design §14.2.4.3).
+#[test]
+fn the_newest_key_is_accepted_for_its_day_and_grace_and_no_longer() {
+    use rhtn_node::node_keys::NodeKeyService;
+    let cfg = NodeKeyConfig::default();
+    let grace = cfg.grace_secs;
+    let mut service = NodeKeyService::new(cfg);
+    let record = service.newest(&id("bob"), &kh("carol"), T0);
+    let n = node_key(&record).fields.n;
+    assert!(service.accepts(&kh("carol"), n, T0));
+    assert!(service.accepts(&kh("carol"), n, T0 + DAY + grace - 1));
+    assert!(!service.accepts(&kh("carol"), n, T0 + DAY + grace));
+    service.prune(&kh("carol"), &|_| false, T0 + 100 * DAY);
+    assert!(
+        !service.accepts(&kh("carol"), n, T0 + 100 * DAY),
+        "an idle key is not accepted 100 days later"
+    );
+    // and a sender refused asks, which makes the next
+    let next = node_key(&service.newest(&id("bob"), &kh("carol"), T0 + 100 * DAY));
+    assert_eq!(next.fields.n, n + 1);
+    assert!(service.accepts(&kh("carol"), n + 1, T0 + 100 * DAY));
+}
+
+// functional: MAIL-003
+/// **A key that could not be written is not published** [review,
+/// 2026-11-25]: a service that keeps its keys on disk and cannot make
+/// its directory does not start, and one whose write fails later refuses
+/// the asker and holds nothing, so no message is ever queued under a key
+/// a restart would not have.
+#[test]
+fn a_key_that_cannot_be_kept_is_neither_published_nor_accepted() {
+    use rhtn_archive::node_key::{FAIL_REFUSED, NodeKeyReply, NodeKeyRequest};
+    use rhtn_node::node_keys::NodeKeyService;
+    // where the keys would be kept is a file: nothing can be kept there
+    let root = temp("unwritable-root");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("node-keys"), b"not a directory").unwrap();
+    assert!(
+        NodeKeyService::at(&root, NodeKeyConfig::default()).is_err(),
+        "a service that cannot keep its keys does not start"
+    );
+    std::fs::remove_dir_all(&root).unwrap();
+
+    // the directory is there, and one recipient's place in it is a file
+    let root = temp("unwritable-recipient");
+    std::fs::create_dir_all(root.join("node-keys")).unwrap();
+    let hex: String = kh("carol").iter().map(|b| format!("{b:02x}")).collect();
+    std::fs::write(root.join("node-keys").join(&hex), b"in the way").unwrap();
+    let mut service = NodeKeyService::at(&root, NodeKeyConfig::default()).unwrap();
+    assert!(service.try_newest(&id("bob"), &kh("carol"), T0).is_err());
+    assert!(service.held(&kh("carol")).is_empty(), "nothing is held");
+    assert!(!service.accepts(&kh("carol"), 1, T0));
+    // an asker is refused, and another recipient is served as ever
+    let ask = NodeKeyRequest::One {
+        recipient: kh("carol"),
+        nonce: [7; 16],
+    };
+    let reply = service
+        .answer(&id("bob"), &|_| true, &ask.encode(), T0)
+        .unwrap();
+    assert_eq!(
+        NodeKeyReply::decode(&reply).unwrap().outcome,
+        Err(FAIL_REFUSED)
+    );
+    let kept = node_key(&service.try_newest(&id("bob"), &kh("w1"), T0).unwrap());
+    drop(service);
+    let reopened = NodeKeyService::at(&root, NodeKeyConfig::default()).unwrap();
+    assert_eq!(reopened.held(&kh("w1")), vec![kept.fields.n]);
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+// functional: SES-019
+/// **A device's earlier session ending does not detach the one it holds
+/// now** [review, 2026-11-25]: a client that attaches again before its
+/// earlier session is seen to end is still attached when that one closes.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_earlier_session_ending_does_not_detach_the_one_that_replaced_it() {
+    use rhtn_transport::session::*;
+    let b = Bench::start(T0, None, NodeKeyConfig::default(), |_| {});
+    let cfg = ClientConfig {
+        me: rhtn_transport::tls::Party::of(std::sync::Arc::new(id("carol"))),
+        pins: b.pins.clone(),
+        bind: Default::default(),
+        capabilities: Default::default(),
+        attestation: None,
+        filter: None,
+        sibling_cache: Default::default(),
+        addresses: Default::default(),
+        cursors: Default::default(),
+        tls: Default::default(),
+        connect_timeout: std::time::Duration::from_secs(3),
+        on_reachability: None,
+        log: Log::default(),
+    };
+    let ep = rhtn_transport::tls::client_endpoint("127.0.0.1:0".parse().unwrap()).unwrap();
+    let AttachOutcome::Attached(first) = attach(&cfg, &ep, kh("bob"), b.live.addr, false).await
+    else {
+        panic!("first attach");
+    };
+    let AttachOutcome::Attached(second) = attach(&cfg, &ep, kh("bob"), b.live.addr, false).await
+    else {
+        panic!("second attach");
+    };
+    first.conn.close(0u32.into(), b"old connection closed");
+    // the node reads the old stream's end; this is no heartbeat timeout
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    assert!(
+        second.conn.close_reason().is_none(),
+        "the later one is live"
+    );
+    assert!(
+        b.live.view.lock().unwrap().attached.contains(&kh("carol")),
+        "and its client is still attached"
+    );
+    // and when the last goes, so does the client
+    second.conn.close(0u32.into(), b"gone");
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    assert!(!b.live.view.lock().unwrap().attached.contains(&kh("carol")));
+}

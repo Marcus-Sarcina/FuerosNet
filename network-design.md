@@ -6622,7 +6622,10 @@ key, and deletion is still by message. **A node accepts a message sealed to
 its newest key for the recipient, and to the one before only for a grace of
 generous network latency after the rotation** [author, 2026-11-19] — thirty
 seconds as shipped, the node's own to change — so a sealed message cannot be
-replayed into the queue past its key's day. A sender refused for a stale key
+replayed into the queue past its key's day. **The newest key is itself accepted
+only for its day and that grace**: a key is replaced when somebody asks for one
+after its day has run, so one nobody has asked after is refused from then, and
+the sender refused is given its successor. A sender refused for a stale key
 fetches the newest and seals again, which costs it nothing, and a recipient
 remembers what it has opened under the two newest keys alone (`wire-format.md`
 §7.8.1).
