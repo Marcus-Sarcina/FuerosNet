@@ -206,9 +206,9 @@ pub struct Sender<'a> {
     pub secret: &'a EncryptionSecret,
     /// The alias shown with it, display only.
     pub alias: &'a str,
-    /// Its own introduction, on a message to a recipient it has had no
-    /// reply from.
-    pub introduction: Option<&'a [u8]>,
+    /// Its own card, or its introduction where it could compose none, on
+    /// a message to a recipient it has had no reply from.
+    pub card: Option<&'a [u8]>,
 }
 
 /// **Seal `kind` and `bytes` to `to`** (`wire-format.md` §7.8.1): an X-Wing
@@ -232,13 +232,13 @@ pub fn seal_to(
     let (ss_n, ct_n) = xwing::encapsulate(&node_key.public, &eseed)
         .map_err(|e| PayloadError::Malformed(e.into()))?;
     let key = seal::message_key(&ss_r, &ss_n, to, &node_key.node, node_key.n, &ct_r, &ct_n);
-    let fields = SealedBody::tagged(from.keyhash, from.alias, from.introduction, kind, bytes);
+    let fields = SealedBody::tagged(from.keyhash, from.alias, from.card, kind, bytes);
     let tag_key = from.secret.tag_key(&their.auth, from.keyhash, to);
     let tag = seal::tag(&tag_key, &ct_r, &ct_n, &fields);
     let body = SealedBody {
         sender: *from.keyhash,
         alias: from.alias.to_string(),
-        introduction: from.introduction.map(<[u8]>::to_vec),
+        card: from.card.map(<[u8]>::to_vec),
         kind,
         bytes: bytes.to_vec(),
         tag,
@@ -351,8 +351,9 @@ pub struct PayloadState {
     /// Whether [`PayloadState::secret`] came in a pairing, and so is
     /// written.
     pub secret_handed: bool,
-    /// **This device's own introduction**, carried in the seal on its
-    /// messages to a recipient until one replies (`wire-format.md` §7.8.1):
+    /// **This device's own card**, or its introduction where it could
+    /// compose no card, carried in the seal on its messages to a recipient
+    /// until one replies (`wire-format.md` §7.8.1):
     /// refreshed at attach and whenever the positions move, and never
     /// written.
     pub card: Option<Vec<u8>>,

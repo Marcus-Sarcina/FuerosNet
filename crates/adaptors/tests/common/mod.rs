@@ -105,7 +105,7 @@ pub fn seal_under(
         keyhash: &me,
         secret: &mine,
         alias: from,
-        introduction,
+        card: introduction,
     };
     let mut fresh = |out: &mut [u8]| {
         for c in out.chunks_mut(32) {

@@ -614,6 +614,10 @@ impl NodeView {
             let prior = *prior;
             self.keep_in_force(&prior);
         }
+        // and the most recent peering of the pair this one joins
+        if let Some(pair) = crate::store::peered(&rec) {
+            self.store.keep_peering(&pair);
+        }
         let issued = outcome.acks.clone();
         (self.fold_slot(&rec, me, &outcome), issued)
     }
@@ -704,6 +708,26 @@ impl NodeView {
             .collect();
         for (m, p) in gone {
             self.store.keep_in_force(&m, &p, &[]);
+        }
+        // **a peering likewise** [author, 2026-11-25]: the most recent of
+        // each pair, for as long as either of the two is within the
+        // horizon.  The table holds no peering, so what it must speak of
+        // before one is dropped is either of the parties: a table lost and
+        // not yet repaired knows neither and drops nothing
+        let joined: BTreeSet<(Keyhash, Keyhash)> =
+            self.store.kept().filter_map(crate::store::peered).collect();
+        for pair in joined {
+            let (a, b) = pair;
+            let spoken = self
+                .table
+                .bindings()
+                .iter()
+                .any(|x| [x.node, x.patron].iter().any(|k| *k == a || *k == b));
+            if !within(&a) && !within(&b) && spoken {
+                self.store.drop_peering(&pair);
+            } else {
+                self.store.keep_peering(&pair);
+            }
         }
     }
 

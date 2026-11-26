@@ -1899,7 +1899,7 @@ async fn a_sender_attached_to_the_recipients_node_fetches_and_submits_as_nobody(
     let bodies: Vec<(Vec<u8>, bool)> = sealed_bodies(&node, "carol")
         .into_iter()
         .filter(|b| b.sender == alice_k)
-        .map(|b| (b.bytes, b.introduction.is_some()))
+        .map(|b| (b.bytes, b.card.is_some()))
         .collect();
     assert_eq!(
         bodies,

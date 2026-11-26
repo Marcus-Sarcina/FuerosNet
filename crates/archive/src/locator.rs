@@ -168,6 +168,16 @@ impl Card {
     }
 }
 
+/// **What a sealed body carries of its sender, read** (`wire-format.md`
+/// §7.8.1): the introduction inside its card, or the introduction it is
+/// where the sender could compose no card.  Verified either way.
+pub fn carried_introduction(b: &[u8]) -> Result<Introduction, String> {
+    match Card::parse(b) {
+        Ok(card) => Ok(card.introduction),
+        Err(_) => Introduction::parse(b),
+    }
+}
+
 /// Compose a `Card` from an introduction, the key material of the anchor
 /// its locator names, and that anchor's published records.  The entry is
 /// optional; everything else is not.

@@ -747,9 +747,11 @@ does not reinvent its parts.
   Fetch its key and submit under a transport key you mint for that
   connection, never your identity's (`wire-format.md` §7.8, §7.10), **and do
   so where you are attached to that node yourself** [author, 2026-11-19]: the
-  session you hold there names you. Your introduction rides inside the seal on
-  your messages to a recipient until you have had a reply from it [author,
-  2026-11-20].
+  session you hold there names you. Your card rides inside the seal on your
+  messages to a recipient until you have had a reply from it [author,
+  2026-11-20, 2026-11-25], so a stranger you write to can answer from the
+  message alone; where you hold no record of where your anchor answers and
+  can compose no card, your introduction rides in its place.
 - **Every identity is a leaf.** A patron is a person on devices that may be
   offline, and a patron who runs no node is a light client like any other
   [author, 2026-11-14]: a message to one takes this construction, through
@@ -1146,12 +1148,15 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   a contact with no upstream among your holdings goes last, because
   pruning it is losing it: that party you will need introduced again,
   which is the ordinary way of meeting anybody (design §12.3 Case 0).
-- **Take a cold call** [author, 2026-10-30]: anyone holding your locator can
-  write to you first, and their first message carries their introduction
-  (`wire-format.md` §7.10.1). Take it where the material hashes to the
+- **Take a cold call** [author, 2026-10-30; 2026-11-25: *"cold calls are
+  expected behavior from any user holding your card"*]: anyone holding your
+  card can write to you first, and their first message carries their own
+  (`wire-format.md` §7.8.1). Take it where the material hashes to the
   keyhash the channel names — it is what a scanned code carries, presented
-  by its own holder — and hold them as a contact introduced, so the
-  message that follows is attributable. **Whether to accept what they then
+  by its own holder — its anchor first and then its introduction, and hold
+  them as a contact introduced, so the message that follows is attributable
+  and you can answer it from what it brought. One that carries an
+  introduction and no card is taken the same, less the anchor. **Whether to accept what they then
   say is your policy, and the default is yes**; a query the subject of a
   ceremony consented to is accepted whatever that policy says of other cold
   messages, since the consent names the one asking and the subject is a

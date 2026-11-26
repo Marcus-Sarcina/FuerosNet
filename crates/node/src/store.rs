@@ -107,6 +107,18 @@ pub fn relationship(rec: &Record) -> Option<(Keyhash, Keyhash)> {
     }
 }
 
+/// **The two identities a peering joins**, in keyhash order so the pair is
+/// one whichever way the record names them.  A node keeps the most recent
+/// peering of a pair in its horizon as it keeps an adoption in force
+/// (`infra-client-requirements.md` §4.3) [author, 2026-11-25].
+pub fn peered(rec: &Record) -> Option<(Keyhash, Keyhash)> {
+    if rec.tx_type != TYPE_PEERING {
+        return None;
+    }
+    let (a, b) = (rec.field_hash(1)?, rec.field_hash(2)?);
+    Some(if a <= b { (a, b) } else { (b, a) })
+}
+
 /// Whether a transaction type travels in the topology class at all.
 pub fn is_topology_class(tx_type: u64) -> bool {
     matches!(
@@ -336,6 +348,51 @@ impl TopologyStore {
     /// The records in force this node keeps of other parties.
     pub fn kept(&self) -> impl Iterator<Item = &Record> {
         self.kept.values()
+    }
+
+    /// **Hold, of the peerings between `pair`, the most recent and no
+    /// other** [author, 2026-11-25]: by effective time and then
+    /// identifier, among what is kept and what this run stored.  One this
+    /// node signed is among its own acts and not repeated here.
+    pub fn keep_peering(&mut self, pair: &(Keyhash, Keyhash)) {
+        let newest = self
+            .kept
+            .values()
+            .chain(self.transactions.values())
+            .filter(|r| peered(r).as_ref() == Some(pair))
+            .max_by_key(|r| (r.effective, r.txid))
+            .cloned();
+        self.kept.retain(|_, r| peered(r).as_ref() != Some(pair));
+        if let Some(r) = newest
+            && !self.own.contains_key(&r.txid)
+        {
+            self.kept.insert(r.txid, r);
+        }
+    }
+
+    /// Drop what is kept of the peerings between `pair`.
+    pub fn drop_peering(&mut self, pair: &(Keyhash, Keyhash)) {
+        self.kept.retain(|_, r| peered(r).as_ref() != Some(pair));
+    }
+
+    /// **Every peering this node holds**: what this run stored, what it
+    /// keeps of other parties across a restart, and its own.  One record
+    /// each, however many of the three hold it.
+    pub fn peerings(&self) -> Vec<Record> {
+        let mut out: BTreeMap<Txid, Record> = BTreeMap::new();
+        for r in self.transactions.values().chain(self.kept.values()) {
+            if r.tx_type == TYPE_PEERING {
+                out.insert(r.txid, r.clone());
+            }
+        }
+        for b in self.own.values() {
+            if let Ok(r) = Record::parse(b)
+                && r.tx_type == TYPE_PEERING
+            {
+                out.insert(r.txid, r);
+            }
+        }
+        out.into_values().collect()
     }
 
     /// **The adoption that placed `subordinate` under `patron`**, the
@@ -924,7 +981,7 @@ impl TopologyStore {
                     st.seen.insert(rec.txid, rec.effective);
                     if preceding {
                         st.own.insert(rec.txid, bytes);
-                    } else if relationship(&rec).is_some() {
+                    } else if relationship(&rec).is_some() || peered(&rec).is_some() {
                         st.kept.insert(rec.txid, rec);
                     }
                 }

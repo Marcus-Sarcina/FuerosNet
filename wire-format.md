@@ -3484,9 +3484,14 @@ SealedBody = [
                        ;   is the header that indexes a thread, two
                        ;   senders of one alias kept apart by the keyhash
                        ;   [author, 2026-11-20]; neither is an address
-  Introduction / nil,  ; the sender's own (§2.3), on its messages to this
-                       ;   recipient until it has had a reply from it, and
-                       ;   nil from then [author, 2026-11-20]
+  Card / Introduction / nil,
+                       ; the sender's own card (§2.4), on its messages to
+                       ;   this recipient until it has had a reply from it,
+                       ;   and nil from then [author, 2026-11-20,
+                       ;   2026-11-25]. Its introduction (§2.3) where it
+                       ;   holds no record of where its anchor answers and
+                       ;   so can compose no card: the two are told apart
+                       ;   by their length, five elements and four
   uint,                ; the kind (§7.10.1)
   bstr,                ; the bytes
   bstr .size 32        ; the tag
@@ -3503,9 +3508,17 @@ tag convinces the recipient and proves nothing to anyone else.
 **Opening.** The recipient decapsulates `ctR` under its own key and takes
 `ssN` from its node (§7.10), derives the message key and opens the body. **It
 then attributes it**: the sender's field-3 key comes from the introduction it
-already holds for field 1, or from the one in field 3, which MUST hash to field
-1 and verify as §2.3 requires; the tag MUST verify under it. **A body that does
-not open, or whose tag fails, is discarded** and contributes nothing. **A body
+already holds for field 1, or from the one field 3 carries, inside its card or
+alone, which MUST hash to field 1 and verify as §2.3 requires, a card as §2.4
+requires; the tag MUST verify under it. **A body that does
+not open, or whose tag fails, is discarded** and contributes nothing. **The
+card is what lets a stranger be answered** [author, 2026-11-25]: *"cold calls
+are expected behavior from any user holding your card."* A recipient that takes
+the sender as a contact takes the card's anchor with it, its key material and
+where it answers, as it takes a card handed over at a meeting (§2.4), so its
+reply starts the walk to the sender from the message alone. A sender carrying
+its introduction alone is attributed the same, and answered where the recipient
+can find that anchor some other way. **A body
 with no introduction held or carried is kept as unverified** (design
 §14.2.4.3): shown under its alias and marked so, and not answered, since its
 sender is no contact. A recipient discards a sealed

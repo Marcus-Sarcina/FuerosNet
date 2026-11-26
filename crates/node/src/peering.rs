@@ -144,11 +144,7 @@ impl NodeView {
     /// from held topology (design §12.7.5).
     pub fn peers_of(&self, node: &Keyhash) -> BTreeSet<Keyhash> {
         let mut out = BTreeSet::new();
-        for rec in self
-            .store
-            .transactions()
-            .filter(|r| r.tx_type == TYPE_PEERING)
-        {
+        for rec in &self.store.peerings() {
             let ends = subjects(rec);
             if ends.contains(node) {
                 out.extend(ends.into_iter().filter(|e| e != node));
@@ -167,8 +163,8 @@ impl NodeView {
     /// The peering records this node holds, parsed.
     pub fn peerings(&self) -> Vec<Peering> {
         self.store
-            .transactions()
-            .filter(|r| r.tx_type == TYPE_PEERING)
+            .peerings()
+            .iter()
             .filter_map(|r| Peering::from_record(r).ok())
             .collect()
     }

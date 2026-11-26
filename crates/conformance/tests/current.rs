@@ -31,8 +31,8 @@ fn r02_a_sealed_message_must_match_the_named_senders_bound_identity() {
     let node_secret=rhtn_crypto::xwing::Secret::from_seed([21;32]);
     let held=NodeKeyHeld{node:node.public.keyhash,n:1,public:Box::new(*node_secret.public())};
     // Carol seals naming Alice as its sender, under Carol's own secret
-    let forged=seal_to(&Sender{keyhash:&victim.public.keyhash,secret:&carol,alias:"Alice",introduction:None},&recipient.public.keyhash,&key_of(recipient.public.keyhash,&bob),&held,0,b"message from Carol",&mut fresh).unwrap();
-    let honest=seal_to(&Sender{keyhash:&sender.public.keyhash,secret:&carol,alias:"Carol",introduction:None},&recipient.public.keyhash,&key_of(recipient.public.keyhash,&bob),&held,0,b"message from Carol",&mut fresh).unwrap();
+    let forged=seal_to(&Sender{keyhash:&victim.public.keyhash,secret:&carol,alias:"Alice",card:None},&recipient.public.keyhash,&key_of(recipient.public.keyhash,&bob),&held,0,b"message from Carol",&mut fresh).unwrap();
+    let honest=seal_to(&Sender{keyhash:&sender.public.keyhash,secret:&carol,alias:"Carol",card:None},&recipient.public.keyhash,&key_of(recipient.public.keyhash,&bob),&held,0,b"message from Carol",&mut fresh).unwrap();
     let open=|sealed:&[u8]|{let s=rhtn_archive::sealed::Sealed::decode(sealed).unwrap();let half=node_secret.decapsulate(&s.ct_n);open_relayed(&bob,&recipient.public.keyhash,&node.public.keyhash,&rhtn_archive::submission::unrelayed(&rhtn_archive::submission::relayed(1,sealed,&half)).unwrap()).unwrap()};
     let (s,b)=open(&honest);
     assert!(tag_verifies(&bob,&recipient.public.keyhash,&key_of(sender.public.keyhash,&carol),&s,&b),"control: Carol's own message is attributed to Carol");

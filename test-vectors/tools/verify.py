@@ -1304,7 +1304,11 @@ else:
     check(not _opened_wrong, "seal: carol's half alone opens nothing")
     if _body is not None:
         _sb = canonical(_body)
-        _intro = _sb[2]
+        # field 3 is the sender's card (§2.4), five elements, whose second is
+        # its introduction; an introduction alone is four (§7.8.1)
+        _carried = _sb[2]
+        _intro = _carried[1] if len(_carried) == 5 else _carried
+        check(len(_carried) == 5, "seal: a first message carries the sender's card")
         _alice_auth_pub = bytes.fromhex(_intro[2][3])
         _, _carol_auth = _secrets('carol')
         _dh = _XPriv.from_private_bytes(_carol_auth).exchange(_XPub.from_public_bytes(_alice_auth_pub))

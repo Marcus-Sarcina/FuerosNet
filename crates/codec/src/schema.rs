@@ -1432,8 +1432,10 @@ fn sealed_ok(item: &Item) -> Result<(), Error> {
     }
 }
 
-/// A `SealedBody` (§7.8.1): the sender, its alias, its introduction or
-/// nil, the kind, the bytes and the 32-byte tag.
+/// A `SealedBody` (§7.8.1): the sender, its alias, its card — its
+/// introduction where it could compose no card — or nil, the kind, the
+/// bytes and the 32-byte tag.  The two are told apart by their length, a
+/// card being five elements and an introduction four.
 fn sealed_body_ok(b: &[u8], item: &Item) -> Result<(), Error> {
     let Item::Array(a) = item else {
         return Err(Error("a sealed body is an array"));
@@ -1451,7 +1453,10 @@ fn sealed_body_ok(b: &[u8], item: &Item) -> Result<(), Error> {
     }
     if !matches!(a[2], Item::Null) {
         let parts = array_item_ranges(b, 0).ok_or(Error("array walk"))?;
-        introduction_ok(b, parts[2].start)?;
+        match &a[2] {
+            Item::Array(v) if v.len() == 5 => card_ok(b, parts[2].start)?,
+            _ => introduction_ok(b, parts[2].start)?,
+        }
     }
     as_uint(&a[3]).ok_or(Error("a kind is a uint"))?;
     if !matches!(a[4], Item::Bytes(_)) {

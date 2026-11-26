@@ -234,6 +234,12 @@ guarantee, which is a floor rather than a ceiling.
   2026-11-25]. No clock ends it. A departure or a disavowal is a deliberate
   act of consequence: forgetting a disavowal costs more than holding it, and
   such acts are slow to accumulate.
+- **Keep the most recent peering between two identities, either of whom is
+  in your horizon** [author, 2026-11-25]. Whoever signed it and across a
+  restart, as you keep an adoption in force: a later peering of the same two
+  takes the earlier one's place, and it goes when neither of them is in your
+  horizon any longer. It is what you say an identity's peers are from, and
+  where they were when they peered (design §12.7.5).
 - **Those records are proof of where an identity stands, and your table is
   still the reference** [author, 2026-11-25]. Do not fold them, and do not
   rebuild a table you have lost from them. One of them is what you answer an

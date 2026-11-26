@@ -241,7 +241,7 @@ async fn send(addr: SocketAddr, from: &str, to: &str, bytes: &[u8]) -> u64 {
             keyhash: &kh(from),
             secret: &mine,
             alias: from,
-            introduction: None,
+            card: None,
         },
         &kh(to),
         &their,

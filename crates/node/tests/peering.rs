@@ -23,6 +23,11 @@ const SUBNET: [u8; 32] = [0xdb; 32];
 /// A peering transaction between two infra nodes, each asserting its own
 /// address and ASN.
 fn peering(a: &str, b: &str, a_point: NetworkPoint, b_point: NetworkPoint) -> Record {
+    peering_at(a, b, a_point, b_point, 1_800_000_000)
+}
+
+/// The same, made at `time`.
+fn peering_at(a: &str, b: &str, a_point: NetworkPoint, b_point: NetworkPoint, time: u64) -> Record {
     let (ia, ib) = (id(a), id(b));
     let pop = rhtn_codec::cose::sha256(format!("pop:{a}:{b}").as_bytes());
     let back_a = vec![rhtn_archive::genesis(&ia.public.keyhash)];
@@ -33,11 +38,95 @@ fn peering(a: &str, b: &str, a_point: NetworkPoint, b_point: NetworkPoint) -> Re
         &ib.public.keyhash,
         &a_point,
         &b_point,
-        1_800_000_000,
+        time,
         Some(1 << 20),
         &pop,
     );
     Record::parse(&tx::envelope(tx::TYPE_PEERING, &body, &[&ia, &ib])).expect("well-formed")
+}
+
+/// The bodies a saved store holds of other parties' records.
+fn kept_on_disk(n: &NodeView, tag: &str) -> Vec<Vec<u8>> {
+    let dir = std::env::temp_dir().join(format!("rhtn-peering-{tag}-{}", std::process::id()));
+    n.store.save(&dir).unwrap();
+    let mut out: Vec<Vec<u8>> = std::fs::read_dir(dir.join("tx"))
+        .map(|rd| {
+            rd.filter_map(Result::ok)
+                .map(|e| std::fs::read(e.path()).unwrap())
+                .collect()
+        })
+        .unwrap_or_default();
+    out.sort();
+    out
+}
+
+// acceptance: TOP-45
+// functional: TOP-035
+#[test]
+fn the_most_recent_peering_of_a_pair_in_the_horizon_is_kept_across_a_restart_and_no_longer() {
+    let (mut w, mut o, fab) = observer();
+    let a_point = NetworkPoint::new([203, 0, 113, 7], Some(7431)).with_asn(64_496);
+    let b_point = NetworkPoint::new([198, 51, 100, 9], Some(7432)).with_asn(64_497);
+    // bob is two hops from carol, through alice; w5 is nowhere in her
+    // horizon, and one party in it is enough
+    let first = peering("bob", "w5", a_point.clone(), b_point.clone());
+    assert_eq!(
+        o.take_object(&*fab, &kh("alice"), KIND_TRANSACTION, &first.bytes, &ids()),
+        Decision::Stored
+    );
+    assert_eq!(kept_on_disk(&o, "kept"), vec![first.bytes.clone()]);
+
+    // **a later one between the same two takes its place**
+    let later = peering_at(
+        "bob",
+        "w5",
+        a_point,
+        b_point.with_asn(64_496),
+        1_800_000_500,
+    );
+    assert_eq!(
+        o.take_object(&*fab, &kh("alice"), KIND_TRANSACTION, &later.bytes, &ids()),
+        Decision::Stored
+    );
+    assert_eq!(kept_on_disk(&o, "kept"), vec![later.bytes.clone()]);
+
+    // **a restart holds it**: the node that comes back still says who
+    // bob's peer is, and where
+    let dir = std::env::temp_dir().join(format!("rhtn-peering-kept-{}", std::process::id()));
+    let derived = o.materialise();
+    let (_, mut again, _) = observer();
+    again.store = rhtn_node::store::TopologyStore::load(&dir).unwrap();
+    again.restore_materialised(Some(&derived), &ids());
+    assert_eq!(again.peers_of(&kh("bob")), BTreeSet::from([kh("w5")]));
+    assert_eq!(again.peerings().len(), 1);
+    assert_eq!(again.peerings()[0].b_point.asn, Some(64_496));
+    assert_eq!(kept_on_disk(&again, "again"), vec![later.bytes.clone()]);
+
+    // **and it goes when neither of the two is in the horizon any longer**:
+    // bob leaves alice, and at the next write-back nothing is kept of it
+    let d = w.depart(
+        "bob",
+        "alice",
+        Seqno {
+            series: 1,
+            counter: 1,
+        },
+    );
+    assert_eq!(
+        o.take_object(&*fab, &kh("alice"), KIND_TRANSACTION, &d.bytes, &ids()),
+        Decision::Stored
+    );
+    o.settle_kept();
+    assert!(
+        !kept_on_disk(&o, "kept").contains(&later.bytes),
+        "a peering neither of whose parties is in view"
+    );
+
+    for tag in ["kept", "again"] {
+        let _ = std::fs::remove_dir_all(
+            std::env::temp_dir().join(format!("rhtn-peering-{tag}-{}", std::process::id())),
+        );
+    }
 }
 
 /// An observer in A's horizon: A (bob) under root (alice), B (w5) elsewhere.

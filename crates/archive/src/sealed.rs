@@ -74,9 +74,13 @@ pub struct SealedBody {
     pub sender: Keyhash,
     /// Its alias: display only, unverified until the tag is checked.
     pub alias: String,
-    /// The sender's own `Introduction`, on its messages to this recipient
-    /// until it has had a reply.
-    pub introduction: Option<Vec<u8>>,
+    /// **The sender's own `Card`** (`wire-format.md` §2.4), on its
+    /// messages to this recipient until it has had a reply [author,
+    /// 2026-11-25]: everything that reaches the sender's address, so a
+    /// stranger is answered from the message alone. Its `Introduction`
+    /// where it holds no record of where its anchor answers and so could
+    /// compose no card.
+    pub card: Option<Vec<u8>>,
     /// The kind (§7.10.1).
     pub kind: u64,
     /// The bytes.
@@ -89,10 +93,10 @@ impl std::fmt::Debug for SealedBody {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "SealedBody(kind {}, {} bytes, introduction {})",
+            "SealedBody(kind {}, {} bytes, card {})",
             self.kind,
             self.bytes.len(),
-            self.introduction.is_some()
+            self.card.is_some()
         )
     }
 }
@@ -105,14 +109,14 @@ impl SealedBody {
     pub fn tagged(
         sender: &Keyhash,
         alias: &str,
-        introduction: Option<&[u8]>,
+        card: Option<&[u8]>,
         kind: u64,
         bytes: &[u8],
     ) -> Vec<u8> {
         let mut out = Vec::new();
         emit_bstr(&mut out, sender);
         emit_tstr(&mut out, alias);
-        match introduction {
+        match card {
             Some(i) => out.extend_from_slice(i),
             None => emit_null(&mut out),
         }
@@ -126,7 +130,7 @@ impl SealedBody {
         Self::tagged(
             &self.sender,
             &self.alias,
-            self.introduction.as_deref(),
+            self.card.as_deref(),
             self.kind,
             &self.bytes,
         )
@@ -162,7 +166,7 @@ impl SealedBody {
         Ok(SealedBody {
             sender: bytes(0)?.try_into().map_err(|_| "sender")?,
             alias,
-            introduction: match &a[2] {
+            card: match &a[2] {
                 Item::Null => None,
                 _ => Some(b[parts[2].clone()].to_vec()),
             },

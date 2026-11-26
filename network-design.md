@@ -6627,7 +6627,7 @@ the two together tell apart two senders who chose one alias wherever messages
 are indexed [author, 2026-11-20]. The header is not an address: **a recipient
 replies to a sender it holds as a contact, and to no other** [author,
 2026-11-20], which is wanted, since a stranger's mail that cannot be answered
-gives a spammer or an impostor nothing to work. And the sender's introduction rides on its messages to a
+gives a spammer or an impostor nothing to work. And the sender's card rides on its messages to a
 recipient until it has had a reply, and not after [author, 2026-11-20], so a
 device that has lost what it held of a sender — one restored from the phrase,
 collecting mail still queued — opens a later message it has no introduction to
@@ -7033,7 +7033,8 @@ accepted and not enough to reconstruct it.
 **A node keeps one thing more** [author, 2026-11-25]. For each relationship in
 its horizon, out to two hops, it keeps the record in force: the most recent
 adoption, or the departure or disavowal that ended it in that adoption's place,
-for as long as either party to it is within that horizon
+for as long as either party to it is within that horizon; and the most recent
+peering between two identities either of whom is
 (`infra-client-requirements.md` §4.3). That is proof of the current
 state of every identity in its horizon, at the smallest archive that gives it.
 **It is not the fold's input**: the table is still the reference, and a copy the

@@ -166,7 +166,7 @@ async fn send(
         keyhash: &kh(from),
         secret: &me,
         alias: from,
-        introduction: None,
+        card: None,
     };
     let sealed = seal_to(
         &sender,

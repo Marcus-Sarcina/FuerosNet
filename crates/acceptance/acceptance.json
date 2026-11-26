@@ -14298,7 +14298,7 @@
   ],
   "given": "Node P holds, of parties it did not sign for, an adoption, two series reissues of that relationship in turn, then a departure, a later adoption and a disavowal; of a second such relationship two hops out, an ending, and then the ending of the relationship that held its patron in P's horizon; a current endpoint line for its own child; and a derived view written beside them.",
   "when": "P is stopped and started again, and a party attaches to it and reconciles.",
-  "then": "What P wrote of that relationship is at each step the record in force and no other: the adoption; the adoption still and neither reissue, the table saying where the series stands; the departure in the adoption's place; the later adoption in the departure's; the disavowal in that adoption's. A record superseded is gone from disk at the next write. An ending is kept while either party to it is within P's horizon and goes once neither is. After the restart P holds the same, its table comes back from the derived view, and with no derived view it holds nothing of that relationship in its table and still keeps the record. The evidence an adoption cited does not survive, and an upgrade removes what an earlier version wrote. The identifiers still suppress a second forwarding wave. P replays the endpoint line byte for byte and no foreign act, kept or not.",
+  "then": "What P wrote of that relationship is at each step the record in force and no other: the adoption; the adoption still and neither reissue, the table saying where the series stands; the departure in the adoption's place; the later adoption in the departure's; the disavowal in that adoption's. A record superseded is gone from disk at the next write. An ending is kept while either party to it is within P's horizon and goes once neither is. A peering between two identities one of whom is within P's horizon is kept across the restart, a later one of the same two in its place, and goes by the same rule. After the restart P holds the same, its table comes back from the derived view, and with no derived view it holds nothing of that relationship in its table and still keeps the record. The evidence an adoption cited does not survive, and an upgrade removes what an earlier version wrote. The identifiers still suppress a second forwarding wave. P replays the endpoint line byte for byte and no foreign act, kept or not.",
   "oracle": "behaviour",
   "interpretation": null,
   "families": [
@@ -18108,7 +18108,7 @@
    },
    {
     "where": "light-client-requirements.md §3",
-    "text": "Your introduction rides inside the seal on your messages to a recipient until you have had a reply from it"
+    "text": "Your card rides inside the seal on your messages to a recipient until you have had a reply from it"
    },
    {
     "where": "wire-format.md §7.10",

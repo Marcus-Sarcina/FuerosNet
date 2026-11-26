@@ -1483,6 +1483,25 @@ impl Client {
     /// once there is somewhere to start the walk from.
     pub fn take_card(&mut self, bytes: &[u8]) -> Result<Keyhash, String> {
         let card = rhtn_archive::locator::Card::parse(bytes)?;
+        self.take_card_anchor(&card)?;
+        let introduction = rhtn_archive::locator::introduction(
+            &card.introduction.material,
+            &card.introduction.encryption_key,
+            &card.introduction.locator.bytes,
+        );
+        let who = self.take_introduction(&introduction)?;
+        tracing::info!(
+            target: "cer",
+            who = %id8(&who),
+            anchor = %id8(&card.anchor.keyhash),
+            "cer.card.taken"
+        );
+        Ok(who)
+    }
+
+    /// The anchor a card carries: its identity, where it answers, and
+    /// what it claims.
+    fn take_card_anchor(&mut self, card: &rhtn_archive::locator::Card) -> Result<(), String> {
         // the anchor's identity, so its records check and a dial to it
         // binds (`wire-format.md` §9.1)
         if !self.known.iter().any(|i| i.keyhash == card.anchor.keyhash) {
@@ -1499,19 +1518,7 @@ impl Client {
         ) {
             c.anchor_entry = Some(entry.clone());
         }
-        let introduction = rhtn_archive::locator::introduction(
-            &card.introduction.material,
-            &card.introduction.encryption_key,
-            &card.introduction.locator.bytes,
-        );
-        let who = self.take_introduction(&introduction)?;
-        tracing::info!(
-            target: "cer",
-            who = %id8(&who),
-            anchor = %id8(&card.anchor.keyhash),
-            "cer.card.taken"
-        );
-        Ok(who)
+        Ok(())
     }
 
     /// **This client's own code to hand over** (`wire-format.md` §2.4): its
@@ -6028,14 +6035,45 @@ impl Client {
         out
     }
 
-    /// **The introduction this device carries on a first message**
-    /// [author, 2026-10-30]: its material, its encryption key and a
-    /// signed locator, where it holds a position to be found at; none
-    /// where it does not. Refreshed at attach and whenever its positions
-    /// move, so a stranger it writes to first can attribute the message
-    /// and answer.
+    /// **The card this device carries on a first message** [author,
+    /// 2026-10-30, 2026-11-25]: its introduction, and the anchor its
+    /// locator names with where that anchor answers, where it holds a
+    /// position to be found at and that anchor's record. Refreshed at
+    /// attach and whenever its positions move, so a stranger it writes to
+    /// first can attribute the message and answer from the message alone:
+    /// *"cold calls are expected behavior from any user holding your
+    /// card."* **Its introduction alone where it holds no record of where
+    /// its anchor answers**, which attributes the message and leaves the
+    /// answer to whatever the recipient can find of that anchor; none
+    /// where it has no position at all.
     pub fn refresh_card(&mut self) {
-        self.payload.card = self.own_introduction().ok();
+        self.payload.card = self.own_card().or_else(|_| self.own_introduction()).ok();
+    }
+
+    /// **A cold call's card** (`wire-format.md` §7.8.1): what a stranger's
+    /// first message carried inside the seal. Its anchor is taken first,
+    /// as a scanned card's is, so there is somewhere to start the walk to
+    /// the sender from; then its introduction, as [`take_cold_introduction`]
+    /// takes one. An anchor record this client will not hold — an older
+    /// one than it has — costs the introduction nothing. What is no card
+    /// is taken as the introduction it may be.
+    ///
+    /// [`take_cold_introduction`]: Client::take_cold_introduction
+    pub fn take_cold_card(&mut self, from: &Keyhash, bytes: &[u8]) -> bool {
+        let Ok(card) = rhtn_archive::locator::Card::parse(bytes) else {
+            return self.take_cold_introduction(from, bytes);
+        };
+        if card.introduction.identity.keyhash != *from {
+            tracing::warn!(target: "pay", from = %id8(from), "pay.cold_call.not_theirs");
+            return false;
+        }
+        let _ = self.take_card_anchor(&card);
+        let introduction = rhtn_archive::locator::introduction(
+            &card.introduction.material,
+            &card.introduction.encryption_key,
+            &card.introduction.locator.bytes,
+        );
+        self.take_cold_introduction(from, &introduction)
     }
 
     /// **A cold call** [author, 2026-10-30: anyone with a locator can
@@ -7416,7 +7454,7 @@ impl Client {
         let waiting = self.payload.pending.remove(to).unwrap_or_default();
         let me = self.keyhash();
         let alias = self.seal_alias();
-        let introduction = (!self.payload.heard_from.contains(to))
+        let card = (!self.payload.heard_from.contains(to))
             .then(|| self.payload.card.clone())
             .flatten();
         let random = self.device.random.clone();
@@ -7426,7 +7464,7 @@ impl Client {
             keyhash: &me,
             secret,
             alias: &alias,
-            introduction: introduction.as_deref(),
+            card: card.as_deref(),
         };
         let mut out = Vec::with_capacity(waiting.len());
         for plain in waiting {
@@ -7763,11 +7801,11 @@ impl Client {
         }
         let from = body.sender;
         // the sender's encryption key: the one held for it, or the one its
-        // own introduction carries, which must name it and verify
-        let carried = match &body.introduction {
-            Some(intro) => match rhtn_archive::locator::Introduction::parse(intro) {
+        // own card carries, which must name it and verify
+        let carried = match &body.card {
+            Some(card) => match rhtn_archive::locator::carried_introduction(card) {
                 Ok(i) if i.identity.keyhash == from => Some(i),
-                _ => return Err("the introduction carried is not the sender's".into()),
+                _ => return Err("the card carried is not the sender's".into()),
             },
             None => None,
         };
@@ -7795,10 +7833,11 @@ impl Client {
         if !payload::tag_verifies(secret, &me, &their, &sealed, &body) {
             return Err(PayloadError::TagFailed.to_string());
         }
-        // attributed: the introduction it carried is taken as any is, and
-        // this client's own stops riding to a party that has written back
-        if let Some(intro) = &body.introduction {
-            self.take_cold_introduction(&from, intro);
+        // attributed: the card it carried is taken as a scanned one is,
+        // and this client's own stops riding to a party that has written
+        // back
+        if let Some(card) = &body.card {
+            self.take_cold_card(&from, card);
         }
         self.payload.heard_from.insert(from);
         Ok((from, self.dispatch(from, body.kind, body.bytes)))

@@ -336,7 +336,7 @@ fn the_seal_reproduces_the_canonical_vector_and_opens_only_with_both_halves() {
         keyhash: &kh("alice"),
         secret: &alice,
         alias: "alice",
-        introduction: body.introduction.as_deref(),
+        card: body.card.as_deref(),
     };
     let sealed = seal_to(
         &from,
@@ -392,12 +392,10 @@ fn the_seal_reproduces_the_canonical_vector_and_opens_only_with_both_halves() {
     // **and a recipient holding nothing of alice attributes it by what it
     // carries**: the introduction in the body is alice's, its locator reads,
     // and its encryption key is the one the tag verified under
-    let intro = rhtn_archive::locator::Introduction::parse(
-        b.introduction
-            .as_deref()
-            .expect("a first message carries it"),
+    let intro = rhtn_archive::locator::carried_introduction(
+        b.card.as_deref().expect("a first message carries it"),
     )
-    .expect("the carried introduction reads");
+    .expect("what it carries of its sender reads");
     assert_eq!(intro.identity.keyhash, kh("alice"));
     assert!(tag_verifies(
         &carol,
@@ -588,7 +586,7 @@ fn a_seal_is_attributed_only_by_a_verifying_tag_and_what_fails_is_discarded() {
             keyhash: &kh("alice"),
             secret: &carol,
             alias: "alice",
-            introduction: None,
+            card: None,
         },
         &kh("bob"),
         &key_of("bob"),
@@ -650,7 +648,7 @@ fn a_seal_is_attributed_only_by_a_verifying_tag_and_what_fails_is_discarded() {
             keyhash: &kh("carol"),
             secret: &carol,
             alias: "carol",
-            introduction: Some(&alices),
+            card: Some(&alices),
         },
         &kh("bob"),
         &key_of("bob"),
@@ -1031,7 +1029,7 @@ fn an_unattributed_sender_is_shown_unverified_and_cannot_be_answered() {
     n.send("bob", "alice", "a later message");
     let waiting = n.queued("alice");
     let (_, body) = opened("alice", "w1", &waiting[0]);
-    assert_eq!(body.introduction, None, "field 3 is nil");
+    assert_eq!(body.card, None, "field 3 is nil");
     let alias = body.alias.clone();
 
     // alice restored from her phrase: her own material and nothing else
@@ -1049,7 +1047,7 @@ fn an_unattributed_sender_is_shown_unverified_and_cannot_be_answered() {
             keyhash: &kh("carol"),
             secret: &carol,
             alias: &alias,
-            introduction: None,
+            card: None,
         },
         &kh("alice"),
         &key_of("alice"),
@@ -1108,7 +1106,7 @@ fn an_unattributed_sender_is_shown_unverified_and_cannot_be_answered() {
             keyhash: &kh("carol"),
             secret: &carol,
             alias: &alias,
-            introduction: None,
+            card: None,
         },
         &kh("alice"),
         &key_of("alice"),
@@ -1150,7 +1148,7 @@ fn a_stranger_is_attributed_by_the_introduction_in_the_seal_until_it_hears_back(
     n.send("alice", "bob", "and again");
     for bytes in n.queued("bob") {
         let (_, body) = opened("bob", "w2", &bytes);
-        let intro = body.introduction.expect("her introduction rides");
+        let intro = body.card.expect("her introduction rides");
         let read = rhtn_archive::locator::Introduction::parse(&intro).unwrap();
         assert_eq!(read.identity.keyhash, kh("alice"));
     }
@@ -1180,8 +1178,71 @@ fn a_stranger_is_attributed_by_the_introduction_in_the_seal_until_it_hears_back(
     n.send("alice", "bob", "no card now");
     let later = n.queued("bob");
     let (_, body) = opened("bob", "w2", &later[0]);
-    assert_eq!(body.introduction, None, "nil once she has heard back");
+    assert_eq!(body.card, None, "nil once she has heard back");
     assert_eq!(n.collect("bob"), vec!["Application(no card now)"]);
+}
+
+// functional: PAY-021
+/// **A stranger is answered from the message alone** [author, 2026-11-25:
+/// *"cold calls are expected behavior from any user holding your card"*]:
+/// a sender that holds where its anchor answers carries its whole card
+/// inside the seal, so a recipient that held nothing of the sender or of
+/// the anchor it sits under holds both on arrival, with the record of
+/// where that anchor answers, and starts the walk back there.
+#[test]
+fn a_stranger_is_answered_from_the_card_its_first_message_carries() {
+    let mut n = bare_net(&["w1", "w2"], &[("alice", "w1"), ("bob", "w2")]);
+    // alice sits under w1 and holds where w1 answers, as a member does
+    // once its node has said so
+    n.s.adopted("alice", "w1", "w2", 1);
+    let mut point = Vec::new();
+    rhtn_transport::session::NetworkPoint::new([127, 0, 0, 1], Some(7447)).encode(&mut point);
+    let record = rhtn_archive::endpoint::endpoint_record(
+        &id("w1"),
+        &[point],
+        rhtn_archive::tx::Seqno {
+            series: 1,
+            counter: 1,
+        },
+    );
+    n.s.client("alice")
+        .take_endpoint(&record)
+        .expect("w1's own");
+    n.introduce("bob", "alice");
+    // bob holds nothing of alice, and nothing of the anchor she sits under
+    n.s.client("bob")
+        .known
+        .retain(|i| i.keyhash != kh("alice") && i.keyhash != kh("w1"));
+    n.s.client("bob").store.contacts.remove(&kh("w1"));
+    n.attach("bob");
+    n.attach("alice");
+    n.away.insert(kh("bob"));
+    n.send("alice", "bob", "hello, stranger");
+    let (_, body) = opened("bob", "w2", &n.queued("bob")[0]);
+    let card = rhtn_archive::locator::Card::parse(&body.card.expect("her card rides"))
+        .expect("a card, since she holds where her anchor answers");
+    assert_eq!(card.introduction.identity.keyhash, kh("alice"));
+    assert_eq!(card.anchor.keyhash, kh("w1"));
+    assert_eq!(n.collect("bob"), vec!["Application(hello, stranger)"]);
+
+    let bob = n.s.client("bob");
+    assert!(bob.store.contacts.contains_key(&kh("alice")), "a contact");
+    assert!(
+        bob.known.iter().any(|i| i.keyhash == kh("w1")),
+        "and her anchor's material, which bob had never held"
+    );
+    assert!(
+        bob.store
+            .contacts
+            .get(&kh("w1"))
+            .is_some_and(|c| c.endpoint_record.is_some()),
+        "with the record of where it answers"
+    );
+    assert_eq!(
+        bob.reach_for(&kh("alice")).ask.first().map(|a| a.node),
+        Some(kh("w1")),
+        "so the walk to her starts at the anchor her card named"
+    );
 }
 
 /// **The subject holds their archive, so a patron evaluating you fetches

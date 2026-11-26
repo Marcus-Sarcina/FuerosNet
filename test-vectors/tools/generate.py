@@ -2554,11 +2554,20 @@ ss_r, ct_r = xwing_encaps(carol_kem_pub, SEAL_ESEED_R)
 ss_n, ct_n = xwing_encaps(node_key_pub, SEAL_ESEED_N)
 seal_info = b'rhtn/1:seal' + carol.keyhash + bob.keyhash + e_uint(NODE_KEY_N) + ct_r + ct_n
 message_key = _hkdf32(ss_r + ss_n, seal_info)
-seal_intro_loc = locator(alice.keyhash, path([]), seqno(1, 0), subnet=None)
+# field 3 is the sender's own card (§2.4) [author, 2026-11-25]: alice's
+# introduction, her locator anchored at bob, with bob's key material and bob's
+# endpoint record
+seal_intro_loc = locator(bob.keyhash, p_even, seqno(1, 0))
+seal_intro = e_arr([e_uint(1), alice.key_material, encryption_key(alice),
+                    _signed_locator_by(alice, seal_intro_loc)])
+seal_card = e_arr([e_uint(1), seal_intro, bob.key_material, endpoint_record, NULL])
 seal_fields = (e_bstr(alice.keyhash) + e_tstr(SEAL_ALIAS)
-               + e_arr([e_uint(1), alice.key_material, encryption_key(alice),
-                        _signed_locator_by(alice, seal_intro_loc)])
+               + seal_card
                + e_uint(0) + e_bstr(SEAL_BYTES))
+# and the same from a sender that could compose no card, a lone identity
+# naming no subnet: its introduction alone
+seal_lone = e_arr([e_uint(1), alice.key_material, encryption_key(alice),
+                   _signed_locator_by(alice, locator(alice.keyhash, path([]), seqno(1, 0), subnet=None))])
 _auth_dh = X25519PrivateKey.from_private_bytes(alice_auth).exchange(
     X25519PublicKey.from_public_bytes(_x25519_pub(carol_auth)))
 tag_key = _hkdf32(_auth_dh, b'rhtn/1:seal-auth' + alice.keyhash + carol.keyhash)
@@ -2680,7 +2689,8 @@ encryption key and to the node key above. Every random input is the vector's
 own: the encapsulation randomness to carol `H("rhtn-test-vectors:seal-eseed-r-1")
 ‖ H("…-r-2")`, to the node `H("…-n-1") ‖ H("…-n-2")`, and the nonce the first 12
 bytes of `H("rhtn-test-vectors:seal-nonce")`. The body carries alice's keyhash,
-the alias `alice`, her introduction (a first message), kind 0 and the bytes
+the alias `alice`, her card (a first message: her introduction, anchored at
+bob, with bob's key material and endpoint record), kind 0 and the bytes
 `hello carol`, and its tag:
 
 ```
@@ -3840,8 +3850,14 @@ reg('N-sealed-body-tag-31', 'bytes', REJ('SealedBody', 'schema', 'a tag is 32 by
     b'\x86' + seal_fields + e_bstr(seal_tag[:31]))
 reg('N-sealed-body-alias-empty', 'bytes', REJ('SealedBody', 'schema', 'an alias is 1 to 64 bytes of text'),
     b'\x86' + e_bstr(alice.keyhash) + e_tstr('') + NULL + e_uint(0) + e_bstr(SEAL_BYTES) + e_bstr(seal_tag))
-reg('P-sealed-body-no-introduction', 'bytes', ACC('SealedBody', 'a later message: the introduction slot is nil'),
+reg('P-sealed-body-no-introduction', 'bytes', ACC('SealedBody', 'a later message: the card slot is nil'),
     b'\x86' + e_bstr(alice.keyhash) + e_tstr(SEAL_ALIAS) + NULL + e_uint(0) + e_bstr(SEAL_BYTES) + e_bstr(seal_tag))
+reg('P-sealed-body-introduction', 'bytes', ACC('SealedBody', 'a sender that could compose no card: its introduction alone in the card slot'),
+    b'\x86' + e_bstr(alice.keyhash) + e_tstr(SEAL_ALIAS) + seal_lone + e_uint(0) + e_bstr(SEAL_BYTES) + e_bstr(seal_tag))
+reg('N-sealed-body-card-crossed', 'bytes', REJ('SealedBody', 'schema', "a card in the body is a card: the anchor material hashes to the anchor the locator names (§2.4)"),
+    b'\x86' + e_bstr(alice.keyhash) + e_tstr(SEAL_ALIAS)
+    + e_arr([e_uint(1), seal_intro, carol.key_material, endpoint_record, NULL])
+    + e_uint(0) + e_bstr(SEAL_BYTES) + e_bstr(seal_tag))
 reg('N-relayed-half-31', 'bytes', REJ('RelayedPayload', 'schema', "the node's half is 32 bytes"),
     e_arr([e_uint(7), sealed, e_bstr(ss_n[:31])]))
 reg('N-relayed-sender-named', 'bytes', REJ('RelayedPayload', 'schema', 'the retired shape: a sender keyhash in front of a byte string'),
