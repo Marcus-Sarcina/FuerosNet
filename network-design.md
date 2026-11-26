@@ -5672,6 +5672,13 @@ locator names changes (§12.1), as a mailing address does until a move. The
 serving node's key for the recipient is not on it, since that rotates
 (§14.2.4.3); the sender fetches it from the node the locator walks to.
 
+**Who has a card follows from who answers somewhere** [author, 2026-11-25].
+A member's card names the anchor it sits under and where that anchor answers.
+A root that runs its subnet's node is its own anchor, and its card carries
+where it answers itself. An identity that runs no node and is in no subnet
+that has one is reachable nowhere and has no card, until it launches a node or
+is adopted into a subnet with one.
+
 **Everything above in this section, and the sessions of §14, is said of one
 address.** The resolution walk, the mailbox, the attach, the failover to a
 sibling: each is one client and one node, and an identity holding several

@@ -483,6 +483,50 @@ fn a_client_makes_a_card_of_its_own_once_it_knows_where_its_anchor_answers() {
     );
 }
 
+/// **A root that runs its subnet's node is its own anchor, and its card
+/// carries where it answers itself** [author, 2026-11-25: *"in the case of
+/// a lone identity operating a node, they are their own root and publish
+/// their own static IP"*]; one that runs no node has no card, being
+/// reachable nowhere.
+// functional: TOP-042
+#[test]
+fn a_root_that_runs_its_node_makes_a_card_anchored_at_itself() {
+    let mut s = setup(&PARTIES);
+    // alice roots a subnet: her first adoption, carol under her
+    s.adopted("carol", "alice", "w1", 1);
+    assert!(
+        s.client("alice").own_card().is_err(),
+        "a root that runs no node answers nowhere, and has no card"
+    );
+    // she signs where her node answers, on the line of the subnet she
+    // roots, and holds it as her node hands it back at attach
+    let mut point = Vec::new();
+    rhtn_transport::session::NetworkPoint::new([127, 0, 0, 1], Some(7447)).encode(&mut point);
+    let record = s
+        .client("alice")
+        .endpoint_record_in(None, &[point], 1)
+        .expect("a root signs for the subnet under its own key");
+    s.client("alice").take_endpoint(&record).expect("her own");
+    let card = s
+        .client("alice")
+        .own_card()
+        .expect("a card anchored at herself");
+    let read = rhtn_archive::locator::Card::parse(&card).expect("it reads");
+    assert_eq!(read.introduction.identity.keyhash, kh("alice"));
+    assert_eq!(read.anchor.keyhash, kh("alice"), "her own anchor");
+    // and a stranger acts on it: the walk to alice starts at alice
+    let who = s.client("bob").take_card(&card).expect("one code");
+    assert_eq!(who, kh("alice"));
+    assert_eq!(
+        s.client("bob")
+            .reach_for(&kh("alice"))
+            .ask
+            .first()
+            .map(|a| a.node),
+        Some(kh("alice"))
+    );
+}
+
 /// **A scope brought under a patron dissolves into the subnet joined, and
 /// stands alone again on departure** (design §13.8; `wire-format.md` §4.1
 /// field 10); a body naming a scope this key does not root is refused.
