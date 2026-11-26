@@ -169,6 +169,88 @@ fn a_block_is_asked_for_after_the_image_and_said_rather_than_failed_where_the_ho
     }
 }
 
+// functional: PKG-025
+/// **A package's icon is read out of its image, and the image is never
+/// started** [author, 2026-11-25]: a container made, the first of the
+/// three names copied out, the container removed; the reply names the
+/// type by the file's name and carries the file as one line of base64url.
+#[test]
+fn an_icon_is_read_out_of_an_image_that_is_made_and_never_started() {
+    let h = Host::new("icon");
+    // an engine that holds one file, at the path named in `$HELD`
+    let held = h.dir.join("held");
+    let log = h.dir.join("engine.log");
+    std::fs::write(
+        &h.engine,
+        format!(
+            "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '{log}'\n\
+             if [ \"$1\" = cp ]; then\n\
+             \x20 want=\"$(cat '{held}' 2> /dev/null || true)\"\n\
+             \x20 case \"$2\" in *\":$want\") cp '{file}' \"$3\"; exit 0 ;; esac\n\
+             \x20 exit 1\n\
+             fi\n",
+            log = log.display(),
+            held = held.display(),
+            file = h.dir.join("file").display(),
+        ),
+    )
+    .unwrap();
+    let image = "docker.io/library/thing@sha256:00";
+    let asked = || std::fs::read_to_string(&log).unwrap_or_default();
+
+    // **a PNG at the first name**, standard base64's `+`, `/` and padding
+    // gone from the line
+    std::fs::write(&held, "/rhtn/icon.png").unwrap();
+    std::fs::write(h.dir.join("file"), [0xfb, 0xff, 0xfe, 0x01]).unwrap();
+    let (code, out, err) = h.ask(&format!("icon {image}"));
+    assert_eq!(code, 0, "{out}{err}");
+    assert_eq!(out, "icon image/png 4\n-__-AQ\n");
+    let said = asked();
+    let verbs: Vec<&str> = said.lines().map(|l| l.split(' ').next().unwrap()).collect();
+    assert_eq!(verbs, ["rm", "create", "cp", "rm"], "{said}");
+    assert!(
+        !said
+            .lines()
+            .any(|l| l.starts_with("run") || l.starts_with("start")),
+        "nothing of the package ran: {said}"
+    );
+    assert!(said.contains("create --name rhtn-pkg-icon-") && said.contains(image));
+
+    // **a JPEG and a WebP by their names**
+    for (path, media) in [
+        ("/rhtn/icon.jpg", "image/jpeg"),
+        ("/rhtn/icon.webp", "image/webp"),
+    ] {
+        std::fs::write(&held, path).unwrap();
+        let (_, out, _) = h.ask(&format!("icon {image}"));
+        assert!(
+            out.starts_with(&format!("icon {media} 4\n")),
+            "{path}: {out}"
+        );
+    }
+
+    // **none at any of the three, an empty one and one past the bound are
+    // no icon**, said rather than failed
+    std::fs::write(&held, "/somewhere/else.png").unwrap();
+    assert_eq!(h.ask(&format!("icon {image}")).1, "icon none\n");
+    std::fs::write(&held, "/rhtn/icon.png").unwrap();
+    std::fs::write(h.dir.join("file"), b"").unwrap();
+    assert_eq!(h.ask(&format!("icon {image}")).1, "icon none\n");
+    std::fs::write(h.dir.join("file"), vec![0u8; 65_537]).unwrap();
+    assert_eq!(h.ask(&format!("icon {image}")).1, "icon none\n");
+    std::fs::write(h.dir.join("file"), vec![0u8; 65_536]).unwrap();
+    assert!(
+        h.ask(&format!("icon {image}"))
+            .1
+            .starts_with("icon image/png 65536\n")
+    );
+
+    // and it takes an image reference and nothing else
+    assert_eq!(h.ask("icon").0, 2);
+    assert_eq!(h.ask(&format!("icon {image} more")).0, 2);
+    assert_eq!(h.ask("icon --privileged").0, 2);
+}
+
 // functional: OPS-029
 #[test]
 fn a_runner_is_taken_only_signed_by_the_operators_key_and_never_older() {

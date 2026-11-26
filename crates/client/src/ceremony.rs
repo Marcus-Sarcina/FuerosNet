@@ -681,8 +681,10 @@ pub struct PendingAsk {
 }
 
 /// **Where a resource's icon is asked for** (`light-client-requirements.md`
-/// §8) [author, 2026-11-23]: the path the web's own browsers try, so a
-/// resource chooses its icon by what it serves there.
+/// §8) [author, 2026-11-23, 2026-11-25]: the path the web's own browsers
+/// try. **The node hosting the resource answers it**, from the file the
+/// package's installation delivered, so asking reaches no resource and
+/// runs nothing of one.
 pub const ICON_PATH: &str = "/favicon.ico";
 
 /// A participant client: its identity, archive and store, its two query
@@ -6465,7 +6467,7 @@ impl Client {
     }
 
     /// **The request for a resource's icon**: `GET` [`ICON_PATH`], composed
-    /// as the shells compose a page's.
+    /// as the shells compose a page's, and answered by the node itself.
     #[must_use]
     pub fn icon_request(&self, node: Keyhash, resource: Keyhash) -> Msg {
         self.request_resource(
@@ -6668,8 +6670,8 @@ impl Client {
         out
     }
 
-    /// **Take what a resource answered at [`ICON_PATH`]**, delivered: its
-    /// icon where it answered 200 with a declared PNG, JPEG or WebP of at
+    /// **Take what the node answered at [`ICON_PATH`]**, delivered: the
+    /// resource's icon where the answer is 200 with a declared PNG, JPEG or WebP of at
     /// most 64 KiB — the profile image's formats and bound — and none
     /// otherwise, which is kept too, so it is not asked again this run.
     /// **Nothing is sniffed**: the declared type decides (§8).

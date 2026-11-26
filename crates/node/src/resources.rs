@@ -749,6 +749,32 @@ impl Gateway {
         if parsed.target.starts_with(crate::federation::PATH_PREFIX) {
             return answered(STATUS_REFUSED);
         }
+        // **its icon is this node's to give and never the package's**
+        // (`infra-client-requirements.md` §9.4) [author, 2026-11-25]: the
+        // file its installation delivered, so a launcher is badged for a
+        // person who has opened nothing and no code of the package runs to
+        // badge it. Asked of a package shut or stopped, it is the same
+        // file; one that delivered none has none
+        if parsed.method == "GET" && parsed.target == ICON_PATH {
+            let composed = match &binding.declared.icon {
+                Some(icon) => http::Response {
+                    status: 200,
+                    reason: "OK".into(),
+                    headers: vec![("content-type".into(), icon.media.clone())],
+                    body: icon.bytes.clone(),
+                },
+                None => http::Response {
+                    status: 404,
+                    reason: "Not Found".into(),
+                    headers: vec![("content-type".into(), "text/plain".into())],
+                    body: b"this resource was installed with no icon\n".to_vec(),
+                },
+            };
+            return Decided::Answered(ResourceResponse {
+                status: STATUS_DELIVERED,
+                body: Some(http::serialise_response(&composed)),
+            });
+        }
         let Some(backend) = binding.backend.clone() else {
             return answered(STATUS_UNAVAILABLE);
         };
@@ -1170,6 +1196,56 @@ impl Kind {
     }
 }
 
+/// **Where a member's client asks for a resource's icon**, the path the
+/// web's own browsers try: answered by the node from what the package's
+/// installation delivered, and never handed to the package
+/// (`infra-client-requirements.md` §9.4) [author, 2026-11-25].
+pub const ICON_PATH: &str = "/favicon.ico";
+
+/// **The kinds an icon may be, each with the file extension that says
+/// so**: a profile image's formats (`wire-format.md` §7.11). The name
+/// declares the type and nothing is sniffed.
+pub const ICON_KINDS: [(&str, &str); 3] = [
+    ("image/png", "png"),
+    ("image/jpeg", "jpg"),
+    ("image/webp", "webp"),
+];
+
+/// **A package's icon, as its installation delivered it** [author,
+/// 2026-11-25]: a file of the package's, kept by its host and shown with
+/// no code of the package running.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Icon {
+    /// Its declared type, one of [`ICON_KINDS`].
+    pub media: String,
+    /// The image, 1 byte to
+    /// [`PROFILE_IMAGE_BYTES`](rhtn_codec::bounds::PROFILE_IMAGE_BYTES).
+    pub bytes: Vec<u8>,
+}
+
+impl Icon {
+    /// An icon of `media` holding `bytes`, or why it is none: a type that
+    /// is not one of the three, or a size outside the bound.
+    pub fn of(media: &str, bytes: Vec<u8>) -> Result<Icon, String> {
+        if !ICON_KINDS.iter().any(|(m, _)| *m == media) {
+            return Err(format!(
+                "`{media}` is not an icon's type: image/png, image/jpeg or image/webp"
+            ));
+        }
+        let most = rhtn_codec::bounds::PROFILE_IMAGE_BYTES;
+        if bytes.is_empty() || bytes.len() > most {
+            return Err(format!(
+                "an icon is 1 to {most} bytes, and this is {}",
+                bytes.len()
+            ));
+        }
+        Ok(Icon {
+            media: media.to_string(),
+            bytes,
+        })
+    }
+}
+
 /// What a package declares (`resource-requirements.md` §7, §8).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Manifest {
@@ -1212,6 +1288,10 @@ pub struct Manifest {
     /// [author, 2026-11-25]: its statement likewise, that the endpoints
     /// are ones it verified as belonging to its authorised users.
     pub media_members: bool,
+    /// **Its icon, where its installation delivered one** ([`Icon`]): not
+    /// a line of the manifest, and held with it because it arrives with
+    /// it and is replaced with it.
+    pub icon: Option<Icon>,
 }
 
 /// The most endpoints a package may declare its pages stream with.

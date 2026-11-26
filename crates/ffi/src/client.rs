@@ -5084,12 +5084,13 @@ impl Participant {
         self.save()
     }
 
-    /// **Ask each resource at `node` for its icon, once a run**
-    /// (`rhtn_client::ceremony::ICON_PATH`) [author, 2026-11-23]: after a
-    /// sweep, for what it found that has not been asked. An answer that is
-    /// an ask is not held — nobody opened anything to be asked — and one
-    /// not delivered is asked again at the next sweep. A node that stops
-    /// answering ends the round.
+    /// **Ask `node` for the icon of each resource there, once a run**
+    /// (`rhtn_client::ceremony::ICON_PATH`) [author, 2026-11-23,
+    /// 2026-11-25]: after a sweep, for what it found that has not been
+    /// asked. **The node answers from the file each package's installation
+    /// delivered**, so this reaches no resource the person has not opened
+    /// and runs nothing of one. An answer not delivered is asked again at
+    /// the next sweep, and a node that stops answering ends the round.
     fn icons_at(&self, node: rhtn_model::Keyhash) {
         let wanted = self.handle.with_blocking(move |c| c.icons_wanted(node));
         for r in wanted {

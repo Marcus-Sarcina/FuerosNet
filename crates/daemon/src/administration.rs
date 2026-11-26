@@ -1003,8 +1003,18 @@ impl Surface {
         if was.iter().any(|p| p.resource == want.resource && p.sealed) {
             want.sealed = true;
         }
+        // **and its icon, read out of the image by the host** (§9.4)
+        // [author, 2026-11-25]: a file of the package's that becomes this
+        // node's to show, with nothing of the package run to give it. A
+        // host whose runner predates the verb refuses it, and the package
+        // is installed with no icon
+        let icon = shell
+            .ask(&key, &["icon", &want.image])
+            .ok()
+            .and_then(|said| crate::packages::icon_said(&said));
         let manifest_at = crate::packages::manifest_at(&hosting, &want.resource);
         let held_manifest = std::fs::read(&manifest_at).ok();
+        let held_icon = crate::packages::read_icon(&manifest_at).ok().flatten();
         let mut now: Vec<crate::packages::Package> = was
             .iter()
             .filter(|p| p.resource != want.resource)
@@ -1023,6 +1033,7 @@ impl Surface {
                     let _ = std::fs::remove_file(&manifest_at);
                 }
             }
+            let _ = crate::packages::write_icon(&manifest_at, held_icon.as_ref());
             let _ = crate::packages::write(&hosting, &was);
             let _ = self.reload();
         };
@@ -1034,6 +1045,10 @@ impl Surface {
         }
         if let Err(e) = std::fs::write(&manifest_at, manifest) {
             return (500, format!("{}: {e}\n", manifest_at.display()));
+        }
+        if let Err(why) = crate::packages::write_icon(&manifest_at, icon.as_ref()) {
+            undo();
+            return (500, format!("{why}; nothing changed\n"));
         }
         if let Err(why) = crate::packages::write(&hosting, &now) {
             undo();
@@ -1140,13 +1155,17 @@ impl Surface {
         (
             200,
             format!(
-                "installed {}\nname rhtn-pkg-{name}\nimage {}\naddress 127.0.0.1:{}\nblock {}\nauthority \
+                "installed {}\nname rhtn-pkg-{name}\nimage {}\naddress 127.0.0.1:{}\nblock {}\nicon {}\nauthority \
                  {}\nowner {}\ngrants none\nnext nobody may reach it until a role is granted on \
                  it\npulled {}\nstarted {}\n",
                 hex(&want.resource),
                 want.image,
                 want.port,
                 block_said,
+                match &icon {
+                    Some(i) => format!("{}, {} bytes, from its image", i.media, i.bytes.len()),
+                    None => "none: its image carries none this host could read".into(),
+                },
                 want.authority,
                 hex(&want.owner),
                 pulled.trim(),
@@ -1225,7 +1244,9 @@ impl Surface {
                 format!("this node did not re-read its configuration: {said}\nnothing changed\n"),
             );
         }
-        let _ = std::fs::remove_file(crate::packages::manifest_at(&hosting, &resource));
+        let manifest_at = crate::packages::manifest_at(&hosting, &resource);
+        let _ = std::fs::remove_file(&manifest_at);
+        let _ = crate::packages::write_icon(&manifest_at, None);
         tracing::info!(
             target: "daemon",
             step = "surface_act",

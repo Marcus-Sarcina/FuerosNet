@@ -49,6 +49,11 @@ RUN groupadd -g ${GID} testapp \
 
 COPY --from=build /usr/local/bin/rhtn-testapp /usr/local/bin/rhtn-testapp
 
+# **its icon, where its host reads one out at installation**
+# (`resource-requirements.md` §8): a file of the image's, which nothing of
+# the package runs to give
+COPY testapp/res/icon.png /rhtn/icon.png
+
 # the resource holds nothing on disk unless an operator mounts somewhere for
 # its log: its own record of a walk is in memory and in its container's log
 USER testapp

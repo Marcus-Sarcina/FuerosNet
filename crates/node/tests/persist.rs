@@ -357,6 +357,26 @@ fn what_is_kept_goes_when_neither_party_to_it_is_in_the_horizon_any_longer() {
     n.settle_kept();
     assert_eq!(kept_on_disk(&n, "gone"), vec![d_c.bytes.clone()]);
 
+    // **and a record whose parties come into view after a write-back
+    // dropped it is taken again**, where this run still holds its body: a
+    // later adoption of w1 by carol is two hops from nobody until carol is
+    // bob's again
+    let (a_w2, _) = w.adopt("w1", "carol", 2);
+    assert_eq!(
+        n.take_object(&*fab, &kh("bob"), KIND_TRANSACTION, &a_w2.bytes, &ids()),
+        Decision::Stored,
+        "bob's own identity pushes what his horizon does not yet reach"
+    );
+    n.settle_kept();
+    assert!(!kept_on_disk(&n, "gone").contains(&a_w2.bytes));
+    let (a_c2, _) = w.adopt("carol", "bob", 2);
+    assert_eq!(
+        n.take_object(&*fab, &kh("bob"), KIND_TRANSACTION, &a_c2.bytes, &ids()),
+        Decision::Stored
+    );
+    n.settle_kept();
+    assert!(kept_on_disk(&n, "gone").contains(&a_w2.bytes));
+
     let _ = std::fs::remove_dir_all(
         std::env::temp_dir().join(format!("rhtn-store-gone-{}", std::process::id())),
     );

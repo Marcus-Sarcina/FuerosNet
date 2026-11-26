@@ -1202,6 +1202,9 @@ pub(crate) fn read_manifest(path: &Path) -> Result<(Manifest, Option<std::path::
         });
     }
     let manifest = Manifest {
+        // **not a line of the manifest**: the file beside it, where the
+        // package's installation delivered one
+        icon: crate::packages::read_icon(path)?,
         roles: f.roles.into_iter().collect(),
         imports: f.imports,
         admin,

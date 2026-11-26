@@ -656,7 +656,8 @@ impl NodeView {
     /// record neither of whose parties is within two hops any longer is
     /// dropped, so what is kept of an ending lasts as long as someone it
     /// concerns is still in view and no longer.  What a restart owes once
-    /// its table is in hand, and what a write-back owes before it writes.
+    /// its table is in hand, and what a write-back owes before it writes,
+    /// which is each interval of the daemon's own clock and the way out.
     ///
     /// **Only where the table speaks of the relationship**: one it holds
     /// nothing of is left as kept, since a table lost and not yet repaired
@@ -667,13 +668,28 @@ impl NodeView {
             .kept()
             .filter_map(crate::store::relationship)
             .collect();
-        let members: BTreeSet<Keyhash> = pairs.iter().map(|(m, _)| *m).collect();
+        let me = self.me();
+        let near = self.table.horizon(&me, 2);
+        let attached = self.attached.clone();
+        let within = |x: &Keyhash| *x == me || attached.contains(x) || near.contains(x);
+        // **and whoever the table binds within the horizon**, so a record
+        // dropped while its parties were not yet in view is taken again
+        // once they are, where this run still holds its body: a write-back
+        // may fall in the middle of a replay that builds the horizon
+        let members: BTreeSet<Keyhash> = pairs
+            .iter()
+            .map(|(m, _)| *m)
+            .chain(
+                self.table
+                    .bindings()
+                    .iter()
+                    .filter(|b| within(&b.node) || within(&b.patron))
+                    .map(|b| b.node),
+            )
+            .collect();
         for m in members {
             self.keep_in_force(&m);
         }
-        let me = self.me();
-        let near = self.table.horizon(&me, 2);
-        let within = |x: &Keyhash| *x == me || self.attached.contains(x) || near.contains(x);
         let gone: Vec<(Keyhash, Keyhash)> = pairs
             .into_iter()
             .filter(|(m, p)| {

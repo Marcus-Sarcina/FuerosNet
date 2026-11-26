@@ -637,6 +637,113 @@ fn a_resource_that_holds_its_own_port_is_reached_over_a_socket() {
     );
 }
 
+/// **A package's icon is the file its installation delivered, and the node
+/// answers for it** (`infra-client-requirements.md` §9.4) [author,
+/// 2026-11-25]: beside the manifest, named as the manifest is with the
+/// extension that says its type; a member granted the resource is given it
+/// from there, and the package is never asked.
+// functional: PKG-025
+// functional: CAT-029
+// functional: CAT-033
+#[test]
+fn a_packages_icon_is_the_file_beside_its_manifest_and_the_package_is_never_asked_for_it() {
+    use rhtn_archive::topology::Table;
+    use rhtn_node::grant::Standing;
+
+    // the resource: a socket that counts who connects, and nobody should
+    let l = std::net::TcpListener::bind("127.0.0.1:0").expect("a port of its own");
+    l.set_nonblocking(true).expect("non-blocking");
+    let addr = l.local_addr().expect("its address");
+
+    let d = Dir::new("icon");
+    let m = d.put("front.manifest", "roles = [\"reader\"]\n");
+    let png = b"\x89PNG\r\n\x1a\nnot much of a picture".to_vec();
+    d.put("front.png", &png);
+    let hosting = format!(
+        "[[host]]\nresource = \"{RES}\"\nowner = \"{WHO}\"\nauthority = \"shop.internal\"\n\
+         manifest = \"{}\"\naddress = \"{addr}\"\n",
+        m.display()
+    );
+    grants_for(&d, RES, "[[grant]]\nroles = [\"reader\"]\n");
+    let bound = |text: &str| {
+        let f = d.put("hosting", text);
+        let mut g = Gateway::default();
+        apply(
+            &mut g,
+            Path::new(&f),
+            Limits::default(),
+            Some(&d.0.join("grants")),
+            Some(&d.0.join("state")),
+        )
+        .map(|_| g)
+        .map_err(|e| e.to_string())
+    };
+    let mut g = bound(&hosting).expect("bound");
+    let resource = g.bound()[0];
+    let held = g.binding(&resource).unwrap().declared.icon.clone().unwrap();
+    assert_eq!((held.media.as_str(), &held.bytes), ("image/png", &png));
+
+    let owner = [1u8; 32];
+    let table = Table::with_me(owner);
+    g.refresh(&table, &Standing::unknown(), 0);
+    let ask = |g: &mut Gateway, who: &[u8; 32], line: &str| {
+        let request = rhtn_archive::catalog::ResourceRequest {
+            resource,
+            message: format!("{line} HTTP/1.1\r\nhost: anything\r\n\r\n").into_bytes(),
+        }
+        .encode();
+        g.serve(&owner, &table, who, &request, 0)
+    };
+    let reply = ask(&mut g, &owner, "GET /favicon.ico");
+    assert_eq!(reply.status, 0);
+    let answer = reply.body.expect("an answer");
+    let head = format!(
+        "HTTP/1.1 200 OK\r\ncontent-type: image/png\r\ncontent-length: {}\r\n\r\n",
+        png.len()
+    );
+    assert_eq!(answer, [head.as_bytes(), &png[..]].concat());
+    // **only a member granted it**: the gate is the one every request meets
+    assert_ne!(ask(&mut g, &[7u8; 32], "GET /favicon.ico").status, 0);
+    assert!(
+        matches!(l.accept(), Err(e) if e.kind() == std::io::ErrorKind::WouldBlock),
+        "the package was asked nothing"
+    );
+
+    // **a JPEG is one by its name**, and the first kind found is the icon
+    std::fs::remove_file(d.0.join("front.png")).unwrap();
+    d.put("front.jpg", b"\xff\xd8\xff");
+    let g = bound(&hosting).expect("bound");
+    assert_eq!(
+        g.binding(&resource)
+            .unwrap()
+            .declared
+            .icon
+            .as_ref()
+            .unwrap()
+            .media,
+        "image/jpeg"
+    );
+
+    // **none delivered is none shown**: the node says so itself
+    std::fs::remove_file(d.0.join("front.jpg")).unwrap();
+    let mut g = bound(&hosting).expect("bound");
+    g.refresh(&table, &Standing::unknown(), 0);
+    let none = ask(&mut g, &owner, "GET /favicon.ico");
+    assert_eq!(none.status, 0);
+    assert!(
+        none.body.unwrap().starts_with(b"HTTP/1.1 404 "),
+        "a resource installed with no icon"
+    );
+    assert!(matches!(l.accept(), Err(e) if e.kind() == std::io::ErrorKind::WouldBlock));
+
+    // **and one outside the bound is refused by name**, empty or too large
+    d.put("front.webp", b"");
+    assert!(bound(&hosting).err().unwrap().contains("front.webp"));
+    d.put("front.webp", vec![0u8; 65_537]);
+    let why = bound(&hosting).err().unwrap();
+    assert!(why.contains("1 to 65536 bytes"), "{why}");
+}
+
 /// An address and a component are not a choice to be made quietly: §10.6
 /// has the hosting model follow from where the resource runs, and both at
 /// once describes two places.

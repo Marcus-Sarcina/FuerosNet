@@ -1799,7 +1799,7 @@ mod tests {
             &Body::Launchers(rows, BoardList::default()),
         );
         // **a card each, which is what opens it** [author, 2026-11-23], and
-        // **badged with the icon the resource serves**
+        // **badged with the resource's icon**, as its node hands it
         assert!(p.contains(&format!(
             "<button class=\"card\" data-open=\"{}\" data-node=\"{}\" data-by=\"{}\" data-name=\"Notices\">\
              <span class=\"icon\"><img src=\"data:image/png;base64,iVBORw==\" alt=\"\"></span>\

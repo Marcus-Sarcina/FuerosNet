@@ -927,13 +927,17 @@ owner, the role set fingerprints the *user within it*. Not a reason to withhold
 roles; a reason for operators to choose names knowing they are public to those who
 can see the resource.
 
-**Its icon is what it serves at `/favicon.ico`** [author, 2026-11-23]. A member's
-client badges the launcher it shows for a resource with the answer to `GET
-/favicon.ico`, asked once in its run, where that answer is 200 with a declared
-`image/png`, `image/jpeg` or `image/webp` of at most 64 KiB
-(`light-client-requirements.md` §8); a resource serving none is shown by its
-mark. Serve it to anyone who reaches you: it is asked by a client nobody is
-using yet, so answering it with an ask (§3.4) shows nothing and is not held.
+**Its icon is a file your package delivers at installation, and your host
+shows it from then on** [author, 2026-11-23, 2026-11-25]: *"The resource can
+deliver an icon image to the node during installation in the same way a
+desktop application creates it's desktop or start menu icon. The image becomes
+a host system resource and doesn't require execution of the application to be
+displayed."* A member's client badges the launcher it shows for a resource
+with that image (`light-client-requirements.md` §8), and a resource that
+delivered none is shown by its mark. Where it goes in your package is §8's.
+**`GET /favicon.ico` is your host's to answer and never reaches you**
+(`infra-client-requirements.md` §9.4): it is asked for a person who has
+opened nothing of yours, and nothing of yours runs to answer it.
 
 ---
 
@@ -959,6 +963,16 @@ that cannot use you. That is ordinary capacity rather than a defect on either si
 Declaring it here makes the mismatch visible before installation instead of at first
 request, which is packaging hygiene rather than something the protocol enforces. The
 operator's side of the same fact is `infra-client-requirements.md` §9.
+
+**Carry your icon in your image, at `/rhtn/icon.png`, `/rhtn/icon.jpg` or
+`/rhtn/icon.webp`** [author, 2026-11-25]. Your host reads the first of the
+three it finds out of the image at installation, without starting you, and
+keeps it (`infra-client-requirements.md` §9.4). The file's name says its type
+and nothing is sniffed; it is a plain file of 1 byte to 64 KiB, a profile
+image's formats and bound (`wire-format.md` §7.11), and one that is not is
+no icon. It is replaced when you are installed again and is not a line of
+your manifest. A package a host runs from a directory puts the file beside
+its manifest instead, named as the manifest is with that extension.
 
 **What the manifest says of its host** [author, 2026-10-30], beside the roles and
 the bindings it imports: **`host`**, the surface versions you tolerate

@@ -353,24 +353,23 @@ fn every_ask_in_the_sequence_is_one_the_kernel_reads() {
 
 // functional: CAT-029
 #[test]
-fn its_icon_is_one_a_launcher_keeps_and_asking_for_it_is_no_step() {
-    let mut a = app();
-    let first = get(&mut a, WHO);
-    let icon = a.handle(
-        format!(
-            "GET {} HTTP/1.1\r\nhost: testapp.internal\r\nrhtn-principal: {WHO}\r\nrhtn-secret: {}\r\n\r\n",
-            rhtn_testapp::ICON_PATH,
-            host_secret()
-        )
-        .as_bytes(),
+fn its_icon_is_a_file_its_image_carries_where_its_host_reads_one() {
+    // the file is a PNG within the bound, named as one
+    let icon = rhtn_testapp::ICON;
+    assert!(icon.starts_with(b"\x89PNG\r\n\x1a\n") && icon.len() <= 65_536);
+    assert!(rhtn_testapp::ICON_IN_IMAGE.ends_with(".png"));
+    // and the image is built with that file at that path
+    let recipe = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../packaging/Containerfile.testapp"),
+    )
+    .unwrap();
+    assert!(
+        recipe.contains(&format!(
+            "COPY testapp/res/icon.png {}\n",
+            rhtn_testapp::ICON_IN_IMAGE
+        )),
+        "the image carries the icon where a host looks"
     );
-    let read = rhtn_client::resource::answer(&icon).unwrap();
-    assert_eq!(
-        (read.http_status, read.media.as_deref()),
-        (200, Some("image/png"))
-    );
-    assert!(read.body.starts_with(b"\x89PNG\r\n\x1a\n") && read.body.len() <= 65_536);
-    assert_eq!(get(&mut a, WHO), first, "the walk did not move");
 }
 
 // functional: CAT-030

@@ -27,11 +27,13 @@ use std::collections::BTreeMap;
 /// constant would not notice the contract moving.
 pub const ASK_MEDIA: &str = "application/vnd.rhtn.utility+json";
 
-/// **Where a client asks for this resource's icon** (`light-client-requirements.md`
-/// §8), written out for the reason [`ASK_MEDIA`] is.
-pub const ICON_PATH: &str = "/favicon.ico";
+/// **Where this package's image carries its icon**
+/// (`resource-requirements.md` §8), written out for the reason
+/// [`ASK_MEDIA`] is: its host reads the file out at installation and
+/// answers for it from then on, so nothing here serves it.
+pub const ICON_IN_IMAGE: &str = "/rhtn/icon.png";
 
-/// The icon served there: a 64-pixel PNG.
+/// The icon the image carries there: a 64-pixel PNG.
 pub const ICON: &[u8] = include_bytes!("../res/icon.png");
 
 /// The tag the claim's signed array opens with (§3.4).
@@ -498,9 +500,6 @@ impl App {
                 }
                 response(204, "text/plain", Vec::new())
             }
-            // **its icon, where a client's launcher looks for one**
-            // (`light-client-requirements.md` §8), which is no step
-            "GET" if target == ICON_PATH => response(200, "image/png", ICON.to_vec()),
             "GET" => {
                 // a member met for the first time has the whole walk
                 // waiting, which is what their launcher wears once they

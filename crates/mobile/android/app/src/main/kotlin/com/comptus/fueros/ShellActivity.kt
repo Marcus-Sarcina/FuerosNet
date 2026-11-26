@@ -540,9 +540,10 @@ class ShellActivity : Activity() {
                 cornerRadius = dp(10).toFloat()
             }
         }
-        // **badged with the icon the resource serves** [author, 2026-11-23],
-        // decoded by the platform from the format the kernel took; its
-        // mark where it served none, as an orb's
+        // **badged with the resource's icon** [author, 2026-11-23], which
+        // its node hands from what the package's installation delivered
+        // [author, 2026-11-25], decoded by the platform from the format the
+        // kernel took; its mark where there is none, as an orb's
         val bitmap = l.icon?.let { android.graphics.BitmapFactory.decodeByteArray(it, 0, it.size) }
         face.addView(
             if (bitmap != null) {

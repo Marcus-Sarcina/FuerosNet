@@ -25,6 +25,8 @@
 #    list                                        the packages running
 #    logs <name> [<lines>]                       what one said
 #    pull <image-ref>                            fetch an image
+#    icon <image-ref>                            the icon an image carries,
+#                                                read out of it unstarted
 #    node-restart                                restart the node itself
 #    node-upgrade <image-ref>                    replace the node on a new image
 #    version                                     which runner this is
@@ -95,12 +97,24 @@
 #  instead; where it can, the line says `block /rhtn-block <bytes>`.  A
 #  stop leaves the directory: the block is destroyed by an operator and
 #  never by a restart or a reinstall.
+#
+#  **A package's icon is a file in its image, read out at installation**
+#  [author, 2026-11-25]: "The resource can deliver an icon image to the
+#  node during installation in the same way a desktop application creates
+#  it's desktop or start menu icon. The image becomes a host system
+#  resource and doesn't require execution of the application to be
+#  displayed."  So `icon` makes a container of the image and never starts
+#  it, copies out the first of /rhtn/icon.png, /rhtn/icon.jpg and
+#  /rhtn/icon.webp it holds, and removes the container.  The file's name
+#  says its type and nothing is sniffed; one that is no plain file, or is
+#  empty or past 65536 bytes, is no icon.  The reply is `icon <type>
+#  <bytes>` and then the file as one line of base64url, or `icon none`.
 # =============================================================================
 set -eu
 
 # **which runner this is**: a client compares it with the one it carries
 # and tells its operator when a newer one is available
-RUNNER_VERSION=4
+RUNNER_VERSION=5
 RUNNER_SELF="${RHTN_RUNNER_SELF:-/usr/local/bin/rhtn-package-runner}"
 AUTHORIZED="${RHTN_AUTHORIZED_KEYS:-/root/.ssh/authorized_keys}"
 NAMESPACE=rhtn-runner@1
@@ -255,6 +269,42 @@ case "$verb" in
     image="$(image_of "${1:-}")"
     say "pull $image"
     "$ENGINE" pull "$image"
+    ;;
+  icon)
+    image="$(image_of "${1:-}")"; shift
+    [ $# -eq 0 ] || refuse "icon takes one image reference"
+    work="$(mktemp -d)" || refuse "there is no room to read an icon"
+    trap 'rm -rf "$work"' EXIT
+    # **made and never started**: the file comes out of the image's own
+    # filesystem, so nothing of the package runs to give it
+    held="${PREFIX}icon-$$"
+    "$ENGINE" rm -f "$held" > /dev/null 2>&1 || true
+    "$ENGINE" create --name "$held" "$image" > /dev/null 2>&1 \
+      || refuse "that image could not be read for an icon"
+    found=""
+    for kind in png jpeg webp; do
+      case "$kind" in jpeg) ext=jpg ;; *) ext="$kind" ;; esac
+      rm -rf "$work/icon"
+      if "$ENGINE" cp "$held:/rhtn/icon.$ext" "$work/icon" > /dev/null 2>&1 \
+          && [ -f "$work/icon" ] && [ ! -L "$work/icon" ]; then
+        found="image/$kind"
+        break
+      fi
+    done
+    "$ENGINE" rm -f "$held" > /dev/null 2>&1 || true
+    if [ -z "$found" ]; then
+      echo "icon none"
+    else
+      bytes="$(wc -c < "$work/icon" | tr -d ' ')"
+      if [ "$bytes" -lt 1 ] || [ "$bytes" -gt 65536 ]; then
+        echo "icon none"
+      else
+        say "icon $image $found $bytes"
+        echo "icon $found $bytes"
+        base64 -w 0 "$work/icon" | tr '+/' '-_' | tr -d '='
+        echo
+      fi
+    fi
     ;;
   node-restart)
     [ $# -eq 0 ] || refuse "node-restart takes nothing"

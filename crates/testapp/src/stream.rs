@@ -14,7 +14,7 @@
 //! the node's and keeps nothing about who asked: every member is served
 //! the same bytes.
 
-use crate::{ICON, ICON_PATH, read_request};
+use crate::read_request;
 
 /// The bytes in one part.
 pub const PART_BYTES: usize = 1 << 20;
@@ -230,7 +230,6 @@ impl Stream {
                 }
                 answer(204, "text/plain", None, Vec::new())
             }
-            ("GET", ICON_PATH) => answer(200, "image/png", None, ICON.to_vec()),
             ("GET", "/") if self.live.is_some() && !self.answered => {
                 let seconds = self.live.unwrap_or(0);
                 self.said.push(format!(

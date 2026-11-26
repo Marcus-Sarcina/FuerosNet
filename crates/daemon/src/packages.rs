@@ -249,6 +249,76 @@ fn entry(hosting: &Path, p: &Package) -> String {
     out
 }
 
+/// **The icon beside the manifest at `manifest`**, where the package's
+/// installation delivered one (`infra-client-requirements.md` §9.4)
+/// [author, 2026-11-25]: a file named as the manifest is, with the
+/// extension that says its type. The first of the three kinds found is
+/// the icon; one whose size is outside the bound is refused by name, since
+/// a file this node quietly passed over would be a package shown without
+/// the icon its operator believes it has.
+pub fn read_icon(manifest: &Path) -> Result<Option<rhtn_node::resources::Icon>, String> {
+    for (media, ext) in rhtn_node::resources::ICON_KINDS {
+        let at = manifest.with_extension(ext);
+        match std::fs::read(&at) {
+            Ok(bytes) => {
+                return rhtn_node::resources::Icon::of(media, bytes)
+                    .map(Some)
+                    .map_err(|why| format!("{}: {why}", at.display()));
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(format!("{}: {e}", at.display())),
+        }
+    }
+    Ok(None)
+}
+
+/// **Put `icon` beside the manifest at `manifest`, in the place of any
+/// icon there**: none removes what was there, so an installation that
+/// delivered no icon leaves the package with none rather than with its
+/// predecessor's.
+pub fn write_icon(
+    manifest: &Path,
+    icon: Option<&rhtn_node::resources::Icon>,
+) -> Result<(), String> {
+    for (_, ext) in rhtn_node::resources::ICON_KINDS {
+        let at = manifest.with_extension(ext);
+        match std::fs::remove_file(&at) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(format!("{}: {e}", at.display())),
+        }
+    }
+    let Some(icon) = icon else {
+        return Ok(());
+    };
+    let ext = rhtn_node::resources::ICON_KINDS
+        .iter()
+        .find(|(m, _)| *m == icon.media)
+        .map(|(_, e)| *e)
+        .ok_or_else(|| format!("`{}` is not an icon's type", icon.media))?;
+    let at = manifest.with_extension(ext);
+    std::fs::write(&at, &icon.bytes).map_err(|e| format!("{}: {e}", at.display()))
+}
+
+/// **What the host said of a package's icon** (`packaging/package-runner.sh`,
+/// `icon`): `icon <type> <bytes>` and then the file as one line of
+/// base64url, or `icon none`. The icon where the reply carries one this
+/// node will keep, and nothing where it carries none, or one whose bytes
+/// are not the count it named, or the host's runner predates the verb.
+#[must_use]
+pub fn icon_said(reply: &str) -> Option<rhtn_node::resources::Icon> {
+    let mut lines = reply.lines();
+    let head = lines.find(|l| l.starts_with("icon "))?;
+    let mut words = head.split_whitespace().skip(1);
+    let media = words.next().filter(|m| *m != "none")?;
+    let count: usize = words.next()?.parse().ok()?;
+    let bytes = rhtn_node::federation::unbase64url(lines.next()?.trim())?;
+    if bytes.len() != count {
+        return None;
+    }
+    rhtn_node::resources::Icon::of(media, bytes).ok()
+}
+
 /// **What the host said of a block on the start** (`infra-client-requirements.md`
 /// §9.3): the runner's first line is `block <path> <bytes>` where it
 /// mounted one, `block none <why>` where it could not, and nothing of a

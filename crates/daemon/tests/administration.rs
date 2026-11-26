@@ -1506,6 +1506,7 @@ fn recorder(dir: &Path, refuse: &str) -> PathBuf {
              esac\n\
              case \"$last\" in\n\
              \x20 *\" block=\"*) echo \"block /rhtn-block 4096\" ;;\n\
+             \x20 \"icon \"*) echo \"icon image/png 4\"; echo \"iVBORw\"; exit 0 ;;\n\
              esac\n\
              echo \"ok: $last\"\n",
             log.display()
@@ -1555,6 +1556,7 @@ fn install_body(resource: &str, owner: &str, image: &str, port: u16, manifest: &
     .into_bytes()
 }
 
+// functional: PKG-025
 // acceptance: DMN-39
 #[test]
 fn a_package_is_installed_on_the_hosts_shell_and_the_node_then_hosts_it() {
@@ -1584,8 +1586,19 @@ fn a_package_is_installed_on_the_hosts_shell_and_the_node_then_hosts_it() {
     // **the host was asked for the image before anything was written,
     // and for the package afterwards**
     let asked = asked_of_host(&l.dir);
-    assert_eq!(asked.len(), 2, "the vocabulary, in order: {asked:?}");
+    assert_eq!(asked.len(), 3, "the vocabulary, in order: {asked:?}");
     assert_eq!(asked[0], format!("pull {image}"));
+    // **and for its icon, read out of the image and kept beside the
+    // manifest** (`infra-client-requirements.md` §9.4): a file of this
+    // node's from then on, which nothing of the package runs to give
+    assert_eq!(asked[1], format!("icon {image}"));
+    assert_eq!(
+        field(&said, "icon").as_deref(),
+        Some("image/png, 4 bytes, from its image"),
+        "{said}"
+    );
+    let icon_at = l.dir.join("packages").join(format!("{resource}.png"));
+    assert_eq!(std::fs::read(&icon_at).unwrap(), b"\x89PNG");
     // **and the start carries the secret the host established for the
     // instance** (`resource-requirements.md` §3.1; GAT-042): 64 hex digits
     // minted at this install, kept under the state directory
@@ -1593,8 +1606,8 @@ fn a_package_is_installed_on_the_hosts_shell_and_the_node_then_hosts_it() {
         "start {} {image} --listen 127.0.0.1:37460 --resource {resource} --secret ",
         &resource[..16]
     );
-    assert!(asked[1].starts_with(&start), "{:?}", asked[1]);
-    let secret = &asked[1][start.len()..];
+    assert!(asked[2].starts_with(&start), "{:?}", asked[2]);
+    let secret = &asked[2][start.len()..];
     assert_eq!(secret.len(), 64, "{secret}");
     assert!(secret.bytes().all(|b| b.is_ascii_hexdigit()));
 
@@ -1700,6 +1713,7 @@ fn a_package_is_installed_on_the_hosts_shell_and_the_node_then_hosts_it() {
     let listed = ask(at, "GET /node/packages HTTP/1.1", b"");
     assert_eq!(field(&listed, "packages").as_deref(), Some("0"), "{listed}");
     assert!(!manifest.exists(), "the relayed manifest goes with it");
+    assert!(!icon_at.exists(), "and the icon its installation delivered");
 
     d.stop();
     let _ = std::fs::remove_dir_all(&l.dir);
@@ -1735,7 +1749,7 @@ fn an_install_the_node_or_the_host_refuses_leaves_the_configuration_as_it_was() 
     assert!(body(&refused).contains("nothing changed"), "{refused}");
     assert_eq!(
         asked_of_host(&l.dir),
-        vec![format!("pull {image}")],
+        vec![format!("pull {image}"), format!("icon {image}")],
         "nothing was started"
     );
     assert_eq!(
@@ -1864,7 +1878,11 @@ fn an_install_says_what_it_was_missing_rather_than_half_doing_it() {
     assert!(body(&theirs).contains("by hand"), "{theirs}");
 
     // nothing was asked of the host but the one install that succeeded
-    assert_eq!(asked_of_host(&l.dir).len(), 2, "one pull and one start");
+    assert_eq!(
+        asked_of_host(&l.dir).len(),
+        3,
+        "one pull, one icon and one start"
+    );
 
     d.stop();
     let _ = std::fs::remove_dir_all(&l.dir);

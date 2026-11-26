@@ -1527,18 +1527,28 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   count that rose and came with a line, with the resource's name and that
   line, while no screen of yours is showing it; a count that fell, or one
   with no line, tells nothing.
-- **Badge each launcher with the icon its resource serves** [author,
-  2026-11-23: *"Resource cards should be badged with a favicon image
-  determined by the resource"*]. Ask each resource a sweep finds, once in the
-  client's run, for `GET /favicon.ico`, the path the web's own browsers try,
-  so the resource chooses its icon by what it serves there
-  (`resource-requirements.md` §7.4). Keep it where the answer is 200 with a
-  declared `image/png`, `image/jpeg` or `image/webp` of at most 64 KiB — a
-  profile image's formats and bound (`wire-format.md` §7.11) — and nothing
-  else: the declared type decides, as below. An answer that is an ask is not
-  held, since nobody opened anything to be asked. **Keep it in memory alone**,
-  as nothing else a resource answers is kept; a resource that served none
-  wears its mark, as an orb with no picture does.
+- **Open no channel and run no code for a resource the person has not
+  opened at least once** [author, 2026-11-25: *"Vetting occurs at the
+  operator level, but clients must not open channels or execute code for
+  resources the user has not opened at least once with the exception of
+  displaying the notification count."*]. Before that first opening a
+  resource is a launcher and nothing more: no page of its is fetched, no
+  script of its runs, no ask of its is put to the person and no live session
+  is made. What the launcher shows comes from the node and not from the
+  resource: its name and its count on the node's page, and its icon, below.
+- **Badge each launcher with the resource's icon, asked of the node**
+  [author, 2026-11-23: *"Resource cards should be badged with a favicon image
+  determined by the resource"*; 2026-11-25]. Ask the node serving you, once
+  in the client's run for each resource a sweep finds, for `GET
+  /favicon.ico` on that resource, the path the web's own browsers try. **The
+  node answers it from the file the package's installation delivered and
+  hands the request to no resource** (`infra-client-requirements.md` §9.4,
+  `resource-requirements.md` §7.4), which is why asking is no opening. Keep
+  it where the answer is 200 with a declared `image/png`, `image/jpeg` or
+  `image/webp` of at most 64 KiB — a profile image's formats and bound
+  (`wire-format.md` §7.11) — and nothing else: the declared type decides, as
+  below. **Keep it in memory alone**; a resource with none wears its mark,
+  as an orb with no picture does.
 - **Access is gated by current membership in the resource owner's trust horizon**
   (design §11.2), so it changes without any action by the user, on joining,
   departing, or crossing a tenure boundary. The departure warning in §6 above is

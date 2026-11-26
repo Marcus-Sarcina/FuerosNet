@@ -1173,6 +1173,22 @@ not admit leaves nothing running. Then start the package. **Either leg
 failing puts your configuration back as it was and re-reads it**: what is
 in force is what is on disk, as it is for a grant (§10.2).
 
+**Take the package's icon at installation, and answer for it yourself**
+[author, 2026-11-25]. After the image is fetched, ask your host for the
+icon it carries (`resource-requirements.md` §8): the host reads the file
+out of the image without starting it, and you keep it beside the manifest,
+in the place of any icon an earlier installation left, so a package
+installed again with none has none. A host that cannot give one leaves the
+package without. Refuse a configuration whose icon file is empty or past
+64 KiB, naming the file. **`GET /favicon.ico` on a resource you host is
+yours to answer**: decide the request as any other, by the asker's reach
+and their grant, and then answer from that file — 200 with its type, or
+404 where there is none — without handing the request to the package,
+whether or not the package is running. A launcher is badged for a person
+who has opened nothing (`light-client-requirements.md` §8), so nothing of
+the package may run to badge it; the icon is yours once delivered, as a
+desktop's launcher icon is the desktop's.
+
 **Who may reach it afterwards: nobody.** §7 has a package's roles start
 bound to nobody, and that is where an install leaves them. Say so in the
 answer, because an operator who has just installed something will otherwise
