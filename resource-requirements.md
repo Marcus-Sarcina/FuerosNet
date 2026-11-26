@@ -550,6 +550,10 @@ architecture. It is the same shape as
 **What this means for a package author.** Do not design for a single wide-scale
 deployment and expect the network to express its access control; it never sees a
 wide-scale audience. Design for one instance, and let the application federate.
+**The federation exchanges of §3.3 are offered, not required** [author, 2026-11-26]: a
+package on a socket of its own has its own network (`infra-client-requirements.md` §9.2)
+and may federate in a protocol of its own, on a port of its own, with instances the node
+knows nothing of.
 
 **design §11.0.1 carries the argument**: the three properties that follow from
 this, and the cost, which is that every patron running an instance becomes an
