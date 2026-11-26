@@ -629,6 +629,28 @@ __SEGS__ segments played as they arrive. Nothing here is one message.</p>
     } catch (e) { row('fetch_outside', 'refused: ' + e.message); }
     try { row('beacon', String(navigator.sendBeacon('https://' + BESIDE + '/', 'x'))); }
     catch (e) { row('beacon', 'refused: ' + e.message); }
+    // **a plain request across origins**, which goes the one way the
+    // person's client leaves open: to an address shaped like this page's
+    // own that is not it, and to this page's own from a document that is
+    // not this page. Neither answer is this page's to read, so the row
+    // says only that it was asked; what became of it is the client's to say
+    const other = location.protocol + '//' + location.hostname.replace(/^[^.]+/, l => '0'.repeat(l.length));
+    try {
+      const r = await fetch(other + '/crossed');
+      row('fetch_beside', 'answered ' + r.status);
+    } catch (e) { row('fetch_beside', 'refused: ' + e.message); }
+    await new Promise(done => {
+      const f = document.createElement('iframe');
+      f.sandbox = 'allow-scripts';
+      f.style.display = 'none';
+      f.srcdoc = '<script>fetch(' + JSON.stringify(location.origin + '/crossed') + ')' +
+        '.then(r => parent.postMessage("answered " + r.status, "*"), e => parent.postMessage("refused: " + e.message, "*"))<\/script>';
+      let ended = false;
+      const end = v => { if (ended) return; ended = true; row('fetch_crossed', v); f.remove(); done(); };
+      window.addEventListener('message', e => { if (e.source === f.contentWindow) end(String(e.data)); });
+      setTimeout(() => end('asked, and nothing came of it'), 4000);
+      document.body.appendChild(f);
+    });
   }
   // **a live session with this package's media port**: the offer goes as
   // a request of this page's own and the answer is that request's body;

@@ -49,7 +49,10 @@ class ResourceActivity : Activity() {
     /** The frame's session in the engine, closed with the screen. */
     private var session: org.mozilla.geckoview.GeckoSession? = null
 
-    /** The identity that holds the entry this screen was opened from. */
+    /** **The identity this screen asks as, for as long as it is open**:
+     *  the one that holds the entry it was opened from, or the one that
+     *  was acting when it opened. Its frame's origin is that identity's
+     *  ([Frames.origin]), so it does not change under a page. */
     private var by: String? = null
 
     /** Ask as that identity, or as the one that acts where none came. */
@@ -72,8 +75,9 @@ class ResourceActivity : Activity() {
         // is reached inside a subnet, so the identity holding its catalog
         // entry is the one that asks ([Identities.Owned]). Absent where
         // this screen was opened from a pasted keyhash with no entry, and
-        // then the identity that acts asks.
-        by = intent.getStringExtra("by")
+        // then the identity that is acting as it opens asks, and goes on
+        // asking whoever acts afterwards.
+        by = intent.getStringExtra("by") ?: Identities.activeIdentity()
         // **whose entry brought us here** [author, 2026-11-07]: a resource
         // is reached inside a subnet, so the identity that holds its
         // catalog entry is the one that asks ([Identities.Owned]). Absent
@@ -869,7 +873,8 @@ class ResourceActivity : Activity() {
         val node = intent.getStringExtra("node").orEmpty()
         val resource = intent.getStringExtra("resource").orEmpty()
         val path = intent.getStringExtra("path") ?: "/"
-        val origin = Frames.origin(resource)
+        val who = by ?: return note("No identity on this device to open it as.")
+        val origin = Frames.origin(who, resource)
         if (!Engine.carried()) {
             return note("This build carries no engine for this device's processor, so a resource's page is not shown here.")
         }
@@ -877,7 +882,7 @@ class ResourceActivity : Activity() {
         // the page as it was answered, styled, served to the first load
         Carrier.serve(
             Carrier.Serving(
-                resource, by, node, path to page.copy(body = html.toByteArray(Charsets.UTF_8)),
+                resource, who, node, path to page.copy(body = html.toByteArray(Charsets.UTF_8)),
                 // a request of the page's own answered with an ask: the
                 // question takes the page's place, as one at opening does
                 asked = { show(it) },
@@ -1073,7 +1078,9 @@ class ResourceActivity : Activity() {
         // 2026-11-15]: the resource's, until the person forgets the
         // resource ([Frames.forget]); the view itself goes with the screen
         unframe()
-        intent.getStringExtra("resource")?.takeIf { it.length == 64 }?.let { runCatching { Carrier.stop(it) } }
+        val who = by
+        val resource = intent.getStringExtra("resource")
+        if (who != null && resource?.length == 64) runCatching { Carrier.stop(who, resource) }
         super.onDestroy()
     }
 }

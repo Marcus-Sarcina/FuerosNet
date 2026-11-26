@@ -38,31 +38,40 @@ import androidx.webkit.WebViewFeature
 object Frames {
 
     /**
-     * **A resource's origin, minted here** (`light-client-requirements.md`
-     * §8): the resource's keyhash under a name no network resolves, so the
-     * page is same-origin with its own resource and nothing else, its
+     * **A resource's origin as one identity opens it, minted here**
+     * (`light-client-requirements.md` §8): a name no network resolves, so
+     * the page is same-origin with its own resource and nothing else, its
      * storage is its own, and a load to it reaches the kernel and not a
-     * socket. Two labels, since one may not exceed 63 characters.
+     * socket. **One per identity and resource** [author, 2026-11-26]:
+     * what a page stored as one identity is not there as another.
      */
-    fun origin(resource: String): String {
-        val hex = resource.lowercase()
-        require(hex.length == 64 && hex.all { it in '0'..'9' || it in 'a'..'f' }) { "a resource is 64 hex digits" }
-        return "http://${host(resource)}"
-    }
+    fun origin(by: String, resource: String): String = "http://${host(by, resource)}"
+
+    /** How many bytes of the digest a host's one label carries: 62 characters, and a label holds 63. */
+    const val LABEL: Int = 31
 
     /**
-     * **The name a resource's origin goes by**: its keyhash in two labels,
-     * since one may not exceed 63 characters, under `localhost` — a name
-     * every engine holds to be this device and no network resolves. The
+     * **The name that origin goes by**: one label under `localhost`, a
+     * name every engine holds to be this device and no network resolves.
+     * The label is a digest of the identity and the resource, so the page
+     * reads neither from its own address; and it is one label, so each
+     * origin is a site to itself and nothing an engine keeps by site — a
+     * cookie set for the name above — is shared by two of them. The
      * engine reaches it through [Carrier] alone ([Engine]); it has no
      * port, so the origin is the same at every start and what a page
      * stored under it is still there.
      */
-    fun host(resource: String): String {
-        val hex = resource.lowercase()
-        require(hex.length == 64 && hex.all { it in '0'..'9' || it in 'a'..'f' }) { "a resource is 64 hex digits" }
-        return "${hex.substring(0, 32)}.${hex.substring(32)}.localhost"
+    fun host(by: String, resource: String): String {
+        val (who, what) = by.lowercase() to resource.lowercase()
+        require(keyhash(who)) { "an identity is 64 hex digits" }
+        require(keyhash(what)) { "a resource is 64 hex digits" }
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest("$who $what".toByteArray(Charsets.US_ASCII))
+        return digest.take(LABEL).joinToString("") { "%02x".format(it) } + ".localhost"
     }
+
+    private fun keyhash(hex: String): Boolean =
+        hex.length == 64 && hex.all { it in '0'..'9' || it in 'a'..'f' }
 
     /**
      * **Where a frame's engine is sent with everything it would fetch for
@@ -128,17 +137,18 @@ object Frames {
 
     /**
      * **Forget a resource on this device**: what its pages stored under
-     * their origin, and what the person allowed them. Nothing of another
-     * resource is touched, which is what the origin per resource is for.
+     * their origin as each of `identities`, and what the person allowed
+     * them. Nothing of another resource is touched, which is what an
+     * origin of its own is for.
      */
-    fun forget(context: Context, resource: String) {
+    fun forget(context: Context, resource: String, identities: List<String>) {
         runCatching {
             context.getSharedPreferences(SCRIPT_STORE, Context.MODE_PRIVATE)
                 .edit()
                 .remove(resource)
                 .apply()
         }
-        runCatching { Engine.forget(context, resource) }
+        runCatching { Engine.forget(context, identities.map { host(it, resource) }) }
     }
 
     /**

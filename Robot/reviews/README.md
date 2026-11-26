@@ -21,6 +21,7 @@ the input, never the record of what was done about it.
 | Filed | What it reviewed | Where its findings stand |
 |---|---|---|
 | ~~`directive-and-implementation-review-2026-10-26.md`~~ and its probes | The directive surface and its implementation as built on 2026-10-26 | **Ingested and deleted** [author, 2026-10-27]: all nine dispositions are in [`../review-tracking.md`](../review-tracking.md) under R01–R09, and the ten counterexample probes — every one of which reproduced before the fixes — became ordinary regression tests. The files are in `e34bcbb` if they are ever wanted |
+| ~~`2026-11-25-probes/`~~ | Seven counterexample tests, five against the Rust crates and two against the phone's frame proxy, with no prose | **Ingested and deleted** [2026-11-26]: all seven reproduced before anything was changed, and the seven dispositions are in [`../review-tracking.md`](../review-tracking.md) under "Reviewer probes of 2026-11-25", P1 to P7; each has a regression test, P3's holding what was built (a key that cannot be kept is not published, and a service that cannot write does not start) and not what the probe asked. The files are in `29057d75` if they are ever wanted |
 
 **A review is deleted once its findings are recorded**, which is what this
 directory is for: a received artefact is an input, and the record of what was

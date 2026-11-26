@@ -12,7 +12,7 @@ import org.junit.Test
  * what of an answer reaches the engine.
  */
 class CarrierTest {
-    private val host = "${"a".repeat(32)}.${"a".repeat(32)}.localhost"
+    private val host = Frames.host("e".repeat(64), "a".repeat(64))
 
     private fun text(message: ByteArray) = String(message, Charsets.ISO_8859_1)
 
@@ -26,6 +26,13 @@ class CarrierTest {
         assertEquals("/submit?x=1", got.path)
         assertEquals("application/json", got.type)
         assertEquals(12, got.length)
+        // what the engine says of where it came from, each once
+        val marked = Carrier.read(
+            "GET http://$host/ HTTP/1.1\r\nSec-Fetch-Site: Same-Origin\r\nSec-Fetch-Mode: cors\r\n" +
+                "Sec-Fetch-Dest: empty\r\nOrigin: http://$host",
+        )!!
+        assertEquals(listOf("same-origin", "cors", "empty", "http://$host"), listOf(marked.site, marked.mode, marked.dest, marked.origin))
+        assertNull(got.site)
         // the origin's own port is its default and no other
         assertEquals(host, Carrier.read("GET http://$host:80/ HTTP/1.1")!!.host)
         assertEquals("/", Carrier.read("GET http://$host HTTP/1.1")!!.path)
@@ -40,6 +47,8 @@ class CarrierTest {
             "POST http://$host/ HTTP/1.1\r\nTransfer-Encoding: chunked",
             "POST http://$host/ HTTP/1.1\r\nContent-Length: ${(16 shl 20) + 1}",
             "POST http://$host/ HTTP/1.1\r\nContent-Length: -1",
+            "GET http://$host/ HTTP/1.1\r\nSec-Fetch-Site: cross-site\r\nSec-Fetch-Site: same-origin",
+            "GET http://$host/ HTTP/1.1\r\nOrigin: http://$host\r\nOrigin: http://$host",
             "GET http://$host/",
         )) {
             assertNull(head, Carrier.read(head))
@@ -78,17 +87,19 @@ class CarrierTest {
     @Test
     fun the_proxy_answers_a_framed_resource_to_the_holder_of_the_secret_and_nobody_else() {
         val resource = "c".repeat(64)
-        val origin = Frames.host(resource)
+        val nobody = "e".repeat(64)
+        val origin = Frames.host(nobody, resource)
         val page = Gateway.Page(200, "text/html", "utf-8", Gateway.Shape.PAGE, "<p>framed</p>".toByteArray())
-        Carrier.serve(Carrier.Serving(resource, "nobody", "node", "/" to page))
-        val secret = "Proxy-Authorization: ${Carrier.credential()}\r\n"
+        Carrier.serve(Carrier.Serving(resource, nobody, "node", "/" to page))
+        // as the engine marks the screen's own load of the page
+        val secret = "Proxy-Authorization: ${Carrier.credential()}\r\nSec-Fetch-Site: none\r\n"
         try {
             // another app on the device: no secret, and the page stays in hand
             assertTrue(exchange("GET http://$origin/ HTTP/1.1\r\nHost: $origin\r\n\r\n").startsWith("HTTP/1.1 407 "))
             assertTrue(exchange("GET http://$origin/ HTTP/1.1\r\nProxy-Authorization: Basic a2VybmVsOng=\r\n\r\n").startsWith("HTTP/1.1 407 "))
             // the engine, asked by a page for anywhere else
             assertTrue(exchange("GET http://example.invalid/ HTTP/1.1\r\n$secret\r\n").startsWith("HTTP/1.1 403 "))
-            assertTrue(exchange("GET http://${Frames.host("d".repeat(64))}/ HTTP/1.1\r\n$secret\r\n").startsWith("HTTP/1.1 403 "))
+            assertTrue(exchange("GET http://${Frames.host(nobody, "d".repeat(64))}/ HTTP/1.1\r\n$secret\r\n").startsWith("HTTP/1.1 403 "))
             assertTrue(exchange("GET http://127.0.0.1:8080/ HTTP/1.1\r\n$secret\r\n").startsWith("HTTP/1.1 403 "))
             assertTrue(exchange("CONNECT example.invalid:443 HTTP/1.1\r\n$secret\r\n").startsWith("HTTP/1.1 403 "))
             // a path that is the node's, and a method no frame carries
@@ -99,10 +110,86 @@ class CarrierTest {
             assertTrue(served, served.startsWith("HTTP/1.1 200 OK\r\n"))
             assertTrue(served.endsWith("<p>framed</p>"))
         } finally {
-            Carrier.stop(resource)
+            Carrier.stop(nobody, resource)
         }
         // once its screen is gone, its origin is nobody's
         assertTrue(exchange("GET http://$origin/ HTTP/1.1\r\n$secret\r\n").startsWith("HTTP/1.1 403 "))
+    }
+
+    private fun page(body: String) =
+        Gateway.Page(200, "text/html", "utf-8", Gateway.Shape.PAGE, body.toByteArray())
+
+    /** One request as the engine would send it for `host`, marked as given. */
+    private fun asked(host: String, vararg marks: String): String = exchange(
+        "GET http://$host/ HTTP/1.1\r\nProxy-Authorization: ${Carrier.credential()}\r\n" +
+            marks.joinToString("") { "$it\r\n" } + "\r\n",
+    )
+
+    /**
+     * **Only an origin's own page may ask for it** [2026-11-25]: with two
+     * resources framed at once, a request the engine marks as having come
+     * from the other's page, or does not mark, is refused, and the page
+     * in hand for the first load stays in hand.
+     */
+    // acceptance: RSC-58
+    // functional: CAT-034
+    @Test
+    fun a_request_that_crossed_from_another_origin_is_not_carried() {
+        val who = "e".repeat(64)
+        val (a, b) = "a".repeat(64) to "b".repeat(64)
+        val (ha, hb) = Frames.host(who, a) to Frames.host(who, b)
+        Carrier.serve(Carrier.Serving(a, who, "node-a", "/" to page("A")))
+        Carrier.serve(Carrier.Serving(b, who, "node-b", "/" to page("B")))
+        try {
+            // a's page asking for b, as the engine marks it: with the
+            // asking origin named, and without
+            assertTrue(asked(hb, "Origin: http://$ha", "Sec-Fetch-Site: cross-site").startsWith("HTTP/1.1 403 "))
+            assertTrue(asked(hb, "Sec-Fetch-Site: cross-site", "Sec-Fetch-Mode: no-cors").startsWith("HTTP/1.1 403 "))
+            assertTrue(asked(hb, "Sec-Fetch-Site: same-site").startsWith("HTTP/1.1 403 "))
+            // the mark and the origin named disagree: the origin named decides too
+            assertTrue(asked(hb, "Origin: http://$ha", "Sec-Fetch-Site: same-origin").startsWith("HTTP/1.1 403 "))
+            assertTrue(asked(hb, "Origin: null", "Sec-Fetch-Site: same-origin").startsWith("HTTP/1.1 403 "))
+            // no mark at all: nothing says whose it is
+            assertTrue(asked(hb).startsWith("HTTP/1.1 403 "))
+            // and b's own page, which gets the page that stayed in hand
+            val own = asked(hb, "Origin: http://$hb", "Sec-Fetch-Site: same-origin")
+            assertTrue(own, own.startsWith("HTTP/1.1 200 ") && own.endsWith("B"))
+        } finally {
+            Carrier.stop(who, a)
+            Carrier.stop(who, b)
+        }
+        assertEquals("unmarked", Carrier.crossed(Carrier.read("GET http://$ha/ HTTP/1.1")!!))
+        assertEquals("cross-site", Carrier.crossed(Carrier.read("GET http://$ha/ HTTP/1.1\r\nSec-Fetch-Site: cross-site")!!))
+        assertNull(Carrier.crossed(Carrier.read("GET http://$ha/ HTTP/1.1\r\nSec-Fetch-Site: none")!!))
+    }
+
+    /**
+     * **One resource opened as two identities is two frames**
+     * [author, 2026-11-26]: each has an origin of its own, so the second
+     * does not take the first's place and each is answered its own page,
+     * as the identity it was opened as.
+     */
+    // acceptance: RSC-58
+    // functional: CAT-035
+    @Test
+    fun one_resource_opened_as_two_identities_is_answered_as_each() {
+        val resource = "c".repeat(64)
+        val (first, second) = "1".repeat(64) to "2".repeat(64)
+        assertNotEquals(Frames.host(first, resource), Frames.host(second, resource))
+        Carrier.serve(Carrier.Serving(resource, first, "node", "/" to page("the first's page")))
+        Carrier.serve(Carrier.Serving(resource, second, "node", "/" to page("the second's page")))
+        try {
+            assertTrue(asked(Frames.host(first, resource), "Sec-Fetch-Site: none").endsWith("the first's page"))
+            assertTrue(asked(Frames.host(second, resource), "Sec-Fetch-Site: none").endsWith("the second's page"))
+            // one frame closing leaves the other answered
+            Carrier.stop(first, resource)
+            Carrier.serve(Carrier.Serving(resource, second, "node", "/" to page("again")))
+            assertTrue(asked(Frames.host(first, resource), "Sec-Fetch-Site: none").startsWith("HTTP/1.1 403 "))
+            assertTrue(asked(Frames.host(second, resource), "Sec-Fetch-Site: none").endsWith("again"))
+        } finally {
+            Carrier.stop(first, resource)
+            Carrier.stop(second, resource)
+        }
     }
 
     @Test

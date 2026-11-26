@@ -77,6 +77,9 @@ struct Offered {
 
 /// **What opening a resource came to**, for the window to frame.
 struct Framed {
+    /// **The identity that opened it**, which is the one its window asks
+    /// as for as long as it is open.
+    by: Vec<u8>,
     node: Vec<u8>,
     resource: Vec<u8>,
     name: String,
@@ -90,6 +93,7 @@ struct Framed {
 /// context its storage lives in, held together since dropping any of them
 /// is the window gone.
 struct FrameWindow {
+    by: Vec<u8>,
     resource: Vec<u8>,
     window: tao::window::Window,
     _view: wry::WebView,
@@ -279,7 +283,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             Event::UserEvent(Said::Frame(framed)) => {
-                let Some(p) = up.running.lock().unwrap().clone() else {
+                // **as the identity that opened it**, whichever is in
+                // focus by now
+                let Some(p) = up.by(&framed.by).map(|i| i.p) else {
                     return;
                 };
                 match open_frame(target, &root, framed, p, worker.clone()) {
@@ -440,9 +446,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     resource,
                     name,
                 }) => {
-                    // **one window per resource**: one already open is
-                    // brought forward rather than opened twice
-                    if let Some(f) = frames.iter().find(|f| f.resource == resource) {
+                    // **one window per resource and identity**: one
+                    // already open is brought forward rather than opened
+                    // twice, and the same resource as another identity
+                    // is a window of its own [author, 2026-11-26]
+                    if let Some(f) = frames.iter().find(|f| f.resource == resource && f.by == by) {
                         f.window.set_focus();
                         return;
                     }
@@ -1547,6 +1555,7 @@ fn open(
         None => false,
     };
     let _ = back.send_event(Said::Frame(Framed {
+        by: p.me(),
         node,
         resource,
         name,
@@ -1677,6 +1686,7 @@ fn open_frame(
     back: EventLoopProxy<Said>,
 ) -> Result<FrameWindow, Box<dyn std::error::Error>> {
     let Framed {
+        by,
         node,
         resource,
         name,
@@ -1685,8 +1695,9 @@ fn open_frame(
     } = framed;
     let key = hex(&resource);
     let held = resource.clone();
-    let origin = frame::origin(&key)?;
-    let storage = frame::dir(root, &key).join("web");
+    let who = hex(&by);
+    let origin = frame::origin(&who, &key)?;
+    let storage = frame::storage(root, &who, &key);
     platform::create_private(&storage)?;
     let mut context = wry::WebContext::new(Some(storage));
     let w = WindowBuilder::new()
@@ -1737,6 +1748,7 @@ fn open_frame(
     );
     let view = web_view(builder, &w)?;
     Ok(FrameWindow {
+        by,
         resource: held,
         window: w,
         _view: view,

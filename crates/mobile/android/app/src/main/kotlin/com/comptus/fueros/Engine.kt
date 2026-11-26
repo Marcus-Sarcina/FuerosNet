@@ -223,12 +223,13 @@ object Engine {
         }
     }
 
-    /** Wipe what a resource's pages stored under its origin. */
-    fun forget(context: Context, resource: String) {
+    /** Wipe what a resource's pages stored under each of its origins. */
+    fun forget(context: Context, hosts: List<String>) {
         if (!carried()) return
-        val host = Frames.host(resource)
         android.os.Handler(android.os.Looper.getMainLooper()).post {
-            with(context) { it?.storageController?.clearDataFromHost(host, StorageController.ClearFlags.ALL) }
+            with(context) { engine ->
+                for (host in hosts) engine?.storageController?.clearDataFromHost(host, StorageController.ClearFlags.ALL)
+            }
         }
     }
 }

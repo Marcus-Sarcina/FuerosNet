@@ -20,6 +20,12 @@ import java.util.concurrent.ConcurrentHashMap
  * else by construction, whichever way its markup or its code asks — there
  * is no second route for the engine to take.
  *
+ * **And only that origin's own page may ask for it** ([crossed]). Two
+ * frames are answered here at once, and a request is answered as the
+ * identity its frame was opened as; so one the engine says came from
+ * another origin, or does not say came from this one, is refused before
+ * any resource is asked.
+ *
  * **Only this app's engine may ask.** A port on the loopback is open to
  * every app on the device, and a request here is answered as the member.
  * So each carries a secret minted when this process starts, which the
@@ -37,7 +43,7 @@ object Carrier {
     /** Whom a framed resource is asked as, and through which node. */
     class Serving(
         val resource: String,
-        val by: String?,
+        val by: String,
         val node: String,
         /** The page already in hand, served to the first load of its path. */
         @Volatile var first: Pair<String, Gateway.Page>?,
@@ -90,12 +96,12 @@ object Carrier {
 
     /** Begin answering a resource's origin, as the identity and node its screen named. */
     fun serve(s: Serving) {
-        serving[Frames.host(s.resource)] = s
+        serving[Frames.host(s.by, s.resource)] = s
     }
 
     /** Stop answering it: the screen that framed it is gone. */
-    fun stop(resource: String) {
-        serving.remove(Frames.host(resource))
+    fun stop(by: String, resource: String) {
+        serving.remove(Frames.host(by, resource))
     }
 
     /** One request as this proxy reads it. */
@@ -106,6 +112,13 @@ object Carrier {
         val path: String,
         val type: String?,
         val length: Int,
+        /** Where the engine says the request came from, against where it goes (`Sec-Fetch-Site`). */
+        val site: String? = null,
+        /** What the engine says the request is for (`Sec-Fetch-Mode`, `Sec-Fetch-Dest`). */
+        val mode: String? = null,
+        val dest: String? = null,
+        /** The origin the engine names as asking, where it names one (`Origin`). */
+        val origin: String? = null,
     )
 
     /** What the engine presents when it holds the secret. */
@@ -133,6 +146,10 @@ object Carrier {
         if (host.isEmpty() || host.contains(':') || host.contains('@')) return null
         var type: String? = null
         var length = 0
+        var site: String? = null
+        var mode: String? = null
+        var dest: String? = null
+        var origin: String? = null
         for (line in lines.drop(1)) {
             val colon = line.indexOf(':')
             if (colon <= 0) continue
@@ -142,9 +159,31 @@ object Carrier {
                 "content-length" -> length = value.toIntOrNull()?.takeIf { it in 0..MOST } ?: return null
                 // a body whose length is not said is not one this reads
                 "transfer-encoding" -> return null
+                // said twice is said by somebody else: the engine says each once
+                "sec-fetch-site" -> site = if (site == null) value.lowercase() else return null
+                "sec-fetch-mode" -> mode = if (mode == null) value.lowercase() else return null
+                "sec-fetch-dest" -> dest = if (dest == null) value.lowercase() else return null
+                "origin" -> origin = if (origin == null) value.lowercase() else return null
             }
         }
-        return Asked(first[0].uppercase(), host, path, type, length)
+        return Asked(first[0].uppercase(), host, path, type, length, site, mode, dest, origin)
+    }
+
+    /**
+     * **Why a request is not this origin's own page asking, or nothing
+     * where it is.** The engine marks every request with where it came
+     * from against where it goes, and a page cannot write or remove the
+     * mark. What is carried is a request the origin's own page made
+     * (`same-origin`), and the screen's own load of the page, which no
+     * page made (`none`). One with no mark is not carried: nothing here
+     * can tell whose it is. And where the engine names the asking origin,
+     * it is this one.
+     */
+    fun crossed(a: Asked): String? = when {
+        a.site == null -> "unmarked"
+        a.site != "same-origin" && a.site != "none" -> a.site
+        a.origin != null && a.origin != "http://${a.host}" -> "another origin"
+        else -> null
     }
 
     /** What a request's head presents to the proxy, whatever else it is. */
@@ -254,6 +293,18 @@ object Carrier {
             out.write(elsewhere())
             return
         }
+        // **from this origin's own page, or not carried**: before any
+        // resource is looked for, so what is refused is the same whether
+        // or not a frame of the host asked is open
+        crossed(asked)?.let { why ->
+            Diag.event(
+                "carrier.crossed",
+                "why" to why, "mode" to asked.mode, "dest" to asked.dest,
+                "method" to asked.method, "framed" to (serving[asked.host] != null),
+            )
+            out.write(elsewhere())
+            return
+        }
         val s = serving[asked.host]
         if (s == null) {
             out.write(elsewhere())
@@ -278,13 +329,8 @@ object Carrier {
                 return
             }
         }
-        val who = s.by ?: Identities.activeId
-        if (who == null) {
-            out.write(notCarried("nobody is acting"))
-            return
-        }
         val carried = Gateway.requestAs(
-            who, s.node, s.resource, asked.method, asked.path,
+            s.by, s.node, s.resource, asked.method, asked.path,
             asked.type.takeIf { asked.length > 0 },
             body.takeIf { asked.length > 0 },
         )

@@ -408,8 +408,10 @@ the same through the `rhtn/1:notices` binding (`infra-client-requirements.md`
 
 **A member's client frames your page so that it reaches you and nothing of
 theirs** (`light-client-requirements.md` §8) [author, 2026-11-15]: an origin
-of its own per resource, every load and navigation inside it carried by the
-kernel to you and every other one answered with nothing, storage of its own,
+of its own per resource and per identity that opens it, every load and
+navigation inside it carried by the kernel to you and every other one answered
+with nothing, storage of its own, **and what your page stored as one identity
+is not there as another** [author, 2026-11-26],
 and **script only where your page declares it** — a `content-security-policy`
 naming `script-src`, which the frame's engine then holds you to — **and the
 member has allowed it**, asked once per resource. A page that runs is given one

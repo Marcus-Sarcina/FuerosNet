@@ -5,10 +5,11 @@
 //!
 //! **The policy is the phone's, and the engine is the one that differs.**
 //!
-//!  - **An origin of its own**: [`origin`] mints one per resource under a
-//!    scheme the window registers and a name no network resolves, and each
-//!    resource's window has a web context of its own under [`dir`], so its
-//!    storage is its own, kept, and gone when the directory is.
+//!  - **An origin of its own**: [`origin`] mints one per identity and
+//!    resource under a scheme the window registers and a name no network
+//!    resolves, and each such window has a web context of its own under
+//!    [`storage`], so what a page stores is its own as that identity,
+//!    kept, and gone when the directory is.
 //!  - **The same resource, and nothing else**: every load inside that
 //!    origin is composed here ([`compose`]) and carried by the kernel to the
 //!    resource by the node that served it; a navigation anywhere else is
@@ -43,18 +44,27 @@ pub const METHODS: [&str; 5] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 /// has not got is a refusal saying so, never a silence.
 pub const NO_UTILITY: &str = "this device has no such utility";
 
-/// **The origin minted for a resource**: its keyhash in two labels, under
-/// a name no network resolves, as the phone mints one (`Frames.origin`).
-pub fn origin(resource: &str) -> Result<String, String> {
-    let hex = resource.to_ascii_lowercase();
-    if hex.len() != 64 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+/// How many bytes of the digest an origin's one label carries: 62
+/// characters, and a label holds 63.
+pub const LABEL: usize = 31;
+
+/// **The origin minted for a resource as one identity opens it**
+/// [author, 2026-11-26]: one label, a digest of the identity and the
+/// resource, under a name no network resolves, as the phone mints one
+/// (`Frames.origin`). The page reads neither from its own address, and
+/// what it stored as one identity is not there as another.
+pub fn origin(by: &str, resource: &str) -> Result<String, String> {
+    let (who, what) = (by.to_ascii_lowercase(), resource.to_ascii_lowercase());
+    let keyhash = |hex: &str| hex.len() == 64 && hex.bytes().all(|b| b.is_ascii_hexdigit());
+    if !keyhash(&who) {
+        return Err("an identity is 64 hex digits".into());
+    }
+    if !keyhash(&what) {
         return Err("a resource is 64 hex digits".into());
     }
-    Ok(format!(
-        "{SCHEME}://{}.{}.rhtn.invalid",
-        &hex[..32],
-        &hex[32..]
-    ))
+    let digest = rhtn_codec::cose::sha256(format!("{who} {what}").as_bytes());
+    let label: String = digest[..LABEL].iter().map(|b| format!("{b:02x}")).collect();
+    Ok(format!("{SCHEME}://{label}.rhtn.invalid"))
 }
 
 /// **Whether `url` is inside `origin`**: the origin itself, or a path
@@ -351,11 +361,19 @@ pub const SCRIPT_ASKS: &str = "This resource's pages run their own code. In its 
      not another resource — and keeps storage of its own on this computer. Allow it for this \
      resource?";
 
-/// **Where one resource's frame keeps what it keeps**: its web storage and
-/// the person's answer about its code, in a directory of its own, so
-/// forgetting the resource is removing one directory.
+/// **Where one resource's frames keep what they keep**: the person's
+/// answer about its code, and beneath it what its pages stored as each
+/// identity ([`storage`]), in a directory of its own, so forgetting the
+/// resource is removing one directory.
 pub fn dir(state: &Path, resource: &str) -> PathBuf {
     state.join("frames").join(resource.to_ascii_lowercase())
+}
+
+/// **Where a resource's pages store what they store as one identity**
+/// [author, 2026-11-26]: a web context of its own, so nothing a page kept
+/// as one identity is read as another.
+pub fn storage(state: &Path, by: &str, resource: &str) -> PathBuf {
+    dir(state, resource).join(by.to_ascii_lowercase())
 }
 
 /// **Whether the person allowed this resource's pages to run their
@@ -492,6 +510,7 @@ mod tests {
     use super::*;
 
     const R: &str = "AB00000000000000000000000000000000000000000000000000000000000001";
+    const ME: &str = "1100000000000000000000000000000000000000000000000000000000000002";
 
     fn page(
         media: Option<&str>,
@@ -525,17 +544,39 @@ mod tests {
 
     #[test]
     fn a_resource_has_an_origin_of_its_own_and_a_prefix_of_it_is_outside() {
-        let o = origin(R).unwrap();
-        assert_eq!(
-            o,
-            "rhtnr://ab000000000000000000000000000000.00000000000000000000000000000001.rhtn.invalid"
-        );
+        let o = origin(ME, R).unwrap();
+        // one label: a digest, the same at every start, saying neither
+        // who nor what
+        let label = o
+            .strip_prefix("rhtnr://")
+            .and_then(|h| h.strip_suffix(".rhtn.invalid"))
+            .expect("the scheme and the name");
+        assert_eq!(label.len(), 62);
+        assert!(label.bytes().all(|b| b.is_ascii_hexdigit()));
+        assert_eq!(o, origin(&ME.to_uppercase(), &R.to_uppercase()).unwrap());
+        assert!(!o.contains(&R.to_lowercase()[..16]) && !o.contains(&ME[..16]));
         assert!(inside(&o, &o));
         assert!(inside(&o, &format!("{o}/a?b")));
         assert!(!inside(&o, &format!("{o}.evil/")));
         assert!(!inside(&o, "https://example.com/"));
-        assert!(origin("ab").is_err());
-        assert!(origin(&"g".repeat(64)).is_err());
+        assert!(origin(ME, "ab").is_err());
+        assert!(origin(ME, &"g".repeat(64)).is_err());
+        assert!(origin("ab", R).is_err());
+    }
+
+    // functional: CAT-035
+    #[test]
+    fn one_resource_as_two_identities_is_two_origins_and_two_stores() {
+        let other = "2".repeat(64);
+        assert_ne!(origin(ME, R).unwrap(), origin(&other, R).unwrap());
+        assert_ne!(origin(ME, R).unwrap(), origin(R, ME).unwrap());
+        let state = Path::new("/state");
+        let (mine, theirs) = (storage(state, ME, R), storage(state, &other, R));
+        assert_ne!(mine, theirs);
+        // both under the resource's one directory, beside its answer
+        // about code, so forgetting the resource is still one removal
+        assert!(mine.starts_with(dir(state, R)) && theirs.starts_with(dir(state, R)));
+        assert_eq!(storage(state, &ME.to_uppercase(), R), mine);
     }
 
     #[test]
@@ -655,7 +696,7 @@ mod tests {
 
     #[test]
     fn the_bridge_names_the_origin_and_publishes_one_object() {
-        let o = origin(R).unwrap();
+        let o = origin(ME, R).unwrap();
         let js = bridge(&o);
         assert!(js.contains(&format!("const ORIGIN = \"{o}\"")));
         assert!(js.contains(r#"["GET","POST","PUT","PATCH","DELETE"]"#));

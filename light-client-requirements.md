@@ -1592,13 +1592,24 @@ to show a resource's page has to read one.
   asserting it**. What that argument forbids is reach into the device; it does
   not forbid a page running against its own resource, and an application of any
   size needs to. So:
-  - **Give the page an origin of its own**, minted by the client from the
-    resource's keyhash under a name no network resolves, so it is same-origin
-    with its own resource and nothing else, and its storage is its own.
+  - **Give the page an origin of its own**, minted by the client under a name
+    no network resolves, so it is same-origin with its own resource and
+    nothing else, and its storage is its own. **One for each identity that
+    opens the resource** [author, 2026-11-26]: what a page stored as one
+    identity is not there as another, and two identities with the same
+    resource open are two pages, neither in the other's place. *"Even though
+    we publish core resources, those will be widely customizable, so a shared
+    data store would not make sense even if we didn't want the identities
+    unlinkable, which we do."* The identity a page is opened as is the one its
+    every request is carried as, until it is closed.
   - **Carry every load and navigation inside that origin through the kernel**,
     to the same resource by the same node, and answer every other one with
     nothing. The kernel stays the only network and sees every exchange, as it
-    does a form's.
+    does a form's. **And carry one only for that origin's own page**
+    [2026-11-26]: where one route answers for every page you have framed, a
+    request another page made of this origin would be asked as this page's
+    identity, so refuse whatever the engine does not mark as the origin's own
+    page asking.
   - **Leave the frame's engine no network but that one** [author,
     2026-11-25]. A load the engine offers you is the least of what a page can
     ask of it: a socket, from its window, from a window it makes for itself or
@@ -1632,7 +1643,7 @@ to show a resource's page has to read one.
     Nothing of the client is reachable through it.
   - **Keep what a page stores, under its origin**, across screens, and wipe it
     when the user forgets the resource. Nothing of one resource reaches
-    another.
+    another, and nothing a page kept as one identity reaches it as another.
 - **Style beneath the page rather than over it, and do not rewrite its markup.**
   What the resource has not styled for itself the client may style to match its
   own surface, with rules the page's own override. Editing somebody else's

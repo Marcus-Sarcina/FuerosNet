@@ -206,17 +206,31 @@ class ResourcePageTest {
     fun a_resources_origin_is_its_own_and_resolves_nowhere() {
         val a = "a".repeat(64)
         val b = "b".repeat(64)
-        assertEquals("http://${"a".repeat(32)}.${"a".repeat(32)}.localhost", Frames.origin(a))
-        assertEquals("${"a".repeat(32)}.${"a".repeat(32)}.localhost", Frames.host(a))
-        assertNotEquals(Frames.origin(a), Frames.origin(b))
-        assertEquals(Frames.Going.INSIDE, Frames.resourceGoing(Frames.origin(a), Frames.origin(a) + "/x?y"))
-        assertEquals(Frames.Going.REFUSE, Frames.resourceGoing(Frames.origin(a), Frames.origin(b) + "/x"))
-        assertEquals(Frames.Going.REFUSE, Frames.resourceGoing(Frames.origin(a), "https://example.invalid/"))
-        assertEquals(Frames.Going.REFUSE, Frames.resourceGoing(Frames.origin(a), "file:///etc/hosts"))
+        val (me, other) = "1".repeat(64) to "2".repeat(64)
+        // one label under a name that is this device: a digest, the same
+        // at every start, which says neither who nor what
+        val host = Frames.host(me, a)
+        assertEquals("http://$host", Frames.origin(me, a))
+        assertTrue(host, Regex("[0-9a-f]{62}\\.localhost").matches(host))
+        assertEquals(host, Frames.host(me.uppercase(), a.uppercase()))
+        assertTrue(!host.contains(a.take(16)) && !host.contains(me.take(16)))
+        // per resource, and per identity [author, 2026-11-26]
+        assertNotEquals(Frames.origin(me, a), Frames.origin(me, b))
+        assertNotEquals(Frames.origin(me, a), Frames.origin(other, a))
+        assertNotEquals(Frames.origin(me, a), Frames.origin(a, me))
+        for (bad in listOf("ab", "g".repeat(64))) {
+            assertTrue(runCatching { Frames.host(bad, a) }.isFailure)
+            assertTrue(runCatching { Frames.host(me, bad) }.isFailure)
+        }
+        assertEquals(Frames.Going.INSIDE, Frames.resourceGoing(Frames.origin(me, a), Frames.origin(me, a) + "/x?y"))
+        assertEquals(Frames.Going.REFUSE, Frames.resourceGoing(Frames.origin(me, a), Frames.origin(me, b) + "/x"))
+        assertEquals(Frames.Going.REFUSE, Frames.resourceGoing(Frames.origin(me, a), Frames.origin(other, a) + "/x"))
+        assertEquals(Frames.Going.REFUSE, Frames.resourceGoing(Frames.origin(me, a), "https://example.invalid/"))
+        assertEquals(Frames.Going.REFUSE, Frames.resourceGoing(Frames.origin(me, a), "file:///etc/hosts"))
         assertEquals(
             "a prefix of the host is another host",
             Frames.Going.REFUSE,
-            Frames.resourceGoing(Frames.origin(a), Frames.origin(a) + ".example.invalid/"),
+            Frames.resourceGoing(Frames.origin(me, a), Frames.origin(me, a) + ".example.invalid/"),
         )
     }
 
@@ -245,7 +259,7 @@ class ResourcePageTest {
         // reaches for the definitions — either alone would pass while the
         // other drifted.
         val screen = source("ResourceActivity.kt")
-        assertTrue("the page loads at the resource's own origin", screen.contains("Frames.origin(resource)"))
+        assertTrue("the page loads at the resource's own origin", screen.contains("Frames.origin(who, resource)"))
         assertTrue("its origin is answered by the carrier", screen.contains("Carrier.serve("))
         assertTrue("no frame before the engine holds what it was told", screen.contains("Engine.with(this) { engine ->"))
         assertTrue("the session is the engine's own definition", screen.contains("Engine.session(allowed)"))
