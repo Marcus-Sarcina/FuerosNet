@@ -5,7 +5,8 @@
     tools/bench-package.py mint <file>
 
 `<verb>` is one of `rhtn node`'s package acts -- `install`, `remove`,
-`grant`, `grant-template`, `packages`, `running`, `logs`, `acts` -- and every
+`grant`, `grant-template`, `grants`, `grant-narrow`, `grant-drop`,
+`packages`, `running`, `logs`, `log`, `acts` -- and every
 option after it is handed to `rhtn node <verb>` as it is
 (`--resource`, `--image`, `--port`, `--manifest`, `--authority`, `--roles`,
 `--of`, ...). What this adds is the operator, so a caller holds no key:
@@ -53,7 +54,8 @@ CRATES = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 key_script = __import__("bench-host-key")
 
-VERBS = {"install", "remove", "grant", "grant-template", "packages", "running", "logs", "acts"}
+VERBS = {"install", "remove", "grant", "grant-template", "grants", "grant-narrow", "grant-drop",
+         "packages", "running", "logs", "log", "acts"}
 SURFACE = 7449
 
 

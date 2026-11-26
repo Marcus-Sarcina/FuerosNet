@@ -391,9 +391,9 @@ an image to a person opening it. Every step is a verb of `rhtn`, driving
 the same routes and the same proof a client's screens do.
 
 1. **Build an image** that keeps [the container contract](#the-container-contract)
-   below, and **push it, naming it by digest** (`registry/name@sha256:…`)
-   when it is installed, so what the host pulls is what was tested and a
-   moved tag changes nothing already running.
+   below, push it, and **name it by digest** (`registry/name@sha256:…`,
+   the `digest:` line a push ends with): the node refuses a tag, which
+   names whatever was pushed under it last.
 2. **Mint the resource's identity**: `rhtn keys mint resource.key`, and
    `rhtn keys show resource.key` for its keyhash. It is the resource's,
    not the operator's.
