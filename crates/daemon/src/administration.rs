@@ -1991,7 +1991,7 @@ impl Surface {
         let Some((res_hex, act)) = rest.split_once('/') else {
             return (
                 404,
-                "GET /node/resource/<hex>/federation, GET …/log, PUT …/envelope, POST …/federate\n"
+                "GET /node/resource/<hex>/federation, GET …/grants, GET …/log, PUT …/envelope, POST …/federate\n"
                     .into(),
             );
         };
@@ -2089,6 +2089,21 @@ impl Surface {
                 };
                 (status, format!("{outcome:?}\n"))
             }
+            // **the grants in force, numbered as narrow and drop take
+            // them**: the page's own list as text, so an operator with no
+            // page names the one they mean by the number it is read under
+            ("GET", "grants") => {
+                let view = node.view.lock().unwrap();
+                if view.resources.binding(&resource).is_none() {
+                    return (404, "no resource is bound here under that identity\n".into());
+                }
+                let grants = view.resources.grants_for(&resource);
+                let mut out = format!("grants {}\n", grants.len());
+                for (n, g) in grants.iter().enumerate() {
+                    out.push_str(&format!("grant {n} {g}\n"));
+                }
+                (200, out)
+            }
             // the local rounds; what is pending for another node goes on
             // the tick, which is where the transport lives
             ("POST", "federate") => (200, format!("{:?}\n", crate::federation::rounds(&node))),
@@ -2122,7 +2137,7 @@ impl Surface {
             }
             _ => (
                 404,
-                "GET /node/resource/<hex>/federation, GET …/log, PUT …/envelope, POST …/federate\n"
+                "GET /node/resource/<hex>/federation, GET …/grants, GET …/log, PUT …/envelope, POST …/federate\n"
                     .into(),
             ),
         }

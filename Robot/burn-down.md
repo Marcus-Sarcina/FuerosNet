@@ -68,21 +68,21 @@ is decided, built or explicitly deferred; a deferral moves to
 
 | # | Work | Waits on |
 |---|---|---|
-| B-01 | Write the developer procedure (build, push by digest, mint, install, grant, open, logs) and the container contract (`--listen`, `--resource`, `--secret`, user, read-only root, `/rhtn-block`), with the block and log verbs | — |
+| B-01 | **Done 2026-11-26**: the procedure and the container contract in `crates/packaging/README.md` ("Hosting a package: the procedure", "The container contract"), the package verbs in `rhtn`'s usage, which had none of them | — |
 | B-02 | **Done 2026-11-24** (53dc2563, PKG-021): a request is decided under the lock and its package asked holding nothing; a request the node answers itself waited 3.38 s behind a 2 s package before, under 1 s after | — |
 | B-03 | Utility asks on the desktop | D-01 |
 | B-04 | Closed with D-02: nothing to build | — |
 | B-05 | **Done 2026-11-24**: the HTTP limits stated (resource-requirements section 3) and the answer bound raised (PKG-022) | — |
 | B-06 | `local.sh`: `resources`, `state`, host shell | D-05 |
 | B-07 | Run `smoke.sh` in the gate or CI, so a renamed config key fails a build and not a developer | — |
-| B-08 | Command-line verbs to narrow or drop a grant and to read an instance's log | — |
+| B-08 | **Done 2026-11-26**: `rhtn node grants` (a new route, `GET /node/resource/<hex>/grants`, numbered as narrow and drop take them), `grant-narrow`, `grant-drop`, and `node log` for the instance's own log beside `node logs` for the container's output | — |
 | B-09 | An act that sets an installed package's federation relationships | — |
 | B-10 | A client that composes a resource's registration, so a launcher has a name other than its authority | — |
 | B-11 | Phone: form posts, a file picker, binary bodies; check a 3xx answer does not crash the frame | — |
 | B-12 | `live` on the phone: **built 2026-11-25** (see B-55); video capture, PDF scan and `uwb` are still declined there | — |
 | B-13 | Install and offering screens on the desktop (phone only today) | — |
 | B-14 | The install act's seal warning says less than light-client section 10 requires | — |
-| B-15 | `crates/packaging/README.md`: the "carries no control yet" passage predates the acts | with B-01 |
+| B-15 | **Done 2026-11-26** with B-01: the passage now says the page shows and the declared acts ask | — |
 
 ### Protocol and node
 

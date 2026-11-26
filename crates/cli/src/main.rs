@@ -45,10 +45,6 @@ usage: rhtn <command> [...]
   node destroy --provider <name> --credential-file <file> --id <machine id>
         Destroy a machine launched this way, at the provider.
   node enrol <identity> <host:port> --token <64 hex> [...]
-  node renew <identity> <host:port> --token <64 hex> [--credentials <n>]
-        Sign the next run for an instance already enrolled, opening where
-        its current run ends (I §7). The proof is checked again; neither
-        record of §4.4 is re-signed.
         Enrol an instance over its administration surface: fetch the
         transport key it minted, check the proof that it holds the token
         its configuration carried, and hand back a run signed over that
@@ -66,6 +62,55 @@ usage: rhtn <command> [...]
         one is corrected (I §4.4). The addresses themselves do not change.
         This is the provisioning page's work as an instrument: in a product
         the client does it (L §8.3). It crosses no protocol request.
+  node renew <identity> <host:port> --token <64 hex> [--credentials <n>]
+        Sign the next run for an instance already enrolled, opening where
+        its current run ends (I §7). The proof is checked again; neither
+        record of §4.4 is re-signed.
+
+  node install --at <host:port> --identity <file> --resource <keyhash>
+        --owner <keyhash> (--manifest <file> --image <ref> --authority <name>
+        --port <n> | --offering <link>) [--token <64 hex>]
+        Install a package on an instance: the node writes its hosting
+        entry, relays the manifest, and asks its host to pull and start
+        the image (I §9.4). <identity> is the operator's, which the
+        restricted ssh key is derived from; --token proves an act that
+        does not arrive on the instance's loopback, and is the one
+        `node launch` printed. An option given beside --offering wins.
+  node remove --at <host:port> --identity <file> --resource <keyhash>
+  node packages --at <host:port>
+        What the node installed: resource, container, image, port and
+        authority.
+  node running --at <host:port> --identity <file>
+  node logs --at <host:port> --identity <file> --resource <keyhash>
+        [--lines <n>]
+        What the host runs, and one container's process output as its
+        engine kept it (at most 500 lines).
+  node log --at <host:port> --resource <keyhash>
+        What the instance wrote through its host's log binding (I §9.3),
+        the last 64 KiB.
+  node grant --at <host:port> --resource <keyhash> --roles <a,b>
+        [--of <clause> [--with <value>]] [--until <epoch seconds>]
+        Grant roles the package declared (I §10.3). With no --of it is
+        every member of the owner's horizon. Clauses: clients,
+        grandclients, distance, most-trusted, top-fraction, joined-before,
+        named.
+  node grants --at <host:port> --resource <keyhash>
+        The grants in force, numbered. A number is a position and moves
+        when a grant before it is withdrawn.
+  node grant-narrow --at <host:port> --resource <keyhash> --grant <n>
+        --of <clause> [--with <value>]
+        Add a clause to grant <n>, which is the and.
+  node grant-drop --at <host:port> --resource <keyhash> --grant <n>
+        Withdraw grant <n>, ending the sessions it carried (I §10.5).
+  node grant-template --at <host:port> --resource <keyhash> --name <name>
+        Take a grant the package offers, by its name.
+  node acts --at <host:port>
+        The acts this instance declares it can be asked for.
+  node offer --manifest <file> --name <name> --image <ref>
+        --authority <name> [--port <n>]
+        Compose the package offering a distributor publishes, as a link.
+        Every verb above but `node offer` takes --token where the act does
+        not arrive on the instance's loopback.
 
   probe <identity> <node-keyhash> <address> <ask> [...]
         Attach and ask one read-only question. <ask> is one of:
@@ -238,6 +283,10 @@ fn do_node(rest: &[&str]) -> Result<String, String> {
         Some("remove") => return do_package(&rest[1..], Package::Remove),
         Some("grant") => return do_package(&rest[1..], Package::Grant),
         Some("grant-template") => return do_package(&rest[1..], Package::Template),
+        Some("grants") => return do_package(&rest[1..], Package::Grants),
+        Some("grant-narrow") => return do_package(&rest[1..], Package::Narrow),
+        Some("grant-drop") => return do_package(&rest[1..], Package::Drop),
+        Some("log") => return do_package(&rest[1..], Package::Log),
         Some("packages") => return do_package(&rest[1..], Package::Listed),
         Some("running") => return do_package(&rest[1..], Package::Running),
         Some("logs") => return do_package(&rest[1..], Package::Logs),
@@ -248,9 +297,12 @@ fn do_node(rest: &[&str]) -> Result<String, String> {
     };
     if *sub != "enrol" && *sub != "renew" {
         return Err(format!(
-            "`node {sub}` is not a command; there are `node launch`, `node offers`,              `node credential`, `node destroy`, `node enrol`, `node renew`,              `node acts`, `node offer`, `node install`, `node remove`, \
-             `node grant`, `node grant-template`, `node packages`, `node running` and \
-             `node logs`"
+            "`node {sub}` is not a command; there are `node launch`, `node offers`, \
+             `node credential`, `node destroy`, `node enrol`, `node renew`, \
+             `node acts`, `node offer`, `node install`, `node remove`, \
+             `node grant`, `node grant-template`, `node grants`, `node grant-narrow`, \
+             `node grant-drop`, `node packages`, `node running`, `node logs` and \
+             `node log`"
         ));
     }
     let (mut token, mut credentials, mut endpoint) = (None, 7usize, None);
@@ -433,7 +485,7 @@ fn do_destroy(opts: &[&str]) -> Result<String, String> {
     )
 }
 
-/// Which of the five package acts `node <verb>` named.
+/// Which of the package acts `node <verb>` named.
 enum Package {
     Acts,
     Offer,
@@ -441,12 +493,16 @@ enum Package {
     Remove,
     Grant,
     Template,
+    Grants,
+    Narrow,
+    Drop,
     Listed,
     Running,
     Logs,
+    Log,
 }
 
-/// **`node install|remove|grant|grant-template|packages|running|logs`**:
+/// **`node install|remove|grant|grant-template|grants|grant-narrow|grant-drop|packages|running|logs|log`**:
 /// the acts an operator
 /// makes on the packages their own instance hosts ([`install`];
 /// `infra-client-requirements.md` §9.4).
@@ -475,6 +531,7 @@ fn do_package(opts: &[&str], which: Package) -> Result<String, String> {
             "of",
             "with",
             "until",
+            "grant",
         ],
     )?;
     let number = |k: &str| -> Result<Option<u16>, String> {
@@ -509,6 +566,13 @@ fn do_package(opts: &[&str], which: Package) -> Result<String, String> {
         of: o.get("of").cloned(),
         with: o.get("with").cloned(),
         until: o.get("until").cloned(),
+        grant: match o.get("grant") {
+            None => None,
+            Some(v) => Some(
+                v.parse()
+                    .map_err(|_| "--grant takes the number `node grants` lists it under")?,
+            ),
+        },
     };
     match which {
         Package::Acts => install::acts(&ask),
@@ -517,9 +581,13 @@ fn do_package(opts: &[&str], which: Package) -> Result<String, String> {
         Package::Remove => install::remove(&ask),
         Package::Grant => install::grant(&ask),
         Package::Template => install::template(&ask),
+        Package::Grants => install::grants(&ask),
+        Package::Narrow => install::narrow(&ask),
+        Package::Drop => install::drop_grant(&ask),
         Package::Listed => install::packages(&ask),
         Package::Running => install::running(&ask, false),
         Package::Logs => install::running(&ask, true),
+        Package::Log => install::log(&ask),
     }
 }
 

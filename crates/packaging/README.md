@@ -134,17 +134,17 @@ presented in"). Before the run arrives it says what it is waiting for and
 carries the transport key to sign over; afterwards it is the node's state —
 what it is, what it holds, who is attached, and §8's exposure disclosure.
 
-**It carries no control yet, which is not a prohibition** [corrected,
-2026-10-08]. §8.1's "reads and never speaks for the node" is glossed by §8.1
-itself as composing, signing or sending nothing *on the wire*, and OPS-012 has
-hosting, predicates and standing policies kept as explicit management acts —
-which presupposes acts. A control within the node's own authority is one of
-those; what §8.1 and OPS-011 forbid is a packet workbench. So the page is text
-and tables today because nothing is wired to invoke an operation, and invoking
-one waits on a third reserved role. What can never be a control here is an act
-needing the operator's *seed* — the endpoint record and the anchor entry carry
-their signature, not the delegation's (§4.4), and the instance does not hold
-that key (design §23.3), so for those the page can only ask the client.
+**What it shows and what may be asked are different halves**
+(`infra-client-requirements.md` §8.3). The page is the node's state, read
+only. The acts are declared beside it at `GET /node/acts`, in the same
+closed vocabulary a package declares its operations in, and a client draws
+them and proves each invocation (`rhtn_daemon::acts`): acknowledge, reload,
+stop, install, running, upgrade, move, runner-refresh, the four grant acts,
+logs and remove. `rhtn node acts` prints the declaration. What can never be
+an act here is one needing the operator's *seed*: the endpoint record and
+the anchor entry carry their signature, not the delegation's (§4.4), and the
+instance does not hold that key (design §23.3), so for those the node can
+only ask the client.
 
 **The frame is the client's to sandbox** (§8.3), isolated from its keys,
 archive and sealed captures, because a seized node serving a hostile page must
@@ -383,6 +383,80 @@ sent**. The client picks a nonce; the answer carries `HMAC-SHA256(token,
 "rhtn/1:enrolment-proof" || nonce || key)` beside the key. The token is not the
 transport key: the private half never leaves the instance, which is what design
 §23.3 is for.
+
+## Hosting a package: the procedure
+
+What a package author does to have their resource served by a node, from
+an image to a person opening it. Every step is a verb of `rhtn`, driving
+the same routes and the same proof a client's screens do.
+
+1. **Build an image** that keeps [the container contract](#the-container-contract)
+   below, and **push it, naming it by digest** (`registry/name@sha256:…`)
+   when it is installed, so what the host pulls is what was tested and a
+   moved tag changes nothing already running.
+2. **Mint the resource's identity**: `rhtn keys mint resource.key`, and
+   `rhtn keys show resource.key` for its keyhash. It is the resource's,
+   not the operator's.
+3. **Install it** on the operator's instance:
+
+   ```
+   rhtn node install --at <machine>:7449 --token <token> \
+     --identity operator.key --resource <resource keyhash> \
+     --owner <operator keyhash> --manifest package.toml \
+     --image registry/name@sha256:… --authority shop.internal --port 7460
+   ```
+
+   The token is the one `node launch` printed; an act arriving on the
+   instance's own loopback needs none. The node writes the hosting entry,
+   relays the manifest, reads the icon out of the image, and asks its host
+   to pull and start it. A refusal changes nothing and says which part was
+   missing or refused. `--offering <link>` in place of the manifest, image,
+   authority and port takes what a distributor published (`rhtn node
+   offer` composes one).
+4. **Grant who may reach it**: nobody does until a grant is made.
+   `rhtn node grant … --roles reader` is every member of the owner's
+   horizon; `--of <clause> --with <value>` narrows it at once.
+   `rhtn node grants` lists them numbered, and `grant-narrow` and
+   `grant-drop` name one by that number. `grant-template --name` takes one
+   the package offers.
+5. **Open it**: from a launcher on a member's phone or desktop, or as a
+   check from here, `rhtn resource <identity> <node keyhash> <address>
+   <resource keyhash> /`.
+6. **Read what it said**: `rhtn node logs` is the container's own output
+   as its engine kept it (needs `--identity`); `rhtn node log` is what the
+   instance wrote through its host's log binding.
+   `rhtn node packages` and `rhtn node running` say what is installed and
+   what is up.
+
+**Installing again replaces it**: the container's name is derived from the
+resource (`rhtn-pkg-` and its keyhash's first sixteen hex digits), so a
+second install of one resource is an upgrade, keeping its block and its
+secret. `rhtn node remove` stops it and leaves the block, which only its
+operator destroys.
+
+**A node from `local.sh` has no shell on this machine to start a package
+with**, so steps 3 and 6's `node logs` are refused there and say which line
+is missing. `testapp.sh install` is the route on this machine meanwhile: it
+writes the hosting entry itself and restarts the node.
+
+### The container contract
+
+How the host starts a socket-backed package (`package-runner.sh`'s `start`),
+and so what an image must keep:
+
+| | |
+|---|---|
+| **Arguments** | `--listen 127.0.0.1:<port> --resource <64 hex> --secret <64 hex>`, after the image, in that order. Listen where you are told; answer as that resource |
+| **Network** | the host's own (`--network=host`): your port is on the loopback the node shares, and the node is how anyone reaches it |
+| **The secret** | read the node's `rhtn-*` headers only on a request presenting it as `rhtn-secret`, and present it on yours to the host's surface (`resource-requirements.md` §3.1, §3.3). It is the same across restarts and reinstalls |
+| **Filesystem** | the root is read-only; `/tmp` is a tmpfs, lost on every restart; `/rhtn-block` is yours to write where your manifest asked for a block (`[budget] block_bytes`, or importing `rhtn/1:block`, 64 MiB unasked) and the host could bound one by its filesystem. Where it could not, your block is a surface of the host's instead, and the relationships exchange says which (§3.3) |
+| **User** | the image's own `USER`. No capabilities (`--cap-drop=all`) and no privilege gained (`no-new-privileges`), so running as root buys nothing; run as a user of your own |
+| **Lifetime** | `--restart=always`, with the arguments it was started with |
+| **Output** | standard output and error are kept by the engine and read with `node logs`; what your operator should read as your log goes through the host's log binding instead |
+| **Icon** | `/rhtn/icon.png`, `.jpg` or `.webp` in the image, read out without starting it (`resource-requirements.md` §8) |
+
+`crates/testapp` is a package keeping all of this, and
+`Containerfile.testapp` its image.
 
 ## The three credentials, and why the distinction is in the document
 

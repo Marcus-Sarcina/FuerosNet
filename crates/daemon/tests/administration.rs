@@ -954,6 +954,25 @@ fn a_grant_is_made_and_withdrawn_from_the_page_and_is_written_back() {
         "the clause narrowed the grant it was given: {page}"
     );
 
+    // **and the same grants as text, numbered as narrow and drop take
+    // them**, for an operator with no page (`rhtn node grants`)
+    let listed = ask(
+        at,
+        &format!("GET /node/resource/{RES}/grants HTTP/1.1"),
+        b"",
+    );
+    assert_eq!(200, status(&listed), "{listed}");
+    assert!(
+        listed.contains("grants 1\n") && listed.contains("grant 0 reader to my 10 most trusted"),
+        "{listed}"
+    );
+    let elsewhere = ask(
+        at,
+        &format!("GET /node/resource/{}/grants HTTP/1.1", "07".repeat(32)),
+        b"",
+    );
+    assert_eq!(404, status(&elsewhere), "{elsewhere}");
+
     // a role the package never declared is refused, and nothing moves
     let no = ask(
         at,

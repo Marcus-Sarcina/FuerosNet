@@ -74,6 +74,9 @@ pub struct Ask {
     pub with: Option<String>,
     /// When a grant lapses, in seconds since the epoch.
     pub until: Option<String>,
+    /// Which grant a narrowing or a withdrawal names: the number
+    /// `node grants` lists it under.
+    pub grant: Option<usize>,
 }
 
 /// Install the package `ask` describes, and say what the node and its
@@ -244,6 +247,81 @@ pub fn template(ask: &Ask) -> Result<String, String> {
         .ok_or("`node grant-template` names --name, the grant the package offers")?;
     let body = form(&[("resource", &resource), ("name", &name)]);
     act(ask, "/node/grant/template", &body, QUICK)
+}
+
+/// **The grants in force on a resource, numbered** as a narrowing and a
+/// withdrawal name them. The numbers are positions and move when a grant
+/// before one is withdrawn, so a list is read again before the next act.
+pub fn grants(ask: &Ask) -> Result<String, String> {
+    let resource = ask
+        .resource
+        .as_ref()
+        .ok_or("`node grants` names --resource")?;
+    let path = format!("/node/resource/{resource}/grants");
+    let addr = resolve(&ask.at)?;
+    let target = proved(ask, "GET", &path, b"")?;
+    said(&exchange(
+        addr,
+        &format!("GET {target} HTTP/1.1"),
+        b"",
+        QUICK,
+    )?)
+}
+
+/// **Narrow a grant by one clause**, the conjunction
+/// (`infra-client-requirements.md` §10.3).
+pub fn narrow(ask: &Ask) -> Result<String, String> {
+    let resource = ask
+        .resource
+        .clone()
+        .ok_or("`node grant-narrow` names --resource")?;
+    let at = ask
+        .grant
+        .ok_or("`node grant-narrow` names --grant, the number `node grants` lists it under")?;
+    let of = ask
+        .of
+        .clone()
+        .ok_or("`node grant-narrow` names --of, the clause it adds")?;
+    let none = String::new();
+    let body = form(&[
+        ("resource", &resource),
+        ("at", &at.to_string()),
+        ("of", &of),
+        ("with", ask.with.as_ref().unwrap_or(&none)),
+    ]);
+    act(ask, "/node/grant/narrow", &body, QUICK)
+}
+
+/// **Withdraw a grant**, which ends the hosted sessions its rows carried
+/// (`infra-client-requirements.md` §10.5).
+pub fn drop_grant(ask: &Ask) -> Result<String, String> {
+    let resource = ask
+        .resource
+        .clone()
+        .ok_or("`node grant-drop` names --resource")?;
+    let at = ask
+        .grant
+        .ok_or("`node grant-drop` names --grant, the number `node grants` lists it under")?;
+    let body = form(&[("resource", &resource), ("at", &at.to_string())]);
+    act(ask, "/node/grant/drop", &body, QUICK)
+}
+
+/// **What the instance itself wrote** through its host's log binding
+/// (`infra-client-requirements.md` §9.3), and what the host refused it:
+/// the node's own file, the last 64 KiB of it, which needs no key. Not
+/// `node logs`, which is the container's process output as its engine
+/// kept it.
+pub fn log(ask: &Ask) -> Result<String, String> {
+    let resource = ask.resource.as_ref().ok_or("`node log` names --resource")?;
+    let path = format!("/node/resource/{resource}/log");
+    let addr = resolve(&ask.at)?;
+    let target = proved(ask, "GET", &path, b"")?;
+    said(&exchange(
+        addr,
+        &format!("GET {target} HTTP/1.1"),
+        b"",
+        QUICK,
+    )?)
 }
 
 /// What the node's record says it installed, which needs no key.
