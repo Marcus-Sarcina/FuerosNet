@@ -456,7 +456,12 @@ the same routes and the same proof a client's screens do.
    horizon; `--of <clause> --with <value>` narrows it at once.
    `rhtn node grants` lists them numbered, and `grant-narrow` and
    `grant-drop` name one by that number. `grant-template --name` takes one
-   the package offers.
+   the package offers. **Whom it federates with** is set the same way:
+   `rhtn node relate … --relation subordinate --instance <keyhash>`, with
+   `--group <name>` for kin, and `--address` and `--presents` where another
+   node hosts that instance (its federation listener and the key it
+   presents); `unrelate` withdraws one. A removal keeps them, as it keeps
+   the grants.
 5. **Open it**: from a launcher on a member's phone or desktop, or as a
    check from here, `rhtn resource <identity> <node keyhash> <address>
    <resource keyhash> /`.

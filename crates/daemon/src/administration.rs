@@ -501,6 +501,8 @@ impl Surface {
             ("GET", "/node/packages") => self.package_list(),
             ("POST", "/node/package/install") => self.package_install(&req.body),
             ("POST", "/node/package/remove") => self.package_remove(&req.body),
+            ("POST", "/node/package/relate") => self.relationship(&req.body, true),
+            ("POST", "/node/package/unrelate") => self.relationship(&req.body, false),
             ("POST", "/node/package/running") => self.package_said(&req.body, false),
             ("POST", "/node/package/logs") => self.package_said(&req.body, true),
             ("POST", "/node/reload") => self.reload(),
@@ -833,6 +835,8 @@ impl Surface {
             "grant-template" => self.grant_template(body),
             "install" => self.package_install(body),
             "remove" => self.package_remove(body),
+            "relate" => self.relationship(body, true),
+            "unrelate" => self.relationship(body, false),
             "running" => self.package_said(body, false),
             "logs" => self.package_said(body, true),
             "upgrade" => self.node_upgrade(body),
@@ -1183,8 +1187,8 @@ impl Surface {
     /// the part this act is about; what the host said is reported rather
     /// than refused.
     ///
-    /// **What is kept**: the grants, the storage block, the log and the
-    /// jobs. A removal is how an operator upgrades — it is a removal and
+    /// **What is kept**: the grants, the relationships, the storage
+    /// block, the log and the jobs. A removal is how an operator upgrades — it is a removal and
     /// an install of the same resource — and an upgrade that silently
     /// dropped who may reach the package, or its data, would be the worse
     /// surprise. The answer names what was left behind.
@@ -1257,11 +1261,184 @@ impl Surface {
         (
             200,
             format!(
-                "removed {}\n{stopped}\nkept the grants, the storage block, the log and the \
-                 jobs: a removal is also how a package is upgraded\n",
+                "removed {}\n{stopped}\nkept the grants, the relationships, the storage block, \
+                 the log and the jobs: a removal is also how a package is upgraded\n",
                 hex(&resource)
             ),
         )
+    }
+
+    /// **Set or withdraw one federation relationship of a package this
+    /// node installed** (`infra-client-requirements.md` §9.2: "written in
+    /// your hosting configuration beside the resource"), which an operator
+    /// with no shell could not otherwise reach.
+    ///
+    /// Written into the node's own record and generated into the
+    /// package's entry, then re-read, so the instance is told at once and a
+    /// relationship withdrawn revokes the work it authorised, both by the
+    /// reload a hand edit gets. **A resource its operator wrote into the
+    /// hosting file by hand keeps its relationships there**, where the
+    /// node does not write.
+    fn relationship(&self, body: &[u8], adding: bool) -> (u16, String) {
+        if self.acting().is_err() {
+            return (409, "this node is not serving yet\n".into());
+        }
+        let Some((hosting, _)) = self.hosting.clone() else {
+            return (409, "the configuration names no `resources` file\n".into());
+        };
+        let f = form(body);
+        let keyhash = |name: &str| {
+            unhex(field(&f, name)).and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
+        };
+        let Some(resource) = keyhash("resource") else {
+            return (400, "a resource is 64 lower-case hex digits\n".into());
+        };
+        let Some(instance) = keyhash("instance") else {
+            return (
+                400,
+                "the related instance is its resource keyhash, 64 lower-case hex digits\n".into(),
+            );
+        };
+        let related =
+            match crate::packages::Related::named(field(&f, "relation"), field(&f, "group")) {
+                Ok(r) => r,
+                Err(why) => return (400, format!("{why}\n")),
+            };
+        let packages = match crate::packages::read(&hosting) {
+            Ok(p) => p,
+            Err(why) => return (500, format!("{why}\n")),
+        };
+        if !packages.iter().any(|p| p.resource == resource) {
+            return (
+                404,
+                "this node installed no such package through its surface. A resource its \
+                 operator wrote into the hosting file by hand is related there\n"
+                    .into(),
+            );
+        }
+        let was = match crate::packages::read_relations(&hosting) {
+            Ok(w) => w,
+            Err(why) => return (500, format!("{why}\n")),
+        };
+        let same = |r: &crate::packages::Relation| {
+            r.resource == resource && r.related == related && r.instance == instance
+        };
+        let mut now = was.clone();
+        let said = if adding {
+            let at = match (field(&f, "address"), field(&f, "presents")) {
+                ("", "") => None,
+                (a, k) if !a.is_empty() && !k.is_empty() => {
+                    let Ok(address) = a.parse::<std::net::SocketAddr>() else {
+                        return (400, format!("`{a}` is not an address and port\n"));
+                    };
+                    let Some(key) = unhex(k).and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
+                    else {
+                        return (
+                            400,
+                            "the key a listener presents is 64 lower-case hex digits\n".into(),
+                        );
+                    };
+                    Some((address, key))
+                }
+                _ => {
+                    return (
+                        400,
+                        "where another node hosts it is its listener and the key it presents, \
+                         both or neither\n"
+                            .into(),
+                    );
+                }
+            };
+            if instance == resource {
+                return (400, "an instance is not its own relationship\n".into());
+            }
+            if was.iter().any(same) {
+                return (409, format!("it is {related} of this one already\n"));
+            }
+            if related == crate::packages::Related::Patron
+                && let Some(p) = was
+                    .iter()
+                    .find(|r| r.resource == resource && r.related == related)
+            {
+                return (
+                    409,
+                    format!(
+                        "it has a patron's instance already, {}: withdraw that one first\n",
+                        hex(&p.instance)
+                    ),
+                );
+            }
+            if let Some(loc) = at
+                && let Some((there, _)) = was
+                    .iter()
+                    .filter(|r| r.resource == resource && r.instance == instance)
+                    .find_map(|r| r.at)
+                    .filter(|l| *l != loc)
+            {
+                return (
+                    409,
+                    format!(
+                        "that instance is reached at {there} already: one instance is at one \
+                         node, so withdraw the relationship that says so first\n"
+                    ),
+                );
+            }
+            now.push(crate::packages::Relation {
+                resource,
+                related: related.clone(),
+                instance,
+                at,
+            });
+            let located = at
+                .or_else(|| {
+                    was.iter()
+                        .filter(|r| r.resource == resource && r.instance == instance)
+                        .find_map(|r| r.at)
+                })
+                .map_or(
+                    "where no node is named for it, this node carries to it only if it hosts \
+                     it, and what is emitted for it otherwise waits on this page as pending"
+                        .to_string(),
+                    |(a, _)| format!("reached at {a}"),
+                );
+            format!(
+                "related {} as {related} of {}\n{located}\n",
+                hex(&instance),
+                hex(&resource)
+            )
+        } else {
+            now.retain(|r| !same(r));
+            if now.len() == was.len() {
+                return (404, format!("it is not {related} of this one\n"));
+            }
+            format!(
+                "withdrew {} as {related} of {}\nthe work it authorised stops with it, both \
+                 ways, and says so on this page\n",
+                hex(&instance),
+                hex(&resource)
+            )
+        };
+        if let Err(why) = crate::packages::write_relations(&hosting, &now, &packages) {
+            let _ = crate::packages::write_relations(&hosting, &was, &packages);
+            return (500, format!("{why}; nothing changed\n"));
+        }
+        let (code, reread) = self.reload();
+        if code != 200 {
+            let _ = crate::packages::write_relations(&hosting, &was, &packages);
+            let _ = self.reload();
+            return (
+                400,
+                format!("this node did not re-read its configuration: {reread}\nnothing changed\n"),
+            );
+        }
+        tracing::info!(
+            target: "daemon",
+            step = "surface_act",
+            act = if adding { "relate" } else { "unrelate" },
+            resource = %hex(&resource),
+            "daemon.lifecycle"
+        );
+        (200, said)
     }
 
     /// **What this node installed through its own surface**, as its record

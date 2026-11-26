@@ -104,6 +104,16 @@ usage: rhtn <command> [...]
         Withdraw grant <n>, ending the sessions it carried (I §10.5).
   node grant-template --at <host:port> --resource <keyhash> --name <name>
         Take a grant the package offers, by its name.
+  node relate --at <host:port> --resource <keyhash>
+        --relation <patron|subordinate|kin> [--group <name>]
+        --instance <keyhash> [--address <host:port> --presents <64 hex>]
+        Federate a package this node installed with another instance
+        (I §9.2). --address and --presents are where another node hosts
+        it: its federation listener and the key it presents.
+  node unrelate --at <host:port> --resource <keyhash>
+        --relation <patron|subordinate|kin> [--group <name>]
+        --instance <keyhash>
+        Withdraw one, and the work it authorised with it.
   node acts --at <host:port>
         The acts this instance declares it can be asked for.
   node offer --manifest <file> --name <name> --image <ref>
@@ -286,6 +296,8 @@ fn do_node(rest: &[&str]) -> Result<String, String> {
         Some("grants") => return do_package(&rest[1..], Package::Grants),
         Some("grant-narrow") => return do_package(&rest[1..], Package::Narrow),
         Some("grant-drop") => return do_package(&rest[1..], Package::Drop),
+        Some("relate") => return do_package(&rest[1..], Package::Relate),
+        Some("unrelate") => return do_package(&rest[1..], Package::Unrelate),
         Some("log") => return do_package(&rest[1..], Package::Log),
         Some("packages") => return do_package(&rest[1..], Package::Listed),
         Some("running") => return do_package(&rest[1..], Package::Running),
@@ -301,8 +313,8 @@ fn do_node(rest: &[&str]) -> Result<String, String> {
              `node credential`, `node destroy`, `node enrol`, `node renew`, \
              `node acts`, `node offer`, `node install`, `node remove`, \
              `node grant`, `node grant-template`, `node grants`, `node grant-narrow`, \
-             `node grant-drop`, `node packages`, `node running`, `node logs` and \
-             `node log`"
+             `node grant-drop`, `node relate`, `node unrelate`, `node packages`, \
+             `node running`, `node logs` and `node log`"
         ));
     }
     let (mut token, mut credentials, mut endpoint) = (None, 7usize, None);
@@ -496,13 +508,15 @@ enum Package {
     Grants,
     Narrow,
     Drop,
+    Relate,
+    Unrelate,
     Listed,
     Running,
     Logs,
     Log,
 }
 
-/// **`node install|remove|grant|grant-template|grants|grant-narrow|grant-drop|packages|running|logs|log`**:
+/// **`node install|remove|grant|grant-template|grants|grant-narrow|grant-drop|relate|unrelate|packages|running|logs|log`**:
 /// the acts an operator
 /// makes on the packages their own instance hosts ([`install`];
 /// `infra-client-requirements.md` §9.4).
@@ -532,6 +546,11 @@ fn do_package(opts: &[&str], which: Package) -> Result<String, String> {
             "with",
             "until",
             "grant",
+            "relation",
+            "group",
+            "instance",
+            "address",
+            "presents",
         ],
     )?;
     let number = |k: &str| -> Result<Option<u16>, String> {
@@ -566,6 +585,11 @@ fn do_package(opts: &[&str], which: Package) -> Result<String, String> {
         of: o.get("of").cloned(),
         with: o.get("with").cloned(),
         until: o.get("until").cloned(),
+        relation: o.get("relation").cloned(),
+        group: o.get("group").cloned(),
+        instance: o.get("instance").cloned(),
+        address: o.get("address").cloned(),
+        presents: o.get("presents").cloned(),
         grant: match o.get("grant") {
             None => None,
             Some(v) => Some(
@@ -584,6 +608,8 @@ fn do_package(opts: &[&str], which: Package) -> Result<String, String> {
         Package::Grants => install::grants(&ask),
         Package::Narrow => install::narrow(&ask),
         Package::Drop => install::drop_grant(&ask),
+        Package::Relate => install::relate(&ask, true),
+        Package::Unrelate => install::relate(&ask, false),
         Package::Listed => install::packages(&ask),
         Package::Running => install::running(&ask, false),
         Package::Logs => install::running(&ask, true),

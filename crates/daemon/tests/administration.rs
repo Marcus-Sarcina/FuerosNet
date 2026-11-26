@@ -1738,6 +1738,155 @@ fn a_package_is_installed_on_the_hosts_shell_and_the_node_then_hosts_it() {
     let _ = std::fs::remove_dir_all(&l.dir);
 }
 
+// functional: OPS-021
+#[test]
+fn an_installed_packages_relationships_are_set_and_withdrawn_from_the_operators_surface() {
+    let (l, d, at) = enrolled_with("relate", |l| {
+        l.ssh_client = Some(recorder(&l.dir, "none"));
+    });
+    let resource = hex(&[0xc4u8; 32]);
+    let owner = hex(&test_identity("bob").public.keyhash);
+    let image = "ggcr.io/mzuech/fuerosnet/rhtn-testapp@sha256:abc12345abc12345abc12345abc12345abc12345abc12345abc12345abc12345";
+    let install = || {
+        ask(
+            at,
+            "POST /node/package/install HTTP/1.1",
+            &install_body(&resource, &owner, image, 37462, "roles = [\"reader\"]\n"),
+        )
+    };
+    assert!(install().starts_with("HTTP/1.1 200"));
+    let patron = hex(&[0xd1u8; 32]);
+    let sub = hex(&[0xd2u8; 32]);
+    let far_key = hex(&[0xd3u8; 32]);
+    let relate = |body: String| ask(at, "POST /node/act/relate HTTP/1.1", body.as_bytes());
+    let plane = || {
+        ask(
+            at,
+            &format!("GET /node/resource/{resource}/federation HTTP/1.1"),
+            b"",
+        )
+    };
+
+    // **declared for a package this node installed**, and withdrawing only
+    // once there is something to withdraw
+    let acts = ask(at, "GET /node/acts HTTP/1.1", b"");
+    assert!(acts.contains("\"relate\""), "{acts}");
+    assert!(!acts.contains("\"unrelate\""), "{acts}");
+
+    let said = relate(format!(
+        "resource={resource}&relation=patron&instance={patron}&address=203.0.113.9%3A7452&presents={far_key}"
+    ));
+    assert!(said.starts_with("HTTP/1.1 200"), "{said}");
+    assert!(said.contains("reached at 203.0.113.9:7452"), "{said}");
+    let said = relate(format!(
+        "resource={resource}&relation=subordinate&instance={sub}"
+    ));
+    assert!(said.starts_with("HTTP/1.1 200"), "{said}");
+    assert!(
+        said.contains("pending"),
+        "an unlocated instance is said to wait: {said}"
+    );
+
+    // **written into the generated entry and re-read**, so the plane has it
+    let hosting = std::fs::read_to_string(l.dir.join("hosting")).unwrap();
+    assert!(
+        hosting.contains(&format!("patron = \"{patron}\"")),
+        "{hosting}"
+    );
+    assert!(
+        hosting.contains(&format!("\"{patron}\" = {{ address = \"203.0.113.9:7452\"")),
+        "{hosting}"
+    );
+    let now = plane();
+    assert!(now.contains(&format!("\"patron\":\"{patron}\"")), "{now}");
+    assert!(now.contains(&sub), "{now}");
+    let acts = ask(at, "GET /node/acts HTTP/1.1", b"");
+    assert!(acts.contains("\"unrelate\""), "{acts}");
+
+    // **what it refuses, changing nothing**: a second patron, itself, the
+    // same relationship twice, half a location, and a resource it did not
+    // install
+    let other = hex(&[0xd4u8; 32]);
+    for (body, code) in [
+        (
+            format!("resource={resource}&relation=patron&instance={other}"),
+            409,
+        ),
+        (
+            format!("resource={resource}&relation=kin&group=guild&instance={resource}"),
+            400,
+        ),
+        (
+            format!("resource={resource}&relation=subordinate&instance={sub}"),
+            409,
+        ),
+        (
+            format!(
+                "resource={resource}&relation=kin&group=guild&instance={other}&address=203.0.113.9%3A7452"
+            ),
+            400,
+        ),
+        (
+            format!("resource={resource}&relation=kin&instance={other}"),
+            400,
+        ),
+        (
+            format!("resource={other}&relation=subordinate&instance={sub}"),
+            404,
+        ),
+    ] {
+        let r = relate(body.clone());
+        assert_eq!(status(&r), code, "{body}: {r}");
+    }
+    assert_eq!(
+        std::fs::read_to_string(l.dir.join("hosting")).unwrap(),
+        hosting,
+        "a refusal leaves the hosting file as it was"
+    );
+
+    // **a removal and an install keep them**, as they keep its grants
+    let gone = ask(
+        at,
+        "POST /node/package/remove HTTP/1.1",
+        format!(
+            "resource={resource}&key={}",
+            RUNNER_KEY.replace('\n', "%0A")
+        )
+        .as_bytes(),
+    );
+    assert!(
+        gone.contains("relationships"),
+        "the removal says what it kept: {gone}"
+    );
+    assert!(install().starts_with("HTTP/1.1 200"));
+    assert!(plane().contains(&format!("\"patron\":\"{patron}\"")));
+
+    // **withdrawn**, and the plane no longer has it
+    let r = ask(
+        at,
+        "POST /node/act/unrelate HTTP/1.1",
+        format!("resource={resource}&relation=patron&instance={patron}").as_bytes(),
+    );
+    assert!(r.starts_with("HTTP/1.1 200"), "{r}");
+    let now = plane();
+    assert!(now.contains("\"patron\":null"), "{now}");
+    assert!(now.contains(&sub), "the other relationship stands: {now}");
+    let hosting = std::fs::read_to_string(l.dir.join("hosting")).unwrap();
+    assert!(
+        !hosting.contains(&patron),
+        "its location goes with it: {hosting}"
+    );
+    let r = ask(
+        at,
+        "POST /node/act/unrelate HTTP/1.1",
+        format!("resource={resource}&relation=patron&instance={patron}").as_bytes(),
+    );
+    assert_eq!(status(&r), 404, "{r}");
+
+    d.stop();
+    let _ = std::fs::remove_dir_all(&l.dir);
+}
+
 // acceptance: DMN-39
 #[test]
 fn an_install_the_node_or_the_host_refuses_leaves_the_configuration_as_it_was() {

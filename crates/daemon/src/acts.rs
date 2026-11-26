@@ -451,13 +451,88 @@ pub fn resource_acts(view: &crate::operator::ResourceView, installed: bool) -> V
         out.push(act(
             "remove",
             "Remove this package",
-            "The package is stopped and the entry dropped. The grants, the storage block, the \
-             log and the jobs are kept, because a removal and an install of one resource is how \
-             a package is upgraded.",
+            "The package is stopped and the entry dropped. Its grants, relationships, storage \
+             block, log and jobs are kept, because a removal and an install of one resource is \
+             how a package is upgraded.",
             About::Resource,
             Brings::HostKey,
             vec![p("resource", "the resource", Kind::Keyhash)],
         ));
+        // **whom it federates with** (`infra-client-requirements.md`
+        // §9.2), for the same reason as the two above: the node writes
+        // only the entries it generated, so a hand-written resource is
+        // related in the operator's own half of the file
+        let relation = || {
+            p(
+                "relation",
+                "how it is related",
+                Kind::Choice {
+                    of: vec!["patron".into(), "subordinate".into(), "kin".into()],
+                },
+            )
+        };
+        let group = || {
+            p(
+                "group",
+                "the kin group's name, for kin",
+                Kind::Text {
+                    max: rhtn_node::federation::MAX_KIN_NAME,
+                },
+            )
+        };
+        out.push(act(
+            "relate",
+            "Federate with another instance",
+            "Re-read at once and told to the instance. One another node hosts is reached at \
+             the listener and key its operator gave you; without them, what is emitted for it \
+             waits here as pending.",
+            About::Resource,
+            Brings::Nothing,
+            vec![
+                p("resource", "the resource", Kind::Keyhash),
+                relation(),
+                p(
+                    "instance",
+                    "the other instance, by its resource keyhash",
+                    Kind::Keyhash,
+                ),
+                group(),
+                p(
+                    "address",
+                    "where another node hosts it: its federation listener, address:port",
+                    Kind::Text { max: 64 },
+                ),
+                p(
+                    "presents",
+                    "the key that listener presents, 64 hex digits",
+                    Kind::Text { max: 64 },
+                ),
+            ],
+        ));
+        // **withdrawing exists only where there is something to withdraw**
+        if view
+            .federation
+            .as_ref()
+            .is_some_and(|f| f.patron.is_some() || !f.subordinates.is_empty() || !f.kin.is_empty())
+        {
+            out.push(act(
+                "unrelate",
+                "Withdraw a relationship",
+                "The work it authorised stops with it, both ways, and this page says so (§9.2).",
+                About::Resource,
+                Brings::Nothing,
+                vec![
+                    p("resource", "the resource", Kind::Keyhash),
+                    relation(),
+                    p(
+                        "instance",
+                        "the other instance, by its resource keyhash",
+                        Kind::Keyhash,
+                    ),
+                    group(),
+                ],
+            ));
+        }
     }
     out
 }

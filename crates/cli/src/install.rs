@@ -77,6 +77,17 @@ pub struct Ask {
     /// Which grant a narrowing or a withdrawal names: the number
     /// `node grants` lists it under.
     pub grant: Option<usize>,
+    /// How a package is related to another instance: `patron`,
+    /// `subordinate` or `kin`.
+    pub relation: Option<String>,
+    /// The kin group's name, for kin.
+    pub group: Option<String>,
+    /// The other instance, by its resource keyhash.
+    pub instance: Option<String>,
+    /// Where another node hosts it: that node's federation listener.
+    pub address: Option<String>,
+    /// The raw public key that listener presents.
+    pub presents: Option<String>,
 }
 
 /// Install the package `ask` describes, and say what the node and its
@@ -290,6 +301,37 @@ pub fn narrow(ask: &Ask) -> Result<String, String> {
         ("with", ask.with.as_ref().unwrap_or(&none)),
     ]);
     act(ask, "/node/grant/narrow", &body, QUICK)
+}
+
+/// **Set or withdraw one federation relationship** of a package the node
+/// installed (`infra-client-requirements.md` §9.2): written into the
+/// package's hosting entry and re-read, so the instance is told at once.
+pub fn relate(ask: &Ask, adding: bool) -> Result<String, String> {
+    let verb = if adding { "relate" } else { "unrelate" };
+    let resource = ask
+        .resource
+        .clone()
+        .ok_or(format!("`node {verb}` names --resource"))?;
+    let relation = ask.relation.clone().ok_or(format!(
+        "`node {verb}` names --relation: patron, subordinate or kin"
+    ))?;
+    let instance = ask.instance.clone().ok_or(format!(
+        "`node {verb}` names --instance, the other resource's keyhash"
+    ))?;
+    let mut fields = vec![
+        ("resource", resource),
+        ("relation", relation),
+        ("instance", instance),
+        ("group", ask.group.clone().unwrap_or_default()),
+    ];
+    if adding {
+        fields.push(("address", ask.address.clone().unwrap_or_default()));
+        fields.push(("presents", ask.presents.clone().unwrap_or_default()));
+    } else if ask.address.is_some() || ask.presents.is_some() {
+        return Err("`node unrelate` names the relationship, not where it is".into());
+    }
+    let pairs: Vec<(&str, &String)> = fields.iter().map(|(k, v)| (*k, v)).collect();
+    act(ask, &format!("/node/package/{verb}"), &form(&pairs), QUICK)
 }
 
 /// **Withdraw a grant**, which ends the hosted sessions its rows carried

@@ -6,10 +6,10 @@
 
 `<verb>` is one of `rhtn node`'s package acts -- `install`, `remove`,
 `grant`, `grant-template`, `grants`, `grant-narrow`, `grant-drop`,
-`packages`, `running`, `logs`, `log`, `acts` -- and every
+`relate`, `unrelate`, `packages`, `running`, `logs`, `log`, `acts` -- and every
 option after it is handed to `rhtn node <verb>` as it is
 (`--resource`, `--image`, `--port`, `--manifest`, `--authority`, `--roles`,
-`--of`, ...). What this adds is the operator, so a caller holds no key:
+`--of`, `--relation`, `--instance`, ...). What this adds is the operator, so a caller holds no key:
 
   - **the identity** is the bench entry's (`--as`, default GXV's
     `RFCRC1JDGXV`), turned from its phrase in `phones-recovery.conf` exactly
@@ -26,8 +26,8 @@ hex>`, the `digest:` line `docker push` ends with): the node refuses a tag.
 
 A second `install` of the same `--resource` with a new `--image` is how a
 build is deployed again: the node replaces the package under the name it
-derives from the resource, and keeps its grants, its block, its log and its
-jobs.
+derives from the resource, and keeps its grants, its relationships, its
+block, its log and its jobs.
 
 `mint <file>` makes a resource's identity at `<file>` and prints its
 keyhash, which is what `--resource` names; keep the file wherever the
@@ -55,6 +55,7 @@ sys.path.insert(0, HERE)
 key_script = __import__("bench-host-key")
 
 VERBS = {"install", "remove", "grant", "grant-template", "grants", "grant-narrow", "grant-drop",
+         "relate", "unrelate",
          "packages", "running", "logs", "log", "acts"}
 SURFACE = 7449
 
@@ -119,7 +120,8 @@ def main(argv):
         print(next((l for l in shown.stdout.splitlines() if "keyhash" in l), "").strip())
         return 0
     if not argv or argv[0] not in VERBS:
-        die("usage: bench-package.py <install|remove|grant|grant-template|packages|running|logs|acts> "
+        die("usage: bench-package.py <install|remove|grant|grant-template|grants|grant-narrow|"
+            "grant-drop|relate|unrelate|packages|running|logs|log|acts> "
             "[--node <address>] [--as <entry>] [rhtn node options] | mint <file>")
     verb, rest = argv[0], argv[1:]
     node = os.environ.get("RHTN_BENCH_NODE")

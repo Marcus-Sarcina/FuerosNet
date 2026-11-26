@@ -19,6 +19,7 @@
 //! | the hosting file, above [`SENTINEL`] | the operator's, untouched | the packages they put there by hand |
 //! | the hosting file, below [`SENTINEL`] | the node's, generated | the packages installed through its surface |
 //! | `packages.toml` | the node's | the record those entries are generated from |
+//! | `relationships.toml` | the node's | whom each of those federates with, generated into its entry |
 //! | `packages/<resource>.manifest` | the package's, relayed | what the package declares (§9.1) |
 //!
 //! **The generated region is derived and never read back.** Every line of
@@ -205,6 +206,7 @@ pub fn write(hosting: &Path, packages: &[Package]) -> Result<(), String> {
 /// **The hosting file as the two owners leave it**: the operator's lines
 /// above [`SENTINEL`], and one entry per installed package below.
 pub fn compose(hosting: &Path, packages: &[Package]) -> Result<(), String> {
+    let related = read_relations(hosting)?;
     let held = std::fs::read_to_string(hosting).unwrap_or_default();
     let theirs = above(&held);
     let mut out = theirs.to_string();
@@ -217,6 +219,7 @@ pub fn compose(hosting: &Path, packages: &[Package]) -> Result<(), String> {
     out.push('\n');
     for p in packages {
         out.push_str(&entry(hosting, p));
+        out.push_str(&relationships(&p.resource, &related));
     }
     std::fs::write(hosting, out).map_err(|e| format!("{}: {e}", hosting.display()))
 }
@@ -228,6 +231,232 @@ pub fn above(held: &str) -> &str {
         Some(i) => &held[..i],
         None => held,
     }
+}
+
+/// **How one installed package is related to another instance**
+/// (`infra-client-requirements.md` §9.2: each "written in your hosting
+/// configuration beside the resource").
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Related {
+    /// The patron's instance; a resource has at most one.
+    Patron,
+    /// A subordinate's instance.
+    Subordinate,
+    /// A member of the named kin group.
+    Kin(String),
+}
+
+impl Related {
+    /// **What an act names it as**: `patron`, `subordinate`, or `kin`
+    /// with the group's name beside it.
+    pub fn named(relation: &str, group: &str) -> Result<Related, String> {
+        match (relation, group.is_empty()) {
+            ("patron", true) => Ok(Related::Patron),
+            ("subordinate", true) => Ok(Related::Subordinate),
+            // **checked here and not only on the re-read**, since the
+            // name is written into the hosting file as a key
+            ("kin", false)
+                if group.len() <= rhtn_node::federation::MAX_KIN_NAME
+                    && group.bytes().all(|c| {
+                        c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_' || c == b'-'
+                    }) =>
+            {
+                Ok(Related::Kin(group.to_string()))
+            }
+            ("kin", false) => Err(format!(
+                "`{group}` is not a kin group name: [a-z0-9_-], 1 to {} bytes",
+                rhtn_node::federation::MAX_KIN_NAME
+            )),
+            ("kin", true) => Err("a kin relationship names its group".into()),
+            ("patron" | "subordinate", false) => {
+                Err("only a kin relationship names a group".into())
+            }
+            (other, _) => Err(format!(
+                "`{other}` is not a relationship: patron, subordinate or kin"
+            )),
+        }
+    }
+}
+
+impl std::fmt::Display for Related {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Related::Patron => write!(f, "patron"),
+            Related::Subordinate => write!(f, "subordinate"),
+            Related::Kin(g) => write!(f, "kin {g}"),
+        }
+    }
+}
+
+/// **One federation relationship of a package this node installed**, set
+/// by its operator's `relate` act.
+///
+/// **Kept apart from the package's own record**, as its grants are: a
+/// removal and an install of one resource is how a package is upgraded,
+/// and an upgrade that dropped whom it federates with would be a
+/// federation its operator never withdrew going silent.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Relation {
+    /// The installed package it belongs to.
+    pub resource: Keyhash,
+    /// How the two are related.
+    pub related: Related,
+    /// The other instance, by its resource keyhash.
+    pub instance: Keyhash,
+    /// **Where another node hosts it**: that node's federation listener
+    /// and the raw public key it presents, as its operator gave them
+    /// (`rhtn_node::federation::Location`). None where this node hosts it,
+    /// or where nobody has said yet.
+    pub at: Option<(std::net::SocketAddr, Keyhash)>,
+}
+
+/// Where the node keeps the relationships it was asked to set.
+pub fn relations_at(hosting: &Path) -> PathBuf {
+    beside(hosting, "relationships.toml")
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Default)]
+struct Relations {
+    #[serde(default)]
+    relation: Vec<RelationEntry>,
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+struct RelationEntry {
+    resource: String,
+    relation: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    group: String,
+    instance: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    address: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    presents: Option<String>,
+}
+
+/// **Read the relationships set on installed packages**, or none where
+/// none were set.
+pub fn read_relations(hosting: &Path) -> Result<Vec<Relation>, String> {
+    let path = relations_at(hosting);
+    let text = match std::fs::read_to_string(&path) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(format!("{}: {e}", path.display())),
+    };
+    let held: Relations =
+        toml::from_str(&text).map_err(|e| format!("{}: {}", path.display(), e.message()))?;
+    let mut out = Vec::new();
+    for e in &held.relation {
+        let bad = |what: &str| format!("{}: `{}` is not {what}", path.display(), e.resource);
+        let at = match (&e.address, &e.presents) {
+            (None, None) => None,
+            (Some(a), Some(k)) => Some((
+                a.parse()
+                    .map_err(|_| bad("located at an address and port"))?,
+                keyhash(k).ok_or_else(|| bad("located with a 64-hex key"))?,
+            )),
+            _ => return Err(bad("located with both an address and a key")),
+        };
+        out.push(Relation {
+            resource: keyhash(&e.resource).ok_or_else(|| bad("a resource"))?,
+            related: Related::named(&e.relation, &e.group)
+                .map_err(|why| format!("{}: {why}", path.display()))?,
+            instance: keyhash(&e.instance).ok_or_else(|| bad("related to an instance"))?,
+            at,
+        });
+    }
+    Ok(out)
+}
+
+/// **Write the relationships, and generate the hosting file's lower half
+/// again** with them in it. The caller reloads afterwards and puts both
+/// back where the reload refuses, as an install does.
+pub fn write_relations(
+    hosting: &Path,
+    relations: &[Relation],
+    packages: &[Package],
+) -> Result<(), String> {
+    let path = relations_at(hosting);
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    }
+    let held = Relations {
+        relation: relations
+            .iter()
+            .map(|r| {
+                let (relation, group) = match &r.related {
+                    Related::Patron => ("patron", String::new()),
+                    Related::Subordinate => ("subordinate", String::new()),
+                    Related::Kin(g) => ("kin", g.clone()),
+                };
+                RelationEntry {
+                    resource: hex(&r.resource),
+                    relation: relation.into(),
+                    group,
+                    instance: hex(&r.instance),
+                    address: r.at.map(|(a, _)| a.to_string()),
+                    presents: r.at.map(|(_, k)| hex(&k)),
+                }
+            })
+            .collect(),
+    };
+    let text = toml::to_string(&held).map_err(|e| format!("{}: {e}", path.display()))?;
+    std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
+    compose(hosting, packages)
+}
+
+/// **One package's relationships, in the hosting file's own terms**
+/// (`crate::hosting`): written after its entry's plain keys, since a
+/// table opened beneath `[[host]]` takes every key that follows it.
+///
+/// One location an instance: where two relationships to it say where it
+/// is, the first says it, and the act refuses a second that differs.
+fn relationships(resource: &Keyhash, related: &[Relation]) -> String {
+    let mine: Vec<&Relation> = related.iter().filter(|r| r.resource == *resource).collect();
+    let mut out = String::new();
+    if let Some(r) = mine.iter().find(|r| r.related == Related::Patron) {
+        out.push_str(&format!("patron = \"{}\"\n", hex(&r.instance)));
+    }
+    let subordinates: Vec<String> = mine
+        .iter()
+        .filter(|r| r.related == Related::Subordinate)
+        .map(|r| format!("\"{}\"", hex(&r.instance)))
+        .collect();
+    if !subordinates.is_empty() {
+        out.push_str(&format!("subordinates = [{}]\n", subordinates.join(", ")));
+    }
+    let mut kin: std::collections::BTreeMap<&str, Vec<String>> = Default::default();
+    for r in &mine {
+        if let Related::Kin(g) = &r.related {
+            kin.entry(g)
+                .or_default()
+                .push(format!("\"{}\"", hex(&r.instance)));
+        }
+    }
+    if !kin.is_empty() {
+        out.push_str("[host.kin]\n");
+        for (g, members) in kin {
+            out.push_str(&format!("{g} = [{}]\n", members.join(", ")));
+        }
+    }
+    let mut at: std::collections::BTreeMap<String, (std::net::SocketAddr, Keyhash)> =
+        Default::default();
+    for r in &mine {
+        if let Some(loc) = r.at {
+            at.entry(hex(&r.instance)).or_insert(loc);
+        }
+    }
+    if !at.is_empty() {
+        out.push_str("[host.at]\n");
+        for (i, (a, k)) in at {
+            out.push_str(&format!(
+                "\"{i}\" = {{ address = \"{a}\", key = \"{}\" }}\n",
+                hex(&k)
+            ));
+        }
+    }
+    out
 }
 
 /// One generated `[[host]]` entry.
@@ -579,6 +808,102 @@ mod tests {
             hosts[0].get("manifest").and_then(|m| m.as_str()).unwrap(),
             manifest_at(&hosting, &kh(7)).display().to_string()
         );
+    }
+
+    // functional: OPS-021
+    #[test]
+    fn a_relationship_set_on_an_installed_package_is_its_hosting_entrys_and_outlives_a_reinstall() {
+        let dir = Dir::new("relations");
+        let hosting = dir.path().join("hosting");
+        let far: std::net::SocketAddr = "203.0.113.9:7452".parse().unwrap();
+        let related = vec![
+            Relation {
+                resource: kh(7),
+                related: Related::Patron,
+                instance: kh(20),
+                at: Some((far, kh(30))),
+            },
+            Relation {
+                resource: kh(7),
+                related: Related::Subordinate,
+                instance: kh(21),
+                at: None,
+            },
+            Relation {
+                resource: kh(7),
+                related: Related::Kin("guild".into()),
+                instance: kh(22),
+                at: None,
+            },
+            // a second relationship to one instance says where it is once
+            Relation {
+                resource: kh(7),
+                related: Related::Kin("guild".into()),
+                instance: kh(20),
+                at: Some((far, kh(30))),
+            },
+            Relation {
+                resource: kh(8),
+                related: Related::Subordinate,
+                instance: kh(23),
+                at: None,
+            },
+        ];
+        let both = [one(7, 7460), one(8, 7461)];
+        write_relations(&hosting, &related, &both).unwrap();
+        assert_eq!(read_relations(&hosting).unwrap(), related);
+        // **read back by what the node reads the hosting file with**
+        let rs = crate::hosting::relationships(&hosting).expect("the entries parse");
+        let of = |n: u8| {
+            rs.iter()
+                .find(|(r, _)| *r == kh(n))
+                .map(|(_, r)| r.clone())
+                .unwrap()
+        };
+        assert_eq!(of(7).patron, Some(kh(20)));
+        assert_eq!(
+            of(7).subordinates.iter().copied().collect::<Vec<_>>(),
+            vec![kh(21)]
+        );
+        assert_eq!(
+            of(7).kin["guild"].iter().copied().collect::<Vec<_>>(),
+            vec![kh(20), kh(22)]
+        );
+        assert_eq!(
+            of(8).subordinates.iter().copied().collect::<Vec<_>>(),
+            vec![kh(23)]
+        );
+        assert_eq!(of(8).patron, None);
+        let at = crate::hosting::locations(&hosting).expect("the locations parse");
+        assert_eq!(at.len(), 1, "{at:?}");
+        assert_eq!(at[0].0, kh(20));
+        assert_eq!((at[0].1.address, at[0].1.key), (far, kh(30)));
+        // **a removal and an install keep them**, as they keep its grants
+        write(&hosting, &[one(8, 7461)]).unwrap();
+        assert!(
+            crate::hosting::relationships(&hosting)
+                .unwrap()
+                .iter()
+                .all(|(r, _)| *r != kh(7))
+        );
+        write(&hosting, &both).unwrap();
+        let again = crate::hosting::relationships(&hosting).unwrap();
+        assert_eq!(again, rs, "the reinstalled entry carries what was set");
+    }
+
+    #[test]
+    fn a_relationship_is_named_as_the_hosting_file_names_it() {
+        assert_eq!(Related::named("patron", ""), Ok(Related::Patron));
+        assert_eq!(Related::named("subordinate", ""), Ok(Related::Subordinate));
+        assert_eq!(
+            Related::named("kin", "guild"),
+            Ok(Related::Kin("guild".into()))
+        );
+        assert!(Related::named("kin", "").is_err());
+        assert!(Related::named("patron", "guild").is_err());
+        assert!(Related::named("kin", "Guild Hall").is_err());
+        assert!(Related::named("kin", &"g".repeat(33)).is_err());
+        assert!(Related::named("cousin", "").is_err());
     }
 
     // acceptance: DMN-38
