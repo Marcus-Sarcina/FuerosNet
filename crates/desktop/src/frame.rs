@@ -245,6 +245,34 @@ pub fn not_shown(page: &ResourcePage) -> Served {
     }
 }
 
+/// **The question an `import` ask is put to the person as** (§8.1): the
+/// resource's purpose and retention in its own words, marked as its, and
+/// the types it takes. A yes opens the file picker; the file picked is
+/// what is handed over, and nothing else of this computer is read.
+pub fn import_question(name: &str, purpose: &str, retention: &str, media: &[String]) -> String {
+    let types = if media.is_empty() {
+        "any type".to_string()
+    } else {
+        media.join(" or ")
+    };
+    format!(
+        "{name} asks for a file you pick ({types}). It says it is for: \u{201c}{purpose}\u{201d}, \
+         and that it keeps it: \u{201c}{retention}\u{201d}. Those are its words, which this desktop \
+         cannot hold it to. Pick a file?"
+    )
+}
+
+/// **Whether an ask takes `media`**, as the phone decides it: an ask
+/// naming no type takes what it is given, and `*/*` or `image/*` take
+/// what they say.
+pub fn takes(asked: &[String], media: &str) -> bool {
+    let major = media.split('/').next().unwrap_or("");
+    asked.is_empty()
+        || asked
+            .iter()
+            .any(|a| a == media || a == "*/*" || *a == format!("{major}/*"))
+}
+
 /// **The name a save dialog suggests** for what `name` answered with: the
 /// resource's name with only letters, digits, dots, dashes and
 /// underscores kept, and an extension from the declared type's subtype
@@ -692,6 +720,23 @@ mod tests {
         keep_script(&t, R, false).unwrap();
         assert_eq!(script_allowed(&t, R), Some(false));
         std::fs::remove_dir_all(&t).unwrap();
+    }
+
+    #[test]
+    fn an_import_takes_what_it_named_and_says_whose_words_it_shows() {
+        let asked = vec!["image/*".to_string(), "application/pdf".to_string()];
+        assert!(takes(&asked, "image/png"));
+        assert!(takes(&asked, "application/pdf"));
+        assert!(!takes(&asked, "text/plain"));
+        assert!(takes(&[], "text/plain"));
+        assert!(takes(&["*/*".to_string()], "text/plain"));
+        let q = import_question("Ledger", "your receipts", "a year", &asked);
+        assert!(q.contains("image/* or application/pdf"), "{q}");
+        assert!(
+            q.contains("\u{201c}your receipts\u{201d}") && q.contains("its words"),
+            "{q}"
+        );
+        assert!(import_question("Ledger", "p", "r", &[]).contains("any type"));
     }
 
     #[test]

@@ -67,6 +67,9 @@ enum Said {
     /// What a resource answered with that this desktop does not show, the
     /// person having said to keep it: a save dialog for it.
     Save(Offered),
+    /// A resource's `import` ask, the person having said yes: the file
+    /// picker, offering the types it takes, and where the path goes.
+    Pick(Vec<String>, Sender<Option<PathBuf>>),
 }
 
 /// **An answer offered for saving**: the name to suggest and the bytes.
@@ -302,6 +305,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Err(why) => (false, format!("not saved: {why}")),
                 };
                 let _ = ours.evaluate_script(&said(line.0, &line.1));
+            }
+            Event::UserEvent(Said::Pick(media, answer)) => {
+                let _ = answer.send(pick(&media));
             }
             Event::UserEvent(Said::Ask(question, answer)) => {
                 if let Some(a) = asking.replace(answer) {
@@ -1565,9 +1571,10 @@ fn open(
 }
 
 /// **One request carried to a resource**, and every ask it answers with
-/// answered (§8.1): this desktop offers none of the device utilities yet,
-/// so each is declined with that as its reason — an answer the resource
-/// sees, never a silence — and the person is told what was asked.
+/// answered (§8.1): `import` is put to the person and a file picked
+/// [author, 2026-11-26]; every other device utility is declined with this
+/// desktop's not having it as the reason — an answer the resource sees,
+/// never a silence — and the person is told what was asked.
 fn carry(
     p: &Participant,
     node: &[u8],
@@ -1587,20 +1594,22 @@ fn carry(
         let Some(ask) = a.ask.take() else {
             return Ok(a);
         };
-        let _ = back.send_event(Said::ToPage(
-            false,
-            format!(
-                "{name} asked for `{}`, which this desktop has not got; it was told so",
-                ask.utility
-            ),
-        ));
+        let outcome = if ask.utility == "import" {
+            importing(back, name, &ask)
+        } else {
+            let _ = back.send_event(Said::ToPage(
+                false,
+                format!(
+                    "{name} asked for `{}`, which this desktop has not got; it was told so",
+                    ask.utility
+                ),
+            ));
+            UtilityOutcome::Declined {
+                reason: frame::NO_UTILITY.into(),
+            }
+        };
         a = p
-            .answer_utility(
-                ask.id,
-                UtilityOutcome::Declined {
-                    reason: frame::NO_UTILITY.into(),
-                },
-            )
+            .answer_utility(ask.id, outcome)
             .map_err(|e| e.to_string())?;
     }
     Err(format!(
@@ -1667,6 +1676,104 @@ fn save(offered: Offered) -> Result<Option<PathBuf>, String> {
 #[cfg(not(target_os = "linux"))]
 fn save(_: Offered) -> Result<Option<PathBuf>, String> {
     Err("this desktop has no save dialog on this platform yet".into())
+}
+
+/// **A file the person picks, handed to the resource that asked**
+/// (§8.1's `import`), as the phone hands one: the ask put whole, then the
+/// picker, then the file under the type this computer reads it as. A no,
+/// a cancel, a file too large or of a type the ask does not take is a
+/// refusal saying which.
+fn importing(
+    back: &EventLoopProxy<Said>,
+    name: &str,
+    ask: &rhtn_ffi::client::UtilityAsk,
+) -> UtilityOutcome {
+    let declined = |why: String| UtilityOutcome::Declined { reason: why };
+    // the picker is the toolkit's, and only Linux's is built
+    if cfg!(not(target_os = "linux")) {
+        return declined(frame::NO_UTILITY.into());
+    }
+    let question = frame::import_question(name, &ask.purpose, &ask.retention, &ask.media);
+    let (tx, rx) = channel();
+    if back.send_event(Said::Ask(question, tx)).is_err() || !rx.recv().unwrap_or(false) {
+        return declined("declined".into());
+    }
+    let (tx, rx) = channel();
+    if back.send_event(Said::Pick(ask.media.clone(), tx)).is_err() {
+        return declined("this desktop offers no file picker".into());
+    }
+    let Some(path) = rx.recv().ok().flatten() else {
+        return declined("no file was picked".into());
+    };
+    let size = std::fs::metadata(&path)
+        .map(|m| m.len())
+        .unwrap_or(u64::MAX);
+    if size > rhtn_client::utility::RESULT_BYTES as u64 {
+        return declined("that file is larger than this desktop can send".into());
+    }
+    let Ok(bytes) = std::fs::read(&path) else {
+        return declined("this desktop would not open that file".into());
+    };
+    let media = media_of(&path, &bytes);
+    if !frame::takes(&ask.media, &media) {
+        return declined(format!(
+            "the file picked is {media}, which it did not ask for"
+        ));
+    }
+    let _ = back.send_event(Said::ToPage(
+        true,
+        format!("{name} was handed {}", path.display()),
+    ));
+    UtilityOutcome::Bytes { media, bytes }
+}
+
+/// **The file picker**, on the drawing thread where the toolkit lives,
+/// offering the types the ask takes.
+#[cfg(target_os = "linux")]
+fn pick(media: &[String]) -> Option<PathBuf> {
+    use gtk::prelude::*;
+    let dialog = gtk::FileChooserNative::new(
+        Some("Pick the file to hand over"),
+        None::<&gtk::Window>,
+        gtk::FileChooserAction::Open,
+        Some("Hand it over"),
+        Some("Cancel"),
+    );
+    if !media.is_empty() {
+        let filter = gtk::FileFilter::new();
+        filter.set_name(Some(&media.join(", ")));
+        for m in media {
+            filter.add_mime_type(m);
+        }
+        dialog.add_filter(filter);
+    }
+    let chosen = (dialog.run() == gtk::ResponseType::Accept)
+        .then(|| dialog.filename())
+        .flatten();
+    dialog.destroy();
+    chosen
+}
+
+/// Elsewhere there is no picker yet, and nothing is picked.
+#[cfg(not(target_os = "linux"))]
+fn pick(_: &[String]) -> Option<PathBuf> {
+    None
+}
+
+/// **The type a picked file is handed over as**: what the platform reads
+/// it as from its name and its first bytes, as the phone hands over its
+/// content resolver's type.
+#[cfg(target_os = "linux")]
+fn media_of(path: &Path, bytes: &[u8]) -> String {
+    let (kind, _) = gtk::gio::content_type_guess(Some(path), bytes);
+    gtk::gio::content_type_get_mime_type(&kind)
+        .map(|m| m.to_string())
+        .unwrap_or_else(|| "application/octet-stream".into())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn media_of(_: &Path, _: &[u8]) -> String {
+    "application/octet-stream".into()
 }
 
 /// How many asks in a row one request may meet before the desktop stops

@@ -15,7 +15,10 @@ asserts five things; it needs a container engine and nothing else.
 
 Neither is in `crates/check.sh`. A build of this size does not belong in a gate
 that runs on every commit, and the image's contents are already covered there by
-the daemon's own tests.
+the daemon's own tests. **`smoke.sh` runs on the hosted test node** instead,
+GXV's for now: `tools/bench-smoke.py docker.io/sarcina/rhtnd:<commit>` boots
+the image CI pushed for a commit on that machine, beside the node serving there
+and without touching it.
 
 ## The two shapes
 

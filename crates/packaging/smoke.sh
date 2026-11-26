@@ -3,6 +3,7 @@
 #  smoke.sh -- the image, booted in each of the two shapes a node takes.
 #
 #    packaging/smoke.sh [<image>]
+#    RHTN_SMOKE_PORT=<port> packaging/smoke.sh <image>   beside a live node
 #
 #  Four assertions, each a thing an operator would otherwise find out on a
 #  rented host:
@@ -151,7 +152,10 @@ fi
 # a token a provisioning page would have written into the configuration it
 # composed, and a port published off the container
 TOKEN=5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a
-PORT=7449
+# **its own port where a node already serves**: `RHTN_SMOKE_PORT` moves
+# the surface this test publishes off a live node's 7449, which is how it
+# runs on a hosted test node (`tools/bench-smoke.py`)
+PORT="${RHTN_SMOKE_PORT:-7449}"
 d="$(state enrolling)"
 if ! minting "$d" keys mint /var/lib/rhtn/operator.key > "$d/operator.txt" 2>&1; then
   bad "could not mint an operator identity for the enrolment case"

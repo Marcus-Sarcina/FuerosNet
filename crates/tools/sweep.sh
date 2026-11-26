@@ -11,10 +11,13 @@
 #                    each crate (default 2), so a crate nobody has built
 #                    this week still rebuilds incrementally.
 #    --deps-days D   pass --time D to cargo-sweep for the rest of the
-#                    target directory (default 30). Dependency artifacts
-#                    are what make a rebuild cheap and they are a hundredth
-#                    of the size of the thing above, so they are kept far
-#                    longer.
+#                    target directory (default 7). Most of what it holds is
+#                    not dependencies but superseded test and binary
+#                    executables: every change to our code relinks each one
+#                    under a new hash and nothing removes the old, so at 30
+#                    days `deps/` reached 472 GiB, 425 GiB of it
+#                    executables [2026-11-26]. A week keeps every flavour
+#                    built in that time and rebuilds anything older once.
 #    --maxsize SIZE  after the above, if the target is still larger than
 #                    SIZE, remove the oldest incremental sessions until it
 #                    is not. Units as cargo-sweep's: MB unless stated,
@@ -56,7 +59,7 @@ CRATES="$(dirname "$HERE")"
 
 DAYS=3
 KEEP=2
-DEPS_DAYS=30
+DEPS_DAYS=7
 MAXSIZE=""
 TARGET="$CRATES/target"
 WAIT=90
@@ -74,7 +77,7 @@ while [ $# -gt 0 ]; do
     --target) TARGET="${2:-}"; shift 2 ;;
     --wait) WAIT="${2:-}"; shift 2 ;;
     --dry-run) DRY=yes; shift ;;
-    -h | --help) sed -n '2,46p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h | --help) sed -n '2,52p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "unknown option: $1 (--help for what there is)" ;;
   esac
 done
@@ -168,7 +171,10 @@ if cargo sweep --version > /dev/null 2>&1; then
   # manifest to find the target itself, and handed a target directory it
   # finds no project and says nothing
   if out="$(cd "$CRATES" && cargo sweep "${args[@]}" 2>&1)"; then
-    swept="$(printf '%s' "$out" | grep -oE '(Would clean|Cleaned):.*' | tail -1)"
+    # a real run says `Cleaned 262.97 GiB from ...`, a dry run `Would
+    # clean: ...`: matching only the colon reported a 263 GiB sweep as
+    # nothing [2026-11-26]
+    swept="$(printf '%s' "$out" | grep -oE '(Would clean:|Cleaned:?) .*' | tail -1)"
     [ -n "$swept" ] || swept="nothing older than ${DEPS_DAYS} days"
   else
     swept="refused: $(printf '%s' "$out" | tr '\n' ' ' | tail -c 120)"

@@ -24,7 +24,9 @@ pub struct NodeKeyConfig {
     /// shipped [author, 2026-11-19].
     pub rotate_secs: u64,
     /// How long after a rotation the key before is still accepted, in
-    /// seconds: **thirty**, generous network latency [author, 2026-11-19].
+    /// seconds: **thirty**, generous network latency [author, 2026-11-19],
+    /// a working estimate until live load says otherwise and not a protocol
+    /// invariant [author, 2026-11-26].
     pub grace_secs: u64,
 }
 
