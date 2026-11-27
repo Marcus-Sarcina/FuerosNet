@@ -488,6 +488,19 @@ impl App {
         } else {
             String::new()
         };
+        // **a request that came by no node**, said with what it carried
+        // and never its body, so whatever sends one can be named
+        if !node {
+            let carried: Vec<String> = headers
+                .iter()
+                .map(|(n, v)| match n.as_str() {
+                    "rhtn-secret" => format!("{n}: (withheld)"),
+                    _ => format!("{n}: {v}"),
+                })
+                .collect();
+            let detail = format!("{method} {target} | {}", carried.join(" | "));
+            self.say("unknown", "unrelayed", &detail);
+        }
         // **the frame's own checks**, beside the walk and outside it
         if let Some(answered) = checks(&method, &target, &headers, &body) {
             return answered;
@@ -600,7 +613,15 @@ impl App {
         self.said.push(format!(
             "{{\"who\":\"{}\",\"what\":\"{what}\",\"detail\":\"{}\"}}",
             principal.chars().take(16).collect::<String>(),
-            detail.replace('"', "'")
+            detail
+                .chars()
+                .map(|c| match c {
+                    '"' => '\'',
+                    '\\' => '/',
+                    c if c.is_control() => ' ',
+                    c => c,
+                })
+                .collect::<String>()
         ));
     }
 }
@@ -893,6 +914,29 @@ mod secret {
             "rhtn-principal: carol\r\nrhtn-roles: reader\r\nrhtn-secret: 00\r\n",
         ));
         assert!(!app.walks.contains_key("carol"));
+        // and each that came by no node is said with what it carried,
+        // a secret it presented withheld
+        let unrelayed: Vec<&String> = app
+            .said
+            .iter()
+            .filter(|l| l.contains("unrelayed"))
+            .collect();
+        assert_eq!(unrelayed.len(), 2, "{:?}", app.said);
+        assert!(
+            unrelayed[0].contains("rhtn-principal: bob"),
+            "{}",
+            unrelayed[0]
+        );
+        assert!(
+            unrelayed[1].contains("rhtn-secret: (withheld)") && !unrelayed[1].contains(": 00"),
+            "{}",
+            unrelayed[1]
+        );
+        assert!(
+            !app.said
+                .iter()
+                .any(|l| l.contains("unrelayed") && l.contains("alice"))
+        );
         // an instance started with no secret trusts nobody
         let mut bare = App::new([1; 32]);
         bare.handle(&req(&format!(
