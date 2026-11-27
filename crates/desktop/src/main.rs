@@ -27,7 +27,7 @@ use rhtn_desktop::screens::{
 };
 use rhtn_desktop::threads::{self, Delivery, Record, Sealer, Threads};
 use rhtn_desktop::{
-    Act, Change, act, code, directory, frame, pairing, phrase, said, verify_and_keep,
+    Act, Change, act, code, directory, frame, operate, pairing, phrase, said, verify_and_keep,
 };
 use rhtn_ffi::client::{PageShape, Participant, ResourceAnswer, UtilityOutcome};
 use rhtn_ffi::net::Event as Kernel;
@@ -70,6 +70,38 @@ enum Said {
     /// A resource's `import` ask, the person having said yes: the file
     /// picker, offering the types it takes, and where the path goes.
     Pick(Vec<String>, Sender<Option<PathBuf>>),
+    /// **An instance this identity runs, reached** (`operate`): its
+    /// operator window to open.
+    Operate(Operating),
+    /// What one operator window sent.
+    Operator(tao::window::WindowId, String),
+    /// Script for one operator window.
+    OperatorSay(tao::window::WindowId, String),
+    /// One operator window drawn again, then that script.
+    OperatorRedraw(tao::window::WindowId, String, String),
+    /// A control on an instance's own page, bounced to its operator
+    /// window as the act it names and its query.
+    Bounced(tao::window::WindowId, String, String),
+}
+
+/// **An instance reached, to be administered**: who runs it, what to call
+/// it, the tunnel to its surface and what it declared.
+struct Operating {
+    by: Vec<u8>,
+    label: String,
+    tunnel: Arc<operate::Tunnel>,
+    declared: operate::Declared,
+}
+
+/// **One operator window**, with the tunnel it is reached through, held
+/// open while the window is, and the instance's own page where opened.
+struct OperatorWindow {
+    by: Vec<u8>,
+    window: tao::window::Window,
+    view: wry::WebView,
+    tunnel: Arc<operate::Tunnel>,
+    declared: Arc<Mutex<operate::Declared>>,
+    own: Option<(tao::window::Window, wry::WebView)>,
 }
 
 /// **An answer offered for saving**: the name to suggest and the bytes.
@@ -243,6 +275,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut asking: Option<Sender<bool>> = None;
     // every resource's window, one per resource
     let mut frames: Vec<FrameWindow> = Vec::new();
+    // every instance's operator window, one per identity
+    let mut operators: Vec<OperatorWindow> = Vec::new();
     let worker = event_loop.create_proxy();
     let root = dir.clone();
     let tokens = Arc::new(dir);
@@ -275,6 +309,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // let it go, keep ours
                     consoles.retain(|(w, _)| w.id() != window_id);
                     frames.retain(|f| f.window.id() != window_id);
+                    // an operator window takes its tunnel and its
+                    // instance's page with it; the page closes alone
+                    operators.retain(|o| o.window.id() != window_id);
+                    for o in &mut operators {
+                        if o.own.as_ref().is_some_and(|(w, _)| w.id() == window_id) {
+                            o.own = None;
+                        }
+                    }
                 }
             }
             Event::UserEvent(Said::Show(page)) => {
@@ -310,6 +352,113 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Event::UserEvent(Said::Pick(media, answer)) => {
                 let _ = answer.send(pick(&media));
             }
+            Event::UserEvent(Said::Operate(o)) => {
+                if let Some(open) = operators.iter().find(|w| w.by == o.by) {
+                    open.window.set_focus();
+                    return;
+                }
+                match open_operator(target, o, worker.clone()) {
+                    Ok(w) => operators.push(w),
+                    Err(e) => {
+                        let _ = ours.evaluate_script(&said(false, &e.to_string()));
+                    }
+                }
+            }
+            Event::UserEvent(Said::Operator(id, message)) => {
+                let Some(o) = operators.iter_mut().find(|o| o.window.id() == id) else {
+                    return;
+                };
+                match operate::asked(&message) {
+                    Err(why) => {
+                        let _ = o
+                            .view
+                            .evaluate_script(&operate::said_script("offering", None, false, &why));
+                    }
+                    Ok(operate::Asked::OwnPage) => {
+                        if let Some((w, _)) = &o.own {
+                            w.set_focus();
+                            return;
+                        }
+                        match open_own_page(target, &o.tunnel, id, worker.clone()) {
+                            Ok(own) => o.own = Some(own),
+                            Err(e) => {
+                                let _ = o.view.evaluate_script(&operate::said_script(
+                                    "offering",
+                                    None,
+                                    false,
+                                    &format!("its page did not open: {e}"),
+                                ));
+                            }
+                        }
+                    }
+                    Ok(operate::Asked::Offering(text)) => {
+                        let _ = o.view.evaluate_script(&offered(&o.by, &text));
+                    }
+                    Ok(operate::Asked::Act {
+                        name,
+                        resource,
+                        fields,
+                    }) => {
+                        let Some(p) = up.by(&o.by).map(|i| i.p) else {
+                            return;
+                        };
+                        let (tunnel, declared, back) =
+                            (o.tunnel.clone(), o.declared.clone(), worker.clone());
+                        std::thread::spawn(move || {
+                            invoke(
+                                &p,
+                                &tunnel,
+                                &declared,
+                                id,
+                                &name,
+                                resource.as_deref(),
+                                &fields,
+                                &back,
+                            );
+                        });
+                    }
+                }
+            }
+            Event::UserEvent(Said::OperatorSay(id, script)) => {
+                if let Some(o) = operators.iter().find(|o| o.window.id() == id) {
+                    let _ = o.view.evaluate_script(&script);
+                }
+            }
+            Event::UserEvent(Said::OperatorRedraw(id, html, script)) => {
+                if let Some(o) = operators.iter().find(|o| o.window.id() == id) {
+                    let _ = o.view.load_html(&html);
+                    // **said once the page is drawn again**, which a load
+                    // finishes after this returns
+                    let (back, id) = (worker.clone(), id);
+                    std::thread::spawn(move || {
+                        std::thread::sleep(std::time::Duration::from_millis(400));
+                        let _ = back.send_event(Said::OperatorSay(id, script));
+                    });
+                }
+            }
+            Event::UserEvent(Said::Bounced(id, name, query)) => {
+                if let Some(o) = operators.iter().find(|o| o.window.id() == id) {
+                    let d = o.declared.lock().unwrap();
+                    // a resource's act is looked for under the resource
+                    // the control named, and the node's otherwise
+                    let resource = query
+                        .split('&')
+                        .find_map(|p| p.strip_prefix("resource="))
+                        .map(operate::unescape);
+                    let act = d
+                        .act(&name, resource.as_deref())
+                        .or_else(|| d.act(&name, None));
+                    if let Some(a) = act {
+                        let values = operate::hints(a, &query);
+                        let _ = o.view.evaluate_script(&operate::fill_script(
+                            &name,
+                            resource.as_deref(),
+                            &values,
+                        ));
+                        o.window.set_focus();
+                    }
+                }
+            }
             Event::UserEvent(Said::Ask(question, answer)) => {
                 if let Some(a) = asking.replace(answer) {
                     let _ = a.send(false);
@@ -339,6 +488,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Ok(Act::Launch) => {
                     *current.lock().unwrap() = rhtn_desktop::page();
                     let _ = ours.load_url(INDEX);
+                }
+                Ok(Act::Administer { by }) => {
+                    let (back, up, root) = (worker.clone(), up.clone(), root.clone());
+                    std::thread::spawn(move || {
+                        let said_back = |ok: bool, t: String| {
+                            let _ = back.send_event(Said::ToPage(ok, t));
+                        };
+                        match reach(&up, &root, &by) {
+                            Ok(o) => {
+                                said_back(true, format!("{} reached", o.label));
+                                let _ = back.send_event(Said::Operate(o));
+                            }
+                            Err(why) => {
+                                said_back(false, format!("the node was not reached: {why}"))
+                            }
+                        }
+                    });
                 }
                 Ok(Act::Go { place }) => {
                     up.place.lock().unwrap().go(place.clone());
@@ -1096,6 +1262,7 @@ fn snapshot(idents: &[Ident], focus: &Participant, device: Device, dir: &Path) -
                 unseen: u32::from(moved) + asked,
                 by: by.clone(),
                 colour: colour.clone(),
+                operates: s.rank.operator,
             }
         }));
         // **the people are the ones met**, as the phone's list has them:
@@ -2032,6 +2199,302 @@ fn media_of(_: &Path, _: &[u8]) -> String {
 /// How many asks in a row one request may meet before the desktop stops
 /// answering them ([`carry`]).
 const ASKS_RUNNING: usize = 32;
+
+/// **Reach the instance `by` runs** [author, 2026-11-26]: on a restored
+/// desktop alone, at the machine its own endpoint record names, through a
+/// tunnel opened with the host control key it derives, and with what the
+/// instance declares read first.
+fn reach(up: &Up, root: &Path, by: &[u8]) -> Result<Operating, String> {
+    if !SIGNS.load(Ordering::Relaxed) {
+        return Err(
+            "this desktop was paired and derives no key for the machine; the phone \
+                    administers it"
+                .into(),
+        );
+    }
+    let p = up.by(by).map(|i| i.p).ok_or("no such identity here")?;
+    let me = hex(&p.me());
+    let addresses = p
+        .instances()
+        .into_iter()
+        .find(|i| hex(&i.keyhash) == me)
+        .map(|i| i.addresses)
+        .unwrap_or_default();
+    let machine = operate::machine(&addresses)
+        .ok_or("this identity's endpoint record names no address this desktop holds")?;
+    // **the key ssh reads, and nothing longer than the tunnel's opening**
+    let key = Zeroizing::new(p.host_control_private_key().map_err(|e| e.to_string())?);
+    let tunnel = operate::Tunnel::open(&machine, &key, &state(root).join("operate"))?;
+    drop(key);
+    let (code, body) = tunnel.exchange(
+        "GET",
+        "/node/acts",
+        None,
+        b"",
+        std::time::Duration::from_secs(15),
+    )?;
+    let text = String::from_utf8_lossy(&body).to_string();
+    if code != 200 {
+        return Err(format!("it answered {code}: {}", text.trim()));
+    }
+    Ok(Operating {
+        by: by.to_vec(),
+        label: format!("The node at {machine}"),
+        tunnel: Arc::new(tunnel),
+        declared: operate::read(&text)?,
+    })
+}
+
+/// **The operator window**: every act the instance declares, drawn as a
+/// form, what it sends coming back here by the window's id.
+fn open_operator(
+    target: &tao::event_loop::EventLoopWindowTarget<Said>,
+    o: Operating,
+    back: EventLoopProxy<Said>,
+) -> Result<OperatorWindow, Box<dyn std::error::Error>> {
+    let w = WindowBuilder::new()
+        .with_title(format!("{} — administered from this desktop", o.label))
+        .with_inner_size(LogicalSize::new(900.0, 900.0))
+        .build(target)?;
+    let id = w.id();
+    let view = web_view(
+        WebViewBuilder::new()
+            .with_html(operate::page(&o.label, &o.declared))
+            .with_ipc_handler(move |request| {
+                let _ = back.send_event(Said::Operator(id, request.into_body()));
+            })
+            .with_new_window_req_handler(|_, _| wry::NewWindowResponse::Deny)
+            .with_download_started_handler(|_, _| false),
+        &w,
+    )?;
+    Ok(OperatorWindow {
+        by: o.by,
+        window: w,
+        view,
+        tunnel: o.tunnel,
+        declared: Arc::new(Mutex::new(o.declared)),
+        own: None,
+    })
+}
+
+/// **The instance's own page, framed** (`infra-client-requirements.md`
+/// §8.3), as the phone's `NodePageActivity` frames it: carried over the
+/// tunnel, script refused by policy whatever the markup says, a
+/// navigation off its one origin not followed, and a control bouncing
+/// to the operator window as the act it names.
+fn open_own_page(
+    target: &tao::event_loop::EventLoopWindowTarget<Said>,
+    tunnel: &Arc<operate::Tunnel>,
+    operator: tao::window::WindowId,
+    back: EventLoopProxy<Said>,
+) -> Result<(tao::window::Window, wry::WebView), Box<dyn std::error::Error>> {
+    let w = WindowBuilder::new()
+        .with_title("The node's own page")
+        .with_inner_size(LogicalSize::new(900.0, 820.0))
+        .build(target)?;
+    let port = tunnel.port;
+    let view = web_view(
+        WebViewBuilder::new()
+            .with_asynchronous_custom_protocol(operate::PAGE_SCHEME.into(), move |_, request, responder| {
+                let path = request
+                    .uri()
+                    .path_and_query()
+                    .map_or("/".to_string(), |p| p.as_str().to_string());
+                let method = request.method().as_str().to_string();
+                let media = request
+                    .headers()
+                    .get("content-type")
+                    .and_then(|v| v.to_str().ok())
+                    .map(String::from);
+                let body = request.body().clone();
+                std::thread::spawn(move || {
+                    let answered = operate::exchange(
+                        port,
+                        &method,
+                        &path,
+                        media.as_deref(),
+                        &body,
+                        std::time::Duration::from_secs(30),
+                    );
+                    let (status, body) = answered.unwrap_or_else(|e| (502, format!("{e}\n").into_bytes()));
+                    let r = Response::builder()
+                        .status(status)
+                        .header("content-type", "text/html; charset=utf-8")
+                        // **no script, whatever the page carries**: the
+                        // instance is the party this frame is against
+                        .header(
+                            "content-security-policy",
+                            "default-src 'self'; script-src 'none'; style-src 'self' 'unsafe-inline'",
+                        )
+                        .body(body)
+                        .unwrap_or_else(|_| Response::builder().status(StatusCode::BAD_GATEWAY).body(Vec::new()).unwrap());
+                    responder.respond(r);
+                });
+            })
+            .with_navigation_handler(move |url| {
+                if let Some((name, query)) = operate::bounced(&url) {
+                    let _ = back.send_event(Said::Bounced(operator, name, query));
+                    return false;
+                }
+                url == operate::PAGE_ORIGIN || url.starts_with(&format!("{}/", operate::PAGE_ORIGIN))
+            })
+            .with_proxy_config(wry::ProxyConfig::Http(wry::ProxyEndpoint {
+                host: rhtn_desktop::window::NOWHERE.0.into(),
+                port: rhtn_desktop::window::NOWHERE.1.into(),
+            }))
+            .with_new_window_req_handler(|_, _| wry::NewWindowResponse::Deny)
+            .with_download_started_handler(|_, _| false)
+            .with_url(format!("{}/", operate::PAGE_ORIGIN)),
+        &w,
+    )?;
+    Ok((w, view))
+}
+
+/// **An offering, read into the install's form** (`rhtn_client::offering`):
+/// the resource minted here, the owner this identity, the rest the
+/// distributor's suggestions with the manifest shown in its field. It
+/// fills a form the person reads and sends; nothing is installed.
+fn offered(by: &[u8], text: &str) -> String {
+    match rhtn_client::offering::parse(text) {
+        Err(r) => operate::said_script("offering", None, false, &r.say()),
+        Ok(o) => {
+            let mut values = vec![
+                (
+                    "resource".to_string(),
+                    rhtn_ffi::client::fresh_resource_keyhash(),
+                ),
+                ("owner".to_string(), hex(by)),
+                ("authority".to_string(), o.authority.clone()),
+                ("image".to_string(), o.image.clone()),
+                ("manifest".to_string(), o.manifest.clone()),
+                ("name".to_string(), o.name.clone()),
+            ];
+            if let Some(port) = o.port {
+                values.push(("port".to_string(), port.to_string()));
+            }
+            format!(
+                "{}{}",
+                operate::fill_script("install", None, &values),
+                operate::said_script(
+                    "offering",
+                    None,
+                    true,
+                    &format!(
+                        "{}: the install below is filled, a resource minted for it and you its \
+                         owner. What it declares is its manifest, in the form: read it before \
+                         you send.",
+                        o.name
+                    ),
+                )
+            )
+        }
+    }
+}
+
+/// **Send one act** over the tunnel, with what it brings derived for this
+/// act alone, and the operator window told what the instance said and
+/// drawn again from what it declares now.
+#[allow(clippy::too_many_arguments)]
+fn invoke(
+    p: &Participant,
+    tunnel: &operate::Tunnel,
+    declared: &Mutex<operate::Declared>,
+    id: tao::window::WindowId,
+    name: &str,
+    resource: Option<&str>,
+    fields: &[(String, String)],
+    back: &EventLoopProxy<Said>,
+) {
+    let say = |ok: bool, text: &str| {
+        let _ = back.send_event(Said::OperatorSay(
+            id,
+            operate::said_script(name, resource, ok, text),
+        ));
+    };
+    let act = declared.lock().unwrap().act(name, resource).cloned();
+    let Some(act) = act else {
+        return say(false, "this instance no longer declares that act");
+    };
+    if let Some(why) = operate::undrawable(&act) {
+        return say(false, &why);
+    }
+    let mut body = match operate::body(&act, fields) {
+        Ok(b) => b,
+        Err(why) => return say(false, &why),
+    };
+    // **the credential, derived for this act and held no longer**
+    if matches!(
+        act.brings,
+        operate::Brings::HostKey | operate::Brings::SignedRunner
+    ) {
+        match p.host_runner_private_key() {
+            Ok(k) => body.push(("key".into(), k)),
+            Err(e) => {
+                return say(
+                    false,
+                    &format!("this desktop could not derive the machine's key: {e}"),
+                );
+            }
+        }
+    }
+    if act.brings == operate::Brings::SignedRunner {
+        match p.host_runner_refresh() {
+            Ok(r) => {
+                body.push(("runner".into(), r.runner));
+                body.push(("signature".into(), r.signature));
+            }
+            Err(e) => {
+                return say(
+                    false,
+                    &format!("this desktop could not sign its runner: {e}"),
+                );
+            }
+        }
+    }
+    let sent = operate::form(&body);
+    for (_, v) in &mut body {
+        zeroize::Zeroize::zeroize(v);
+    }
+    let answered = tunnel.exchange(
+        "POST",
+        &format!("/node/act/{name}"),
+        Some("application/x-www-form-urlencoded"),
+        &sent,
+        std::time::Duration::from_secs(300),
+    );
+    drop(sent);
+    let (code, text) = match answered {
+        Ok((c, b)) => (c, String::from_utf8_lossy(&b).trim().to_string()),
+        Err(e) => return say(false, &format!("not carried: {e}")),
+    };
+    let ok = code == 200;
+    let shown = if ok { text } else { format!("{code}\n{text}") };
+    // **what it declares now**, since an install, a grant or a removal
+    // changes what may be asked next
+    let again = tunnel
+        .exchange(
+            "GET",
+            "/node/acts",
+            None,
+            b"",
+            std::time::Duration::from_secs(15),
+        )
+        .ok()
+        .filter(|(c, _)| *c == 200)
+        .and_then(|(_, b)| operate::read(&String::from_utf8_lossy(&b)).ok());
+    match again {
+        Some(d) if ok => {
+            let html = operate::page(&format!("The node at 127.0.0.1:{}", tunnel.port), &d);
+            *declared.lock().unwrap() = d;
+            let _ = back.send_event(Said::OperatorRedraw(
+                id,
+                html,
+                operate::said_script(name, resource, ok, &shown),
+            ));
+        }
+        _ => say(ok, &shown),
+    }
+}
 
 /// **A resource's window** (`frame`): a web context of its own under the
 /// desktop's directory, so its storage is its own and kept; its origin's

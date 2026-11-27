@@ -469,6 +469,10 @@ document.addEventListener('click', e => {
   }
   if (b.dataset.colour) return post({ act: 'colour', name: b.dataset.colour });
   if (b.dataset.focus) return post({ act: 'focus', by: b.dataset.focus });
+  if (b.dataset.administer) {
+    post({ act: 'administer', by: b.dataset.administer });
+    return say('opening a way to the node…');
+  }
   if (b.id === 'name') {
     const f = document.getElementById('rename');
     if (!f.value.trim()) return say('type the name first');

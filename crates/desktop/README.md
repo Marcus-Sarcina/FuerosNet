@@ -105,6 +105,39 @@ yes opens the toolkit's save dialog with a name suggested from the
 resource and the declared type. A script's own request gets the bytes,
 which are its to read.
 
+## The node an identity runs
+
+**A restored desktop administers it; a paired one leaves it to the phone**
+[author, 2026-11-26]. A subnet's options say *Administer the node* where
+this key runs one (it published the endpoint record on the line it holds).
+Pressed, the desktop derives the host control key from the seed it holds,
+opens an ssh tunnel to the machine its endpoint record names, and reaches
+the instance's surface on that machine's own loopback, where an act needs
+no act token (`operate.rs`). A paired desktop holds no seed and derives no
+key, and says so.
+
+The window it opens draws **every act the instance declares**
+(`GET /node/acts`), the node's own and each resource's, as the phone's
+`ActActivity` draws them: the same checks said before anything is sent,
+the same body, and the machine's restricted key or this desktop's signed
+runner derived for the one act that brings it. After an act it reads the
+declaration again, since an install or a removal changes what may be asked.
+
+- **An offering pasted fills the install** — a resource minted for it, this
+  identity its owner, the distributor's image, authority, port and name,
+  and the manifest in its field to be read — and installs nothing until
+  the person sends it.
+- **The instance's own page**, from the button at the top, is framed with
+  script refused by policy, a navigation off its one origin not followed,
+  and each control on it bouncing to the operator window as the act it
+  names, its values filled in as hints the person confirms.
+
+`cargo run -p rhtn-desktop --example operate_check -- <machine> <control key
+file> [<runner key file>]` reaches a live instance the way the window does,
+reads and draws its declaration, fetches its page, and with the runner key
+sends `running`: the bench's check, not the gate's, which reaches no
+machine.
+
 ## What is not built yet
 
 The launch itself: choosing a region and a size, minting the enrolment

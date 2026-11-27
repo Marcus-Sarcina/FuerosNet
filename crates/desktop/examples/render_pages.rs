@@ -33,6 +33,7 @@ fn main() {
                 unseen: 2,
                 by: "70".repeat(32),
                 colour: "Teal".into(),
+                operates: true,
             },
             SubnetRow {
                 id: "9a".repeat(32),
@@ -43,6 +44,7 @@ fn main() {
                 unseen: 0,
                 by: "70".repeat(32),
                 colour: "Teal".into(),
+                operates: false,
             },
         ],
         people: vec![

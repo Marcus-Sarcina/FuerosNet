@@ -237,6 +237,9 @@ pub struct SubnetRow {
     pub by: String,
     /// That identity's colour, which its orb wears [author, 2026-11-12].
     pub colour: String,
+    /// **Whether this key runs a node here**: it published an endpoint
+    /// record on the line it holds, which is what an operator is.
+    pub operates: bool,
 }
 
 /// One person this key knows.
@@ -1185,6 +1188,23 @@ fn subnet_options(snap: &Snapshot, id: &str) -> String {
                 .unwrap_or_else(|| "Your standing here has not been read yet.".into())
         )
     ));
+    // **the instance it runs, administered here on a restored desktop**
+    // [author, 2026-11-26]; a paired one derives no key for the machine
+    if let Some(s) = s.filter(|s| s.operates) {
+        out.push_str(&match snap.device {
+            Device::Restored => format!(
+                "<h2>Its node</h2>\n<p class=\"sub\">You run this subnet's node. What it declares \
+                 it can be asked — installs, grants, upgrades — is drawn here and sent over its \
+                 machine's own loopback.</p>\n<p><button data-administer=\"{}\">Administer the \
+                 node</button></p>",
+                escape(&s.by)
+            ),
+            Device::Paired { .. } => "<h2>Its node</h2>\n<p class=\"sub\">You run this subnet's \
+                 node. Administering it takes the machine's key, which comes from the identity's \
+                 seed, and this desktop was paired and holds none: administer it on the phone.</p>"
+                .to_string(),
+        });
+    }
     if s.is_some_and(|s| s.crown == Crown::Full) {
         out.push_str(&match snap.device {
             Device::Restored => format!(
@@ -1497,6 +1517,7 @@ mod tests {
                 unseen: 3,
                 by: "ab".repeat(32),
                 colour: "Teal".into(),
+                operates: false,
             }],
             people: vec![
                 Person {
@@ -1894,6 +1915,34 @@ mod tests {
         };
         let po = page(&paired, &Place::SubnetOptions(id.clone()), &Body::Plain);
         assert!(!po.contains("id=\"rename\"") && po.contains("name it on the phone"));
+        // **the node it runs**, administered on a restored desktop alone
+        // [author, 2026-11-26]
+        assert!(
+            !o.contains("data-administer"),
+            "only where this key runs one"
+        );
+        let running = |snap: &Snapshot| Snapshot {
+            subnets: vec![SubnetRow {
+                operates: true,
+                ..snap.subnets[0].clone()
+            }],
+            ..snap.clone()
+        };
+        let ro = page(
+            &running(&root),
+            &Place::SubnetOptions(id.clone()),
+            &Body::Plain,
+        );
+        assert!(
+            ro.contains(&format!("data-administer=\"{}\"", root.subnets[0].by)),
+            "{ro}"
+        );
+        let rpo = page(
+            &running(&paired),
+            &Place::SubnetOptions(id.clone()),
+            &Body::Plain,
+        );
+        assert!(!rpo.contains("data-administer") && rpo.contains("administer it on the phone"));
         // not the root: no name to set at all
         assert!(!page(&s, &Place::SubnetOptions(id), &Body::Plain).contains("The subnet's name"));
 

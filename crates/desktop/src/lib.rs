@@ -42,6 +42,8 @@ pub mod code;
 pub mod custody;
 /// A resource's page, framed in a window of its own.
 pub mod frame;
+/// The instances this identity runs, administered from a restored desktop.
+pub mod operate;
 /// Paired from the phone, over the code this desktop shows.
 pub mod pairing;
 /// The participant client's pages and what it keeps between runs.
@@ -87,6 +89,12 @@ pub enum Act {
     },
     /// Show the page that launches a node.
     Launch,
+    /// **Administer the instance this identity runs** [author, 2026-11-26]:
+    /// on a restored desktop, which derives the machine's keys.
+    Administer {
+        /// The identity that runs it.
+        by: Vec<u8>,
+    },
     /// Restore this desktop from the identity's phrase.
     Restore {
         /// What was typed.
@@ -234,6 +242,11 @@ pub fn act(message: &str) -> Result<Act, String> {
                 .ok_or_else(|| "`yes` is missing".into());
         }
         "launch" => return Ok(Act::Launch),
+        "administer" => {
+            return Ok(Act::Administer {
+                by: node_key(&s("by")?).map_err(|_| "an identity is 64 hex characters")?,
+            });
+        }
         "back" => return Ok(Act::Back),
         "go" => {
             let named = s("place")?;
