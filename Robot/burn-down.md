@@ -110,8 +110,8 @@ is decided, built or explicitly deferred; a deferral moves to
 
 | # | Work | Waits on |
 |---|---|---|
-| B-28 | State the two residual exposures accepted with the minted key: the sender's address reaches the recipient's node, and the sender's own node sees where it relays | — |
-| B-29 | Put the seal key's derivation label in a document; it is in code only | — |
+| B-28 | State the two residual exposures accepted with the minted key: the sender's address reaches the recipient's node, and the sender's own node sees where it relays. **Put to him 2026-11-27**: no record of his accepting them was found, so whether the design states them as accepted costs or as facts alone is his | — |
+| B-29 | Put the seal key's derivation label in a document; it is in code only. **Done 2026-11-27**: `Reopen` field 2 in wire-format section 8.2 now states the package key's derivation whole: HKDF-SHA256, empty salt, the identity's classical signing seed, info `rhtn/1:package-at-rest` and the resource's keyhash, 64 bytes, never stored. The message seal's labels were already there; the application's own sealing labels are the application's | — |
 | B-30 | The design is silent on unassigned nodes, the adoption-carried node and sealed storage, which live in the other three documents | — |
 | B-31 | Say that a paired desktop reopens no sealed package, holding no seed; that a kernel fix waits for a restart; the board's two failover edges | — |
 | B-32 | Design section 15: "a node's launch and closing" travel rootward, though nothing sends a closing | — |

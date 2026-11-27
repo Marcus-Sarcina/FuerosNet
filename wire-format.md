@@ -4466,7 +4466,13 @@ Reopen = {             ; control frame 8, from the operator's client on the
                        ;   package named there, unanswered
   1: keyhash,          ; the resource
   2: bstr .size 64     ; its key, derived from the operator's signing seed
-                       ;   and the resource. On this session and nowhere
+                       ;   and the resource: HKDF-SHA256, empty salt, the
+                       ;   identity's classical signing seed as input and
+                       ;   `rhtn/1:package-at-rest` ‖ the resource's
+                       ;   keyhash as info, 64 bytes. Never stored: every
+                       ;   device restored from the phrase derives the same
+                       ;   key, and one resource's opens no other's. On
+                       ;   this session and nowhere
                        ;   else: its handshake pinned the node's key under
                        ;   the operator's delegation at the address their
                        ;   records name, so an image served at any other is
