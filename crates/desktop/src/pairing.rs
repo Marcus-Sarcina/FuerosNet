@@ -554,6 +554,89 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dd);
     }
 
+    /// The kernel's sealing service, as the window keeps the threads under it.
+    struct KernelSealer(Arc<Participant>);
+
+    impl crate::threads::Sealer for KernelSealer {
+        fn seal(&self, label: &str, bytes: &[u8]) -> Vec<u8> {
+            self.0.seal(label.to_string(), bytes.to_vec())
+        }
+        fn unseal(&self, label: &str, bytes: &[u8]) -> Option<Vec<u8>> {
+            self.0.unseal(label.to_string(), bytes.to_vec()).ok()
+        }
+    }
+
+    /// **A run is renewed by pairing again, and what the desktop holds
+    /// carries over** [author, 2026-11-27]: the second pairing stands on
+    /// the state and the custody the first left, so the conversation kept
+    /// under the first run reads under the second, which opens under a new
+    /// key; and the run held says when the next start pairs again.
+    // functional: APP-021
+    #[test]
+    fn a_desktop_paired_again_on_what_it_holds_keeps_its_conversations() {
+        use crate::participant::{PairedIdentity, hex, run_ended, run_ends};
+        use crate::threads::{Delivery, Record, Threads};
+        let (pd, dd) = (scratch("again-phone"), scratch("again-desk"));
+        let ph = Arc::new(Participant::start(seeds("alice"), vec![], platform(&pd)).unwrap());
+        let custody = Arc::new(Held::default());
+        let pair = || {
+            let offer = Offer::new(fresh_seed(), "127.0.0.1".parse().unwrap()).unwrap();
+            let code = offer.code();
+            let p = ph.clone();
+            let side = std::thread::spawn(move || phone(vec![(p, false)], code));
+            let on_desk = |_: &[u8]| {
+                Ok(Desk::new(&dd, Arc::new(|_| true), Arc::new(|_| {}))
+                    .unwrap()
+                    .platform(custody.clone()))
+            };
+            let mut paired = offer
+                .pair(vec![], &on_desk, &AtomicBool::new(false))
+                .expect("paired");
+            side.join().unwrap().expect("the phone's side runs");
+            paired.remove(0)
+        };
+        let (me, peer) = (hex(&ph.me()), "ab".repeat(32));
+        let threads =
+            |p: &Arc<Participant>| Threads::new(&dd, &me, Box::new(KernelSealer(p.clone())));
+
+        let first = pair();
+        threads(&first.participant)
+            .append(
+                &peer,
+                &Record::Said {
+                    mine: false,
+                    who: "them".into(),
+                    text: "kept".into(),
+                    delivery: Delivery::Sent,
+                    reason: None,
+                },
+            )
+            .unwrap();
+        let held = [PairedIdentity {
+            material: first.material.clone(),
+            run: first.run.clone(),
+        }];
+        let ends = run_ends(&first.run).expect("the run reads");
+        assert!(!run_ended(&held, ends - 1) && run_ended(&held, ends));
+        let before = first.participant.presented_key();
+        drop(first);
+
+        let second = pair();
+        assert_ne!(second.participant.presented_key(), before, "a new key");
+        assert!(run_ends(&second.run).is_some_and(|end| end > now()));
+        let page = threads(&second.participant).newest(&peer, 0);
+        assert!(!page.broken, "every record opens under the second run");
+        assert_eq!(
+            page.messages
+                .iter()
+                .map(|m| m.text.as_str())
+                .collect::<Vec<_>>(),
+            ["kept"]
+        );
+        let _ = std::fs::remove_dir_all(&pd);
+        let _ = std::fs::remove_dir_all(&dd);
+    }
+
     /// **Every identity the phone holds crosses on one session, each under a
     /// key of its own** [author, 2026-11-23], and a no to one identity's
     /// dataset leaves the next one's standing.

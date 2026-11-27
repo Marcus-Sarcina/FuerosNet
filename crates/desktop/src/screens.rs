@@ -1526,10 +1526,16 @@ fn options(snap: &Snapshot) -> String {
         ),
         escape(&said),
         hex(&snap.me),
+        // **a paired desktop renews its run by pairing again**, on the
+        // directory it holds [author, 2026-11-27]
         if snap.device == Device::Restored {
-            BACKUP
+            BACKUP.to_string()
         } else {
-            ""
+            row(
+                "Pair again with the phone",
+                "a new run at the next start, everything this desktop holds kept",
+                "data-pair-again=\"1\"",
+            )
         }
     )
 }
@@ -2052,6 +2058,9 @@ mod tests {
         assert!(
             !po.contains("id=\"import\"") && po.contains("90 days") && po.contains("came across")
         );
+        // **a paired desktop is offered pairing again**, a restored one
+        // nothing of it
+        assert!(po.contains("data-pair-again") && !o.contains("data-pair-again"));
     }
 
     // **the authority screen and the subnet's name carry over** [author,

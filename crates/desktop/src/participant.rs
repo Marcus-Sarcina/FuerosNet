@@ -103,6 +103,54 @@ impl Held {
     }
 }
 
+/// **The file that asks the next start to pair again**, written from the
+/// options and gone once a pairing finishes.
+pub const PAIR_AGAIN: &str = "pair-again";
+
+/// **When `run` ends**: the close of its last window, in seconds; none
+/// where a delegation of it does not read.
+pub fn run_ends(run: &[Vec<u8>]) -> Option<u64> {
+    run.iter()
+        .map(|d| {
+            rhtn_crypto::verify::delegation_fields(d)
+                .ok()
+                .map(|d| d.not_after)
+        })
+        .collect::<Option<Vec<_>>>()?
+        .into_iter()
+        .max()
+}
+
+/// **Whether this start pairs again rather than standing on the run held**
+/// [author, 2026-11-27: re-pairing is the renewal, "so long as local files
+/// and history will carry over to the renewed identity instead of spawning
+/// a fresh identity scope"]: where the run of any identity held has ended
+/// at `now`, or the person asked for it. The pairing is on this same
+/// directory, so what is kept here is kept.
+pub fn pairs_again(dir: &Path, all: &[PairedIdentity], now: u64) -> bool {
+    dir.join(PAIR_AGAIN).exists() || run_ended(all, now)
+}
+
+/// Whether the run of any identity held has ended at `now`.
+pub fn run_ended(all: &[PairedIdentity], now: u64) -> bool {
+    all.iter()
+        .any(|p| run_ends(&p.run).is_none_or(|end| end <= now))
+}
+
+/// Ask the next start to pair again.
+pub fn ask_pair_again(dir: &Path) -> Result<(), String> {
+    crate::platform::write_whole(&dir.join(PAIR_AGAIN), b"")
+        .map_err(|e| format!("{PAIR_AGAIN}: {e}"))
+}
+
+/// A pairing finished: the next start stands on its run.
+pub fn paired_again(dir: &Path) -> Result<(), String> {
+    match std::fs::remove_file(dir.join(PAIR_AGAIN)) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(format!("{PAIR_AGAIN}: {e}")),
+        _ => Ok(()),
+    }
+}
+
 /// **Where each identity's colour is kept** [author, 2026-11-12], by its
 /// keyhash in hex: a choice of this device's, beside what it keeps to start.
 pub const COLOURS: &str = "colours.json";
@@ -242,6 +290,31 @@ pub fn pair_page(code_svg: &str) -> String {
              <textarea id=\"phrase\" rows=\"4\" autocomplete=\"off\" autocapitalize=\"off\" \
              spellcheck=\"false\" placeholder=\"the twenty-four words\"></textarea>\n\
              <p><button id=\"restore\">Restore</button></p>"
+        ),
+    )
+}
+
+/// **The page a paired desktop shows to pair again**, the run it stood on
+/// having `ended` or the person having asked: the same code, and no phrase,
+/// since a restore is a desktop of another kind and starts on a fresh
+/// directory.
+pub fn pair_again_page(code_svg: &str, ended: bool) -> String {
+    let why = if ended {
+        "The run the phone signed for this desktop has ended."
+    } else {
+        "You asked to pair this desktop again."
+    };
+    shell(
+        "Pair this desktop again",
+        &format!(
+            "<h1>Pair this desktop again</h1>\n\
+             <p class=\"sub\">{why} On the phone, open the identity's settings and choose \
+             <b>A desktop of this identity</b>, then point its camera at this code. \
+             Everything this desktop holds is kept: its conversations, its choices and \
+             what came across before. It presents a new key under the new run.</p>\n\
+             <figure class=\"code\">{code_svg}</figure>\n\
+             <p class=\"sub\">Both devices must be on the same local network. The code is \
+             good until this window closes.</p>"
         ),
     )
 }
@@ -496,6 +569,7 @@ document.addEventListener('click', e => {
   }
   if (b.dataset.colour) return post({ act: 'colour', name: b.dataset.colour });
   if (b.dataset.pool) return post({ act: 'board-pool', bytes: Number(b.dataset.pool) });
+  if (b.dataset.pairAgain) return post({ act: 'pair-again' });
   if (b.dataset.focus) return post({ act: 'focus', by: b.dataset.focus });
   if (b.dataset.administer) {
     post({ act: 'administer', by: b.dataset.administer });
@@ -635,6 +709,26 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
     }
 
+    // functional: APP-021
+    #[test]
+    fn the_next_start_pairs_again_where_asked_and_on_a_run_that_does_not_read() {
+        let d = std::env::temp_dir().join(format!("rhtn-again-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        crate::platform::create_private(&d).unwrap();
+        let unread = [PairedIdentity {
+            material: vec![1],
+            run: vec![vec![9; 4]],
+        }];
+        assert!(pairs_again(&d, &unread, 0), "no run to stand on");
+        assert!(!pairs_again(&d, &[], 0));
+        ask_pair_again(&d).unwrap();
+        assert!(pairs_again(&d, &[], 0), "asked");
+        paired_again(&d).unwrap();
+        assert!(!pairs_again(&d, &[], 0), "the pairing finished");
+        paired_again(&d).unwrap();
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
     #[test]
     fn the_scheme_serves_the_pages_files_and_nothing_else() {
         assert_eq!(asset("/tokens.css").unwrap().0, "text/css");
@@ -663,6 +757,13 @@ mod tests {
         assert!(p.contains("href=\"tokens.css\"") && p.contains("<svg/>"));
         assert!(stopped_page("<b>no keyring</b>").contains("&lt;b&gt;no keyring"));
         assert!(p.contains("id=\"phrase\"") && p.contains("autocomplete=\"off\""));
+        // pairing again shows the code and why, and no phrase
+        let (ended, asked) = (
+            pair_again_page("<svg/>", true),
+            pair_again_page("<svg/>", false),
+        );
+        assert!(ended.contains("<svg/>") && ended.contains("has ended") && asked.contains("asked"));
+        assert!(!ended.contains("id=\"phrase\"") && !asked.contains("id=\"phrase\""));
         assert!(ask_script("Take \"it\"?").contains("\"Take \\\"it\\\"?\""));
     }
 

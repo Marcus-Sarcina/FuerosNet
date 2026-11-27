@@ -89,6 +89,9 @@ pub enum Act {
     },
     /// Show the page that launches a node.
     Launch,
+    /// **Pair this desktop again at its next start**, on the directory it
+    /// holds, so that what it keeps is kept.
+    PairAgain,
     /// **Show a page of earlier messages** in the thread with `peer`, as
     /// the phone's "earlier messages" does.
     Earlier {
@@ -255,6 +258,7 @@ pub fn act(message: &str) -> Result<Act, String> {
                 .ok_or_else(|| "`yes` is missing".into());
         }
         "launch" => return Ok(Act::Launch),
+        "pair-again" => return Ok(Act::PairAgain),
         "earlier" => {
             let peer = s("peer")?;
             node_key(&peer).map_err(|_| "a party is 64 hex characters")?;
@@ -720,6 +724,7 @@ mod tests {
             Act::Answer { yes: true }
         );
         assert_eq!(act(r#"{"act":"launch"}"#).unwrap(), Act::Launch);
+        assert_eq!(act(r#"{"act":"pair-again"}"#).unwrap(), Act::PairAgain);
         let k = "ab".repeat(32);
         assert_eq!(
             act(&format!(r#"{{"act":"earlier","peer":"{k}"}}"#)).unwrap(),

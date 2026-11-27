@@ -502,6 +502,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     *current.lock().unwrap() = rhtn_desktop::page();
                     let _ = ours.load_url(INDEX);
                 }
+                Ok(Act::PairAgain) => {
+                    let _ = ours.evaluate_script(&match participant::ask_pair_again(&root) {
+                        Ok(()) => said(
+                            true,
+                            "Start the desktop again and it shows the code to pair with \
+                             the phone; everything it holds is kept.",
+                        ),
+                        Err(why) => said(false, &format!("not asked: {why}")),
+                    });
+                }
                 Ok(Act::Earlier { peer }) => {
                     let (back, up) = (worker.clone(), up.clone());
                     std::thread::spawn(move || {
@@ -844,7 +854,16 @@ fn start(
                 .into(),
         );
     }
+    // **a run that has ended is renewed by pairing again, on this
+    // directory**, so what it holds is kept; so is one the person asked to
+    let again = match &held {
+        Some(Held::Paired(all)) if participant::pairs_again(dir, all, now_s()) => {
+            Some(participant::run_ended(all, now_s()))
+        }
+        _ => None,
+    };
     match held {
+        Some(Held::Paired(_)) if again.is_some() => {}
         Some(Held::Paired(all)) => {
             let days = participant::run_days(&all[0].run);
             let mut kernels = Vec::new();
@@ -897,11 +916,17 @@ fn start(
     // that will not keep it stops the pairing before the phone signs
     // anything, and a seed kept for a pairing never finished is the one
     // the next shows
+    // **pairing again offers a new key**, so no key this desktop presented
+    // under the last run comes to stand for another identity under this one
     let seed = match keyring.seed()? {
-        Some(s) => s,
-        None => {
+        Some(s) if again.is_none() => s,
+        held => {
             let s = pairing::fresh_seed();
-            keyring.keep_seed(&s)?;
+            if held.is_some() {
+                keyring.replace_seed(&s)?;
+            } else {
+                keyring.keep_seed(&s)?;
+            }
             s
         }
     };
@@ -916,7 +941,11 @@ fn start(
                  it on; name one with <code>--at</code>, or restore from the phrase.</p>"
             .to_string(),
     };
-    let _ = back.send_event(Said::Show(participant::pair_page(&shown)));
+    let page = match again {
+        Some(ended) => participant::pair_again_page(&shown, ended),
+        None => participant::pair_page(&shown),
+    };
+    let _ = back.send_event(Said::Show(page));
 
     let (tx, rx) = channel();
     *phrases.lock().unwrap() = Some(tx.clone());
@@ -931,7 +960,7 @@ fn start(
         match rx.recv().map_err(|_| "the window closed".to_string())? {
             First::Paired(Ok(paired)) => {
                 *phrases.lock().unwrap() = None;
-                return finish_paired(dir, &keyring, paired);
+                return finish_paired(dir, &keyring, paired, again.is_some());
             }
             First::Paired(Err(why)) if why == pairing::STOPPED => {}
             First::Paired(Err(why)) => return Err(custody_said(&keyring, why)),
@@ -952,7 +981,7 @@ fn start(
                 *phrases.lock().unwrap() = None;
                 while let Ok(m) = rx.try_recv() {
                     if let First::Paired(Ok(paired)) = m {
-                        return finish_paired(dir, &keyring, paired);
+                        return finish_paired(dir, &keyring, paired, again.is_some());
                     }
                 }
                 return restore(dir, &keyring, platform, &seeds);
@@ -992,15 +1021,21 @@ fn keyhash_of(material: &[u8]) -> Result<String, String> {
 
 /// **A pairing finished**: each identity's transport seed kept by the
 /// keyring and its colour beside it, what starts every one of them again
-/// kept, and what it made said.
+/// kept, and what it made said. Pairing `again`, each seed replaces the
+/// one the last run presented.
 fn finish_paired(
     dir: &Path,
     keyring: &Keyring,
     paired: Vec<pairing::Paired>,
+    again: bool,
 ) -> Result<(Device, Vec<Arc<Participant>>), String> {
     for p in &paired {
         let who = keyhash_of(&p.material)?;
-        keyring.keep_seed_for(&who, &p.seed)?;
+        if again {
+            keyring.replace_seed_for(&who, &p.seed)?;
+        } else {
+            keyring.keep_seed_for(&who, &p.seed)?;
+        }
         if let Some(c) = p
             .colour
             .as_deref()
@@ -1019,6 +1054,7 @@ fn finish_paired(
             .collect(),
     )
     .keep(dir)?;
+    participant::paired_again(dir)?;
     let device = Device::Paired {
         days: participant::run_days(&paired[0].run),
         dataset: Some(paired.iter().all(|p| p.dataset)),

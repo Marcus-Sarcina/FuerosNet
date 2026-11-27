@@ -152,6 +152,23 @@ impl Keyring {
         }
     }
 
+    /// **One paired identity's transport seed, in place of the one held**:
+    /// a pairing again presents a new key under the new run.
+    pub fn replace_seed_for(&self, who: &str, seed: &[u8; 32]) -> Result<(), String> {
+        self.replace(&format!("transport-seed:{who}"), seed)
+    }
+
+    /// The transport seed a pairing again offers, in place of the last.
+    pub fn replace_seed(&self, seed: &[u8; 32]) -> Result<(), String> {
+        self.replace("transport-seed", seed)
+    }
+
+    fn replace(&self, name: &str, secret: &[u8]) -> Result<(), String> {
+        self.entry(name)
+            .and_then(|e| e.set_secret(secret).map_err(|e| e.to_string()))
+            .map_err(|e| format!("the keyring would not keep the {name}: {e}"))
+    }
+
     /// Keep the transport seed a first pairing drew.
     pub fn keep_seed(&self, seed: &[u8; 32]) -> Result<(), String> {
         if self.keep_new("transport-seed", seed) {

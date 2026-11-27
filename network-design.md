@@ -9427,7 +9427,9 @@ signs under its delegated key with the delegation beside it (§14.4;
 `wire-format.md` §10.3.1), and **it
 holds every identity the phone held at the pairing** [author, 2026-11-23], each
 under a transport key of its own (`wire-format.md` §14.3.3); an identity removed
-from either device afterwards stays on the other. Restored,
+from either device afterwards stays on the other. **Its run is renewed by pairing
+it again** [author, 2026-11-27], and what it holds carries over to the run that
+follows rather than starting afresh. Restored,
 it is a signing device of the identity as the phone is, knows only the nodes its
 holder introduces it to, and receives what those nodes and its peers serve it
 from then on (§6.3). Restoring is for the desktop the phone never shares a
