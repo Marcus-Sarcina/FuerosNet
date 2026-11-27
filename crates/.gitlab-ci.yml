@@ -13,6 +13,13 @@ stages:
 gate:
   stage: test
   image: rust:1-bookworm
+  # **A gate a newer push has superseded is cancelled** [author,
+  # 2026-11-27]: the runner is the author's own machine, and two gates
+  # compiling there at once stalled it. With the project's "Auto-cancel
+  # redundant pipelines" on, a push to master stops the older pipeline's
+  # gate; `image-publish` is not interruptible, so a push to a registry
+  # already under way finishes rather than leaving a tag half written.
+  interruptible: true
   variables:
     CARGO_HOME: $CI_PROJECT_DIR/.cargo
     KOTLIN_VERSION: "2.4.20"
