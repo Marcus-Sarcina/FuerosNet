@@ -488,6 +488,10 @@ impl App {
         } else {
             String::new()
         };
+        // **the frame's own checks**, beside the walk and outside it
+        if let Some(answered) = checks(&method, &target, &headers, &body) {
+            return answered;
+        }
         match method.as_str() {
             // **its host's facts, which say where it tells what waits**
             // (`resource-requirements.md` §3.3); and since a host that
@@ -630,7 +634,91 @@ pub fn summary(principal: &str, roles: &str, walk: &Walk) -> String {
         ));
     }
     out.push_str("</table>");
+    out.push_str(
+        "<p><a href=\"/checks\">What a frame carries</a>: a form posted, a redirect, \
+                  and bodies that are not text.</p>",
+    );
     out
+}
+
+/// **What a frame carries, checked by hand** (B-11): a form posted plain
+/// and as parts, each answered with what arrived; a redirect, whose body
+/// is what a frame shows since none follows it; an image, and bytes that
+/// are no page. A page with no script, so it is what any frame draws.
+pub fn checks(
+    method: &str,
+    target: &str,
+    headers: &[(String, String)],
+    body: &[u8],
+) -> Option<Vec<u8>> {
+    if target != "/checks" && !target.starts_with("/checks/") {
+        return None;
+    }
+    let page = |html: String| response(200, "text/html", html.into_bytes());
+    Some(match (method, target) {
+        ("GET", "/checks") => page(
+            "<h1>What a frame carries</h1>\
+             <form method=\"post\" action=\"/checks/form\"><p><label>Something to say \
+             <input name=\"said\" value=\"ça marche &amp; c&#39;est tout\"></label> \
+             <input type=\"hidden\" name=\"n\" value=\"3\"></p>\
+             <p><button>Post it</button></p></form>\
+             <form method=\"post\" action=\"/checks/form\" enctype=\"multipart/form-data\">\
+             <p><input name=\"part\" value=\"in parts\"> <button>Post it as parts</button></p></form>\
+             <p><a href=\"/checks/redirect\">An answer that is a redirect</a></p>\
+             <p>An image, a body that is not text: <img src=\"/checks/image.png\" width=\"48\" \
+             height=\"48\" alt=\"the image did not arrive\"></p>\
+             <p><a href=\"/checks/bytes\">Bytes that are no page</a>, which a client offers to save.</p>\
+             <p><a href=\"/\">Back to the walk</a></p>"
+                .to_string(),
+        ),
+        ("POST", "/checks/form") => {
+            let kind = header(headers, "content-type").unwrap_or_default();
+            let digest = hex(&sha256(body));
+            page(format!(
+                "<h1>What arrived</h1><p>content-type <code>{}</code>, {} bytes, \
+                 sha256 <code>{digest}</code></p><pre>{}</pre>\
+                 <p><a href=\"/checks\">Again</a></p>",
+                escape(&kind),
+                body.len(),
+                escape(&String::from_utf8_lossy(body))
+            ))
+        }
+        ("GET", "/checks/redirect") => {
+            let said = b"<h1>A redirect's own body</h1><p>This answer is a 302 to /checks. A \
+                         frame follows none, so this is what it shows.</p>\
+                         <p><a href=\"/checks\">Back</a></p>";
+            let mut out = format!(
+                "HTTP/1.1 302 Found\r\nlocation: /checks\r\ncontent-type: text/html\r\n\
+                 content-length: {}\r\n\r\n",
+                said.len()
+            )
+            .into_bytes();
+            out.extend_from_slice(said);
+            out
+        }
+        ("GET", "/checks/image.png") => response(200, "image/png", PNG.to_vec()),
+        ("GET", "/checks/bytes") => response(
+            200,
+            "application/octet-stream",
+            (0..=255u8).collect(),
+        ),
+        _ => response(405, "text/plain", b"not a check\n".to_vec()),
+    })
+}
+
+/// A 1x1 red PNG, drawn larger by the page.
+const PNG: [u8; 69] = [
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+    0xde, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41, 0x54, 0x08, 0xd7, 0x63, 0xf8, 0xcf, 0xc0, 0x00,
+    0x00, 0x03, 0x01, 0x01, 0x00, 0x18, 0xdd, 0x8d, 0xb0, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,
+    0x44, 0xae, 0x42, 0x60, 0x82,
+];
+
+fn escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }
 
 /// The record handed over as the file: the same thing in a form that
@@ -813,6 +901,61 @@ mod secret {
         assert_eq!(
             bare.walks.keys().cloned().collect::<Vec<_>>(),
             vec!["unknown".to_string()]
+        );
+    }
+}
+
+#[cfg(test)]
+mod frame_checks {
+    use super::*;
+
+    fn asked(app: &mut App, method: &str, target: &str, kind: &str, body: &[u8]) -> Vec<u8> {
+        let mut r = format!(
+            "{method} {target} HTTP/1.1\r\nhost: a\r\ncontent-type: {kind}\r\ncontent-length: {}\r\n\r\n",
+            body.len()
+        )
+        .into_bytes();
+        r.extend_from_slice(body);
+        app.handle(&r)
+    }
+
+    /// **What a frame carries, checked by hand** (B-11): each check answers
+    /// as it says, and none of them moves the walk.
+    #[test]
+    fn the_checks_answer_as_they_say_and_leave_the_walk_where_it_was() {
+        let mut app = App::new([1; 32]);
+        let text = |r: &[u8]| String::from_utf8_lossy(r).to_string();
+        let page = text(&asked(&mut app, "GET", "/checks", "text/plain", b""));
+        assert!(page.starts_with("HTTP/1.1 200 ") && page.contains("action=\"/checks/form\""));
+        assert!(page.contains("multipart/form-data") && !page.contains("<script"));
+        let posted = text(&asked(
+            &mut app,
+            "POST",
+            "/checks/form",
+            "application/x-www-form-urlencoded",
+            b"said=%C3%A7a+marche&n=3",
+        ));
+        assert!(
+            posted.contains("application/x-www-form-urlencoded") && posted.contains("23 bytes")
+        );
+        assert!(posted.contains("said=%C3%A7a+marche&amp;n=3"), "{posted}");
+        let moved = text(&asked(
+            &mut app,
+            "GET",
+            "/checks/redirect",
+            "text/plain",
+            b"",
+        ));
+        assert!(moved.starts_with("HTTP/1.1 302 ") && moved.contains("location: /checks\r\n"));
+        assert!(moved.ends_with("<p><a href=\"/checks\">Back</a></p>"));
+        let image = asked(&mut app, "GET", "/checks/image.png", "text/plain", b"");
+        assert!(image.ends_with(&PNG) && text(&image).contains("content-type: image/png"));
+        let bytes = asked(&mut app, "GET", "/checks/bytes", "text/plain", b"");
+        assert!(bytes.ends_with(&(0..=255u8).collect::<Vec<_>>()));
+        assert!(app.walks.is_empty(), "no check began a walk");
+        assert!(
+            checks("GET", "/checksum", &[], b"").is_none(),
+            "a path that only begins so is not one"
         );
     }
 }
