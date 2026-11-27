@@ -1844,7 +1844,14 @@ fn an_installed_packages_relationships_are_set_and_withdrawn_from_the_operators_
         "a refusal leaves the hosting file as it was"
     );
 
-    // **a removal and an install keep them**, as they keep its grants
+    // **a removal and an install keep them**, as they keep its grants —
+    // and the install says it kept those
+    let granted = ask(
+        at,
+        "POST /node/grant HTTP/1.1",
+        format!("resource={resource}&roles=reader&of=everyone").as_bytes(),
+    );
+    assert!(granted.starts_with("HTTP/1.1 200"), "{granted}");
     let gone = ask(
         at,
         "POST /node/package/remove HTTP/1.1",
@@ -1858,7 +1865,13 @@ fn an_installed_packages_relationships_are_set_and_withdrawn_from_the_operators_
         gone.contains("relationships"),
         "the removal says what it kept: {gone}"
     );
-    assert!(install().starts_with("HTTP/1.1 200"));
+    let again = install();
+    assert!(again.starts_with("HTTP/1.1 200"), "{again}");
+    assert_eq!(
+        field(&again, "grants").as_deref(),
+        Some("1, kept from before"),
+        "{again}"
+    );
     assert!(plane().contains(&format!("\"patron\":\"{patron}\"")));
 
     // **withdrawn**, and the plane no longer has it

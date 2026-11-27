@@ -1156,12 +1156,28 @@ impl Surface {
             port = want.port,
             "daemon.lifecycle"
         );
+        // **what reaches it, as the table holds it now**: none on a first
+        // install, and on a second, the grants it kept
+        let kept = self
+            .acting()
+            .map(|node| {
+                node.view
+                    .lock()
+                    .unwrap()
+                    .resources
+                    .grants_for(&want.resource)
+                    .len()
+            })
+            .unwrap_or(0);
+        let reach = match kept {
+            0 => "grants none\nnext nobody may reach it until a role is granted on it".to_string(),
+            n => format!("grants {n}, kept from before"),
+        };
         (
             200,
             format!(
                 "installed {}\nname rhtn-pkg-{name}\nimage {}\naddress 127.0.0.1:{}\nblock {}\nicon {}\nauthority \
-                 {}\nowner {}\ngrants none\nnext nobody may reach it until a role is granted on \
-                 it\npulled {}\nstarted {}\n",
+                 {}\nowner {}\n{reach}\npulled {}\nstarted {}\n",
                 hex(&want.resource),
                 want.image,
                 want.port,
