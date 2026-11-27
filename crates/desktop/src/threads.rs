@@ -405,6 +405,28 @@ impl Threads {
         Ok(at)
     }
 
+    /// **The newest page with `peer`, and `earlier` pages before it**, as
+    /// the phone's "earlier messages" asks for them one at a time: each
+    /// read before the one after it, oldest first, the walk stopping at
+    /// the file's start.
+    #[must_use]
+    pub fn newest(&self, peer: &str, earlier: usize) -> Page {
+        let mut page = self.page(peer, None, PAGE, HashMap::new());
+        for _ in 0..earlier {
+            let Some(before) = page.before else { break };
+            let older = self.page(peer, Some(before), PAGE, page.pending.clone());
+            let mut messages = older.messages;
+            messages.extend(page.messages);
+            page = Page {
+                messages,
+                before: older.before,
+                pending: older.pending,
+                broken: page.broken || older.broken,
+            };
+        }
+        page
+    }
+
     /// **The newest `n` messages before `before`** (the file's end where
     /// none), delivery changes folded in — `pending` carries the ones an
     /// earlier page met for messages that lie here.
@@ -554,6 +576,33 @@ mod tests {
             })
         );
         assert_eq!(Record::decode(r#"{"delivery":"LOST"}"#), None);
+    }
+
+    /// **Earlier messages, a page at a time** (the phone's "earlier
+    /// messages"): each page asked for is read before the one after it,
+    /// and asking past the file's start shows everything once.
+    #[test]
+    fn the_newest_page_and_as_many_earlier_as_were_asked_for_read_in_order() {
+        let (d, t) = fresh("earlier");
+        for i in 0..(2 * PAGE + 20) {
+            t.append("ab", &said(false, &format!("m{i}"))).unwrap();
+        }
+        let only = t.newest("ab", 0);
+        assert_eq!(only.messages.len(), PAGE);
+        assert_eq!(only.messages[0].text, format!("m{}", PAGE + 20));
+        assert!(only.before.is_some());
+        let two = t.newest("ab", 1);
+        assert_eq!(two.messages.len(), 2 * PAGE);
+        assert_eq!(two.messages[0].text, "m20");
+        assert_eq!(
+            two.messages.last().unwrap().text,
+            format!("m{}", 2 * PAGE + 19)
+        );
+        let all = t.newest("ab", 9);
+        assert_eq!(all.messages.len(), 2 * PAGE + 20);
+        assert_eq!(all.messages[0].text, "m0");
+        assert_eq!(all.before, None);
+        let _ = std::fs::remove_dir_all(d);
     }
 
     #[test]

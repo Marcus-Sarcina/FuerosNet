@@ -471,6 +471,7 @@ document.addEventListener('click', e => {
     document.getElementById('ask').hidden = true;
     return post({ act: 'answer', yes: b.dataset.yes === '1' });
   }
+  if (b.dataset.earlier) return post({ act: 'earlier', peer: b.dataset.earlier });
   if (b.dataset.act) return post({ act: b.dataset.act });
   if (b.dataset.cost) {
     post({ act: 'cost', patron: b.dataset.cost, by: b.dataset.by });

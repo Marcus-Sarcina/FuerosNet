@@ -101,7 +101,7 @@ is decided, built or explicitly deferred; a deferral moves to
 
 | # | Work |
 |---|---|
-| B-24 | Desktop: paging of earlier messages |
+| B-24 | Desktop: paging of earlier messages. **Built 2026-11-27**: a thread with more than its newest page shows "Earlier messages", which reads one more page back each time it is chosen, as the phone's does; another thread gone to shows its newest alone (`Threads::newest`) |
 | B-25 | Desktop: .deb and AppImage packaging |
 | B-26 | Desktop: the conversation card's last line; a resource's one-line notification |
 | B-27 | Android Web Push; failover on iOS (deferred until iOS is built) |

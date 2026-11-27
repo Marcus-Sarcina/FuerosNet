@@ -1023,7 +1023,10 @@ fn thread(snap: &Snapshot, peer: &str, messages: &[Message], more: bool) -> Stri
         );
     }
     if more {
-        out.push_str("<p class=\"sub\">Earlier messages are kept; the newest are shown.</p>\n");
+        out.push_str(&format!(
+            "<p><button class=\"row\" data-earlier=\"{}\"><span>Earlier messages</span></button></p>\n",
+            escape(peer)
+        ));
     }
     out.push_str("<div id=\"messages\">\n");
     if messages.is_empty() {
@@ -1898,7 +1901,11 @@ mod tests {
         assert!(
             p.contains(&format!("data-peer=\"{peer}\"")) && p.contains("Say something to Carol")
         );
-        assert!(p.contains("Earlier messages are kept") && p.contains("data-act=\"back\""));
+        assert!(
+            p.contains(&format!(
+                "data-earlier=\"{peer}\"><span>Earlier messages</span>"
+            )) && p.contains("data-act=\"back\"")
+        );
         let r = refresh(&s, &Place::Thread(peer), &Body::Thread(vec![], false));
         assert!(r.contains("put('main'") && !r.contains("compose"));
     }

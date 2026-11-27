@@ -89,6 +89,12 @@ pub enum Act {
     },
     /// Show the page that launches a node.
     Launch,
+    /// **Show a page of earlier messages** in the thread with `peer`, as
+    /// the phone's "earlier messages" does.
+    Earlier {
+        /// The party, in hex.
+        peer: String,
+    },
     /// **Administer the instance this identity runs** [author, 2026-11-26]:
     /// on a restored desktop, which derives the machine's keys.
     Administer {
@@ -249,6 +255,11 @@ pub fn act(message: &str) -> Result<Act, String> {
                 .ok_or_else(|| "`yes` is missing".into());
         }
         "launch" => return Ok(Act::Launch),
+        "earlier" => {
+            let peer = s("peer")?;
+            node_key(&peer).map_err(|_| "a party is 64 hex characters")?;
+            return Ok(Act::Earlier { peer });
+        }
         "administer" => {
             return Ok(Act::Administer {
                 by: node_key(&s("by")?).map_err(|_| "an identity is 64 hex characters")?,
@@ -709,6 +720,12 @@ mod tests {
             Act::Answer { yes: true }
         );
         assert_eq!(act(r#"{"act":"launch"}"#).unwrap(), Act::Launch);
+        let k = "ab".repeat(32);
+        assert_eq!(
+            act(&format!(r#"{{"act":"earlier","peer":"{k}"}}"#)).unwrap(),
+            Act::Earlier { peer: k }
+        );
+        assert!(act(r#"{"act":"earlier","peer":"ab"}"#).is_err());
         assert_eq!(act(r#"{"act":"back"}"#).unwrap(), Act::Back);
         let k = "ab".repeat(32);
         assert_eq!(

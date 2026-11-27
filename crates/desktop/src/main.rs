@@ -25,7 +25,7 @@ use rhtn_desktop::screens::{
     self, BoardList, Body, Crown, History, Holder, LineRow, Person, Place, ResourceRow, Snapshot,
     SubnetRow,
 };
-use rhtn_desktop::threads::{self, Delivery, Record, Sealer, Threads};
+use rhtn_desktop::threads::{Delivery, Record, Sealer, Threads};
 use rhtn_desktop::{
     Act, Change, act, code, directory, frame, operate, pairing, phrase, said, verify_and_keep,
 };
@@ -201,6 +201,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         place: Mutex::new(History::default()),
         closing: AtomicBool::new(false),
         dir: dir.clone(),
+        earlier: Mutex::new(HashMap::new()),
     });
     // where a phrase typed on the first start goes, while one is wanted
     let phrases: Arc<Mutex<Option<Sender<First>>>> = Arc::new(Mutex::new(None));
@@ -495,6 +496,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Ok(Act::Launch) => {
                     *current.lock().unwrap() = rhtn_desktop::page();
                     let _ = ours.load_url(INDEX);
+                }
+                Ok(Act::Earlier { peer }) => {
+                    let (back, up) = (worker.clone(), up.clone());
+                    std::thread::spawn(move || {
+                        {
+                            let mut e = up.earlier.lock().unwrap();
+                            e.retain(|p, _| *p == peer);
+                            *e.entry(peer).or_insert(0) += 1;
+                        }
+                        draw(&up, &back, false);
+                    });
                 }
                 Ok(Act::Administer { by }) => {
                     let (back, up, root) = (worker.clone(), up.clone(), root.clone());
@@ -1024,6 +1036,10 @@ struct Up {
     /// Where this desktop keeps what it keeps, its colours among it.
     dir: PathBuf,
     closing: AtomicBool,
+    /// **How many earlier pages each thread shows**, by the party in hex:
+    /// asked for one at a time, as the phone's are, and back to the
+    /// newest alone when another thread is gone to.
+    earlier: Mutex<HashMap<String, usize>>,
 }
 
 /// **One identity this desktop holds**: its kernel and its conversations.
@@ -1103,11 +1119,16 @@ fn draw(up: &Up, back: &EventLoopProxy<Said>, whole: bool) {
         // **a conversation as the identity it is held as**
         Place::Thread(peer) => {
             // **on screen, what arrived is seen**
+            let pages = {
+                let mut e = up.earlier.lock().unwrap();
+                e.retain(|p, _| p == peer);
+                e.get(peer).copied().unwrap_or(0)
+            };
             let page = up
                 .for_peer(peer)
                 .map(|i| {
                     let _ = i.threads.choose(peer, |c| c.unread = 0);
-                    i.threads.page(peer, None, threads::PAGE, HashMap::new())
+                    i.threads.newest(peer, pages)
                 })
                 .unwrap_or_default();
             Body::Thread(page.messages, page.before.is_some())
