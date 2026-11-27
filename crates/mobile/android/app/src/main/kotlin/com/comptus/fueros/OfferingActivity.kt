@@ -258,6 +258,9 @@ class OfferingActivity : Activity() {
             "image" to o.image,
             "port" to port,
             "manifest" to o.manifest,
+            // the name members see it by, the distributor's until the
+            // operator changes it on the act's screen
+            "name" to o.name,
         ).joinToString("&") { (k, v) -> "$k=${Provision.escape(v)}" }
         startActivity(
             Intent(this, ActActivity::class.java).putExtra("by", by)

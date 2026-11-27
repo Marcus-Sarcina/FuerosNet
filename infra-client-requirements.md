@@ -1163,7 +1163,9 @@ composed and no signature is made: it writes configuration of yours and
 asks your host to start an image. §8.1's rule is untouched.
 
 **What arrives, and whose each part is.** The operator chooses the
-resource, its owner, the authority it answers under and where it listens.
+resource, its owner, the authority it answers under, where it listens, and
+the name its members see it by [author, 2026-11-26], which their launcher
+shows where no catalog entry names it (`wire-format.md` §6.9).
 **The package's own manifest is relayed rather than composed**: §9.1 puts
 the capability declaration in the manifest that ships with the package, so
 their client carries that manifest to you and you write it where you will
@@ -1224,7 +1226,7 @@ will know to derive one and to ask the person first.
 **And an operator should not be typing five fields off a web page.** A package's
 distributor may publish the whole of what they can say as one string — a link
 where the operator is reading, a code on a screen where they are not — carrying
-the image, a suggested authority and port, and **the package's own manifest**,
+the image, a suggested name, authority and port, and **the package's own manifest**,
 which §9.1 puts with the package and which therefore has to come from them.
 `light-client-requirements.md` §10 has the client's half of it.
 

@@ -351,6 +351,7 @@ mod tests {
 
     fn binding(backend: Option<Arc<dyn Backend>>) -> Binding {
         Binding {
+            name: None,
             owner: [2u8; 32],
             authority: "records.example".to_string(),
             backend,

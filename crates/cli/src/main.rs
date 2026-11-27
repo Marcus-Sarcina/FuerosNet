@@ -69,7 +69,7 @@ usage: rhtn <command> [...]
 
   node install --at <host:port> --identity <file> --resource <keyhash>
         --owner <keyhash> (--manifest <file> --image <ref> --authority <name>
-        --port <n> | --offering <link>) [--token <64 hex>]
+        --port <n> | --offering <link>) [--name <text>] [--token <64 hex>]
         Install a package on an instance: the node writes its hosting
         entry, relays the manifest, and asks its host to pull and start
         the image (I §9.4). <identity> is the operator's, which the

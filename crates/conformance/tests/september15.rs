@@ -69,7 +69,7 @@ fn s02_recovery_must_forget_the_superseded_clients_wake_endpoint(){
 fn g01_changed_standing_grant_must_rewrite_derived_rows(){
  use rhtn_node::resources::{Gateway,Binding,Row,Manifest};use rhtn_node::grant::{Grant,Standing};use rhtn_archive::topology::Table;use std::collections::BTreeSet;
  let (owner,res)=([41;32],[42;32]);let table=Table::with_me(owner);let mut g=Gateway::default();
- g.bind(res,Binding{owner,authority:"test.internal".into(),backend:None,declared:Manifest{roles:BTreeSet::from(["reader".into()]),..Default::default()}});
+ g.bind(res,Binding{owner,authority:"test.internal".into(),name:None,backend:None,declared:Manifest{roles:BTreeSet::from(["reader".into()]),..Default::default()}});
  let allow=Row{roles:BTreeSet::from(["reader".into()]),connect:true};let bare=Row{roles:BTreeSet::new(),connect:true};
  g.set_grants(res,vec![Grant::standing(BTreeSet::from(["reader".into()]))]).unwrap();g.refresh(&table,&Standing::unknown(), 0);assert_eq!(g.row(&res,&owner),Some(&allow));
  g.set_grants(res,vec![Grant::standing(BTreeSet::new())]).unwrap();g.refresh(&table,&Standing::unknown(), 0);

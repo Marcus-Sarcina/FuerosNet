@@ -150,6 +150,10 @@ struct HostEntry {
     resource: String,
     owner: String,
     authority: String,
+    /// **The name it was installed under** [author, 2026-11-26]: what the
+    /// catalog page shows it by where no entry names it
+    /// (`wire-format.md` §6.9 field 3).
+    name: Option<String>,
     manifest: std::path::PathBuf,
     /// Where the resource listens, where it holds its own port rather
     /// than running inside this node's sandbox
@@ -992,6 +996,7 @@ pub fn apply_in(
             Binding {
                 owner,
                 authority: h.authority.clone(),
+                name: h.name.clone(),
                 backend,
                 declared: manifest,
             },

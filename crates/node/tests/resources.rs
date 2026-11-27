@@ -391,6 +391,7 @@ fn an_entry_whose_scope_cannot_be_computed_is_stored_and_grants_nothing() {
     g.bind(
         R1,
         Binding {
+            name: None,
             owner: kh("bob"),
             authority: "r1.internal".into(),
             backend: Some(Arc::new(Fake::new())),
@@ -509,6 +510,7 @@ fn gateway_with(sc: &Scene, backend: Arc<Fake>) -> Gateway {
     g.bind(
         R1,
         Binding {
+            name: None,
             owner: kh("alice"),
             authority: "r1.internal".into(),
             backend: Some(backend),
@@ -577,6 +579,7 @@ fn one_answer_from_a_package_is_bounded_as_one_message_is() {
         g.bind(
             R1,
             Binding {
+                name: None,
                 owner: kh("alice"),
                 authority: "r1.internal".into(),
                 backend: Some(Arc::new(Sized(bytes))),
@@ -771,6 +774,7 @@ fn a_request_is_decided_from_the_materialised_row_and_a_row_wider_than_64_is_ref
     g.bind(
         R1,
         Binding {
+            name: None,
             owner: kh("alice"),
             authority: "r1".into(),
             backend: Some(backend.clone()),
@@ -852,6 +856,7 @@ fn caller_rhtn_headers_are_stripped_the_nodes_inserted_and_a_session_minted_per_
     g.bind(
         R1,
         Binding {
+            name: None,
             owner: kh("alice"),
             authority: "r1.internal".into(),
             backend: Some(b1.clone()),
@@ -864,6 +869,7 @@ fn caller_rhtn_headers_are_stripped_the_nodes_inserted_and_a_session_minted_per_
     g.bind(
         R2,
         Binding {
+            name: None,
             owner: kh("alice"),
             authority: "r2.internal".into(),
             backend: Some(b2.clone()),
@@ -1343,6 +1349,7 @@ fn the_catalog_page_shows_what_the_viewer_holds_with_the_roles_held() {
     g.bind(
         R2,
         Binding {
+            name: None,
             owner: kh("alice"),
             authority: "r2".into(),
             backend: None,
@@ -1423,6 +1430,51 @@ fn a_hosted_package_with_no_entry_is_on_the_page_of_those_granted_it() {
         items: g.page(&kh("carol"), &svc),
     };
     assert_eq!(CatalogPage::decode(&page.encode()).unwrap(), page);
+}
+
+/// **A launcher's name** [author, 2026-11-26] (`wire-format.md` §6.9 field
+/// 3): the instance name of the entry held, else the name the package was
+/// installed under, else the authority.
+// functional: CAT-028
+#[test]
+fn a_page_names_a_resource_by_its_entry_then_its_installed_name_then_its_authority() {
+    let sc = scene();
+    let mut g = gateway_with(&sc, Arc::new(Fake::new()));
+    let mut svc = CatalogService::default();
+    g.set_row(
+        R1,
+        kh("carol"),
+        Row {
+            roles: BTreeSet::new(),
+            connect: true,
+        },
+    )
+    .unwrap();
+    let named = |g: &Gateway, svc: &CatalogService| g.page(&kh("carol"), svc)[0].name.clone();
+    assert_eq!(
+        named(&g, &svc),
+        "r1.internal",
+        "the authority, with no other"
+    );
+    g.bind(
+        R1,
+        Binding {
+            name: Some("Ledger".into()),
+            owner: kh("alice"),
+            authority: "r1.internal".into(),
+            backend: Some(Arc::new(Fake::new())),
+            declared: Manifest::default(),
+        },
+    );
+    assert_eq!(named(&g, &svc), "Ledger", "the installed name before it");
+    register(
+        &mut svc,
+        "alice",
+        &entry("alice", R1, "rhtn-ledger", b"e"),
+        None,
+        1,
+    );
+    assert_eq!(named(&g, &svc), "An Instance", "and an entry's before both");
 }
 
 /// **What a resource counts as waiting for a member reaches that member's
@@ -1702,6 +1754,7 @@ fn a_reserved_role_name_is_refused_where_it_is_written_and_never_reaches_a_backe
     g.bind(
         R2,
         Binding {
+            name: None,
             owner: kh("alice"),
             authority: "x".into(),
             backend: Some(backend.clone()),
@@ -1759,6 +1812,7 @@ fn a_standing_grant_follows_the_owners_horizon_in_and_out() {
     g.bind(
         R1,
         Binding {
+            name: None,
             owner: kh("alice"),
             authority: "r1.internal".into(),
             backend: Some(backend),
@@ -1863,6 +1917,7 @@ fn an_ending_purges_the_departed_subtree_from_every_resource_not_only_the_grante
     g.bind(
         R1,
         Binding {
+            name: None,
             owner: kh("alice"),
             authority: "r1.internal".into(),
             backend: None,
@@ -1875,6 +1930,7 @@ fn an_ending_purges_the_departed_subtree_from_every_resource_not_only_the_grante
     g.bind(
         R2,
         Binding {
+            name: None,
             owner: kh("alice"),
             authority: "r2.internal".into(),
             backend: None,
@@ -1956,6 +2012,7 @@ fn replacing_a_standing_grant_rewrites_what_it_wrote_and_leaves_the_operators_ow
     g.bind(
         R1,
         Binding {
+            name: None,
             owner: kh("alice"),
             authority: "r1.internal".into(),
             backend: None,
@@ -1968,6 +2025,7 @@ fn replacing_a_standing_grant_rewrites_what_it_wrote_and_leaves_the_operators_ow
     g.bind(
         R2,
         Binding {
+            name: None,
             owner: kh("alice"),
             authority: "r2.internal".into(),
             backend: None,
@@ -2129,6 +2187,7 @@ fn rsc_42_a_role_table_holds_the_current_row_and_no_history_of_it() {
     g.bind(
         R1,
         Binding {
+            name: None,
             owner: kh("bob"),
             authority: "r1.internal".into(),
             backend: Some(Arc::new(Fake::new())),
@@ -2232,6 +2291,7 @@ fn a_grant_selects_by_the_vocabulary_section_10_3_fixes_and_two_grants_union() {
     g.bind(
         R1,
         Binding {
+            name: None,
             owner: kh("alice"),
             authority: "r1.internal".into(),
             backend: None,
@@ -2390,6 +2450,7 @@ fn a_grant_the_node_cannot_hold_is_refused_when_it_is_written() {
     g.bind(
         R1,
         Binding {
+            name: None,
             owner: kh("alice"),
             authority: "r1.internal".into(),
             backend: None,
@@ -2610,6 +2671,7 @@ fn answering(sc: &Scene, said: &[u8]) -> (Gateway, Arc<Says>) {
     g.bind(
         R1,
         Binding {
+            name: None,
             owner: kh("alice"),
             authority: "r1.internal".into(),
             backend: Some(backend.clone()),
@@ -2926,6 +2988,7 @@ fn a_grant_with_an_expiry_lapses_on_the_pass_and_a_permanent_one_stands() {
     g.bind(
         R1,
         Binding {
+            name: None,
             owner: kh("alice"),
             authority: "r1.internal".into(),
             backend: None,
@@ -2997,6 +3060,7 @@ fn a_request_past_the_minutes_budget_is_answered_as_the_application_would_and_de
     g.bind(
         R1,
         Binding {
+            name: None,
             owner: kh("alice"),
             authority: "r1.internal".into(),
             backend: Some(backend.clone()),

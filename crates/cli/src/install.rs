@@ -56,7 +56,9 @@ pub struct Ask {
     /// The package's own manifest, which is relayed rather than composed
     /// here (`infra-client-requirements.md` §9.1).
     pub manifest: Option<PathBuf>,
-    /// What a person reads in an offering: the package's name.
+    /// What a person reads in an offering: the package's name; and on an
+    /// install, the name its members see it by, the offering's where none
+    /// is given.
     pub name: Option<String>,
     /// How many lines of a package's output to read.
     pub lines: Option<usize>,
@@ -132,7 +134,15 @@ pub fn install(ask: &Ask) -> Result<String, String> {
         .port
         .or_else(|| offered.as_ref().and_then(|o| o.port))
         .ok_or("`node install` names --port, and no offering carried one")?;
+    // **the name members see it by** [author, 2026-11-26]: the operator's,
+    // else the offering's, else none and the authority shows
+    let name = ask
+        .name
+        .clone()
+        .or_else(|| offered.as_ref().map(|o| o.name.clone()))
+        .unwrap_or_default();
     let body = form(&[
+        ("name", &name),
         (
             "resource",
             &ask.resource

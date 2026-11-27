@@ -258,6 +258,7 @@ fn what_reaches_a_package_through_the_gateway_is_the_credential_and_the_request(
     g.bind(
         resource,
         Binding {
+            name: None,
             owner: me,
             authority: "shop.internal".into(),
             backend: Some(hosted),

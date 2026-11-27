@@ -49,6 +49,10 @@ pub struct Binding {
     pub owner: Keyhash,
     /// The authority its backend is addressed by.
     pub authority: String,
+    /// **The name it was installed under**, where its operator gave one
+    /// [author, 2026-11-26]: what the catalog page shows it by where no
+    /// entry names it (`wire-format.md` §6.9 field 3). Display only.
+    pub name: Option<String>,
     /// The backend where this node carries the traffic; `None` where it
     /// brokers and the traffic goes elsewhere.
     pub backend: Option<Arc<dyn Backend>>,
@@ -806,9 +810,9 @@ impl Gateway {
     /// §6.9): every resource here the viewer holds `connect` on, with the
     /// roles it holds, and nothing it cannot use. **No entry is needed**
     /// [author, 2026-11-23]: a resource is named by the instance name of
-    /// the entry held for it, and otherwise by the authority it is bound
-    /// under; one with neither is nothing this node can name and is left
-    /// out. In resource keyhash order, at most
+    /// the entry held for it, otherwise by the name it was installed under
+    /// [2026-11-26], and otherwise by the authority it is bound under; one
+    /// with none is nothing this node can name and is left out. In resource keyhash order, at most
     /// [`CATALOG_REPLY_ENTRIES`](rhtn_codec::bounds::CATALOG_REPLY_ENTRIES).
     pub fn page(&self, viewer: &Keyhash, catalog: &CatalogService) -> Vec<PageItem> {
         let name_bytes = rhtn_codec::bounds::PAGE_NAME_BYTES;
@@ -822,6 +826,9 @@ impl Gateway {
                 let binding = self.bindings.get(res);
                 let (owner, name) = match (&entry, binding) {
                     (Some(e), _) => (e.owner, e.instance.clone()),
+                    (None, Some(b)) if b.name.as_ref().is_some_and(|n| !n.is_empty()) => {
+                        (b.owner, b.name.clone().unwrap_or_default())
+                    }
                     (None, Some(b)) if !b.authority.is_empty() => (b.owner, b.authority.clone()),
                     _ => return None,
                 };

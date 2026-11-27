@@ -58,6 +58,10 @@ pub struct Package {
     pub owner: Keyhash,
     /// The authority the resource is reached under, as its `host` header.
     pub authority: String,
+    /// **The name it was installed under** [author, 2026-11-26], from the
+    /// package's offering or the operator: what a member's launcher shows
+    /// where no catalog entry names it (`wire-format.md` §6.9 field 3).
+    pub name: Option<String>,
     /// The image the host pulled, as the registry names it.
     pub image: String,
     /// Where it listens on the loopback this node and the package share.
@@ -135,6 +139,8 @@ struct Entry {
     resource: String,
     owner: String,
     authority: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
     image: String,
     port: u16,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -163,6 +169,7 @@ pub fn read(hosting: &Path) -> Result<Vec<Package>, String> {
             owner: keyhash(&e.owner)
                 .ok_or_else(|| format!("{}: `{}` is not an owner", path.display(), e.owner))?,
             authority: e.authority.clone(),
+            name: e.name.clone(),
             image: e.image.clone(),
             port: e.port,
             block: e.block.clone(),
@@ -191,6 +198,7 @@ pub fn write(hosting: &Path, packages: &[Package]) -> Result<(), String> {
                 resource: hex(&p.resource),
                 owner: hex(&p.owner),
                 authority: p.authority.clone(),
+                name: p.name.clone(),
                 image: p.image.clone(),
                 port: p.port,
                 block: p.block.clone(),
@@ -469,6 +477,11 @@ fn entry(hosting: &Path, p: &Package) -> String {
         manifest_at(hosting, &p.resource).display(),
         p.port
     );
+    // **quoted by the TOML writer**, since it is the operator's or the
+    // offering's text and not a shape this file checked
+    if let Some(n) = &p.name {
+        out.push_str(&format!("name = {}\n", toml::Value::String(n.clone())));
+    }
     if let Some(b) = &p.block {
         out.push_str(&format!("block = \"{b}\"\n"));
     }
@@ -476,6 +489,24 @@ fn entry(hosting: &Path, p: &Package) -> String {
         out.push_str("sealed = true\n");
     }
     out
+}
+
+/// **A name to install a package under** [author, 2026-11-26]: shown on a
+/// member's launcher, so it is 1 to the page's bound in bytes
+/// (`wire-format.md` §6.9 field 3) and carries no control character; empty
+/// is none, the authority showing in its place.
+pub fn name(s: &str) -> Result<Option<String>, String> {
+    let s = s.trim();
+    if s.is_empty() {
+        return Ok(None);
+    }
+    if s.len() > rhtn_codec::bounds::PAGE_NAME_BYTES || s.chars().any(char::is_control) {
+        return Err(format!(
+            "`name` is text of at most {} bytes with no control characters",
+            rhtn_codec::bounds::PAGE_NAME_BYTES
+        ));
+    }
+    Ok(Some(s.to_string()))
 }
 
 /// **The icon beside the manifest at `manifest`**, where the package's
@@ -707,6 +738,7 @@ mod tests {
             resource: kh(n),
             owner: kh(1),
             authority: "testapp.internal".into(),
+            name: None,
             image: "ggcr.io/mzuech/fuerosnet/rhtn-testapp:abc12345".into(),
             port,
             block: None,
@@ -808,6 +840,24 @@ mod tests {
             hosts[0].get("manifest").and_then(|m| m.as_str()).unwrap(),
             manifest_at(&hosting, &kh(7)).display().to_string()
         );
+        // **a name is the operator's text, quoted by the writer**: one
+        // with a quote and a backslash in it is still one TOML string
+        let named = Package {
+            name: Some("Ledger \"one\" \\ two".into()),
+            ..one(7, 7460)
+        };
+        write(&hosting, std::slice::from_ref(&named)).unwrap();
+        let v: toml::Value = toml::from_str(&std::fs::read_to_string(&hosting).unwrap()).unwrap();
+        assert_eq!(v["host"][0]["name"].as_str(), Some("Ledger \"one\" \\ two"));
+        assert_eq!(read(&hosting).unwrap(), vec![named]);
+    }
+
+    #[test]
+    fn an_installed_name_is_the_pages_and_bounded_as_the_page_is() {
+        assert_eq!(name("  "), Ok(None));
+        assert_eq!(name(" Ledger "), Ok(Some("Ledger".into())));
+        assert!(name(&"x".repeat(rhtn_codec::bounds::PAGE_NAME_BYTES + 1)).is_err());
+        assert!(name("two\nlines").is_err());
     }
 
     // functional: OPS-021

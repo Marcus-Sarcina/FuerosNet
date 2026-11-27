@@ -90,7 +90,7 @@ fn r08_reserved_node_roles_must_not_reach_the_backend() {
     // Rejecting the reserved declarations at install time is also conforming.
     let Ok(package)=instantiate(&manifest) else { return };
     let mut gateway=Gateway::default();
-    gateway.bind(resource,Binding{owner,authority:"backend".into(),backend:Some(Arc::new(Echo)),declared:manifest.clone()});
+    gateway.bind(resource,Binding{owner,authority:"backend".into(),name:None,backend:Some(Arc::new(Echo)),declared:manifest.clone()});
     // Refusing the reserved role assignment before serving is also conforming.
     if gateway.set_row(resource,owner,Row{connect:true,roles:package.roles}).is_err() { return }
     let request=ResourceRequest{resource,message:b"GET / HTTP/1.1\r\nHost: backend\r\n\r\n".to_vec()}.encode();

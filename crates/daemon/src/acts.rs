@@ -241,6 +241,13 @@ pub fn node_acts(acknowledging: bool) -> Vec<Act> {
                     Kind::Text { max: 253 },
                 ),
                 p(
+                    "name",
+                    "the name its members see it by; empty shows the authority",
+                    Kind::Text {
+                        max: rhtn_codec::bounds::PAGE_NAME_BYTES,
+                    },
+                ),
+                p(
                     "image",
                     "the image the machine pulls",
                     Kind::Text { max: 512 },

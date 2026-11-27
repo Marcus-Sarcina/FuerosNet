@@ -362,6 +362,7 @@ mod tests {
             resource: *r,
             owner: [1; 32],
             authority: "shop.internal".into(),
+            name: None,
             image: "reg.example/x/pkg:abc".into(),
             port: 9,
             block: None,

@@ -2756,9 +2756,11 @@ PageItem = {
   1: keyhash,          ; the resource
   2: keyhash,          ; its owner
   3: tstr .size (1..128),  ; a name to show it by: the instance name of the
-                       ;   entry this node holds for it (§6.1 field 4), and
-                       ;   otherwise the authority it is hosted under.
-                       ;   Display only, as an instance name is
+                       ;   entry this node holds for it (§6.1 field 4),
+                       ;   otherwise the name it was installed under
+                       ;   (`infra-client-requirements.md` §9.4) [author,
+                       ;   2026-11-26], and otherwise the authority it is
+                       ;   hosted under. Display only, as an instance name is
   4: [ * tstr .size (1..32) ]  ; the application roles the asker holds on
                        ;   it, at most 64 (`resource-requirements.md` §3):
                        ;   the node's own `connect` and `discover` are never

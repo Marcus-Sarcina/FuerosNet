@@ -1983,8 +1983,8 @@ one that is true.
   wherever the identity does.
 - **What the install act carries is the operator's choices and the
   package's own declaration** [author, 2026-11-02]. The resource, its
-  owner, the authority it answers under, the image and the port are the
-  operator's, taken on this screen. **The manifest is the package's, and
+  owner, the authority it answers under, the name its members see it by,
+  the image and the port are the operator's, taken on this screen. **The manifest is the package's, and
   this client relays it**: `infra-client-requirements.md` §9.1 puts the
   capability declaration in the manifest that ships with the package, so
   carry that manifest to the instance rather than letting either of you
@@ -2093,7 +2093,7 @@ one that is true.
   - **Read a refusal back to them.** An act is one proved request and its answer
     is the instance's own words; show them rather than a spinner that stops.
 - **Take a package offering from a link or a code** [author, 2026-11-02]. A
-  distributor publishes the image, a suggested authority and port, and **the
+  distributor publishes the image, a suggested name, authority and port, and **the
   package's own manifest** (`infra-client-requirements.md` §9.1, §9.4) as one
   string; register for it at the device's own level so "open with this client" is
   how an operator starts, and read one from a code where there is nothing to tap.

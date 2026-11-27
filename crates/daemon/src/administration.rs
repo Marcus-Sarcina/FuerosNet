@@ -2797,6 +2797,7 @@ fn asked(f: &[(String, String)]) -> Result<crate::packages::Package, String> {
         resource: keyhash("resource")?,
         owner: keyhash("owner")?,
         authority: crate::packages::authority(field(f, "authority"))?,
+        name: crate::packages::name(field(f, "name"))?,
         image: crate::packages::image(field(f, "image"))?,
         port,
         block: None,

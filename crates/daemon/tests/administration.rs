@@ -2257,6 +2257,7 @@ fn an_instance_declares_what_it_can_be_asked_for_and_one_route_invokes_it() {
             "resource",
             "owner",
             "authority",
+            "name",
             "image",
             "port",
             "manifest",
