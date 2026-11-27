@@ -17,6 +17,7 @@ fn main() {
         name: Some("Marcus".into()),
         device: Device::Restored,
         colour: "Teal".into(),
+        pool: 50 * 1024 * 1024,
         held: vec![screens::Holder {
             by: "70".repeat(32),
             name: Some("Marcus".into()),

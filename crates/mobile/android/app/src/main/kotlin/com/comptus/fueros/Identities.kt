@@ -187,6 +187,37 @@ object Identities {
         colours.entries.joinToString("") { (id, c) -> "$id ${"%06x".format(c and 0xFFFFFF)}\n" }.toByteArray()
 
     /**
+     * **Where each identity's board pool bound is kept**, as the person
+     * set it on Options (`light-client-requirements.md` §4.5): a device
+     * file beside the colours, one `id bytes` line per identity that set
+     * one. An identity with no line keeps the kernel's 50 MB.
+     */
+    const val BOARD_POOLS = "identity.boardpools"
+
+    /** What Options offers for a board's pool, in megabytes. */
+    val POOL_CHOICES = listOf(10L, 25L, 50L, 100L, 250L)
+
+    /** The pools file read: id to bytes. A line that is not one is skipped. */
+    fun boardPools(bytes: ByteArray?): Map<String, Long> {
+        val text = bytes?.toString(Charsets.UTF_8) ?: return emptyMap()
+        val out = LinkedHashMap<String, Long>()
+        for (line in text.lines()) {
+            val id = line.substringBefore(' ')
+            val n = line.substringAfter(' ', "").trim().toLongOrNull()
+            if (!names(id) || n == null || n <= 0) continue
+            out[id] = n
+        }
+        return out
+    }
+
+    /** The pools file written. */
+    fun encodeBoardPools(pools: Map<String, Long>): ByteArray =
+        pools.entries.joinToString("") { (id, n) -> "$id $n\n" }.toByteArray()
+
+    /** A pool's bound as Options shows it: whole megabytes. */
+    fun poolName(bytes: Long): String = "${bytes / (1024 * 1024)} MB"
+
+    /**
      * **Every identity held, coloured**: the stored colour where there is
      * one, else the first of [Palette.IDENTITY] no identity on the device
      * uses yet, in the order held — so a new identity takes an unused
@@ -615,6 +646,35 @@ object Identities {
         val own = AndroidShell(app, h.scope)
         val p = openOn(own, known) ?: return
         Gateway.loaded[h.id] = p
+        // the bound the person set for this identity's boards, handed
+        // over at each start since the kernel does not keep it
+        boardPoolSet(app, h.id)?.let { n ->
+            Gateway.call("setBoardPool", { null }) { p.setBoardPool(n.toULong()) }
+        }
+    }
+
+    /** The bound this identity's boards are held under, where the person set one. */
+    fun boardPoolSet(context: Context, id: String): Long? {
+        val shell = AndroidShell(context.applicationContext)
+        return Identities.boardPools(runCatching { shell.read(Identities.BOARD_POOLS) }.getOrNull())[id]
+    }
+
+    /**
+     * **The bound chosen for one identity's boards on Options**: kept,
+     * then handed to its kernel, which drops the oldest posts above it at
+     * once. What the kernel said where it refused.
+     */
+    fun setBoardPool(context: Context, id: String, bytes: Long): String? {
+        val shell = AndroidShell(context.applicationContext)
+        val now = LinkedHashMap(Identities.boardPools(runCatching { shell.read(Identities.BOARD_POOLS) }.getOrNull()))
+        now[id] = bytes
+        runCatching { shell.write(Identities.BOARD_POOLS, Identities.encodeBoardPools(now)) }
+            .onFailure { return "the bound could not be kept: ${it.message}" }
+        val p = Gateway.loaded[id] ?: return null
+        return Gateway.call("setBoardPool", { it.reason }) {
+            p.setBoardPool(bytes.toULong())
+            null
+        }
     }
 
     /** The keyhash a seed pair names, or null where it does not read. */

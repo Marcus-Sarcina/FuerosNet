@@ -196,6 +196,13 @@ pub enum Act {
         /// The palette's name for it.
         name: String,
     },
+    /// **How much each subnet's board keeps here** for the identity in
+    /// focus (`light-client-requirements.md` §4.5), one of the bounds the
+    /// options offer.
+    BoardPool {
+        /// The bound, in bytes.
+        bytes: u64,
+    },
     /// **Change what is chosen about a party** [author, 2026-11-23], as the
     /// identity their conversation is held as.
     Person {
@@ -336,6 +343,17 @@ pub fn act(message: &str) -> Result<Act, String> {
                     .map_err(|_| "a subnet's id is 64 hex characters")?,
                 name: s("name")?,
             });
+        }
+        "board-pool" => {
+            let bytes = v
+                .get("bytes")
+                .and_then(serde_json::Value::as_u64)
+                .ok_or("a board pool is a number of bytes")?;
+            return screens::POOL_CHOICES
+                .iter()
+                .any(|mb| mb * 1024 * 1024 == bytes)
+                .then_some(Act::BoardPool { bytes })
+                .ok_or_else(|| format!("{bytes} is not a bound the options offer"));
         }
         "colour" => {
             let name = s("name")?;
@@ -772,6 +790,14 @@ mod tests {
         assert!(
             act(r#"{"act":"colour","name":"Mauve"}"#).is_err(),
             "not the palette's"
+        );
+        assert_eq!(
+            act(r#"{"act":"board-pool","bytes":26214400}"#).unwrap(),
+            Act::BoardPool { bytes: 26_214_400 }
+        );
+        assert!(
+            act(r#"{"act":"board-pool","bytes":1000}"#).is_err(),
+            "not a bound the options offer"
         );
         assert_eq!(
             act(r#"{"act":"backup","data":"00Ff"}"#).unwrap(),

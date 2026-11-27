@@ -1,6 +1,8 @@
 //! A subnet's board as a client keeps it (`light-client-requirements.md`
 //! §4.5; functional_tests.md BRD-012, BRD-013).
 
+mod common;
+
 use rhtn_archive::board::{Draft, Post, Writer};
 use rhtn_archive::tx::{Locator, Seqno};
 use rhtn_client::board::{Pool, Took, reach_from};
@@ -187,6 +189,42 @@ fn the_oldest_go_first_by_the_posts_own_date_read_no_later_than_its_arrival() {
         "it outlived nothing"
     );
     assert!(pool.get(&Post::hash(&b)).is_some() && pool.get(&Post::hash(&d)).is_some());
+}
+
+/// **The bound is the person's to set** (`light-client-requirements.md`
+/// §4.5): lowered, the oldest by their own dates go at once; a bound
+/// below one post of the largest size is refused and changes nothing.
+// functional: BRD-013
+#[test]
+fn the_pool_is_held_under_the_bound_the_person_set() {
+    let a = post("carol", 100, None, "oldest");
+    let b = post("carol", 200, None, "middle");
+    let c = post("carol", 300, None, "newest");
+    let mut pool = Pool::new(1 << 20);
+    for p in [&b, &c, &a] {
+        assert_eq!(pool.take(&SUBNET, &me(), p, 1_000, None), Took::New);
+    }
+    assert_eq!(pool.bounded(1 << 20), 0, "raised or kept, nothing goes");
+    assert_eq!(pool.bounded(c.len() + b.len()), 1);
+    assert!(pool.get(&Post::hash(&a)).is_none() && pool.get(&Post::hash(&c)).is_some());
+    // and a new post is taken under the bound set, not the shipped one
+    let d = post("carol", 400, None, "newer still");
+    pool.take(&SUBNET, &me(), &d, 1_000, None);
+    assert!(pool.get(&Post::hash(&b)).is_none() && pool.get(&Post::hash(&d)).is_some());
+
+    let clock = std::rc::Rc::new(std::cell::Cell::new(1_790_000_000_000u64));
+    let (device, _) = common::harness::device(clock, 7, 0);
+    let mut client = rhtn_client::ceremony::Client::new(
+        common::id("alice"),
+        common::ids(),
+        Default::default(),
+        device,
+    );
+    assert_eq!(client.board_pool(), rhtn_client::board::POOL_BYTES);
+    assert_eq!(client.set_board_pool(1000), None);
+    assert_eq!(client.board_pool(), rhtn_client::board::POOL_BYTES);
+    assert_eq!(client.set_board_pool(20 << 20), Some(0));
+    assert_eq!(client.board_pool(), 20 << 20);
 }
 
 #[test]

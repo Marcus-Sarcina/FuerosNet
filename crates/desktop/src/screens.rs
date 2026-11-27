@@ -42,6 +42,9 @@ pub enum Place {
     Authority,
     /// The colour of the identity in focus, chosen from the palette.
     Colour,
+    /// **How much each subnet's board keeps here**, chosen from the
+    /// bounds offered (`light-client-requirements.md` §4.5).
+    Pool,
     /// **Which identity is in focus** [author, 2026-11-23], opened by a
     /// double click on the nameplate: the one a direct message starts as.
     Identities,
@@ -73,6 +76,7 @@ impl Place {
                 "instances" => Some(Place::Instances),
                 "authority" => Some(Place::Authority),
                 "colour" => Some(Place::Colour),
+                "pool" => Some(Place::Pool),
                 "identities" => Some(Place::Identities),
                 _ => None,
             },
@@ -99,6 +103,7 @@ impl Place {
             Place::Instances => "instances".into(),
             Place::Authority => "authority".into(),
             Place::Colour => "colour".into(),
+            Place::Pool => "pool".into(),
             Place::Identities => "identities".into(),
             Place::Thread(h) => format!("thread:{h}"),
             Place::Subnet(h) => format!("subnet:{h}"),
@@ -122,7 +127,7 @@ impl Place {
     /// reached from.
     fn parent(&self) -> Place {
         match self {
-            Place::Node | Place::Instances | Place::Colour => Place::Options,
+            Place::Node | Place::Instances | Place::Colour | Place::Pool => Place::Options,
             Place::SubnetOptions(h) | Place::Board(h, _) | Place::BoardNew(h) => {
                 Place::Subnet(h.clone())
             }
@@ -310,6 +315,9 @@ pub struct Snapshot {
     /// **The colour of the identity in focus**, by its palette name: what
     /// the foot wears [author, 2026-11-12].
     pub colour: String,
+    /// **The bound each subnet's board is held under here** for the
+    /// identity in focus, in bytes (`light-client-requirements.md` §4.5).
+    pub pool: u64,
     /// **Every identity this desktop holds** [author, 2026-11-23], the one
     /// in focus among them.
     pub held: Vec<Holder>,
@@ -744,6 +752,7 @@ fn main(snap: &Snapshot, place: &Place, body: &Body) -> String {
         Place::Node => node(snap),
         Place::Instances => instances(snap),
         Place::Colour => colour(snap),
+        Place::Pool => pool(snap),
         Place::Identities => identities(snap),
         Place::Person(peer) => person(snap, peer),
         Place::Authority => match body {
@@ -1284,6 +1293,36 @@ fn identities(snap: &Snapshot) -> String {
     out
 }
 
+/// What the options offer for a board's pool, in megabytes, as the
+/// phone's do.
+pub const POOL_CHOICES: [u64; 5] = [10, 25, 50, 100, 250];
+
+/// A pool's bound as the options show it: whole megabytes.
+#[must_use]
+pub fn pool_name(bytes: u64) -> String {
+    format!("{} MB", bytes / (1024 * 1024))
+}
+
+/// **How much each subnet's board keeps here**, the person's to set
+/// (`light-client-requirements.md` §4.5): lowered, the oldest posts go at
+/// once.
+fn pool(snap: &Snapshot) -> String {
+    let mut out = bar("Board storage", true, None);
+    out.push_str(
+        "<p class=\"sub\">What each subnet's board keeps on this desktop. At the bound the \
+         oldest posts go first, by their own dates.</p>\n",
+    );
+    for mb in POOL_CHOICES {
+        let bytes = mb * 1024 * 1024;
+        out.push_str(&format!(
+            "<button class=\"row\" data-pool=\"{bytes}\"><span>{}{}</span></button>\n",
+            if snap.pool == bytes { "● " } else { "" },
+            pool_name(bytes)
+        ));
+    }
+    out
+}
+
 /// **The colour of the identity in focus**, chosen from the palette by
 /// name, as the phone's options offer it.
 fn colour(snap: &Snapshot) -> String {
@@ -1442,7 +1481,7 @@ fn options(snap: &Snapshot) -> String {
         ),
     };
     format!(
-        "{}{}{}{}<h2>This desktop</h2>\n<p class=\"sub\">{}</p>\n{dataset}\n\
+        "{}{}{}{}{}<h2>This desktop</h2>\n<p class=\"sub\">{}</p>\n{dataset}\n\
          <p class=\"sub mono\">{}</p>\n{}",
         bar("Options", true, None),
         row("Serving node", &snap.connection, "data-go=\"node\""),
@@ -1456,6 +1495,14 @@ fn options(snap: &Snapshot) -> String {
             "data-go=\"instances\""
         ),
         row("Colour", &snap.colour, "data-go=\"colour\""),
+        row(
+            "Board storage",
+            &format!(
+                "{} on this desktop for each subnet's board, oldest posts out first",
+                pool_name(snap.pool)
+            ),
+            "data-go=\"pool\""
+        ),
         escape(&said),
         hex(&snap.me),
         if snap.device == Device::Restored {
@@ -1540,6 +1587,7 @@ mod tests {
             name: Some("Ann <A>".into()),
             device: Device::Restored,
             colour: "Teal".into(),
+            pool: rhtn_client::board::POOL_BYTES as u64,
             held: vec![Holder {
                 by: "ab".repeat(32),
                 name: Some("Ann <A>".into()),
@@ -2087,6 +2135,29 @@ mod tests {
         assert_eq!(token("Nonesuch"), "--rail-orb");
         assert_eq!(Place::parse("colour"), Some(Place::Colour));
         assert_eq!(Place::parse("authority"), Some(Place::Authority));
+    }
+
+    /// **How much each subnet's board keeps here is the person's**
+    /// (`light-client-requirements.md` §4.5), chosen on the options from
+    /// the bounds offered, the one in force marked.
+    // functional: BRD-013
+    #[test]
+    fn the_board_pool_is_chosen_from_the_bounds_offered_the_one_in_force_marked() {
+        let s = snap();
+        let p = page(&s, &Place::Pool, &Body::Plain);
+        assert_eq!(p.matches("data-pool=").count(), POOL_CHOICES.len());
+        assert!(
+            p.contains("data-pool=\"52428800\"><span>● 50 MB</span>"),
+            "{p}"
+        );
+        assert!(!p.contains("● 10 MB"));
+        assert!(
+            page(&s, &Place::Options, &Body::Plain).contains(
+                "data-go=\"pool\"><span>Board storage</span><small>50 MB on this desktop"
+            )
+        );
+        assert_eq!(Place::parse("pool"), Some(Place::Pool));
+        assert_eq!(Place::Pool.parent(), Place::Options);
     }
 
     // **every identity the desktop holds, and which acts** [author,

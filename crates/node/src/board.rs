@@ -35,7 +35,7 @@ pub const REPLY_POSTS: usize = 256;
 
 /// What a held post costs the queue: the blocks it occupies, as the
 /// mailbox counts (`infra-client-requirements.md` §2, §13).
-const BLOCK: usize = 4096;
+pub const BLOCK: usize = 4096;
 
 /// Where a copy arrived from, which the session it arrived on says
 /// (`wire-format.md` §10.3). The counts are measured from a different
@@ -718,7 +718,7 @@ impl NodeView {
                 });
             }
         }
-        self.board = Queue::restored(QUEUE_BYTES, held);
+        self.board = Queue::restored(self.board.cap, held);
         self.board_dir = Some(dir.to_path_buf());
         self.clear_gone();
         Ok(())

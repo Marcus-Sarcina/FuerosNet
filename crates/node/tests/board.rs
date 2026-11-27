@@ -457,5 +457,18 @@ fn the_queue_is_kept_a_file_a_post_and_taken_up_where_it_was_left() {
     let mut third = scene();
     third.n.open_board(&dir).expect("opens on a bad file");
     assert_eq!(third.n.board.len(), 3);
+    // **under the bound its operator set** (`infra-client-requirements.md`
+    // §13), not the shipped one: lowered to one block, the newest alone
+    let mut lowered = scene();
+    lowered.n.board = rhtn_node::board::Queue::new(rhtn_node::board::BLOCK);
+    lowered
+        .n
+        .open_board(&dir)
+        .expect("opens under a lower bound");
+    assert_eq!(lowered.n.board.len(), 1);
+    assert_eq!(
+        ask(&lowered.n, "w1", None).unwrap().posts,
+        vec![(3, b"third".to_vec(), 0)]
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }

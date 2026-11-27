@@ -213,6 +213,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // and the one in focus** as it was last left
                 let idents: Vec<Ident> = kernels
                     .into_iter()
+                    .inspect(|p| {
+                        // the bound the person set for this identity's
+                        // boards, handed over at each start
+                        if let Some(n) = participant::pool_of(&dir, &p.me()) {
+                            let _ = p.set_board_pool(n);
+                        }
+                    })
                     .map(|p| Ident {
                         threads: Arc::new(Threads::new(
                             &dir,
@@ -567,6 +574,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         };
                         let _ = back.send_event(Said::ToPage(said.0, said.1));
                         draw(&up, &back, false);
+                    });
+                }
+                Ok(Act::BoardPool { bytes }) => {
+                    let (back, up) = (worker.clone(), up.clone());
+                    std::thread::spawn(move || {
+                        let p = up.running.lock().unwrap().clone();
+                        if let Some(p) = p {
+                            let said =
+                                participant::keep_pool(&up.dir, &p.me(), bytes).and_then(|()| {
+                                    p.set_board_pool(bytes).map_err(|e| e.reason().to_string())
+                                });
+                            match said {
+                                Ok(0) => {}
+                                Ok(n) => {
+                                    let _ = back.send_event(Said::ToPage(
+                                        true,
+                                        format!("{n} of the oldest posts went to make room"),
+                                    ));
+                                }
+                                Err(why) => {
+                                    let _ = back.send_event(Said::ToPage(
+                                        false,
+                                        format!("not kept: {why}"),
+                                    ));
+                                }
+                            }
+                        }
+                        up.place.lock().unwrap().back();
+                        draw(&up, &back, true);
                     });
                 }
                 Ok(Act::Colour { name }) => {
@@ -1207,6 +1243,7 @@ fn snapshot(idents: &[Ident], focus: &Participant, device: Device, dir: &Path) -
         .collect();
     let mut snap = Snapshot {
         colour: participant::colour_of(dir, &focus.me()),
+        pool: focus.board_pool(),
         me: focus.me(),
         name: named(focus),
         held: idents

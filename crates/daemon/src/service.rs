@@ -9,7 +9,7 @@ use crate::config::Config;
 use rhtn_archive::Keyhash;
 use rhtn_archive::topology::{Restored, Snapshot};
 use rhtn_crypto::{Identity, SigningIdentity};
-use rhtn_node::node_keys::{NodeKeyConfig, NodeKeyService};
+use rhtn_node::node_keys::NodeKeyService;
 use rhtn_node::resolution::AnchorTable;
 use rhtn_node::runtime::{LiveNode, RateLimit};
 use rhtn_node::store::TopologyStore;
@@ -519,7 +519,7 @@ impl Service {
         // key is written when it is made and unlinked when it goes, so a
         // stop between snapshots neither loses one a queued message needs
         // nor brings back one deleted
-        let node_keys = NodeKeyService::at(&cfg.keys, NodeKeyConfig::default())
+        let node_keys = NodeKeyService::at(&cfg.keys, cfg.node_keys.clone())
             .map_err(|e| Startup::State(format!("{}: {e}", cfg.keys.display())))?;
         // the profiles beside the node keys: published to be read, written
         // as they are taken (`wire-format.md` §7.11)
@@ -600,6 +600,7 @@ impl Service {
         }
         // **the board's queue, a file a post** (design §14.4): taken up
         // from where it was left, so no number is given twice
+        view.board = rhtn_node::board::Queue::new(cfg.board_queue);
         view.open_board(&cfg.topology.join(BOARD))
             .map_err(|e| Startup::State(format!("{}: {e}", cfg.topology.join(BOARD).display())))?;
         let snap = std::fs::read(cfg.topology.join(DERIVED))
@@ -797,6 +798,7 @@ impl Service {
         node_cfg.listen = Some(cfg.listen);
         node_cfg.queue = queue;
         node_cfg.queue_cap = cfg.queue_cap;
+        node_cfg.retention_secs = cfg.delivered_retention_secs;
         // the wall clock, so issuance, outage stamps and the ladder's
         // intervals read time that moves
         node_cfg.clock = Arc::new(|| {

@@ -43,6 +43,25 @@ class ColoursTest {
         assertEquals("Blue", Identities.colourName(Palette.IDENTITY[3].second))
     }
 
+    /**
+     * **A board's pool is the person's to bound** (`light-client-requirements.md`
+     * §4.5), per identity and kept beside the colours: the file round-trips,
+     * and what is not a line of it, or not a positive size, is skipped.
+     */
+    // functional: BRD-013
+    @Test
+    fun the_board_pools_file_round_trips_and_skips_what_is_not_a_line_of_it() {
+        val map = mapOf(id(1) to 25L * 1024 * 1024, id(2) to 250L * 1024 * 1024)
+        assertEquals(map, Identities.boardPools(Identities.encodeBoardPools(map)))
+        assertEquals(emptyMap<String, Long>(), Identities.boardPools(null))
+        assertEquals(
+            emptyMap<String, Long>(),
+            Identities.boardPools("not a line\n${id(1)} lots\n${id(2)} 0\n${id(3)} -5\n".toByteArray()),
+        )
+        assertEquals("25 MB", Identities.poolName(25L * 1024 * 1024))
+        assertTrue(50L in Identities.POOL_CHOICES)
+    }
+
     @Test
     fun every_colour_carries_the_rail_ink() {
         for ((name, c) in Palette.IDENTITY) {

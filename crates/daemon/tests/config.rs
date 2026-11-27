@@ -119,6 +119,49 @@ fn a_complete_configuration_reads_and_a_missing_key_has_no_default() {
     );
 }
 
+/// **The node's own numbers** (design §14.1.6, §14.2.4.3, §21.1.1;
+/// `infra-client-requirements.md` §13): each absent is the value it ships
+/// at, each set is taken, and one that would leave nothing working is
+/// refused at its line.
+// functional: MAIL-014
+// functional: BRD-009
+#[test]
+fn the_nodes_own_numbers_ship_at_their_values_and_are_its_to_set() {
+    let c = Config::parse(GOOD).unwrap();
+    assert_eq!(c.delivered_retention_secs, 30 * 86_400);
+    assert_eq!(
+        (c.node_keys.rotate_secs, c.node_keys.grace_secs),
+        (86_400, 30)
+    );
+    assert_eq!(c.board_queue, 100 * 1024 * 1024);
+
+    let set = with(
+        "heartbeat = 30",
+        "heartbeat = 30\ndelivered-retention = 604800\nnode-key-rotation = 43200\n\
+         node-key-grace = 90\nboard-queue = 20971520",
+    );
+    let c = Config::parse(&set).unwrap();
+    assert_eq!(c.delivered_retention_secs, 604_800);
+    assert_eq!(
+        (c.node_keys.rotate_secs, c.node_keys.grace_secs),
+        (43_200, 90)
+    );
+    assert_eq!(c.board_queue, 20_971_520);
+
+    for (line, names) in [
+        ("delivered-retention = 0", "`delivered-retention`"),
+        ("node-key-rotation = 30", "`node-key-rotation`"),
+        ("node-key-grace = 86400", "`node-key-rotation`"),
+        ("board-queue = 1000", "`board-queue`"),
+    ] {
+        let text = with("heartbeat = 30", &format!("heartbeat = 30\n{line}"));
+        let e = Config::parse(&text).unwrap_err();
+        let at = text.lines().position(|l| l == line).unwrap() + 1;
+        assert!(e.what.contains(names), "{line}: {e}");
+        assert_eq!(e.line, at, "{line}: refused at its own line: {e}");
+    }
+}
+
 #[test]
 fn an_unknown_or_repeated_key_is_refused_naming_its_line() {
     let e = Config::parse(&format!("listne = \"127.0.0.1:1\"{GOOD}")).unwrap_err();

@@ -732,6 +732,30 @@ class ShellActivity : Activity() {
             .show()
     }
 
+    /** The bound the focused identity's boards are held under. */
+    private fun focusPool(): Long =
+        Identities.activeIdentity()?.let { Identities.boardPoolSet(this, it) } ?: (50L * 1024 * 1024)
+
+    /**
+     * **How much each subnet's board keeps on this phone**, the person's
+     * to set (`light-client-requirements.md` §4.5): lowered, the oldest
+     * posts go at once.
+     */
+    private fun choosePool() {
+        val me = Identities.activeIdentity() ?: return
+        val now = focusPool()
+        val choices = Identities.POOL_CHOICES.map { it * 1024 * 1024 }
+        val rows = choices.map { (if (it == now) "● " else "") + Identities.poolName(it) }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("Board storage, each subnet")
+            .setItems(rows) { _, which ->
+                val bytes = choices.getOrNull(which) ?: return@setItems
+                Identities.setBoardPool(this, me, bytes)?.let { Gateway.front.note("· $it") }
+                go(place)
+            }
+            .show()
+    }
+
     private fun howToAdd() {
         val ways = arrayOf("Generate new ID", "Add ID from seed phrase", "Cancel")
         AlertDialog.Builder(this)
@@ -992,6 +1016,11 @@ class ShellActivity : Activity() {
                 )
                 column.addView(
                     row("Colour", Identities.colourName(focusColour())) { chooseColour() },
+                )
+                column.addView(
+                    row("Board storage", "${Identities.poolName(focusPool())} on this phone for each subnet's board, oldest posts out first") {
+                        choosePool()
+                    },
                 )
                 column.addView(
                     row("Remove an identity", null) { removeIdentity() },

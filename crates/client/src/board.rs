@@ -19,6 +19,9 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Provisional [author, 2026-11-18], and the person's to set.
 pub const POOL_BYTES: usize = 50 * 1024 * 1024;
 
+/// The least a person may bound a pool at: one post of the largest size.
+pub const POOL_LEAST: usize = rhtn_codec::bounds::BOARD_POST_BYTES;
+
 /// One post as the pool keeps it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Kept {
@@ -157,6 +160,21 @@ impl Pool {
                 carried,
             },
         );
+        self.bound();
+        Took::New
+    }
+
+    /// **Held under `cap` from now**, the oldest by their own dates going
+    /// where it is lower than what is held. How many went.
+    pub fn bounded(&mut self, cap: usize) -> usize {
+        self.cap = cap;
+        let before = self.posts.len();
+        self.bound();
+        before - self.posts.len()
+    }
+
+    /// At the bound the oldest go, by their own dates.
+    fn bound(&mut self) {
         while self.bytes > self.cap {
             let Some(oldest) = self
                 .posts
@@ -170,7 +188,6 @@ impl Pool {
                 self.bytes -= gone.post.bytes.len();
             }
         }
-        Took::New
     }
 
     /// How many posts are held.
@@ -400,18 +417,31 @@ pub const RELATION_BOARD: &str = "board";
 
 /// **The boards a client keeps**, a pool a subnet, and the askings it has
 /// in flight.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Boards {
     pools: BTreeMap<Txid, Pool>,
     /// The nonce of the asking each node has not yet answered.
     asked: BTreeMap<Keyhash, [u8; 16]>,
+    /// The bound on each pool: [`POOL_BYTES`] unless the person set
+    /// another (`light-client-requirements.md` §4.5). The application
+    /// keeps the setting and hands it over; it is not a relation.
+    cap: usize,
+}
+
+impl Default for Boards {
+    fn default() -> Self {
+        Boards {
+            pools: BTreeMap::new(),
+            asked: BTreeMap::new(),
+            cap: POOL_BYTES,
+        }
+    }
 }
 
 impl Boards {
     fn pool(&mut self, subnet: &Txid) -> &mut Pool {
-        self.pools
-            .entry(*subnet)
-            .or_insert_with(|| Pool::new(POOL_BYTES))
+        let cap = self.cap;
+        self.pools.entry(*subnet).or_insert_with(|| Pool::new(cap))
     }
 }
 
@@ -639,6 +669,31 @@ impl Client {
         }
     }
 
+    /// **The bound on each subnet's pool, as the person set it**
+    /// (`light-client-requirements.md` §4.5), in bytes and no less than
+    /// one post of the largest size: each pool held is bounded under it
+    /// at once, the oldest going by their own dates. How many posts went;
+    /// `None` for a bound below one post.
+    pub fn set_board_pool(&mut self, bytes: usize) -> Option<usize> {
+        if bytes < POOL_LEAST {
+            return None;
+        }
+        self.boards.cap = bytes;
+        Some(
+            self.boards
+                .pools
+                .values_mut()
+                .map(|p| p.bounded(bytes))
+                .sum(),
+        )
+    }
+
+    /// The bound each subnet's pool is held under, in bytes.
+    #[must_use]
+    pub fn board_pool(&self) -> usize {
+        self.boards.cap
+    }
+
     /// How many posts of `subnet`'s board the person has not been shown.
     #[must_use]
     pub fn board_unread(&self, subnet: &Txid) -> usize {
@@ -680,7 +735,7 @@ impl Client {
             };
             read.insert(
                 <[u8; 32]>::try_from(&b[subnet.clone()]).ok()?,
-                Pool::decode(POOL_BYTES, &b[pool.clone()])?,
+                Pool::decode(self.boards.cap, &b[pool.clone()])?,
             );
         }
         self.boards.pools = read;

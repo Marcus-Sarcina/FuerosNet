@@ -1554,6 +1554,38 @@ impl Participant {
         })
     }
 
+    /// **The bound each subnet's board pool is held under**, in bytes:
+    /// 50 MB unless the person set another (`light-client-requirements.md`
+    /// §4.5).
+    #[must_use]
+    pub fn board_pool(&self) -> u64 {
+        self.call_plain("board_pool", || {
+            let n = self.handle.with_blocking(|c| c.board_pool());
+            u64::try_from(n).unwrap_or(u64::MAX)
+        })
+    }
+
+    /// **The person's bound on each subnet's board pool**, in bytes and
+    /// no less than one post of the largest size. The application keeps
+    /// the setting and hands it over at each start and each change; a
+    /// pool held above it loses its oldest posts, by their own dates, at
+    /// once. How many went.
+    pub fn set_board_pool(&self, bytes: u64) -> Result<u32, Refused> {
+        self.call("set_board_pool", || {
+            let bytes = usize::try_from(bytes).unwrap_or(usize::MAX);
+            let Some(went) = self.handle.with_blocking(move |c| c.set_board_pool(bytes)) else {
+                return Err(Refused::new(format!(
+                    "a board pool holds at least one post of the largest size, {} bytes",
+                    rhtn_client::board::POOL_LEAST
+                )));
+            };
+            if went > 0 {
+                self.save()?;
+            }
+            Ok(u32::try_from(went).unwrap_or(u32::MAX))
+        })
+    }
+
     /// The person has been shown a thread.
     pub fn board_read(&self, subnet: Id, thread: Id) -> Result<(), Refused> {
         self.call("board_read", || {

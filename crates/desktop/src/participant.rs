@@ -131,6 +131,32 @@ pub fn keep_colour(dir: &Path, me: &[u8], name: &str) -> Result<(), String> {
         .map_err(|e| format!("{COLOURS}: {e}"))
 }
 
+/// **Where each identity's board pool bound is kept**, as the person set
+/// it on Options (`light-client-requirements.md` §4.5), by its keyhash in
+/// hex: a choice of this device's beside the colours, handed to the kernel
+/// at each start since the kernel does not keep it.
+pub const POOLS: &str = "boardpools.json";
+
+/// The bound `me`'s boards are held under here, where the person set one.
+pub fn pool_of(dir: &Path, me: &[u8]) -> Option<u64> {
+    std::fs::read(dir.join(POOLS))
+        .ok()
+        .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+        .and_then(|v| v.get(hex(me)).and_then(serde_json::Value::as_u64))
+}
+
+/// Keep `bytes` as the bound on `me`'s boards here, whole or not at all.
+pub fn keep_pool(dir: &Path, me: &[u8], bytes: u64) -> Result<(), String> {
+    let mut v: serde_json::Value = std::fs::read(dir.join(POOLS))
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .filter(serde_json::Value::is_object)
+        .unwrap_or_else(|| serde_json::json!({}));
+    v[hex(me)] = serde_json::Value::from(bytes);
+    crate::platform::write_whole(&dir.join(POOLS), v.to_string().as_bytes())
+        .map_err(|e| format!("{POOLS}: {e}"))
+}
+
 /// **Where the identity in focus is kept** [author, 2026-11-23], so the
 /// desktop starts again on the one it was left on.
 pub const FOCUS: &str = "focus";
@@ -468,6 +494,7 @@ document.addEventListener('click', e => {
     return post(m);
   }
   if (b.dataset.colour) return post({ act: 'colour', name: b.dataset.colour });
+  if (b.dataset.pool) return post({ act: 'board-pool', bytes: Number(b.dataset.pool) });
   if (b.dataset.focus) return post({ act: 'focus', by: b.dataset.focus });
   if (b.dataset.administer) {
     post({ act: 'administer', by: b.dataset.administer });

@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use zeroize::Zeroizing;
 
 /// The service's own numbers, each the node's to change (design §21.1.1).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NodeKeyConfig {
     /// How often a recipient's key is replaced, in seconds: **one day** as
     /// shipped [author, 2026-11-19].

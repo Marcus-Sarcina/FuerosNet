@@ -102,6 +102,18 @@ pub struct Config {
     /// and its sender told (`infra-client-requirements.md` §2, design
     /// §14.1.6).  Absent is uncapped.
     pub queue_cap: Option<usize>,
+    /// How long a delivered message is kept from its first delivery, in
+    /// seconds: thirty days as shipped and each node's own (design
+    /// §14.1.6, §21.1.1).
+    pub delivered_retention_secs: u64,
+    /// How often a recipient's node key is replaced, and how long the key
+    /// before is taken after, in seconds: one day and thirty as shipped,
+    /// the node's own (design §14.2.4.3, §21.1.1).
+    pub node_keys: rhtn_node::node_keys::NodeKeyConfig,
+    /// The bound on the board's queue, in bytes counted in blocks: 100 MB
+    /// as shipped and the operator's to set
+    /// (`infra-client-requirements.md` §13).
+    pub board_queue: usize,
     /// The heartbeat interval this node advertises, in seconds
     /// (`wire-format.md` §8.2 fixes the range at 1 to 3600).
     pub heartbeat_secs: u64,
@@ -374,6 +386,14 @@ struct File {
     allowance: Spanned<Allowance>,
     #[serde(rename = "queue-cap")]
     queue_cap: Option<usize>,
+    #[serde(rename = "delivered-retention")]
+    delivered_retention: Option<Spanned<u64>>,
+    #[serde(rename = "node-key-rotation")]
+    node_key_rotation: Option<Spanned<u64>>,
+    #[serde(rename = "node-key-grace")]
+    node_key_grace: Option<Spanned<u64>>,
+    #[serde(rename = "board-queue")]
+    board_queue: Option<Spanned<usize>>,
     upstream: Option<Spanned<Upstream>>,
     resources: Option<PathBuf>,
     grants: Option<PathBuf>,
@@ -461,6 +481,54 @@ impl Config {
                 "`heartbeat` is 1 to 3600 seconds (`wire-format.md` §8.2)",
             ));
         }
+
+        // **the node's own numbers, each with the value it ships at**
+        // (design §21.1.1): absent is the shipped value, and a setting
+        // that leaves nothing working is refused
+        let shipped = rhtn_node::node_keys::NodeKeyConfig::default();
+        let delivered_retention_secs = match &f.delivered_retention {
+            None => rhtn_transport::session::RETENTION_SECS,
+            Some(r) if *r.get_ref() > 0 => *r.get_ref(),
+            Some(r) => {
+                return Err(at(
+                    line_at(text, r),
+                    "`delivered-retention` is a number of seconds above 0 (design §14.1.6)",
+                ));
+            }
+        };
+        let grace_secs = f
+            .node_key_grace
+            .as_ref()
+            .map_or(shipped.grace_secs, |g| *g.get_ref());
+        let rotate_secs = match &f.node_key_rotation {
+            None if grace_secs < shipped.rotate_secs => shipped.rotate_secs,
+            Some(r) if *r.get_ref() > grace_secs => *r.get_ref(),
+            _ => {
+                let line = f
+                    .node_key_rotation
+                    .as_ref()
+                    .map(|r| line_at(text, r))
+                    .or_else(|| f.node_key_grace.as_ref().map(|g| line_at(text, g)))
+                    .unwrap_or(0);
+                return Err(at(
+                    line,
+                    "`node-key-rotation` is seconds longer than `node-key-grace` (design §14.2.4.3)",
+                ));
+            }
+        };
+        let board_queue = match &f.board_queue {
+            None => rhtn_node::board::QUEUE_BYTES,
+            Some(b) if *b.get_ref() >= rhtn_node::board::POST_MAX => *b.get_ref(),
+            Some(b) => {
+                return Err(at(
+                    line_at(text, b),
+                    format!(
+                        "`board-queue` is bytes, at least one post of the largest size ({})",
+                        rhtn_node::board::POST_MAX
+                    ),
+                ));
+            }
+        };
 
         // 15 minutes absent a setting: often enough that a missed frame
         // is repaired within an operator's attention span, rare enough
@@ -656,6 +724,12 @@ impl Config {
             upstream,
             queue: f.queue,
             queue_cap: f.queue_cap,
+            delivered_retention_secs,
+            node_keys: rhtn_node::node_keys::NodeKeyConfig {
+                rotate_secs,
+                grace_secs,
+            },
+            board_queue,
             heartbeat_secs,
             reconcile_secs,
             ingestion,
