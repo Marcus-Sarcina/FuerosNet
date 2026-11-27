@@ -6538,7 +6538,11 @@ for anything the node no longer holds.
 **The recipient's node does not learn who sent a message** [author,
 2026-11-19]. A sender submits under a transport key minted for the
 submission and not its identity's, and its card travels inside the seal, so
-the node sees a recipient, a size and a time. The reason is the recipient's
+the node sees a recipient, a size and a time. **The minted key withholds the
+sender's identity and not where the submission came from**: a sender that dials
+the recipient's node does so from its own network address, which that node sees
+as it sees any connection's, and a submission its own node makes for it is seen
+by that node, which then knows whom its holder wrote to and when. The reason is the recipient's
 and not only the sender's: a node that saw senders could eclipse its
 subordinate selectively, holding back the mail of one correspondent or of
 everyone from one subnet, and it serves few enough recipients that one
