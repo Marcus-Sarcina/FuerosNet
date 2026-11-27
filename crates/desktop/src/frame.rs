@@ -227,22 +227,60 @@ pub fn navigating(accept: Option<&str>) -> bool {
 /// **What the frame shows in place of an answer this desktop does not
 /// show** (`light-client-requirements.md` §8): its declared type and its
 /// size, never a guess, and where it went — offered for saving in the
-/// desktop's own window, since nothing in the frame reaches a file.
-pub fn not_shown(page: &ResourcePage) -> Served {
+/// desktop's own window, since nothing in the frame reaches a file — and
+/// the way `back` to the page it was reached from, the frame having no
+/// controls of its own [found 2026-11-27].
+pub fn not_shown(page: &ResourcePage, back: &str) -> Served {
     let said = format!(
         "<p>The resource answered with {}. It is offered for saving in this desktop's own \
          window.</p>",
         escape_html(&named(page))
     );
+    own_page(200, &said, back)
+}
+
+/// **A page moved to that was not carried**, said in the frame with the
+/// way `back`, where a script's request gets [`not_carried`]'s text.
+pub fn not_reached(why: &str, back: &str) -> Served {
+    let mut s = own_page(502, &format!("<p>{}</p>", escape_html(why)), back);
+    s.headers.push((CARRIED.into(), escape(why)));
+    s
+}
+
+/// **Where a page of the frame's own leads back to**: the last page the
+/// frame showed, a path of its own origin, else its first.
+pub fn way_back(back: &str) -> String {
+    let back = if back.starts_with('/') && !back.starts_with("//") {
+        back
+    } else {
+        "/"
+    };
+    format!(
+        "<p><a href=\"{}\">Back to the page you came from</a></p>",
+        escape_html(back)
+    )
+}
+
+/// One of the frame's own pages, running nothing.
+fn own_page(status: u16, said: &str, back: &str) -> Served {
     Served {
-        status: 200,
+        status,
         headers: vec![
             ("content-type".into(), "text/html; charset=utf-8".into()),
             ("x-content-type-options".into(), "nosniff".into()),
             ("content-security-policy".into(), policy(false)),
         ],
-        body: styled(&said).into_bytes(),
+        body: styled(&format!("{said}{}", way_back(back))).into_bytes(),
     }
+}
+
+/// **Whether an answer is a page the frame shows**, and so where its own
+/// pages lead back to: a navigation answered with markup.
+pub fn shows(s: &Served) -> bool {
+    (200..300).contains(&s.status)
+        && s.headers
+            .iter()
+            .any(|(n, v)| n == "content-type" && v.starts_with("text/html"))
 }
 
 /// **The question an `import` ask is put to the person as** (§8.1): the
@@ -388,16 +426,25 @@ fn escape_html(s: &str) -> String {
 /// declared and nothing else; an undeclared one is octet-stream with
 /// sniffing off, so the engine renders nothing it guessed at.
 pub fn served(answer: &ResourceAnswer, allowed: bool) -> Served {
+    match (undelivered(answer), &answer.page) {
+        (None, Some(page)) => page_served(page, allowed),
+        (why, _) => not_carried(&why.unwrap_or_default()),
+    }
+}
+
+/// **Why an answer carried no page**, where it did not: not delivered,
+/// not readable, or nothing.
+pub fn undelivered(answer: &ResourceAnswer) -> Option<String> {
     if answer.status != 0 {
-        return not_carried(&format!("not delivered: {}", delivery(answer.status)));
+        return Some(format!("not delivered: {}", delivery(answer.status)));
     }
     if let Some(why) = &answer.unreadable {
-        return not_carried(&format!("the answer could not be read: {why}"));
+        return Some(format!("the answer could not be read: {why}"));
     }
-    let Some(page) = &answer.page else {
-        return not_carried("the resource answered with nothing");
-    };
-    page_served(page, allowed)
+    answer
+        .page
+        .is_none()
+        .then(|| "the resource answered with nothing".to_string())
 }
 
 fn page_served(page: &ResourcePage, allowed: bool) -> Served {
@@ -596,9 +643,13 @@ mod tests {
             runs_script: false,
             body: vec![b'a'; 812],
         };
-        let s = not_shown(&p);
-        let body = String::from_utf8(s.body).unwrap();
+        let s = not_shown(&p, "/checks?x=\"1\"");
+        let body = String::from_utf8(s.body.clone()).unwrap();
         assert!(body.contains("`text/csv`, 812 bytes"), "{body}");
+        assert!(
+            body.contains("<a href=\"/checks?x=&quot;1&quot;\">Back to the page you came from</a>"),
+            "{body}"
+        );
         assert!(
             s.headers
                 .iter()
@@ -764,6 +815,21 @@ mod tests {
         assert_eq!(
             header(&served(&a, true), CARRIED),
             ["the answer could not be read: a folded header %E2%80%94 refused"]
+        );
+    }
+
+    #[test]
+    fn the_frames_own_pages_lead_back_within_the_origin() {
+        assert!(way_back("/checks").contains("href=\"/checks\""));
+        assert!(way_back("//elsewhere.example/").contains("href=\"/\""));
+        assert!(way_back("https://elsewhere.example/").contains("href=\"/\""));
+        let s = not_reached("not delivered: timed out", "/checks");
+        assert_eq!(s.status, 502);
+        assert!(!shows(&s));
+        assert_eq!(header(&s, CARRIED), ["not delivered: timed out"]);
+        let body = String::from_utf8(s.body).unwrap();
+        assert!(
+            body.contains("<p>not delivered: timed out</p>") && body.contains("href=\"/checks\"")
         );
     }
 

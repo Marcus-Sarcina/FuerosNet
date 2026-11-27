@@ -2531,9 +2531,13 @@ fn open_frame(
     let carry: rhtn_desktop::window::Carrier = {
         let back = Mutex::new(back.clone());
         let root = root.to_path_buf();
+        // **the last page this frame showed**, which its own pages lead
+        // back to, the window having no controls [found 2026-11-27]
+        let shown = Mutex::new("/".to_string());
         Arc::new(move |method, path, media, body, document| {
             let message = frame::compose(method, path, media, body);
             let back = back.lock().unwrap().clone();
+            let came_from = shown.lock().unwrap().clone();
             match carry(&p, &root, &node, &resource, message, &name, &back) {
                 // **the page moving to something it cannot show** is
                 // named there, and the bytes offered for keeping here,
@@ -2547,10 +2551,20 @@ fn open_frame(
                             && page.shape == PageShape::Other =>
                     {
                         offer(&back, &name, page);
-                        frame::not_shown(page)
+                        frame::not_shown(page, &came_from)
                     }
-                    _ => frame::served(&a, allowed),
+                    _ => match frame::undelivered(&a) {
+                        Some(why) if document => frame::not_reached(&why, &came_from),
+                        _ => {
+                            let s = frame::served(&a, allowed);
+                            if document && method == "GET" && frame::shows(&s) {
+                                *shown.lock().unwrap() = path.to_string();
+                            }
+                            s
+                        }
+                    },
                 },
+                Err(why) if document => frame::not_reached(&why, &came_from),
                 Err(why) => frame::not_carried(&why),
             }
         })
