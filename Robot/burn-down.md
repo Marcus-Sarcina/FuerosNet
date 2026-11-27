@@ -116,7 +116,7 @@ is decided, built or explicitly deferred; a deferral moves to
 | B-31 | Say that a paired desktop reopens no sealed package, holding no seed; that a kernel fix waits for a restart; the board's two failover edges | — |
 | B-32 | Design section 15: "a node's launch and closing" travel rootward, though nothing sends a closing | — |
 | B-33 | **Closed 2026-11-26 with no change**: under D-09 the grace is not a protocol invariant, and design section 21.1 keeps a value one component owns out of section 21's table [author, 2026-09-02]; the three documents already say "as shipped" and the node's own to change | — |
-| B-34 | 44 functional rows are held by no test and no acceptance entry | — |
+| B-34 | 44 functional rows are held by no test and no acceptance entry. **Counted again 2026-11-27**: 42 of 633 live rows, and 41 once MAIL-030 is held (the delivery test now also shows a delivery opens with neither the key nor the secret alone, and that nothing the node sends carries the private half it opened with). Several of the rest look tested and untagged; the E and APP rows need devices or field data | — |
 | B-35 | The change log | D-28 |
 
 ### Tests missing

@@ -209,10 +209,12 @@ async fn the_newest_key_or_the_one_before_within_its_grace_and_no_other() {
 }
 
 // acceptance: SUB-17
+// functional: MAIL-030
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_delivery_is_a_position_the_seal_unchanged_and_the_nodes_half_naming_no_sender() {
     use rhtn_codec::cbor::{Item, as_uint, parse_all};
-    let b = Bench::start(T0, None, NodeKeyConfig::default(), |_| {});
+    let dir = temp("sub17");
+    let b = Bench::start(T0, Some(&dir), NodeKeyConfig::default(), |_| {});
     let r = kh("carol");
     let carol = Recipient::of("carol");
     let key = b.node_key(&r).await;
@@ -261,6 +263,26 @@ async fn a_delivery_is_a_position_the_seal_unchanged_and_the_nodes_half_naming_n
     );
     assert_eq!(carol.open_with(&kh("bob"), &parts[0].1, &parts[1].2), None);
     assert_eq!(carol.open_with(&kh("bob"), &parts[1].1, &parts[0].2), None);
+    // **and with neither alone** (MAIL-030): the recipient's key with no
+    // half, and the half under a key that is not the recipient's
+    assert_eq!(carol.open_with(&kh("bob"), &parts[0].1, &[0; 32]), None);
+    let other = Recipient {
+        keyhash: r,
+        ..Recipient::of("dave")
+    };
+    assert_eq!(other.open_with(&kh("bob"), &parts[0].1, &parts[0].2), None);
+    // **nothing the node sends carries the private half it opened with**
+    let n = node_key(&key).fields.n;
+    let private = std::fs::read(
+        dir.join("node-keys")
+            .join(r.iter().map(|x| format!("{x:02x}")).collect::<String>())
+            .join(n.to_string()),
+    )
+    .expect("the private half, kept")[..32]
+        .to_vec();
+    for d in &got {
+        assert!(!mentions(d, &private), "the node's private half");
+    }
     // nothing in either delivery names S or the key S submitted under
     let alice = id("alice");
     for d in &got {
@@ -270,6 +292,7 @@ async fn a_delivery_is_a_position_the_seal_unchanged_and_the_nodes_half_naming_n
             assert!(!mentions(d, k), "the key S submitted under");
         }
     }
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 // acceptance: DMN-04
