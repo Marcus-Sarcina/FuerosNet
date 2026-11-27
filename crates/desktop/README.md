@@ -108,8 +108,10 @@ which are its to read.
 ## The node an identity runs
 
 **A restored desktop administers it; a paired one leaves it to the phone**
-[author, 2026-11-26]. A subnet's options say *Administer the node* where
-this key runs one (it published the endpoint record on the line it holds).
+[author, 2026-11-26]. *Options → Instances you run* lists each node this
+key runs (it published the endpoint record on the line it holds) with
+*Administer the node*, and launching another beneath; the subnet's own
+options carry the same door.
 Pressed, the desktop derives the host control key from the seed it holds,
 opens an ssh tunnel to the machine its endpoint record names, and reaches
 the instance's surface on that machine's own loopback, where an act needs

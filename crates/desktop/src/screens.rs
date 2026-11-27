@@ -33,6 +33,10 @@ pub enum Place {
     /// The node serving this desktop: where it is connected, and a node
     /// to connect to, reached from the options as the phone's is.
     Node,
+    /// **The nodes this identity runs** [author, 2026-11-26], reached from
+    /// the options: each administered from here on a restored desktop, and
+    /// another launched at a provider.
+    Instances,
     /// **Who this key is under, and what leaving costs**, reached from a
     /// subnet's options: every line the key holds, not that subnet's alone.
     Authority,
@@ -66,6 +70,7 @@ impl Place {
                 "direct" => Some(Place::Direct),
                 "options" => Some(Place::Options),
                 "node" => Some(Place::Node),
+                "instances" => Some(Place::Instances),
                 "authority" => Some(Place::Authority),
                 "colour" => Some(Place::Colour),
                 "identities" => Some(Place::Identities),
@@ -91,6 +96,7 @@ impl Place {
             Place::Direct => "direct".into(),
             Place::Options => "options".into(),
             Place::Node => "node".into(),
+            Place::Instances => "instances".into(),
             Place::Authority => "authority".into(),
             Place::Colour => "colour".into(),
             Place::Identities => "identities".into(),
@@ -116,7 +122,7 @@ impl Place {
     /// reached from.
     fn parent(&self) -> Place {
         match self {
-            Place::Node | Place::Colour => Place::Options,
+            Place::Node | Place::Instances | Place::Colour => Place::Options,
             Place::SubnetOptions(h) | Place::Board(h, _) | Place::BoardNew(h) => {
                 Place::Subnet(h.clone())
             }
@@ -736,6 +742,7 @@ fn main(snap: &Snapshot, place: &Place, body: &Body) -> String {
         Place::SubnetOptions(id) => subnet_options(snap, id),
         Place::Options => options(snap),
         Place::Node => node(snap),
+        Place::Instances => instances(snap),
         Place::Colour => colour(snap),
         Place::Identities => identities(snap),
         Place::Person(peer) => person(snap, peer),
@@ -1191,19 +1198,8 @@ fn subnet_options(snap: &Snapshot, id: &str) -> String {
     // **the instance it runs, administered here on a restored desktop**
     // [author, 2026-11-26]; a paired one derives no key for the machine
     if let Some(s) = s.filter(|s| s.operates) {
-        out.push_str(&match snap.device {
-            Device::Restored => format!(
-                "<h2>Its node</h2>\n<p class=\"sub\">You run this subnet's node. What it declares \
-                 it can be asked — installs, grants, upgrades — is drawn here and sent over its \
-                 machine's own loopback.</p>\n<p><button data-administer=\"{}\">Administer the \
-                 node</button></p>",
-                escape(&s.by)
-            ),
-            Device::Paired { .. } => "<h2>Its node</h2>\n<p class=\"sub\">You run this subnet's \
-                 node. Administering it takes the machine's key, which comes from the identity's \
-                 seed, and this desktop was paired and holds none: administer it on the phone.</p>"
-                .to_string(),
-        });
+        out.push_str("<h2>Its node</h2>\n");
+        out.push_str(&administer(snap, s));
     }
     if s.is_some_and(|s| s.crown == Crown::Full) {
         out.push_str(&match snap.device {
@@ -1225,6 +1221,44 @@ fn subnet_options(snap: &Snapshot, id: &str) -> String {
                 .to_string(),
         });
     }
+    out
+}
+
+/// **Administering the node one subnet's row says this key runs**: the
+/// door on a restored desktop, and on a paired one where the door is.
+fn administer(snap: &Snapshot, s: &SubnetRow) -> String {
+    match snap.device {
+        Device::Restored => format!(
+            "<p class=\"sub\">You run this subnet's node. What it declares it can be asked — \
+             installs, grants, upgrades — is drawn here and sent over its machine's own \
+             loopback.</p>\n<p><button data-administer=\"{}\">Administer the node</button></p>\n",
+            escape(&s.by)
+        ),
+        Device::Paired { .. } => "<p class=\"sub\">You run this subnet's node. Administering it \
+             takes the machine's key, which comes from the identity's seed, and this desktop was \
+             paired and holds none: administer it on the phone.</p>\n"
+            .to_string(),
+    }
+}
+
+/// **The nodes this identity runs** [author, 2026-11-26]: one per subnet
+/// where this key published the endpoint record, each with its door, and
+/// launching another below them.
+fn instances(snap: &Snapshot) -> String {
+    let mut out = bar("Instances you run", true, None);
+    let running: Vec<&SubnetRow> = snap.subnets.iter().filter(|s| s.operates).collect();
+    if running.is_empty() {
+        out.push_str("<p class=\"sub\">You run no node in any subnet this desktop holds.</p>\n");
+    }
+    for s in running {
+        out.push_str(&format!("<h2>{}</h2>\n", escape(&subnet_name(s))));
+        out.push_str(&administer(snap, s));
+    }
+    out.push_str(&row(
+        "Launch a node",
+        "at a provider you choose, with a credential of your own",
+        "data-act=\"launch\"",
+    ));
     out
 }
 
@@ -1414,8 +1448,12 @@ fn options(snap: &Snapshot) -> String {
         row("Serving node", &snap.connection, "data-go=\"node\""),
         row(
             "Instances you run",
-            "launch one at a provider",
-            "data-act=\"launch\""
+            &match snap.subnets.iter().filter(|s| s.operates).count() {
+                0 => "none yet; launch one at a provider".to_string(),
+                1 => "one, administered from here".to_string(),
+                n => format!("{n}, administered from here"),
+            },
+            "data-go=\"instances\""
         ),
         row("Colour", &snap.colour, "data-go=\"colour\""),
         escape(&said),
@@ -1852,7 +1890,28 @@ mod tests {
         let s = snap();
         let o = page(&s, &Place::Options, &Body::Plain);
         assert!(o.contains("data-go=\"node\"><span>Serving node</span><small>Connected to 1111"));
-        assert!(o.contains("data-act=\"launch\"") && o.contains(&"ab".repeat(32)));
+        assert!(o.contains("data-go=\"instances\"") && o.contains(&"ab".repeat(32)));
+        // **the nodes this key runs, then launching another** [author,
+        // 2026-11-26]: where an operator looks for them
+        assert!(o.contains("none yet; launch one at a provider"));
+        let running = Snapshot {
+            subnets: vec![SubnetRow {
+                operates: true,
+                ..s.subnets[0].clone()
+            }],
+            ..s.clone()
+        };
+        assert!(
+            page(&running, &Place::Options, &Body::Plain).contains("one, administered from here")
+        );
+        let i = page(&running, &Place::Instances, &Body::Plain);
+        assert!(
+            i.contains("data-administer=") && i.contains("data-act=\"launch\""),
+            "{i}"
+        );
+        let none = page(&s, &Place::Instances, &Body::Plain);
+        assert!(!none.contains("data-administer=") && none.contains("data-act=\"launch\""));
+        assert_eq!(Place::parse("instances"), Some(Place::Instances));
         assert!(o.contains("Restored from the phrase"));
         assert!(
             !o.contains("id=\"connect\""),
