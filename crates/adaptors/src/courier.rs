@@ -748,7 +748,75 @@ impl Courier {
     async fn fetch_node_keys(&self, recipients: Vec<Keyhash>) -> (Vec<Msg>, Vec<Keyhash>) {
         let mut out = Vec::new();
         let mut unsent = Vec::new();
+        // **a batch to each node that serves several** (design §14.2.4.5;
+        // `wire-format.md` §7.8): recipients whose node this client knows
+        // are asked of it together, so the node sees a sweep and not a
+        // person; one alone, or one whose node is not known, is asked as
+        // before. One the batch did not answer for goes on to a request
+        // of its own only where a message waits for it
+        let mut by_node: BTreeMap<Keyhash, Vec<Keyhash>> = BTreeMap::new();
+        let mut alone = Vec::new();
         for to in recipients {
+            let reach = self.handle.with(move |c| c.reach_for(&to)).await;
+            // the node the horizon names, else a node beside this client
+            // that serves them, as `minted_to` asks
+            let node = match reach.upstream {
+                Upstream::Known { node, .. } => Some(node),
+                _ => self
+                    .servings()
+                    .into_iter()
+                    .find(|s| s.serves(&to))
+                    .map(|s| s.me()),
+            };
+            match node {
+                Some(node) => by_node.entry(node).or_default().push(to),
+                None => alone.push(to),
+            }
+        }
+        for (node, group) in by_node {
+            if group.len() < 2 {
+                alone.extend(group);
+                continue;
+            }
+            for chunk in group.chunks(256) {
+                let Some(req) = NodeKeyRequest::for_recipients(
+                    chunk.to_vec(),
+                    rhtn_transport::tls::random_bytes(),
+                ) else {
+                    continue;
+                };
+                let reply = match self.serving_for(&node) {
+                    Some(held) => held.minted(REQUEST_NODE_KEY, req.encode()).await,
+                    None => {
+                        let beyond = self.beyond.lock().unwrap().clone();
+                        match beyond {
+                            Some(b) => b.minted_at(node, REQUEST_NODE_KEY, req.encode()).await,
+                            None => None,
+                        }
+                    }
+                };
+                let asked = req.recipients();
+                let Some(reply) = reply else {
+                    tracing::info!(target: "pay", node = %hex4(&node), n = asked.len(), "pay.node_key.batch_unanswered");
+                    alone.extend(self.waiting_of(asked).await);
+                    continue;
+                };
+                let (sealed, missing) = self
+                    .handle
+                    .with(move |c| {
+                        let sealed = c.take_node_key_reply(&node, &asked, &reply);
+                        let missing: Vec<Keyhash> = asked
+                            .into_iter()
+                            .filter(|k| !c.payload.node_keys.contains_key(k))
+                            .collect();
+                        (sealed, missing)
+                    })
+                    .await;
+                out.extend(sealed);
+                alone.extend(self.waiting_of(missing).await);
+            }
+        }
+        for to in alone {
             let Some(req) =
                 NodeKeyRequest::for_recipients(vec![to], rhtn_transport::tls::random_bytes())
             else {
@@ -782,6 +850,17 @@ impl Courier {
             }
         }
         (out, unsent)
+    }
+
+    /// Those of `who` a message waits for.
+    async fn waiting_of(&self, who: Vec<Keyhash>) -> Vec<Keyhash> {
+        self.handle
+            .with(move |c| {
+                who.into_iter()
+                    .filter(|k| c.payload.pending.get(k).is_some_and(|w| !w.is_empty()))
+                    .collect()
+            })
+            .await
     }
 
     /// **Hand a sealed message to `to`'s node** (`wire-format.md` §7.10), as

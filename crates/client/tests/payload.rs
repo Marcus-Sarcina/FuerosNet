@@ -669,6 +669,35 @@ fn a_seal_is_attributed_only_by_a_verifying_tag_and_what_fails_is_discarded() {
     assert_eq!(said_to(&n, "carol", "bob").len(), 1);
 }
 
+/// **The prefetch follows the nodes' rotation** (design §14.2.4.5;
+/// MAIL-023): the population an attach swept is swept again by
+/// maintenance once its sweep is a rotation old, and not before.
+// functional: MAIL-023
+#[test]
+fn maintenance_sweeps_the_population_again_once_a_rotation_has_passed() {
+    let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1"), ("carol", "w1")]);
+    n.attach("bob");
+    n.attach("carol");
+    n.attach("alice");
+    let asks = |msgs: &[Msg]| msgs.iter().any(|m| matches!(m, Msg::NodeKeyRequest(_)));
+    let soon = n.s.client("alice").maintain();
+    assert!(!asks(&soon), "within the rotation nothing is fetched again");
+    n.s.clock
+        .set(n.s.clock.get() + Client::NODE_KEY_SWEEP_S * 1000 + 1000);
+    let later = n.s.client("alice").maintain();
+    let asked: Vec<_> = later
+        .iter()
+        .filter_map(|m| match m {
+            Msg::NodeKeyRequest(r) => Some(r.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(asked.len(), 1, "{later:?}");
+    assert!(asked[0].contains(&kh("bob")) && asked[0].contains(&kh("carol")));
+    let again = n.s.client("alice").maintain();
+    assert!(!asks(&again), "and the sweep is dated anew");
+}
+
 // acceptance: PAY-23
 // functional: PAY-023
 /// **A replay opens once, across a restart too**: a captured submission

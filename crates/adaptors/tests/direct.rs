@@ -252,6 +252,39 @@ async fn next(
 
 // functional: PAY-005
 // acceptance: TRV-07
+/// **A sweep reaches each serving node as one batch** (design §14.2.4.5;
+/// `wire-format.md` §7.8): two contacts served by the same node are asked
+/// of it in one request, which the node sees as a sweep and not a person,
+/// and both keys are held from its answer.
+// functional: MAIL-023
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_sweep_asks_each_serving_node_once_for_everyone_it_serves() {
+    let mut scene = Scene::new();
+    scene.adopt("carol", "bob", "bob", &[0]);
+    scene.adopt("w1", "bob", "bob", &[1]);
+    scene.adopt("w2", "bob", "bob", &[2]);
+    let node = live_node("bob", scene.table("bob", &["bob"]), "bob", &[]);
+    let inboxes = Inboxes::default();
+    let counting = Counting::over(LocalNode::new(node.clone(), inboxes.clone()));
+    let serving: Arc<dyn Serving> = counting.clone();
+    let carol = light("carol", &node, &serving, &inboxes);
+    let _w1 = light("w1", &node, &serving, &inboxes);
+    let _w2 = light("w2", &node, &serving, &inboxes);
+    hold(&carol, "w1");
+    hold(&carol, "w2");
+    carol.courier.attach(Vec::new()).await;
+    let before = counting.asked();
+    carol.courier.sweep(vec![kh("w1"), kh("w2")]).await;
+    assert_eq!(counting.asked() - before, 1, "one request for both");
+    assert!(
+        carol
+            .handle
+            .with_blocking(|c| c.payload.node_keys.contains_key(&kh("w1"))
+                && c.payload.node_keys.contains_key(&kh("w2"))),
+        "and both keys held from its answer"
+    );
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn two_light_clients_beside_their_serving_node_join_the_direct_path_from_their_own_sends() {
     // carol and w1 adopted under bob, and each holds the other as a

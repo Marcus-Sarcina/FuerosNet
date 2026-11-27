@@ -804,6 +804,11 @@ pub struct Client {
     /// it, which doubles after each ask (`Client::maintain`). Held in
     /// memory alone: a restart asks again from the first interval.
     key_retry: BTreeMap<Keyhash, (u64, u64)>,
+    /// **The population the last attach swept, and when** (design
+    /// §14.2.4.5): swept again by maintenance on the nodes' rotation
+    /// schedule, so a refresh says a key changed and not that this client
+    /// meant to write. Not kept across a restart, whose attach sweeps.
+    swept: (Vec<Keyhash>, u64),
     /// As a recovering subject: the rotation from the prior key, holding
     /// that key until the lines are sealed.
     pub rotation: Option<Box<Rotation>>,
@@ -1167,6 +1172,7 @@ impl Client {
             browsing: None,
             fetching: BTreeMap::new(),
             key_retry: BTreeMap::new(),
+            swept: (Vec::new(), 0),
             rotation: None,
             asks: BTreeMap::new(),
             asked: 0,
@@ -6456,6 +6462,7 @@ impl Client {
     /// Only those this client holds an encryption key for are asked about,
     /// since nobody else can be written to; this client is dropped.
     pub fn sweep(&mut self, population: &[Keyhash]) -> Vec<Msg> {
+        self.swept = (population.to_vec(), self.now_s());
         let me = self.keyhash();
         let recipients: Vec<Keyhash> = population
             .iter()
@@ -6950,7 +6957,24 @@ impl Client {
         let mut out = self.outbox();
         out.extend(self.resend_unanswered(now));
         out.extend(self.retry_node_keys(now));
+        out.extend(self.sweep_again(now));
         out
+    }
+
+    /// How often the swept population's node keys are fetched again, in
+    /// seconds: a node's rotation as shipped (design §14.2.4.3), which a
+    /// node may set otherwise and which this client cannot see.
+    pub const NODE_KEY_SWEEP_S: u64 = 86_400;
+
+    /// **The last attach's population swept again**, once its sweep is
+    /// [`Self::NODE_KEY_SWEEP_S`] old.
+    fn sweep_again(&mut self, now: u64) -> Vec<Msg> {
+        let (population, at) = &self.swept;
+        if population.is_empty() || now.saturating_sub(*at) < Self::NODE_KEY_SWEEP_S {
+            return Vec::new();
+        }
+        let population = population.clone();
+        self.sweep(&population)
     }
 
     /// The interval before a node key a message waits on is first asked
