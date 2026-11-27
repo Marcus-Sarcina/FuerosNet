@@ -43,6 +43,18 @@ licence is written for; the Rust bindings (`wry`, `tao` and their trees)
 are Apache-2.0 or MIT, and `cargo deny` checks that with the rest of the
 workspace.
 
+**As a Debian package**, the releasable build with its window:
+
+```sh
+desktop/packaging/deb.sh             # target/deb/rhtn-desktop_<version>_<arch>.deb
+sudo apt install ./target/deb/rhtn-desktop_0.1.0_amd64.deb
+```
+
+What it depends on is read off the binary by `dpkg-shlibdeps`, so the
+list follows the libraries it links; `openssh-client` (administering a
+node this identity runs) and `sane-utils` (a resource's scan) are
+recommended. The maintainer named is whoever builds it.
+
 ## What it does, and what it will not do
 
 - **The provider's console is their page in a window of ours.** Another
