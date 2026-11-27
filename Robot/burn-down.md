@@ -103,7 +103,7 @@ is decided, built or explicitly deferred; a deferral moves to
 |---|---|
 | B-24 | Desktop: paging of earlier messages. **Built 2026-11-27**: a thread with more than its newest page shows "Earlier messages", which reads one more page back each time it is chosen, as the phone's does; another thread gone to shows its newest alone (`Threads::newest`) |
 | B-25 | Desktop: .deb and AppImage packaging |
-| B-26 | Desktop: the conversation card's last line; a resource's one-line notification |
+| B-26 | Desktop: the conversation card's last line; a resource's one-line notification. **Built 2026-11-27**: a card says the last line said ("me: " before this identity's own), then " · muted" or " · notifications muted", as the phone's; and where the kernel says a resource changed, a count that rose and came with a line is told through the freedesktop notification service, by the resource's name and that line, for a resource holding the person's `notify` and while no window of the desktop has the focus, each count kept as seen per identity (`frame::rising`, the phone's `Notify.rising`, CAT-030) |
 | B-27 | Android Web Push; failover on iOS (deferred until iOS is built) |
 
 ### Documents

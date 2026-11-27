@@ -355,6 +355,29 @@ pub fn scan_media(asked: &[String]) -> Vec<String> {
         .collect()
 }
 
+/// **Which resources have more waiting than when last seen, with a line
+/// to say so** [author, 2026-11-23], as the phone's `Notify.rising`: the
+/// count is the resource's own, a rise is something new, and a resource
+/// that gave no line has nothing to put in a notice. `seen` is by the
+/// resource in hex.
+#[must_use]
+pub fn rising<'a>(
+    seen: &std::collections::BTreeMap<String, u64>,
+    held: &'a [rhtn_model::Resource],
+) -> Vec<&'a rhtn_model::Resource> {
+    held.iter()
+        .filter(|r| {
+            r.notice.is_some()
+                && u64::from(r.waiting) > seen.get(&hex_of(&r.resource)).copied().unwrap_or(0)
+        })
+        .collect()
+}
+
+/// Lower-case hex.
+fn hex_of(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
 /// **Whether this resource holds the person's standing permission to
 /// show its notifications** (§8.1's `notify`), kept per resource as the
 /// phone keeps it.
@@ -844,6 +867,47 @@ mod tests {
         assert_eq!(
             named(a.page.as_ref().unwrap()),
             "an answer of `application/pdf`, 40 kB, which this desktop does not show"
+        );
+    }
+
+    /// **A notice is for a count that rose and came with a line**
+    /// [author, 2026-11-23], as the phone's `Notify.rising`.
+    // functional: CAT-030
+    #[test]
+    fn a_resource_is_noticed_where_its_count_rose_and_it_gave_a_line() {
+        let held = |res: u8, waiting: u32, notice: Option<&str>| rhtn_model::Resource {
+            node: [1; 32],
+            resource: [res; 32],
+            owner: [2; 32],
+            service_type: "rhtn-http".into(),
+            instance: format!("r{res}"),
+            endpoint: Vec::new(),
+            data_practice: None,
+            truncated: false,
+            stale: false,
+            waiting,
+            notice: notice.map(String::from),
+            icon_format: None,
+            icon: None,
+        };
+        let all = vec![
+            held(3, 2, Some("two new")),
+            held(4, 5, None),
+            held(5, 1, Some("the same")),
+            held(6, 0, Some("fell")),
+        ];
+        let seen: std::collections::BTreeMap<String, u64> =
+            [("05".repeat(32), 1), ("06".repeat(32), 4)]
+                .into_iter()
+                .collect();
+        let rose: Vec<&str> = rising(&seen, &all)
+            .iter()
+            .map(|r| r.instance.as_str())
+            .collect();
+        assert_eq!(
+            rose,
+            ["r3"],
+            "a rise with a line; no line, no rise and a fall say nothing"
         );
     }
 

@@ -200,6 +200,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         device: Mutex::new(None),
         place: Mutex::new(History::default()),
         closing: AtomicBool::new(false),
+        focused: AtomicBool::new(true),
         dir: dir.clone(),
         earlier: Mutex::new(HashMap::new()),
     });
@@ -327,6 +328,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
             }
+            Event::WindowEvent {
+                event: WindowEvent::Focused(on),
+                ..
+            } => up.focused.store(on, Ordering::Relaxed),
             Event::UserEvent(Said::Show(page)) => {
                 *current.lock().unwrap() = page;
                 let _ = ours.load_url(INDEX);
@@ -1036,6 +1041,10 @@ struct Up {
     /// Where this desktop keeps what it keeps, its colours among it.
     dir: PathBuf,
     closing: AtomicBool,
+    /// **Whether a window of this desktop has the focus**: while one
+    /// does, a resource's notice is seen where it is and told nowhere
+    /// else, as the phone tells none while a screen of its own shows.
+    focused: AtomicBool,
     /// **How many earlier pages each thread shows**, by the party in hex:
     /// asked for one at a time, as the phone's are, and back to the
     /// newest alone when another thread is gone to.
@@ -1281,6 +1290,7 @@ fn snapshot(idents: &[Ident], focus: &Participant, device: Device, dir: &Path) -
         people: Vec::new(),
         threads: Vec::new(),
         chosen: Default::default(),
+        last: Default::default(),
     };
     // **every identity's rows together** [author, 2026-11-07], each saying
     // whose it is
@@ -1354,7 +1364,19 @@ fn snapshot(idents: &[Ident], focus: &Participant, device: Device, dir: &Path) -
                     alias: c.alias,
                 }),
         );
-        snap.threads.extend(i.threads.index());
+        let held = i.threads.index();
+        for e in &held {
+            if let Some(m) = i
+                .threads
+                .page(&e.peer, None, 1, HashMap::new())
+                .messages
+                .pop()
+            {
+                snap.last
+                    .insert((by.clone(), e.peer.clone()), (m.mine, m.text));
+            }
+        }
+        snap.threads.extend(held);
         snap.chosen.extend(
             i.threads
                 .people()
@@ -1434,6 +1456,83 @@ fn arrived(
     draw(up, back, false);
 }
 
+/// **Tell this desktop's notification service what a resource counts as
+/// newly waiting** (`light-client-requirements.md` §8; the phone's
+/// `Notify.notices`): for each resource the person allowed to notify
+/// them whose count rose and came with a line, while no window of this
+/// desktop has the focus; and every count kept as seen, so the next rise
+/// is measured from it and a fall is not news.
+fn notices(up: &Up, i: &Ident) {
+    let path = up
+        .dir
+        .join(format!("{}-{}.json", NOTICES_SEEN, hex(&i.p.me())));
+    let seen: std::collections::BTreeMap<String, u64> = std::fs::read(&path)
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or_default();
+    let held = i.p.resources();
+    if !up.focused.load(Ordering::Relaxed) {
+        for r in frame::rising(&seen, &held) {
+            if frame::notify_allowed(&up.dir, &hex(&r.resource)) {
+                notify(&r.instance, r.notice.as_deref().unwrap_or_default());
+            }
+        }
+    }
+    let now: std::collections::BTreeMap<String, u64> = held
+        .iter()
+        .map(|r| (hex(&r.resource), u64::from(r.waiting)))
+        .collect();
+    if now != seen
+        && let Ok(bytes) = serde_json::to_vec(&now)
+        && let Err(why) = platform::write_whole(&path, &bytes)
+    {
+        tracing::warn!(target: "attach", %why, "notices.unkept");
+    }
+}
+
+/// Where the count each resource was last seen at is kept, per identity:
+/// the phone's `Notify.SEEN_STORE`.
+const NOTICES_SEEN: &str = "notices-seen";
+
+/// **One notice, through the freedesktop notification service**: the
+/// resource's name and its line, and nothing where there is no service.
+#[cfg(target_os = "linux")]
+fn notify(name: &str, line: &str) {
+    use gtk::gio;
+    use gtk::glib::{ToVariant, Variant};
+    let Ok(bus) = gio::bus_get_sync(gio::BusType::Session, None::<&gio::Cancellable>) else {
+        return;
+    };
+    let hints: HashMap<String, Variant> = HashMap::new();
+    let body = (
+        "FuerosNet",
+        0u32,
+        "",
+        name,
+        line,
+        Vec::<String>::new(),
+        hints,
+        -1i32,
+    )
+        .to_variant();
+    if let Err(why) = bus.call_sync(
+        Some("org.freedesktop.Notifications"),
+        "/org/freedesktop/Notifications",
+        "org.freedesktop.Notifications",
+        "Notify",
+        Some(&body),
+        None,
+        gio::DBusCallFlags::NONE,
+        2000,
+        None::<&gio::Cancellable>,
+    ) {
+        tracing::warn!(target: "attach", %why, "notice.untold");
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn notify(_name: &str, _line: &str) {}
+
 /// **The kernel's events, for as long as the window is open**: a message
 /// kept in its thread as it arrives, and the place redrawn where what it
 /// shows changed.  The phone's loop, less the meeting a desktop never
@@ -1476,7 +1575,13 @@ fn pump(up: &Up, back: &EventLoopProxy<Said>, i: &Ident) {
                     ),
                 ));
             }
-            Kernel::Connection(_) | Kernel::Changed { .. } => draw(up, back, false),
+            Kernel::Changed { nouns } => {
+                if nouns.contains(&rhtn_model::Noun::Resources) {
+                    notices(up, i);
+                }
+                draw(up, back, false);
+            }
+            Kernel::Connection(_) => draw(up, back, false),
             Kernel::Peer { what, .. } | Kernel::Conversed { what, .. } => {
                 let _ = back.send_event(Said::ToPage(true, what));
             }

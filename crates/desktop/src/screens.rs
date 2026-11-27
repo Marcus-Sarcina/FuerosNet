@@ -333,6 +333,9 @@ pub struct Snapshot {
     /// by the identity and the party, both in hex; a party absent chose
     /// nothing and has nothing unread.
     pub chosen: std::collections::BTreeMap<(String, String), Chosen>,
+    /// **The last line said in each thread**, by the identity and the
+    /// party, both in hex: whether it was this identity's, and its text.
+    pub last: std::collections::BTreeMap<(String, String), (bool, String)>,
 }
 
 impl Snapshot {
@@ -906,17 +909,30 @@ fn card(snap: &Snapshot, by: &str, peer: &str, thread: bool) -> String {
             )
         })
         .unwrap_or_default();
-    let note = if c.blocked {
-        "blocked"
+    // **the last line said**, then what was muted about them, as the
+    // phone's card has it
+    let said = snap.last.get(&(by.to_string(), peer.to_string()));
+    let line = if c.blocked {
+        "blocked".to_string()
     } else if !thread {
-        "nothing said yet"
+        "nothing said yet".to_string()
+    } else {
+        match said {
+            None => "no messages".to_string(),
+            Some((true, text)) => format!("me: {text}"),
+            Some((false, text)) => text.clone(),
+        }
+    };
+    let quiet = if c.blocked {
+        ""
     } else if c.muted {
-        "muted"
+        " · muted"
     } else if c.silent {
-        "notifications muted"
+        " · notifications muted"
     } else {
         ""
     };
+    let note: String = format!("{line}{quiet}").chars().take(160).collect();
     let edge = snap
         .held
         .iter()
@@ -925,15 +941,11 @@ fn card(snap: &Snapshot, by: &str, peer: &str, thread: bool) -> String {
         .unwrap_or("--rule");
     format!(
         "<a class=\"talk{}\" data-go=\"thread:{peer}\" style=\"border-color: var({edge})\">{}\
-         <span class=\"lines\"><span><b>{}</b>{place}</span>{}</span>{}</a>\n",
+         <span class=\"lines\"><span><b>{}</b>{place}</span><span><small>{}</small></span></span>{}</a>\n",
         if c.blocked { " blocked" } else { "" },
         person_orb(snap, by, peer),
         escape(&snap.name_of(peer)),
-        if note.is_empty() {
-            String::new()
-        } else {
-            format!("<small>{note}</small>")
-        },
+        escape(&note),
         if c.unread > 0 {
             format!(
                 "<sup{}>{}</sup>",
@@ -1637,6 +1649,7 @@ mod tests {
                 by: "ab".repeat(32),
             }],
             chosen: Default::default(),
+            last: Default::default(),
         }
     }
 
@@ -1798,6 +1811,23 @@ mod tests {
                 ..Default::default()
             },
         );
+        // **the last line said, then what was muted**, as the phone's card
+        s.last
+            .insert((me.clone(), carol.clone()), (false, "see <you>".into()));
+        assert!(direct(&s).contains("<span><small>see &lt;you&gt;</small></span>"));
+        s.last
+            .insert((me.clone(), carol.clone()), (true, "on my way".into()));
+        s.chosen
+            .get_mut(&(me.clone(), carol.clone()))
+            .unwrap()
+            .muted = true;
+        assert!(direct(&s).contains("<small>me: on my way · muted</small>"));
+        s.last.remove(&(me.clone(), carol.clone()));
+        assert!(direct(&s).contains("<small>no messages · muted</small>"));
+        s.chosen
+            .get_mut(&(me.clone(), carol.clone()))
+            .unwrap()
+            .muted = false;
         let d = direct(&s);
         assert!(d.contains("<b>Carol</b> <span class=\"place\">Mirror <b>+1</b></span>"));
         assert!(d.contains("<sup>4</sup>") && d.contains(&format!("data-person=\"{carol}\"")));

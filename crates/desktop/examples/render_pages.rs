@@ -71,6 +71,7 @@ fn main() {
             by: "70".repeat(32),
         }],
         chosen: Default::default(),
+        last: Default::default(),
     };
     let said = |id, mine, text: &str, delivery| Message {
         id,
