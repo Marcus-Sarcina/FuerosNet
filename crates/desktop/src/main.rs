@@ -1360,6 +1360,59 @@ fn rank(r: &rhtn_model::Rank) -> String {
     format!("{what} {lines}")
 }
 
+/// **A message arrived for `i`, kept in `peer`'s thread under `who`**:
+/// dropped as it comes where the party is blocked [author, 2026-11-23],
+/// unseen until its thread is on screen, and the thread marked
+/// `unverified` or not by this arrival, as the phone's is.
+#[allow(clippy::too_many_arguments)]
+fn arrived(
+    up: &Up,
+    back: &EventLoopProxy<Said>,
+    i: &Ident,
+    peer: &str,
+    who: &str,
+    bytes: &[u8],
+    unverified: bool,
+) {
+    // **kept as the identity it arrived for**
+    let t = &i.threads;
+    if t.people().get(peer).is_some_and(|c| c.blocked) {
+        tracing::info!(target: "attach", peer = &peer[..8], "message.blocked");
+        return;
+    }
+    let text = String::from_utf8_lossy(bytes).into_owned();
+    let kept = t
+        .append(
+            peer,
+            &Record::Said {
+                mine: false,
+                who: who.to_string(),
+                text,
+                delivery: Delivery::Sent,
+                reason: None,
+            },
+        )
+        .and_then(|_| t.list(peer, who));
+    if let Err(why) = kept {
+        let _ = back.send_event(Said::ToPage(
+            false,
+            format!("a message from {who} was not kept: {why}"),
+        ));
+    }
+    // **unseen until its thread is on screen**, and seen as it comes
+    // while it is
+    let showing = *up.place.lock().unwrap().here() == Place::Thread(peer.to_string());
+    if let Err(why) = t.choose(peer, |c| {
+        c.unverified = unverified;
+        if !showing {
+            c.unread += 1;
+        }
+    }) {
+        let _ = back.send_event(Said::ToPage(false, format!("not counted: {why}")));
+    }
+    draw(up, back, false);
+}
+
 /// **The kernel's events, for as long as the window is open**: a message
 /// kept in its thread as it arrives, and the place redrawn where what it
 /// shows changed.  The phone's loop, less the meeting a desktop never
@@ -1379,40 +1432,19 @@ fn pump(up: &Up, back: &EventLoopProxy<Said>, i: &Ident) {
                     .find(|c| c.keyhash[..] == from[..])
                     .and_then(|c| c.alias)
                     .unwrap_or_else(|| peer.chars().take(16).collect());
-                let text = String::from_utf8_lossy(&bytes).into_owned();
-                // **kept as the identity it arrived for**
-                let t = &i.threads;
-                // **a party blocked is dropped as it comes**, never kept
-                // or shown [author, 2026-11-23]
-                if t.people().get(&peer).is_some_and(|c| c.blocked) {
-                    tracing::info!(target: "attach", peer = &peer[..8], "message.blocked");
-                    continue;
-                }
-                let kept = t
-                    .append(
-                        &peer,
-                        &Record::Said {
-                            mine: false,
-                            who: who.clone(),
-                            text,
-                            delivery: Delivery::Sent,
-                            reason: None,
-                        },
-                    )
-                    .and_then(|_| t.list(&peer, &who));
-                if let Err(why) = kept {
-                    let _ = back.send_event(Said::ToPage(
-                        false,
-                        format!("a message from {who} was not kept: {why}"),
-                    ));
-                }
-                // **unseen until its thread is on screen**, and seen as it
-                // comes while it is
-                let showing = *up.place.lock().unwrap().here() == Place::Thread(peer.clone());
-                if !showing && let Err(why) = t.choose(&peer, |c| c.unread += 1) {
-                    let _ = back.send_event(Said::ToPage(false, format!("not counted: {why}")));
-                }
-                draw(up, back, false);
+                arrived(up, back, i, &peer, &who, &bytes, false);
+            }
+            // **a sender this identity cannot attribute** [author,
+            // 2026-11-19]: shown under the alias it carries, marked
+            // unverified, and never answered from here, as the phone has it
+            Kernel::Unverified {
+                from,
+                alias,
+                kind,
+                bytes,
+            } if kind == kind_application() => {
+                let who = format!("{alias} (unverified)");
+                arrived(up, back, i, &hex(&from), &who, &bytes, true);
             }
             Kernel::Payload { kind, bytes, .. } => {
                 let _ = back.send_event(Said::ToPage(

@@ -208,6 +208,11 @@ pub struct Chosen {
     pub blocked: bool,
     /// What arrived since the thread was last on screen.
     pub unread: u32,
+    /// **Its last arrival could not be attributed** [author, 2026-11-19]:
+    /// the thread is shown under the alias it carried, marked unverified,
+    /// and not answered from here [author, 2026-11-20], until a message
+    /// from them is attributed. Not a choice; kept with the count.
+    pub unverified: bool,
 }
 
 /// One identity's threads, under the desktop's directory.
@@ -252,6 +257,7 @@ impl Threads {
                     muted: flag("muted"),
                     silent: flag("silent"),
                     blocked: flag("blocked"),
+                    unverified: flag("unverified"),
                     unread: o
                         .get("unread")
                         .and_then(Value::as_u64)
@@ -285,7 +291,7 @@ impl Threads {
             .into_iter()
             .map(|(peer, c)| {
                 let v = json!({"colour": c.colour, "muted": c.muted, "silent": c.silent,
-                    "blocked": c.blocked, "unread": c.unread});
+                    "blocked": c.blocked, "unread": c.unread, "unverified": c.unverified});
                 (peer, v)
             })
             .collect();
@@ -636,6 +642,7 @@ mod tests {
             c.muted = true;
             c.unread = 2;
             c.colour = Some("Teal".into());
+            c.unverified = true;
         })
         .unwrap();
         let bytes = std::fs::read(d.join(PEOPLE)).unwrap();
@@ -650,6 +657,7 @@ mod tests {
                 silent: false,
                 blocked: false,
                 unread: 2,
+                unverified: true,
             })
         );
         // back to nothing chosen and nothing unread, the party is not kept

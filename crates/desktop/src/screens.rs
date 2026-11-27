@@ -510,8 +510,14 @@ pub fn token(name: &str) -> &'static str {
 /// own way back.
 pub fn page(snap: &Snapshot, place: &Place, body: &Body) -> String {
     let compose = match place {
-        // **not answered once blocked**
+        // **not answered once blocked**, nor where the sender could not be
+        // attributed: a reply goes only to a contact [author, 2026-11-20]
         Place::Thread(peer) if snap.chosen_of(&snap.holder_of(peer), peer).blocked => String::new(),
+        Place::Thread(peer) if snap.chosen_of(&snap.holder_of(peer), peer).unverified => {
+            "<p class=\"sub\">Unverified: this sender could not be attributed, so it cannot be \
+             answered from here.</p>"
+                .to_string()
+        }
         Place::Thread(peer) => format!(
             "<div id=\"compose\"><textarea id=\"text\" rows=\"3\" data-peer=\"{peer}\" \
              placeholder=\"Say something to {}\"></textarea>\
@@ -1811,6 +1817,7 @@ mod tests {
         )));
     }
 
+    // functional: PAY-023
     #[test]
     fn bubbles_wear_the_speaker_s_identity_and_the_party_s_tint_and_a_block_ends_the_box() {
         let mut s = snap();
@@ -1838,6 +1845,22 @@ mod tests {
         assert!(p.contains("color-mix(in srgb, var(--identity-pink) 28%, var(--ground))"));
         assert!(p.contains("class=\"said mine\" style=\"border-color: var(--identity-teal)\""));
         assert!(p.contains("id=\"compose\""));
+        // **a sender that could not be attributed is not answered**
+        // [author, 2026-11-20], and the thread says why
+        s.chosen
+            .get_mut(&(me.clone(), carol.clone()))
+            .unwrap()
+            .unverified = true;
+        let p = page(
+            &s,
+            &Place::Thread(carol.clone()),
+            &Body::Thread(vec![], false),
+        );
+        assert!(!p.contains("id=\"compose\"") && p.contains("Unverified: this sender"));
+        s.chosen
+            .get_mut(&(me.clone(), carol.clone()))
+            .unwrap()
+            .unverified = false;
         s.chosen.get_mut(&(me, carol.clone())).unwrap().blocked = true;
         let p = page(&s, &Place::Thread(carol), &Body::Thread(vec![], false));
         assert!(!p.contains("id=\"compose\"") && p.contains("Blocked:"));
