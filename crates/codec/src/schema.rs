@@ -1164,8 +1164,18 @@ pub fn check_unsigned(f: Family, b: &[u8], at: usize) -> Result<(), Error> {
                 Family::TopologyMemo => {
                     // a slot, 0 to 9, or 10 for the patron's own node
                     // (`wire-format.md` §10.2)
-                    if map_get(m, 3).and_then(as_uint).unwrap_or(99) > 10 {
+                    let slot = map_get(m, 3).and_then(as_uint).unwrap_or(99);
+                    if slot > 10 {
                         return Err(Error("memo slot outside the nibble range"));
+                    }
+                    // **a node-actual memo names the patron as its occupant
+                    // and has no withdrawal** [author, 2026-11-27]
+                    let named = |k: u64| match map_get(m, k) {
+                        Some(Item::Bytes(r)) => Some(&b[r.clone()]),
+                        _ => None,
+                    };
+                    if slot == 10 && (named(5).is_none() || named(5) != named(1)) {
+                        return Err(Error("a node-actual memo names the patron in field 5"));
                     }
                 }
                 Family::AttachAck => {

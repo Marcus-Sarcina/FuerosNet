@@ -6840,8 +6840,8 @@ of the downline itself, no position lying more than two levels below a node
 - **Downward, a node sends a post to the downline nodes that serve somebody in
   reach**, members attaching to their nearest node (§12.6.1). Which nodes
   those are is the same for every post of a given depth, so a node works it
-  out when its downline changes (an adoption, an ending, a node launched or
-  closed) and keeps **three lists, for one, two and three levels down**. A
+  out when its downline changes (an adoption, an ending, a node launched)
+  and keeps **three lists, for one, two and three levels down**. A
   node's nearest downline nodes stand no further than three levels below it
   (§3.3), so a post reaching deeper uses the third list and carries its real
   count on.
@@ -7086,8 +7086,7 @@ a patron disavowed someone is in-horizon state and stays there.
 
 **Or about itself: that it runs a node** [author, 2026-11-23]. The same memo,
 naming the patron's own position in place of a slot, says the member there is
-served from a node of their own, and its withdrawal says the node has closed.
-The memos that detect a cycle are also what tell a subnet how its routable shape
+served from a node of their own. The memos that detect a cycle are also what tell a subnet how its routable shape
 has changed, and one table serves both (§15.2.2). **It still carries no
 address** [author, 2026-11-24]: where the node answers is its endpoint record's
 to say, which stays in the horizon (`wire-format.md` §7.6). The locator was
@@ -7102,8 +7101,8 @@ the subtree's point of view when that authority is withdrawn.
 
 **Restricted to membership operations and to who runs a node, and the restriction
 is load-bearing.**
-Adoption, departure and disavowal travel rootward, and a node's launch and
-closing with them; **peering does not.** The
+Adoption, departure and disavowal travel rootward, and a node's launch with
+them; **peering does not.** The
 memo summarises only changes to the membership slots this chain governs; a
 relationship formed outside its authority is not its business to summarise. A peering
 record names each peer by network point, ASN and zone where it runs an instance

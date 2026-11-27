@@ -140,6 +140,13 @@ fn an_ask_is_read_as_the_declared_type_and_refused_rather_than_guessed_at() {
         parse(&ask_json("location", ",\"precision\":13")),
         Err(Malformed::Field("precision"))
     );
+    // **a tag is on a near-field radio or a code** [author, 2026-11-27:
+    // ultra-wideband removed], and a channel named otherwise is no ask
+    assert!(parse(&ask_json("check-in", ",\"channel\":\"qr\"")).is_ok());
+    assert_eq!(
+        parse(&ask_json("check-in", ",\"channel\":\"uwb\"")),
+        Err(Malformed::Field("channel"))
+    );
     let long = "x".repeat(WORDS_BYTES + 1);
     assert_eq!(
         parse(format!("{{\"utility\":\"tag\",\"ask\":\"{long}\",\"retention\":\"y\",\"return\":\"/t\",\"token\":\"t\"}}").as_bytes()),

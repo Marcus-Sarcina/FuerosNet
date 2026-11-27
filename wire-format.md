@@ -4688,8 +4688,7 @@ TopologyMemo = {
                        ;   THIS patron about THIS slot, and nothing else
   5: ? keyhash         ; the node now occupying that slot. ABSENT means the slot
                        ;   is empty: a departure or a disavowal. With field 3
-                       ;   at 10, the patron itself, and ABSENT means its node
-                       ;   has closed
+                       ;   at 10, PRESENT and the patron itself
 }
 ```
 
@@ -5181,7 +5180,8 @@ silently remove that property.
 field 3 is 10 and whose field 5 is the patron itself, sent rootward when the
 node comes up and its session upstream does. It marks field 2's position *node
 actual* in every downline table it passes (§10.2.5), which is how a table comes
-to hold who runs a node at any depth; field 5 absent withdraws it. Field 4 is
+to hold who runs a node at any depth. One whose field 5 is absent or names
+another is refused as malformed. Field 4 is
 when the node began to say so, the same at every sending of one run, there being
 no transaction behind the statement to copy a time from. **It carries no
 address**, as no memo does: the endpoint record (§7.6) says where the node
@@ -5403,8 +5403,8 @@ within one patron's one slot and by field 4: the table keeps the timestamp
 that last set each slot, an emptied one included, so that an earlier memo
 arriving late reinstates nothing.
 
-**A memo whose field 3 is 10 marks field 2's position node actual**, or with
-field 5 absent unmarks it, under the same ordering. A node heard of before its
+**A memo whose field 3 is 10 marks field 2's position node actual**, under the
+same ordering. A node heard of before its
 position was is a position all the same.
 
 **Within its horizon a node fills the same table from the transactions it

@@ -29,8 +29,12 @@ object Giving {
 
     /** What the shell does to get the result. */
     enum class Way {
-        /** A photograph, taken here, as JPEG ([Still]). */
+        /** A photograph, taken here, as JPEG ([Still]), or as a one-page
+         *  PDF of it where [Plan.media] says so. */
         PHOTOGRAPH,
+
+        /** A video, recorded by the platform's own camera. */
+        VIDEO,
 
         /** A file the person picks, handed over as its own type. */
         PICK,
@@ -80,7 +84,13 @@ object Giving {
         val way: Way,
         val permissions: List<String>,
         val says: String,
+        /** The type the result goes as, where the way can make more than
+         *  one: a photograph as `application/pdf`, a video as its own. */
+        val media: String? = null,
     )
+
+    /** The video type sent, the one the platform's camera records. */
+    const val VIDEO_MEDIA: String = "video/mp4"
 
     /** The most a result may be, leaving the kernel's own headroom under
      *  `wire-format.md` §11's message bound: a capture larger than this is
@@ -90,6 +100,7 @@ object Giving {
     private const val FINE = "android.permission.ACCESS_FINE_LOCATION"
     private const val COARSE = "android.permission.ACCESS_COARSE_LOCATION"
     private const val CAMERA = "android.permission.CAMERA"
+    private const val PDF = "application/pdf"
     private const val NOTIFICATIONS = "android.permission.POST_NOTIFICATIONS"
 
     /**
@@ -104,36 +115,51 @@ object Giving {
             "Point the camera and take the photograph. It is sent only when you send it.",
         )
         return when (ask.utility) {
-            // **a scan is a photograph here, and says so.** Deskewing,
-            // reading the text and assembling a PDF want a local model
-            // this shell does not carry; a photograph of the document is
-            // what it can give, and a resource that will take only a PDF
-            // is told so rather than handed an image it cannot use.
+            // **a scan is a photograph here, and says so**, sent as one
+            // or as a one-page PDF of it, whichever the resource takes.
+            // Deskewing and reading the text want a local model this
+            // shell does not carry, so a resource asking for anything
+            // else is told so rather than handed what it cannot use.
             "scan" -> when {
                 !has.camera -> Plan(Way.NONE, listOf(), "this device has no camera the app can open")
-                !takes(ask, "image/jpeg") -> Plan(
+                takes(ask, "image/jpeg") -> photograph.copy(
+                    says = "Photograph the document. This app sends the photograph itself: " +
+                        "it does not straighten it or read the text.",
+                )
+                takes(ask, PDF) -> photograph.copy(
+                    says = "Photograph the document. This app sends the photograph as a " +
+                        "one-page PDF: it does not straighten it or read the text.",
+                    media = PDF,
+                )
+                else -> Plan(
                     Way.NONE,
                     listOf(),
                     "this app can photograph the document but not read it into " +
                         "${ask.media.joinToString(" or ")}",
                 )
-                else -> photograph.copy(
-                    says = "Photograph the document. This app sends the photograph itself: " +
-                        "it does not straighten it, read the text or make a PDF.",
-                )
             }
-            // a photograph, not a video: the provenance is the kernel's
-            // claim over what is sent, whatever it is
+            // a photograph where one is taken, else a video: the
+            // provenance is the kernel's claim over what is sent,
+            // whatever it is
             "capture" -> when {
                 !has.camera -> Plan(Way.NONE, listOf(), "this device has no camera the app can open")
-                !takes(ask, "image/jpeg") -> Plan(
+                takes(ask, "image/jpeg") -> photograph.copy(
+                    says = "Take the photograph. This app sends a still photograph, " +
+                        "with the time it was taken and this device's claim that it took it.",
+                )
+                takes(ask, VIDEO_MEDIA) -> Plan(
+                    Way.VIDEO,
+                    listOf(CAMERA),
+                    "Record the video with this device's camera, up to ${RESULT_CAP shr 20} MB. " +
+                        "It is sent only when you send it, with the time it was taken and this " +
+                        "device's claim that it took it.",
+                    media = VIDEO_MEDIA,
+                )
+                else -> Plan(
                     Way.NONE,
                     listOf(),
-                    "it asks for ${ask.media.joinToString(" or ")} and this app can give a photograph",
-                )
-                else -> photograph.copy(
-                    says = "Take the photograph. This app sends a still photograph, not video, " +
-                        "with the time it was taken and this device's claim that it took it.",
+                    "it asks for ${ask.media.joinToString(" or ")} and this app can give a " +
+                        "photograph or a video",
                 )
             }
             "location" -> Plan(
@@ -152,11 +178,6 @@ object Giving {
                 } else {
                     Plan(Way.NONE, listOf(), "this device has no near-field radio turned on")
                 }
-                "uwb" -> Plan(
-                    Way.NONE,
-                    listOf(),
-                    "this app does not range over ultra-wideband; a code or a near-field tag it can read",
-                )
                 // the resource does not mind, so the radio where there is
                 // one and the camera otherwise
                 null -> when {

@@ -453,7 +453,7 @@ place in front of the person, and the page is given nothing of it.
 | `payload` | `sign` only, required: the exact bytes to be approved and signed, as hex, at most 64 KiB |
 | `precision` | `location` only, required: the geohash length wanted, 1 to 12 |
 | `media` | `scan`, `capture`, `import`: the media types you take, at most 16 |
-| `channel` | `check-in`, `tag`: `nfc`, `uwb` or `qr`, where you mind |
+| `channel` | `check-in`, `tag`: `nfc` or `qr`, where you mind |
 | `seconds` | `live`: the duration wanted |
 
 The whole ask is at most 16 KiB. **An ask the client could not read gets

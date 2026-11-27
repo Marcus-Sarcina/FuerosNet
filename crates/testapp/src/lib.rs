@@ -58,11 +58,12 @@ pub struct Step {
 }
 
 /// **The sequence, in the order the bench walks it.** `notify` first, so
-/// the asks after it are posted as notifications; the two the shell
-/// cannot give (`live`, and a scan a resource will take only as a PDF)
-/// are in it deliberately, because a refusal carrying its reason is as
-/// much of the contract as a result is; `export` last, because its answer
-/// is the file rather than another ask.
+/// the asks after it are posted as notifications; a capture taken only as
+/// a video and a scan taken only as a PDF, beside the photograph each
+/// takes otherwise, so both of the shell's ways are walked; and `export`
+/// last, because its answer is the file rather than another ask. A step
+/// the person has nothing for is declined, and a refusal carrying its
+/// reason is as much of the contract as a result is.
 pub const STEPS: &[Step] = &[
     Step {
         utility: "notify",
@@ -105,6 +106,14 @@ pub const STEPS: &[Step] = &[
         payload: None,
     },
     Step {
+        utility: "capture",
+        token: "t5v-video",
+        purpose: "to record the meter's dial turning",
+        retention: "ninety days",
+        fields: ",\"media\":[\"video/mp4\"]",
+        payload: None,
+    },
+    Step {
         utility: "scan",
         token: "t6-scan",
         purpose: "to take the delivery note you signed",
@@ -128,9 +137,7 @@ pub const STEPS: &[Step] = &[
         fields: "",
         payload: None,
     },
-    // **the two this shell cannot give**, asked for on purpose: a live
-    // session it has no media stack for, and a scan a resource will take
-    // only as a PDF. Each must come back a refusal with words in it.
+    // **a live session, and a scan a resource will take only as a PDF**
     Step {
         utility: "live",
         token: "t9-live",

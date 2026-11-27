@@ -65,6 +65,17 @@ class ResourceActivity : Activity() {
         }
     }
 
+    /** **Ask the resource again for the page this screen opened on**, off
+     *  the drawing thread, as the first ask is. */
+    private fun again() {
+        val node = intent.getStringExtra("node").orEmpty()
+        val resource = intent.getStringExtra("resource").orEmpty()
+        val path = intent.getStringExtra("path") ?: "/"
+        held?.removeAllViews()
+        held?.addView(note("asking…"))
+        Thread({ show(askAsHolder(node, resource, path)) }, "fueros-resource").start()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val node = intent.getStringExtra("node").orEmpty()
@@ -151,6 +162,9 @@ class ResourceActivity : Activity() {
         const val PICK = 72
         const val SAVE = 73
         const val ENGINE = 74
+        const val VIDEO = 75
+        /** An A4 sheet's longer side, in PDF points. */
+        const val A4_LONG = 842f
     }
 
     /** Draw what the resource answered, from any thread. */
@@ -238,6 +252,7 @@ class ResourceActivity : Activity() {
     /** What the button that gives says. */
     private fun offer(way: Giving.Way): String = when (way) {
         Giving.Way.PHOTOGRAPH -> "Open the camera"
+        Giving.Way.VIDEO -> "Record a video"
         Giving.Way.PICK -> "Pick a file"
         Giving.Way.PLACE -> "Find where I am"
         Giving.Way.TAG_QR -> "Read the code"
@@ -330,6 +345,7 @@ class ResourceActivity : Activity() {
         Diag.event("utility", "which" to ask.utility, "state" to "giving")
         when (plan.way) {
             Giving.Way.PHOTOGRAPH -> photographing(ask, plan)
+            Giving.Way.VIDEO -> recording(ask)
             Giving.Way.PICK -> picking(ask)
             Giving.Way.PLACE -> placing(ask)
             Giving.Way.TAG_QR -> readingCode(ask, plan)
@@ -438,7 +454,7 @@ class ResourceActivity : Activity() {
         buttons.addView(
             button("Take it") {
                 cam.take(rotation()) { bytes ->
-                    runOnUiThread { offering(ask, bytes) }
+                    runOnUiThread { offering(ask, plan, bytes) }
                 }?.let { why -> said(ask, why) }
             },
         )
@@ -447,16 +463,31 @@ class ResourceActivity : Activity() {
     }
 
     /** **The photograph is sent only when the person sends it**: what was
-     *  taken, how large it is, and the three ways on from there. */
-    private fun offering(ask: Gateway.Ask, bytes: ByteArray) {
+     *  taken, how large it is, and the three ways on from there. Where
+     *  the resource takes a PDF, the photograph goes as a one-page one. */
+    private fun offering(ask: Gateway.Ask, plan: Giving.Plan, bytes: ByteArray) {
         val h = held ?: return
         still?.close()
-        if (bytes.size > Giving.RESULT_CAP) {
+        val media = plan.media ?: "image/jpeg"
+        val sent = if (media == "application/pdf") pdfOf(bytes) else bytes
+        if (sent == null) {
+            answer(ask, declined("this device could not make a PDF of the photograph"))
+            return
+        }
+        if (sent.size > Giving.RESULT_CAP) {
             answer(ask, declined("the photograph this device took is larger than the app can send"))
             return
         }
         h.removeAllViews()
-        h.addView(note("A photograph of ${bytes.size} bytes. Nothing has been sent."))
+        h.addView(
+            note(
+                if (sent === bytes) {
+                    "A photograph of ${bytes.size} bytes. Nothing has been sent."
+                } else {
+                    "A photograph, as a one-page PDF of ${sent.size} bytes. Nothing has been sent."
+                },
+            ),
+        )
         h.addView(
             android.widget.ImageView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(
@@ -477,13 +508,66 @@ class ResourceActivity : Activity() {
         }
         buttons.addView(
             button("Send it") {
-                answer(
-                    ask,
-                    uniffi.rhtn_ffi.UtilityOutcome.Bytes("image/jpeg", bytes),
-                )
+                answer(ask, uniffi.rhtn_ffi.UtilityOutcome.Bytes(media, sent))
             },
         )
         buttons.addView(button("Take another") { give(ask, Giving.plan(ask, facts())) })
+        buttons.addView(button("Decline") { answer(ask, declined("declined")) })
+        h.addView(buttons)
+    }
+
+    /** **A photograph as a one-page PDF**, the page as long on its longer
+     *  side as an A4 sheet and the photograph filling it; none where the
+     *  photograph does not decode. */
+    private fun pdfOf(jpeg: ByteArray): ByteArray? = runCatching {
+        val bmp = android.graphics.BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size)
+            ?: return null
+        val scale = A4_LONG / maxOf(bmp.width, bmp.height).toFloat()
+        val w = (bmp.width * scale).toInt().coerceAtLeast(1)
+        val hgt = (bmp.height * scale).toInt().coerceAtLeast(1)
+        val doc = android.graphics.pdf.PdfDocument()
+        val page = doc.startPage(android.graphics.pdf.PdfDocument.PageInfo.Builder(w, hgt, 1).create())
+        page.canvas.drawBitmap(bmp, null, android.graphics.Rect(0, 0, w, hgt), null)
+        doc.finishPage(page)
+        val out = java.io.ByteArrayOutputStream()
+        doc.writeTo(out)
+        doc.close()
+        bmp.recycle()
+        out.toByteArray()
+    }.getOrNull()
+
+    // ---- a video ------------------------------------------------------
+
+    /** **The platform's own camera records it**, bounded to what an answer
+     *  can carry; what it hands back is offered before anything is sent. */
+    private fun recording(ask: Gateway.Ask) {
+        pending = ask
+        val intent = android.content.Intent(android.provider.MediaStore.ACTION_VIDEO_CAPTURE)
+            .putExtra(android.provider.MediaStore.EXTRA_SIZE_LIMIT, Giving.RESULT_CAP.toLong())
+        runCatching {
+            @Suppress("DEPRECATION")
+            startActivityForResult(intent, VIDEO)
+        }.onFailure {
+            pending = null
+            answer(ask, declined("this device offers no camera that records video"))
+        }
+    }
+
+    /** What the camera recorded, with the three ways on from there. */
+    private fun offeringVideo(ask: Gateway.Ask, media: String, bytes: ByteArray) {
+        val h = held ?: return
+        h.removeAllViews()
+        h.addView(note("A video of ${bytes.size} bytes. Nothing has been sent."))
+        val buttons = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(Screen.gutter(context), 8, Screen.gutter(context), 16)
+        }
+        buttons.addView(
+            button("Send it") {
+                answer(ask, uniffi.rhtn_ffi.UtilityOutcome.Bytes(media, bytes))
+            },
+        )
+        buttons.addView(button("Record another") { recording(ask) })
         buttons.addView(button("Decline") { answer(ask, declined("declined")) })
         h.addView(buttons)
     }
@@ -541,6 +625,26 @@ class ResourceActivity : Activity() {
                     )
                 }
             }
+            VIDEO -> {
+                val ask = pending ?: return
+                pending = null
+                if (resultCode != RESULT_OK || uri == null) {
+                    answer(ask, declined("no video was recorded"))
+                    return
+                }
+                val read = runCatching {
+                    contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                }.getOrNull()
+                val media = contentResolver.getType(uri) ?: Giving.VIDEO_MEDIA
+                when {
+                    read == null -> answer(ask, declined("this device would not open the video"))
+                    read.size > Giving.RESULT_CAP ->
+                        answer(ask, declined("the video is larger than the app can send"))
+                    !Giving.takes(ask, media) ->
+                        answer(ask, declined("this device recorded $media, which the resource does not take"))
+                    else -> offeringVideo(ask, media, read)
+                }
+            }
             // the file the resource handed over, going where the person
             // chose to put it
             SAVE -> {
@@ -555,6 +659,10 @@ class ResourceActivity : Activity() {
                     if (wrote) "Saved." else "This device would not write there.",
                     android.widget.Toast.LENGTH_SHORT,
                 ).show()
+                // **a file saved is the step done**: the resource is asked
+                // for its page again, as a browser goes on past a download,
+                // rather than the save being offered a second time
+                if (wrote) again()
             }
         }
     }

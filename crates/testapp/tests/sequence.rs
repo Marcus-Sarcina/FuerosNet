@@ -86,14 +86,17 @@ fn answered(out: Vec<u8>) -> (u16, String, Vec<u8>) {
 }
 
 /// What a phone would answer for each utility, in the order [`STEPS`] asks
-/// them: the two the shell cannot give are declined with the words it
-/// declines them with.
+/// them.
 fn answer_for(ask: &utility::Ask) -> Outcome {
     match (ask.utility.name(), ask.media.first().map(String::as_str)) {
         ("notify", _) => Outcome::Approved,
         ("tag", _) => Outcome::Text("A1-7734".into()),
         ("check-in", _) => Outcome::Text("counter-3".into()),
         ("location", _) => Outcome::Text("u4pruyd".into()),
+        ("capture", Some("video/mp4")) => Outcome::Bytes {
+            media: "video/mp4".into(),
+            bytes: b"ftypmp42 the dial turning".to_vec(),
+        },
         ("capture", _) => Outcome::Bytes {
             media: "image/jpeg".into(),
             bytes: b"JFIF the meter at 41821".to_vec(),
@@ -102,19 +105,18 @@ fn answer_for(ask: &utility::Ask) -> Outcome {
             media: "image/jpeg".into(),
             bytes: b"JFIF the delivery note".to_vec(),
         },
-        // a scan a resource will take only as a PDF: the shell can
-        // photograph and not read, and says so
-        ("scan", Some("application/pdf")) => Outcome::Declined(
-            "this app can photograph the document but not read it into application/pdf".into(),
-        ),
+        // a scan a resource will take only as a PDF: the photograph, made
+        // into a one-page one
+        ("scan", Some("application/pdf")) => Outcome::Bytes {
+            media: "application/pdf".into(),
+            bytes: b"%PDF-1.4 the delivery note".to_vec(),
+        },
         ("sign", _) => Outcome::Approved,
         ("import", _) => Outcome::Bytes {
             media: "image/png".into(),
             bytes: b"\x89PNG the one they had".to_vec(),
         },
-        ("live", _) => {
-            Outcome::Declined("this app carries no live audio or video; it is not built yet".into())
-        }
+        ("live", _) => Outcome::Approved,
         ("export", _) => Outcome::Approved,
         (other, _) => panic!("the sequence asked for {other}, which this walk has no answer for"),
     }
@@ -185,10 +187,12 @@ fn the_whole_sequence_walks_and_every_claim_verifies_at_the_resource() {
             );
             assert!(text.contains("capture,given,verified"), "{text}");
             assert!(text.contains("sign,given,verified"), "{text}");
-            assert!(text.contains("live,declined"), "{text}");
+            assert!(text.contains("live,given"), "{text}");
+            assert!(text.contains("video/mp4"), "the video is in it: {text}");
+            assert!(text.contains("application/pdf"), "the PDF is in it: {text}");
             assert!(
-                text.contains("application/pdf"),
-                "the PDF refusal is in it: {text}"
+                !text.contains("declined"),
+                "every step was answered: {text}"
             );
             assert!(!text.contains("failed:"), "a claim did not verify: {text}");
         }

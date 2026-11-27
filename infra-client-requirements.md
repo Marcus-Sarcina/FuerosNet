@@ -1690,7 +1690,7 @@ not who answers for it (design §11.5), and that asker may see. Nothing floods, 
   what it missed.
 - **Work out who a post goes to from your downline, and keep that worked out**
   [author, 2026-11-18]: the three lists of `wire-format.md` §10.3, redone when
-  an adoption, an ending, or a node launched or closed changes your downline,
+  an adoption, an ending, or a node launched changes your downline,
   and not per post.
 - **Deliver a post once to each session of each member you serve in its band,
   and carry no post twice** (`wire-format.md` §10.3).

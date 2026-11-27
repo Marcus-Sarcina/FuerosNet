@@ -1951,6 +1951,7 @@ fn a_node_saying_it_runs_is_nobody_held_in_two_places() {
     assert_eq!(s.n.slot_of(&kh("carol")), Some(0), "and nobody is removed");
 }
 
+// functional: TOP-021
 #[test]
 fn a_node_tells_the_nodes_above_it_that_it_runs_and_a_root_tells_nobody() {
     let mut s = scene();
@@ -1972,6 +1973,14 @@ fn a_node_tells_the_nodes_above_it_that_it_runs_and_a_root_tells_nobody() {
     let mut far = m.clone();
     far.slot = 11;
     assert!(Memo::decode(&far.encode()).is_err());
+    // **and it has no withdrawal** [author, 2026-11-27]: a node-actual
+    // memo naming nobody, or another, does not decode either
+    let mut closed = m.clone();
+    closed.occupant = None;
+    assert!(Memo::decode(&closed.encode()).is_err());
+    let mut other = m.clone();
+    other.occupant = Some(kh("alice"));
+    assert!(Memo::decode(&other.encode()).is_err());
     // the node above marks the position in its own table and no other
     let mut root = view("alice", Table::with_me(kh("alice")), "alice", &[]);
     root.set_slot(0, Some(kh("bob")), s.w.clock);

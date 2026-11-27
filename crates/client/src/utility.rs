@@ -171,8 +171,8 @@ pub struct Ask {
     pub precision: Option<u8>,
     /// `scan`, `capture`, `import`: the media types the resource takes.
     pub media: Vec<String>,
-    /// `check-in`, `tag`: the channel the tag is on — `nfc`, `uwb`,
-    /// `qr` — where the resource minds.
+    /// `check-in`, `tag`: the channel the tag is on — `nfc` or `qr` —
+    /// where the resource minds.
     pub channel: Option<String>,
     /// `live`: the seconds asked for.
     pub seconds: Option<u64>,
@@ -297,7 +297,7 @@ pub fn parse(bytes: &[u8]) -> Result<Ask, Malformed> {
         None => None,
         Some(x) => {
             let s = x.as_str().ok_or(Malformed::Field("channel"))?;
-            if !matches!(s, "nfc" | "uwb" | "qr") {
+            if !matches!(s, "nfc" | "qr") {
                 return Err(Malformed::Field("channel"));
             }
             Some(s.to_string())

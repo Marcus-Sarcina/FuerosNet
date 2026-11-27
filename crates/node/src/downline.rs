@@ -541,7 +541,7 @@ mod tests {
         assert_eq!(three, vec![vec![0], vec![1, 1], vec![2, 2, 2]]);
         // slot 0 is a real slot, and a path of zeros a real position
         assert!(d.runs_node(&[0, 0]));
-        // a node closed leaves the lists at the next working out
+        // a mark taken off leaves the lists at the next working out
         assert!(d.mark_node(&[1, 1], false));
         assert_eq!(d.lists()[2], vec![vec![0], vec![2, 2, 2]]);
         // and one that left takes its mark with it

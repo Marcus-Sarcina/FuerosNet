@@ -146,10 +146,6 @@ class GivingTest {
         val asked = Giving.plan(ask("check-in", channel = "nfc"), noRadio)
         assertEquals(Giving.Way.NONE, asked.way)
         assertTrue(asked.says, asked.says.contains("near-field"))
-        // and ranging is not built
-        val uwb = Giving.plan(ask("tag", channel = "uwb"), phone)
-        assertEquals(Giving.Way.NONE, uwb.way)
-        assertTrue(uwb.says, uwb.says.contains("ultra-wideband"))
     }
 
     // functional: UX-022
@@ -193,9 +189,25 @@ class GivingTest {
 
     @Test
     fun a_resource_that_will_take_only_what_this_app_cannot_make_is_told_so() {
+        // **a scan taken only as a PDF is a photograph made into one**, and
+        // what the app cannot make is still said
         val pdfOnly = Giving.plan(ask("scan", media = listOf("application/pdf")), phone)
-        assertEquals(Giving.Way.NONE, pdfOnly.way)
-        assertTrue(pdfOnly.says, pdfOnly.says.contains("application/pdf"))
+        assertEquals(Giving.Way.PHOTOGRAPH, pdfOnly.way)
+        assertEquals("application/pdf", pdfOnly.media)
+        assertTrue(pdfOnly.says, pdfOnly.says.contains("PDF"))
+        assertEquals(null, Giving.plan(ask("scan", media = listOf("image/jpeg")), phone).media)
+        val tiff = Giving.plan(ask("scan", media = listOf("image/tiff")), phone)
+        assertEquals(Giving.Way.NONE, tiff.way)
+        assertTrue(tiff.says, tiff.says.contains("image/tiff"))
+        // **a capture taken only as a video is recorded**, with the camera
+        // held, and a video type the camera does not record is refused
+        val video = Giving.plan(ask("capture", media = listOf("video/*")), phone)
+        assertEquals(Giving.Way.VIDEO, video.way)
+        assertEquals(Giving.VIDEO_MEDIA, video.media)
+        assertEquals(listOf("android.permission.CAMERA"), video.permissions)
+        val webm = Giving.plan(ask("capture", media = listOf("video/webm")), phone)
+        assertEquals(Giving.Way.NONE, webm.way)
+        assertTrue(webm.says, webm.says.contains("video/webm"))
         // an image is a photograph, and a wildcard takes one
         assertEquals(
             Giving.Way.PHOTOGRAPH,
