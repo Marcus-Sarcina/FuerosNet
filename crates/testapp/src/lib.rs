@@ -517,6 +517,12 @@ impl App {
                 }
                 response(204, "text/plain", Vec::new())
             }
+            // **the node asking each tick what this instance emits**
+            // (`resource-requirements.md` §3.3): nothing, and no walk,
+            // since the asker is the host and no member
+            "GET" if node && target.starts_with("/.rhtn/outbox") => {
+                response(204, "text/plain", Vec::new())
+            }
             "GET" => {
                 // a member met for the first time has the whole walk
                 // waiting, which is what their launcher wears once they
@@ -936,6 +942,19 @@ mod secret {
             !app.said
                 .iter()
                 .any(|l| l.contains("unrelayed") && l.contains("alice"))
+        );
+        // the host's outbox poll, behind the secret, is answered empty and
+        // begins no walk
+        let mut polled = App::new([1; 32]).with_secret(secret);
+        let answer = polled.handle(
+            format!("GET /.rhtn/outbox HTTP/1.1\r\nhost: a\r\nrhtn-secret: {hex}\r\n\r\n")
+                .as_bytes(),
+        );
+        assert!(answer.starts_with(b"HTTP/1.1 204 "));
+        assert!(
+            polled.walks.is_empty() && polled.said.is_empty(),
+            "{:?}",
+            polled.said
         );
         // an instance started with no secret trusts nobody
         let mut bare = App::new([1; 32]);
