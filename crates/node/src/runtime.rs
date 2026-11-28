@@ -881,10 +881,14 @@ impl LiveNode {
                             Ok(ClientResolution::Answered(reply)) => Some(reply.encode()),
                             Ok(ClientResolution::Proxied(r)) => {
                                 let node = s.lock().unwrap().clone()?;
-                                let (r, last) =
+                                let (r, last, heard) =
                                     drive(r, &dial_ep, &identity, &node, Duration::from_secs(3))
                                         .await;
-                                let reply = v.lock().unwrap().reply_for_client(&r, last.as_ref());
+                                let mut view = v.lock().unwrap();
+                                // what the replies showed of the subnet
+                                // (design §15.2.3), read by no resolution
+                                view.note_lookup(&r.request, &heard);
+                                let reply = view.reply_for_client(&r, last.as_ref());
                                 Some(reply.encode())
                             }
                             // no anchor to start from: the client is told this
@@ -1264,14 +1268,16 @@ impl LiveNode {
 /// endpoint from its list, ask on a request stream, and follow referrals
 /// until a serving answer or a failure.  A session is what a party opens
 /// with any node it needs to request from (design §14.1.2); the hop's
-/// answer says where this node stands, and nothing is served on it.
+/// answer says where this node stands, and nothing is served on it.  Each
+/// reply comes back with the indices consumed before it, for the local
+/// map (design §15.2.3).
 async fn drive(
     mut r: Resolution,
     ep: &quinn::Endpoint,
     me: &rhtn_transport::tls::Party,
     node: &Node,
     per_endpoint: Duration,
-) -> (Resolution, Option<ResolveReply>) {
+) -> (Resolution, Option<ResolveReply>, Vec<(usize, ResolveReply)>) {
     let cfg = ClientConfig {
         me: me.clone(),
         pins: node.cfg.pins.clone(),
@@ -1288,6 +1294,7 @@ async fn drive(
         log: rhtn_transport::session::Log::default(),
     };
     let mut last: Option<ResolveReply> = None;
+    let mut heard = Vec::new();
     for _ in 0..16 {
         let (hop, endpoints) = r.next_hop();
         let addrs: Vec<SocketAddr> = endpoints.iter().map(|e| e.socket()).collect();
@@ -1303,6 +1310,7 @@ async fn drive(
         let Ok(reply) = ResolveReply::decode(&bytes) else {
             break;
         };
+        heard.push((r.consumed, reply.clone()));
         let step = r.take(&reply);
         tracing::debug!(
             target: "node",
@@ -1317,7 +1325,7 @@ async fn drive(
             _ => break,
         }
     }
-    (r, last)
+    (r, last, heard)
 }
 
 /// Replay this node's store to its siblings and its patron every

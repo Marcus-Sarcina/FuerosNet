@@ -7219,6 +7219,44 @@ refused or disavowed on this table's word.
 board is the first thing to read it, for a member's reach upward and for the
 three lists a post is forwarded by (§14.4).
 
+#### 15.2.3 The local map
+
+**A node may also keep what its lookups show of the rest of its subnet** [author,
+2026-11-27]: the positions outside its own downline it has seen filled, and
+which of them it has seen run a node, from the subnet's anchor down and in the
+downline table's shape. **It is a passive read**: it is built from the replies
+to the resolutions the node drives for the clients it serves
+(`wire-format.md` §7.7.1), and nothing is asked or sent for it.
+
+**Each reply says something of the positions along its path.** A referral says
+that a node runs where its next hop stands and that every position down to
+there is filled. A serving answer says that one runs at the serving node's
+position, that every position down to the subject is filled, and that nobody
+between the serving node and the subject runs one, the serving node being the
+subject's nearest infrastructure ancestor (§12.6.1). So a node seen running is
+marked, and one whose position a later answer shows served from above loses
+the mark. A failure places nothing, its code not saying at which index the
+path stopped.
+
+**It holds positions and no identities**, as the downline table does, and only
+in the node's own subnet: a lookup under another anchor is not kept. It adds
+nothing to what P26 already discloses, the serving node knowing whom a client
+wants to find, and it keeps less than that: where infrastructure stood on the
+way, and not who asked or for whom.
+
+**None of it lies beneath the node.** A lookup into the node's own downline is
+answered from its own records and followed onward by the client
+(`infra-client-requirements.md` §4.2, `light-client-requirements.md` §4), so
+no reply about a position beneath the node comes back to it, and the downline
+table is filled by its records and the memos alone (§15.2.2).
+
+**It is assumed to have blind spots and to hold what is no longer so** [author,
+2026-11-27]. It sees only the paths looked up through it, as they stood when
+they were, on the word of replies that are unsigned (`wire-format.md` §7.7.3).
+**Resolution does not read it** [author, 2026-11-27]: the network's address
+resolution runs as §12.6.1 and `wire-format.md` §7.7 have it, without reference
+to this map or to the downline table.
+
 ---
 
 ## 16. Trust model

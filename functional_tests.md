@@ -237,6 +237,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 |---|---|---|---|
 | TOP-047 | C | **A node keeps the shape of its downline by position, and holds nobody's identity in it** [author, 2026-11-18; required, 2026-11-23, and meeting D §12.6.1]. One entry per member beneath it, keyed by the path of slot indices from the node, holding the slots filled beneath that member and whether the member runs a node. Test: within the horizon it is filled from stored adoptions, endings and endpoint records; beyond it from memos passing through in either direction, a filling memo adding the position and an emptying one removing it **and every position beneath it**, a light member's memos being sent by the node that serves them; an earlier memo arriving late reinstates nothing; the table survives a restart; and no keyhash can be read out of it at any depth. A memo naming a slot not beneath the node changes nothing. | D §§12.6.1, 15.2.2; W §10.2.5; I §4.1 |
 | TOP-048 | C | **Who runs a node is in the table at every depth, as a mark of its own beside the filled slots** [author, 2026-11-23]: `3[0, 2, 5, n]`. A position is marked node actual by the node's own memo (slot field 10) passing through, and within the horizon by its endpoint record held; nothing unmarks it while the position stays filled, and the mark goes with the position when its slot empties. The depth of a member's node-running downline is how far down the deepest marked position stands. Test a light-only downline to depth 7 (depth 0), a mark at each depth from 1 to 7, a marked member's departure taking the mark with it, a node heard of before its position was, and that a node-actual memo is never read as a cycle or as its patron held in a second place. A node sends its own on its upstream session coming up, and a root sends none. | D §15.2.2; W §§10.2, 10.2.5 |
+| TOP-049 | C | **A node may keep what its lookups show of the rest of its subnet, passively** [author, 2026-11-27], from the replies to the resolutions it drives for its clients and from nothing sent for it: positions from the subnet's anchor, filled and marked node actual, and no identity. Test that a referral marks its next hop's position and fills the path down to it; a serving answer marks the serving node's position, fills the path to the subject and takes the mark off every position between them; a failure changes nothing; a lookup under another anchor is not kept; a node standing under a new anchor starts the map again; and **resolution does not read it** [author, 2026-11-27]: a node's answer is the same with the map and without it. | D §15.2.3; W §7.7.3; I §4.5 |
 
 ### The subnet's board
 
@@ -1044,6 +1045,7 @@ Use this table alongside OPS/VAL tests during export, restart, migration and del
 | Materialized view / routing cache | Local derived state | Rebuildable; bounded/expiring where specified; never overrides authenticated facts. |
 | Rootward memo table | Ancestor within that subnet | Optional current (patron,slot) rows/tombstones, no historical update log or cross-subnet/IP index. |
 | Downline table | Every node, for its own subtree | Required; positions filled and which run a node, with the timestamp that last set each slot; no identity, no memo, no history; kept across a restart (D §15.2.2). |
+| Local map | A node that keeps one, for the rest of its subnet | Positions seen filled and seen running a node on the replies to lookups it drove, with the time each was last seen; no identity, no requester, no subject; assumed stale and incomplete, and read by no resolution (D §15.2.3). |
 | Board queue | Each node that carried the post | The post's bytes, its two counts, the direction it came from, its hash and the node's number; storage-bounded, oldest out first, no time limit; in the clear (D §14.4). |
 | Board pool and unread state | Client, per subnet | Storage-bounded, oldest out first by the post's own date; what was read is the client's alone. |
 | Sibling list and public pins | Attached client kernel | Complete replacement, persisted for dark-primary failover; unusable without validated matching material. |
@@ -1136,7 +1138,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **634 numbered requirement/test families** across **27 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **635 numbered requirement/test families** across **27 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -1144,7 +1146,7 @@ This specification contains **634 numbered requirement/test families** across **
 | SIG | 13 |
 | TX | 30 |
 | ARC | 19 |
-| TOP | 48 |
+| TOP | 49 |
 | RES | 17 |
 | CUR | 12 |
 | NET | 36 |

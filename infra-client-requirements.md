@@ -457,6 +457,10 @@ one record's arrival can free a layer whose arrival frees another.
 exists (design §19.4, P26). It falls under §1's process-and-discard obligation:
 answer the request, keep no record of who asked about whom.
 
+**What the replies to a lookup you drive show of positions is yours to keep**
+(design §15.2.3): where infrastructure stood on the way, in your own subnet,
+with no identity, and never read when you answer or refer.
+
 ---
 
 ## 5. Evaluating a presented archive

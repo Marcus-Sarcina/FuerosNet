@@ -26,6 +26,8 @@ use std::time::Duration;
 const DERIVED: &str = "derived";
 /// The downline table's file, beside the derived state (design §15.2.2).
 const DOWNLINE: &str = "downline";
+/// The local map's file, beside the downline table's (design §15.2.3).
+const LOCAL_MAP: &str = "local-map";
 /// The directory the board's queue is kept in (design §14.4).
 const BOARD: &str = "board";
 
@@ -597,6 +599,14 @@ impl Service {
             .and_then(|s| rhtn_node::downline::Downline::decode(&s))
         {
             view.downline = d;
+        }
+        // and the local map beside it (design §15.2.3), which no store
+        // holds either: one that does not read starts again
+        if let Some(m) = std::fs::read_to_string(cfg.topology.join(LOCAL_MAP))
+            .ok()
+            .and_then(|s| rhtn_node::local_map::LocalMap::decode(&s))
+        {
+            view.local_map = m;
         }
         // **the board's queue, a file a post** (design §14.4): taken up
         // from where it was left, so no number is given twice
@@ -1276,6 +1286,7 @@ impl Service {
         view.settle_kept();
         view.store.save(&self.topology)?;
         std::fs::write(self.topology.join(DOWNLINE), view.downline.encode())?;
+        std::fs::write(self.topology.join(LOCAL_MAP), view.local_map.encode())?;
         // the derived state last, so it is never newer than the store it
         // claims to be a fold of: a snapshot ahead of its store would be
         // discarded on the next start, which costs a replay, while a

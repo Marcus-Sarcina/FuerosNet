@@ -3341,6 +3341,11 @@ authenticates the endpoint it reaches by ordinary means at contact time (design
 §12.2, the anchor table is an index, not a credential store). A wrong or hostile
 reply causes a failed connection, not a false identity.
 
+**A node driving a resolution may note what the replies show of positions**
+(design §15.2.3): where a referral's next hop stands, where the serving node
+stands and that nobody between it and the subject runs a node. Nothing in this
+section reads what it notes, and a node answers the same with or without it.
+
 **Failure codes** for field 4, with the disposition each implies — stated
 because "distinguishes retry from re-resolve" without a mapping lets two resolvers
 disagree about the same reply:

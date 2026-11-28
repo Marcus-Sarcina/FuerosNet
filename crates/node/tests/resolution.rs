@@ -1243,3 +1243,132 @@ fn a_node_counts_what_it_holds_of_its_own_subtree_once_each_and_not_itself() {
     a.attached.insert(kh("alice"));
     assert_eq!(a.subtree_seen(), 3);
 }
+
+/// A lookup under the subnet's anchor, for `path`, as C would proxy it.
+fn lookup(anchor: &str, path: &[u8], n: u8) -> ResolveRequest {
+    let p = Path::from_indices(path);
+    ResolveRequest {
+        subject: kh("w9"),
+        anchor: kh(anchor),
+        path: p.bytes,
+        nibbles: p.nibbles,
+        nonce: nonce(n),
+    }
+}
+
+fn referral_to(next: &str, advances: u64, n: u8) -> ResolveReply {
+    ResolveReply::Referral {
+        nonce: nonce(n),
+        referral: Referral {
+            next: kh(next),
+            endpoints: vec![point(9, 7009)],
+            advances,
+            key_material: None,
+        },
+    }
+}
+
+fn served_by(node: &str, residual: &[u8], n: u8) -> ResolveReply {
+    ResolveReply::Serving {
+        nonce: nonce(n),
+        serving: ServingInfra {
+            node: kh(node),
+            endpoints: vec![point(9, 7009)],
+            residual: Path::from_indices(residual),
+            key_material: None,
+        },
+    }
+}
+
+// functional: TOP-049
+#[test]
+fn a_node_keeps_what_its_lookups_show_and_answers_without_it() {
+    let mut t = tree();
+    // what C answers for its own client X, before it has seen anything
+    let own = ResolveRequest {
+        subject: kh("carol"),
+        anchor: kh("alice"),
+        path: path_to_x().bytes,
+        nibbles: path_to_x().nibbles,
+        nonce: nonce(8),
+    };
+    let before = t.c.answer_resolution(&own);
+
+    // a referral from the anchor three indices down: a node runs at 3,4,2,
+    // and the path down to it is filled
+    t.c.set_now(100);
+    t.c.note_lookup(
+        &lookup("alice", &[3, 4, 2, 5], 9),
+        &[(0, referral_to("w8", 3, 9))],
+    );
+    let seen = t.c.local_map.seen();
+    assert!(seen.filled(&[3]) && seen.filled(&[3, 4]) && seen.filled(&[3, 4, 2]));
+    assert!(
+        seen.runs_node(&[3, 4, 2]),
+        "the next hop's position runs a node"
+    );
+    assert!(
+        !seen.runs_node(&[3]) && !seen.runs_node(&[3, 4]),
+        "and nothing is said of those between"
+    );
+    assert!(
+        !seen.filled(&[3, 4, 2, 5]),
+        "a referral says nothing of the subject"
+    );
+
+    // a later answer serves 3,4,2 from 3,4: the mark comes off, and the
+    // serving node's position is marked
+    t.c.set_now(200);
+    t.c.note_lookup(
+        &lookup("alice", &[3, 4, 2], 10),
+        &[
+            (0, referral_to("w7", 2, 10)),
+            (2, served_by("w7", &[2], 10)),
+        ],
+    );
+    let seen = t.c.local_map.seen();
+    assert!(seen.runs_node(&[3, 4]), "the serving node's position");
+    assert!(seen.filled(&[3, 4, 2]), "the subject's position is filled");
+    assert!(
+        !seen.runs_node(&[3, 4, 2]),
+        "and nobody between them runs a node"
+    );
+
+    // a failure places nothing, nor does a lookup under another anchor
+    let held = t.c.local_map.clone();
+    t.c.set_now(300);
+    t.c.note_lookup(
+        &lookup("alice", &[6, 1], 11),
+        &[(
+            0,
+            ResolveReply::Failure {
+                nonce: nonce(11),
+                code: FAIL_NO_SUCH_CHILD,
+            },
+        )],
+    );
+    t.c.note_lookup(&lookup("w7", &[6, 1], 12), &[(0, referral_to("w6", 1, 12))]);
+    assert_eq!(t.c.local_map, held, "neither changes the map");
+    assert_eq!(t.c.local_map.anchor(), Some(&kh("alice")));
+
+    // **resolution does not read it** [author, 2026-11-27]
+    assert_eq!(
+        t.c.answer_resolution(&own),
+        before,
+        "C answers as it did before"
+    );
+
+    // and kept across a restart as it was written
+    let read = rhtn_node::local_map::LocalMap::decode(&t.c.local_map.encode());
+    assert_eq!(read.as_ref(), Some(&t.c.local_map));
+
+    // a node standing under another anchor starts the map again
+    t.c.position.anchor = kh("w7");
+    t.c.note_lookup(&lookup("w7", &[6, 1], 13), &[(0, referral_to("w6", 1, 13))]);
+    let seen = t.c.local_map.seen();
+    assert_eq!(t.c.local_map.anchor(), Some(&kh("w7")));
+    assert!(
+        seen.runs_node(&[6]) && !seen.filled(&[3]),
+        "only what was seen under it"
+    );
+}

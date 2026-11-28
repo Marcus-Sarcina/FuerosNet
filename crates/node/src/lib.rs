@@ -60,6 +60,9 @@ pub mod downline;
 /// Where the rows asserted about this node's horizon are kept: the
 /// table's own persistence, as against the topology store's seen-set.
 pub mod horizon;
+/// The local map: what this node's lookups show of the rest of its
+/// subnet, by position and holding nobody's identity (design §15.2.3).
+pub mod local_map;
 /// The second leg, where a resource holds its own port.
 pub mod relay;
 /// The anchor table and the resolution exchange (`wire-format.md` §7.2,
