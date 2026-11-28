@@ -46,14 +46,27 @@ workspace.
 **As a Debian package**, the releasable build with its window:
 
 ```sh
-desktop/packaging/deb.sh             # target/deb/rhtn-desktop_<version>_<arch>.deb
-sudo apt install ./target/deb/rhtn-desktop_0.1.0_amd64.deb
+desktop/packaging/deb.sh             # target/deb/fuerosnet_<version>_<arch>.deb
+sudo apt install ./target/deb/fuerosnet_0.1.0_amd64.deb
 ```
 
 What it depends on is read off the binary by `dpkg-shlibdeps`, so the
 list follows the libraries it links; `openssh-client` (administering a
 node this identity runs) and `sane-utils` (a resource's scan) are
-recommended. The maintainer named is whoever builds it.
+recommended. The maintainer named is whoever builds it. Installed, the
+command is `fuerosnet`; the crate and a build's binary keep their names.
+
+**As an AppImage**, one file that runs where it is put:
+
+```sh
+desktop/packaging/appimage.sh        # target/appimage/fuerosnet-<version>-x86_64.AppImage
+```
+
+It bundles neither the web view nor GTK, for the reason above, so it runs
+where WebKitGTK 4.1 and GTK 3 are installed. The script needs
+`appimagetool` and the AppImage runtime under `~/opt/appimagetool` (or
+`$APPIMAGETOOL_DIR`), and refuses either where it is not the release
+whose digest the script pins.
 
 ## What it does, and what it will not do
 

@@ -139,7 +139,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // `rhtn-desktop [--at ADDRESS] [DIRECTORY]`: the local address a
     // pairing offers, where the one the system routes outward from is not
     // the network the phone is on; and the directory this desktop keeps
-    // its state in, else the platform's own
+    // its state in, else the platform's own. Said under the name it was
+    // started by: `fuerosnet` where installed, `rhtn-desktop` from a build
+    let me = std::env::args()
+        .next()
+        .and_then(|a| {
+            std::path::Path::new(&a)
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+        })
+        .unwrap_or_else(|| "fuerosnet".into());
     let Args {
         at,
         dir: named,
@@ -147,14 +156,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } = match arguments(std::env::args().skip(1)) {
         Ok(a) => a,
         Err(e) => {
-            eprintln!("rhtn-desktop: {e}\nusage: rhtn-desktop {USAGE}");
+            eprintln!("{me}: {e}\nusage: {me} {USAGE}");
             std::process::exit(2);
         }
     };
     let dir = match directory(named.as_deref()) {
         Ok(d) => d,
         Err(e) => {
-            eprintln!("rhtn-desktop: {e}");
+            eprintln!("{me}: {e}");
             std::process::exit(2);
         }
     };

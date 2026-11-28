@@ -1,6 +1,7 @@
 #!/bin/bash
 # **The desktop as a Debian package**: the releasable build with its
-# window, its binary at /usr/bin, a launcher entry and its icon, and the
+# window, its binary at /usr/bin as `fuerosnet` [author, 2026-11-27: "use
+# fuerosnet"], a launcher entry and its icon, and the
 # libraries it links named as its dependencies by `dpkg-shlibdeps`, so
 # what it needs is read off the binary rather than kept by hand.
 #
@@ -15,7 +16,7 @@ set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 CRATES=$(cd "$HERE/../.." && pwd)
 OUT=${1:-$CRATES/target/deb}
-NAME=rhtn-desktop
+NAME=fuerosnet
 
 say() { printf 'deb.sh: %s\n' "$*"; }
 
