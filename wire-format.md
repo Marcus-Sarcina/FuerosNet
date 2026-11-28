@@ -3793,6 +3793,8 @@ before attribution.
 | 28 | `BackupRequest` (§7.10.3) | Peer to peer: asks for the blob the recipient holds of the sender |
 | 29 | `BackupReturn` (§7.10.3) | Peer to peer: the recipient's own blob, as the sender holds it |
 | 30 | `PeeringRecord` (§7.10.3) | Peer to peer, on contact: the peering record naming the two, which a recipient that holds none takes the sender as a peer by |
+| 31 | `TransferRequest` (§7.10.4) | A node to a patron it has had: the statement that moves it under the new patron it names (design §6.1.1) |
+| 32 | `TransferGrant` (§7.10.4) | That patron back: its `Transfer` block (§4.1) for the move asked |
 
 An unknown kind is application payload to a recipient that does not know it,
 and a kind whose body does not decode is dropped by the recipient that
@@ -4079,6 +4081,42 @@ submission is one request frame, and a serving node's mailbox holds mail
 (design §14.1.6); so a deposit or a return for a peer no direct path is
 held to **waits** for the next contact that holds one, and is never put to
 a relay. Kinds 26, 28 and 30 are small and go either way.
+
+#### 7.10.4 What a transfer asks of the former patron
+
+**The former patron's countersignature is signed on its light client
+without its person** (design Appendix A.3, §6.1.1). The node moving asks for
+it (kind 31); the ask waits at the patron's serving node with the rest of
+what is queued for that client, and the client answers when it next
+attaches (kind 32), so a former patron that is offline delays a move and
+does not prevent one. What it signs is §4.1's `TransferStatement`, over the
+three keyhashes and nothing else, so the answer commits the patron to this
+node moving under this new patron and to nothing about the adoption that
+carries it.
+
+**A patron answers a node it adopted and has not disavowed.** A departure
+does not stop it, since adopting at the destination and departing the
+origin come in either order (design §6.2); a disavowal is the patron's own
+word that it ended the relationship, which a statement vouching for the
+node would contradict. To anybody else it answers nothing, and a node
+hearing nothing knows only that, as §7.10.3's requester does.
+
+```
+TransferRequest = {    ; kind 31
+  1: keyhash           ; the NEW patron, the only destination the statement
+                       ;   will name (§4.1). The node is the sender; the
+                       ;   patron asked, the recipient
+}
+
+TransferGrant = {      ; kind 32
+  1: keyhash,          ; the new patron, as asked
+  2: Transfer          ; §4.1's block, its field 1 the sender. The
+                       ;   recipient holds it where it asked that sender for
+                       ;   a move under field 1 and the statement verifies
+                       ;   over itself, the sender and field 1, and drops it
+                       ;   otherwise
+}
+```
 
 ### 7.11 Profile
 

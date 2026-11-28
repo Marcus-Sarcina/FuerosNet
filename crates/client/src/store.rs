@@ -346,6 +346,52 @@ pub struct ClientStore {
     /// position, not the chain. A backup or a ceremony device brings the
     /// archive itself, which speaks first.
     pub placements: BTreeMap<Keyhash, Vec<u8>>,
+    /// **The moves this client asked a patron of its to vouch for**, by
+    /// the new patron each names (`wire-format.md` §7.10.4): the former
+    /// patron asked, and its `Transfer` block (§4.1) once it answered.
+    /// Kept, since the answer comes when that patron's client next
+    /// attaches, which may be after this one has restarted.
+    pub transfers: BTreeMap<Keyhash, Transfer>,
+}
+
+/// One move under a new patron, as its subject holds it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Transfer {
+    /// The former patron asked to vouch for it.
+    pub former: Keyhash,
+    /// Its `Transfer` block (`wire-format.md` §4.1), once it came.
+    pub block: Option<Vec<u8>>,
+}
+
+impl Transfer {
+    fn encode(&self) -> Vec<u8> {
+        use rhtn_codec::encode::*;
+        let mut out = Vec::new();
+        emit_array_head(&mut out, 2);
+        emit_bstr(&mut out, &self.former);
+        match &self.block {
+            Some(b) => emit_bstr(&mut out, b),
+            None => emit_null(&mut out),
+        }
+        out
+    }
+
+    fn decode(b: &[u8]) -> Option<Transfer> {
+        use rhtn_codec::cbor::Item;
+        let item = rhtn_codec::cbor::parse_all(b).ok()?;
+        let Item::Array(f) = &item else { return None };
+        let [Item::Bytes(former), block] = f.as_slice() else {
+            return None;
+        };
+        Some(Transfer {
+            former: b[former.clone()].try_into().ok()?,
+            block: match block {
+                Item::Bytes(r) => Some(b[r.clone()].to_vec()),
+                Item::Null => None,
+                _ => return None,
+            },
+        })
+    }
 }
 
 impl ClientStore {
@@ -504,6 +550,10 @@ impl ClientStore {
             &dir.join("placements"),
             self.placements.iter().map(|(k, b)| (*k, b.clone())),
         )?;
+        rewrite(
+            &dir.join("transfers"),
+            self.transfers.iter().map(|(k, t)| (*k, t.encode())),
+        )?;
         Ok(())
     }
 
@@ -513,7 +563,7 @@ impl ClientStore {
     pub fn encode(&self) -> Vec<u8> {
         use rhtn_codec::encode::*;
         let mut out = Vec::new();
-        emit_array_head(&mut out, 13);
+        emit_array_head(&mut out, 14);
         keyed(&mut out, self.records.iter().map(|(t, b)| (*t, b.clone())));
         keyed(
             &mut out,
@@ -559,6 +609,10 @@ impl ClientStore {
             &mut out,
             self.placements.iter().map(|(k, b)| (*k, b.clone())),
         );
+        keyed(
+            &mut out,
+            self.transfers.iter().map(|(k, t)| (*k, t.encode())),
+        );
         out
     }
 
@@ -575,9 +629,10 @@ impl ClientStore {
         // and eleven with the blobs held for peers (both 2026-10-24; the
         // ten-shape ran on the bench for an afternoon and opens), twelve
         // with the default alias (2026-10-29), thirteen with the
-        // placements (2026-11-20): a store written by an earlier shape
-        // opens with none of what it did not hold
-        if !matches!(f.len(), 6 | 7 | 9 | 10 | 11 | 12 | 13) {
+        // placements (2026-11-20), fourteen with the transfers
+        // (2026-11-28): a store written by an earlier shape opens with
+        // none of what it did not hold
+        if !matches!(f.len(), 6 | 7 | 9 | 10 | 11 | 12 | 13 | 14) {
             return None;
         }
         let m = |i: usize| unkeyed(b, &f[i]);
@@ -643,9 +698,14 @@ impl ClientStore {
                 _ => return None,
             };
         }
-        if f.len() == 13 {
+        if f.len() >= 13 {
             for (k, v) in m(12)? {
                 st.placements.insert(k, v);
+            }
+        }
+        if f.len() == 14 {
+            for (k, v) in m(13)? {
+                st.transfers.insert(k, Transfer::decode(&v)?);
             }
         }
         Some(st)
@@ -709,6 +769,11 @@ impl ClientStore {
         }
         for (k, b) in read_dir_of(&dir.join("placements"))? {
             st.placements.insert(k, b);
+        }
+        for (k, b) in read_dir_of(&dir.join("transfers"))? {
+            if let Some(t) = Transfer::decode(&b) {
+                st.transfers.insert(k, t);
+            }
         }
         Ok(st)
     }

@@ -1833,6 +1833,9 @@ fn event_of(from: Keyhash, d: Dispatched) -> Option<Event> {
             bytes,
         }),
         Dispatched::Peer(what) => Some(Event::Peer { from, what }),
+        // the kernel's own exchange, answered and held there: the shell
+        // reads a held statement when a move is put to the new patron
+        Dispatched::Transfer(_) => None,
         Dispatched::ResponseCopy(Ok(q)) => Some(Event::ResponseCopy {
             from,
             query: Some(q.to_vec()),

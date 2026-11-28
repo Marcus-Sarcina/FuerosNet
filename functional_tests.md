@@ -138,6 +138,7 @@ The Cargo workspace has **21 crates** (`crates/Cargo.toml`). Components below fo
 | TX-028 | — | **WITHDRAWN 2026-10-24** [author]. Ranging is dropped entirely — the NFC tap and UWB both. Co-presence evidence is the optical exchange and the capture (D §7.6.3); the record carries no proximity group and the local interfaces carry no channel outcomes. |
 | TX-029 | S | Apply the presence type's retired-field rejection independently of its unknown-extension allowance, including body key 7 and retired witness keys 4/5. | W §§1.2, 4.5 |
 | TX-030 | C | A participant mints its own departure: one signature, no countersignature sought, no refusal that can arrive, and the series naming the relationship it ends. Nothing ranks a departure by its counter; a repeat is caught by its transaction identifier. Refuse where the archive shows no current relationship with that patron, including one already left. | W §§4.2, 2.3; D §6.2 |
+| TX-031 | C | **A former patron's countersignature is asked on the payload path and signed without its person.** The node asks a patron it has had for the statement naming the new patron (W §7.10.4 kind 31); the ask waits at that patron's serving node while its client is away, and the client answers when it next attaches (kind 32) with no prompt to its person. The node holds the block where it asked that sender for that move and it verifies over the node, the sender and the new patron, and keeps it across a restart and in a backup. Refused at the asking node: a patron it was never under, a new patron that is the node or the patron. Answered with nothing: an ask from a party the patron never adopted, or one it disavowed. Not held: a statement nobody asked for. | W §§4.1, 7.10.4; D §§6.1.1, 6.2, 6.2.3, Appendix A.3 |
 
 ### Archive linking, presentation, fetch and retention
 
@@ -1138,13 +1139,13 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **635 numbered requirement/test families** across **27 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **636 numbered requirement/test families** across **27 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
 | ENC | 13 |
 | SIG | 13 |
-| TX | 30 |
+| TX | 31 |
 | ARC | 19 |
 | TOP | 49 |
 | RES | 17 |

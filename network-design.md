@@ -1160,7 +1160,9 @@ run a fresh ceremony if they want one; that is their choice, not a requirement
 the move imposes, and the reference client does not prompt for it.
 
 **The countersignature is what makes this case cheap, and it is not free.** The
-former patron has to be reachable and willing. Where it is neither, the move is
+former patron has to be reachable and willing. Its client signs without its
+person (Appendix A.3) when it next attaches (`wire-format.md` §7.10.4), so
+being offline delays a move rather than preventing it. Where it is neither, the move is
 an ordinary adoption on a proof of presence like any other; nothing about being
 nearby exempts a node whose old patron will not sign.
 
@@ -9221,7 +9223,7 @@ order and refusal behaviour, with the role row consulted as a lookup.
 - **`§14.2.4`'s remaining caveats**: the split seal's composition wants an
   analysis of its own, and §5.2's crate maturity applies.
   **Payload-type demultiplexing is settled** [2026-09-30]: `wire-format.md`
-  §7.10.1 registers the kind tag and its thirty values, the ceremony's own
+  §7.10.1 registers the kind tag and its thirty-two values, the ceremony's own
   conversation (§7.1) among them and the arranging of an adoption after the
   record with it.
 - **The canonical biometric profile** (§7.5) is settled but for its fuzzing

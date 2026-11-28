@@ -968,6 +968,10 @@ pub enum Dispatched {
     /// came to, in words a screen can show.  What it owes in answer is in
     /// the outbox.
     Peer(String),
+    /// A message of a transfer (`wire-format.md` §7.10.4; kinds 31 and
+    /// 32): a patron's statement asked of this client and answered, or
+    /// the one this client asked for, held — what it came to, in words.
+    Transfer(String),
     /// **Application payload from a sender this client cannot attribute**
     /// [author, 2026-11-19]: no introduction held or carried for the
     /// keyhash it names, so its tag could not be checked. Shown under the
@@ -5036,6 +5040,7 @@ impl Client {
         out.other += insert_absent(&mut self.store.subnet_profiles, theirs.subnet_profiles);
         out.other += insert_absent(&mut self.store.direct_hints, theirs.direct_hints);
         out.other += insert_absent(&mut self.store.placements, theirs.placements);
+        out.other += insert_absent(&mut self.store.transfers, theirs.transfers);
         // **the sealed captures, as the ciphertext they are, and the blobs
         // held for peers** (design §23.3): a peer's blob carries neither
         // (`store_for_peer`), another device of this identity's dataset
@@ -5479,6 +5484,200 @@ impl Client {
                 tracing::info!(target: "peer", peer = %id8(&peer), kind = crate::diag::kind_name(kind), why = ?e, "peer.send.refused");
             }
         }
+    }
+
+    /// **Whether this client's archive holds an adoption of `node` under
+    /// `patron`**: a record it signed, as one or the other.
+    fn adoption_between(&self, node: &Keyhash, patron: &Keyhash) -> bool {
+        self.archive.records().any(|r| {
+            r.tx_type == TYPE_ADOPTION
+                && r.field_hash(1) == Some(*node)
+                && r.field_hash(2) == Some(*patron)
+        })
+    }
+
+    /// **Ask `former` to vouch for this client's move under
+    /// `new_patron`** (`wire-format.md` §7.10.4; design §6.1.1, §6.2.3):
+    /// the request for its `Transfer` block, which waits at its serving
+    /// node with the rest of its traffic until its client next attaches,
+    /// and is answered there without its person (design Appendix A.3).
+    /// The ask is held under the new patron until the answer comes, and
+    /// asking again replaces it.
+    ///
+    /// **Refused where this client was never under `former`**, whose
+    /// statement would be about a subordinate it never had, and where the
+    /// new patron is this key or `former` (§4.1's distinctness rules).
+    pub fn request_transfer(
+        &mut self,
+        former: Keyhash,
+        new_patron: Keyhash,
+    ) -> Result<Vec<Msg>, Abort> {
+        use rhtn_codec::encode::{emit_bstr, emit_map_head, emit_uint};
+        let me = self.keyhash();
+        if new_patron == me || new_patron == former {
+            return Err(Abort::PatronRefused(
+                "a transfer's new patron is neither the node nor its former patron (wire-format.md §4.1)"
+                    .into(),
+            ));
+        }
+        if !self.adoption_between(&me, &former) {
+            return Err(Abort::NoRelationship(former));
+        }
+        let mut req = Vec::new();
+        emit_map_head(&mut req, 1);
+        emit_uint(&mut req, 1);
+        emit_bstr(&mut req, &new_patron);
+        let msgs = self
+            .send_payload(former, payload::KIND_TRANSFER_REQUEST, &req)
+            .map_err(|e| Abort::Payload(e.to_string()))?;
+        self.store.transfers.insert(
+            new_patron,
+            crate::store::Transfer {
+                former,
+                block: None,
+            },
+        );
+        tracing::info!(target: "transfer", former = %id8(&former), new_patron = %id8(&new_patron), "transfer.asked");
+        Ok(msgs)
+    }
+
+    /// **The statement this client holds for a move under `new_patron`**:
+    /// the former patron and its `Transfer` block, once it answered.
+    pub fn transfer_for(&self, new_patron: &Keyhash) -> Option<(Keyhash, Vec<u8>)> {
+        let t = self.store.transfers.get(new_patron)?;
+        Some((t.former, t.block.clone()?))
+    }
+
+    /// **As a former patron: sign the statement a subordinate asked for**
+    /// (kind 31), with nobody asked (design Appendix A.3: countersigning
+    /// an adoption is automatic, on the patron's light client).
+    ///
+    /// **Answered for a party this client adopted and has not
+    /// disavowed.** A departure does not stop it, since a move is adopt
+    /// at the destination and depart the origin in either order (design
+    /// §6.2); a disavowal is this patron's own word that the relationship
+    /// ended against the node, which vouching for its move would
+    /// contradict.  **Nothing is answered otherwise**: a requester hearing
+    /// nothing knows only that, as a backup request does (§7.10.3).
+    fn answer_transfer_request(&mut self, from: Keyhash, inner: &[u8]) -> String {
+        use rhtn_codec::cbor::{Item, map_get, parse_all};
+        use rhtn_codec::encode::{emit_bstr, emit_map_head, emit_uint};
+        let me = self.keyhash();
+        let new_patron: Option<Keyhash> = match &parse_all(inner) {
+            Ok(Item::Map(m)) if m.len() == 1 => match map_get(m, 1) {
+                Some(Item::Bytes(r)) => inner[r.clone()].try_into().ok(),
+                _ => None,
+            },
+            _ => None,
+        };
+        let Some(new_patron) = new_patron else {
+            return format!("{}'s transfer request does not decode", hex8(&from));
+        };
+        if new_patron == me || new_patron == from {
+            return format!(
+                "{} asked to move under itself or this key, which no statement names",
+                hex8(&from)
+            );
+        }
+        if !self.adoption_between(&from, &me) {
+            tracing::info!(target: "transfer", from = %id8(&from), "transfer.refused.not_ours");
+            return format!(
+                "{} asked for a transfer and this key never adopted it",
+                hex8(&from)
+            );
+        }
+        let disavowed = self.horizon.table.bindings().iter().any(|b| {
+            b.patron == me
+                && b.node == from
+                && matches!(
+                    b.end,
+                    Some((_, _, rhtn_archive::topology::End::Disavowal(_)))
+                )
+        });
+        if disavowed {
+            tracing::info!(target: "transfer", from = %id8(&from), "transfer.refused.disavowed");
+            return format!(
+                "{} asked for a transfer and this key disavowed it",
+                hex8(&from)
+            );
+        }
+        let block = match self.signer() {
+            Ok(s) => rhtn_archive::tx::transfer_block(s, &from, &new_patron),
+            Err(e) => return format!("no statement signed for {}: {e:?}", hex8(&from)),
+        };
+        let mut grant = Vec::new();
+        emit_map_head(&mut grant, 2);
+        emit_uint(&mut grant, 1);
+        emit_bstr(&mut grant, &new_patron);
+        emit_uint(&mut grant, 2);
+        emit_map_head(&mut grant, 2);
+        emit_uint(&mut grant, 1);
+        emit_bstr(&mut grant, &me);
+        emit_uint(&mut grant, 2);
+        grant.extend_from_slice(&block);
+        match self.send_payload(from, payload::KIND_TRANSFER_GRANT, &grant) {
+            Ok(msgs) => self.outbox.extend(msgs),
+            Err(e) => return format!("the statement for {} was not sent: {e}", hex8(&from)),
+        }
+        tracing::info!(target: "transfer", node = %id8(&from), new_patron = %id8(&new_patron), "transfer.signed");
+        format!(
+            "vouched for {} moving under {}",
+            hex8(&from),
+            hex8(&new_patron)
+        )
+    }
+
+    /// **The statement this client asked for** (kind 32): held where it
+    /// is from the former patron asked, for the move asked, and verifies
+    /// over this key, that patron and the new one (`wire-format.md` §4.1).
+    fn take_transfer_grant(&mut self, from: Keyhash, inner: &[u8]) -> String {
+        use rhtn_codec::cbor::{Item, map_get, parse_all, value_slice, value_slice_at};
+        let me = self.keyhash();
+        let read = || -> Option<(Keyhash, Keyhash, Vec<u8>)> {
+            let item = parse_all(inner).ok()?;
+            let Item::Map(m) = &item else {
+                return None;
+            };
+            let new_patron: Keyhash = match map_get(m, 1)? {
+                Item::Bytes(r) => inner[r.clone()].try_into().ok()?,
+                _ => return None,
+            };
+            let Item::Map(t) = map_get(m, 2)? else {
+                return None;
+            };
+            let former: Keyhash = match map_get(t, 1)? {
+                Item::Bytes(r) => inner[r.clone()].try_into().ok()?,
+                _ => return None,
+            };
+            let at = value_slice(inner, 2)?.start;
+            let block = inner[value_slice_at(inner, at, 2)?].to_vec();
+            Some((new_patron, former, block))
+        };
+        let Some((new_patron, former, block)) = read() else {
+            return format!("{}'s transfer statement does not decode", hex8(&from));
+        };
+        if former != from || self.store.transfers.get(&new_patron).map(|t| t.former) != Some(from) {
+            return format!(
+                "{} sent a transfer statement this key did not ask it for",
+                hex8(&from)
+            );
+        }
+        if let Err(e) = verify::transfer_statement(&self.known, &me, &from, &new_patron, &block) {
+            return format!("{}'s transfer statement was refused: {e:?}", hex8(&from));
+        }
+        self.store.transfers.insert(
+            new_patron,
+            crate::store::Transfer {
+                former,
+                block: Some(block),
+            },
+        );
+        tracing::info!(target: "transfer", former = %id8(&from), new_patron = %id8(&new_patron), "transfer.held");
+        format!(
+            "{} vouched for this key moving under {}",
+            hex8(&from),
+            hex8(&new_patron)
+        )
     }
 
     /// Open a backup and **scan it before any of it lands**
@@ -7891,6 +8090,14 @@ impl Client {
                 // no node to ask (`ClientStore::direct_hints`)
                 self.store.direct_hints.insert(from, inner.clone());
                 Dispatched::Candidates(inner)
+            }
+            // **a former patron's countersignature, answered without its
+            // person** (design Appendix A.3), and the answer to one asked
+            payload::KIND_TRANSFER_REQUEST => {
+                Dispatched::Transfer(self.answer_transfer_request(from, &inner))
+            }
+            payload::KIND_TRANSFER_GRANT => {
+                Dispatched::Transfer(self.take_transfer_grant(from, &inner))
             }
             // the record that makes a peer, from anybody it names
             payload::KIND_PEERING_RECORD => match self.take_peering_record(&from, &inner) {

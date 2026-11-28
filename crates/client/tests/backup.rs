@@ -466,11 +466,18 @@ fn a_store_written_before_locators_were_kept_still_opens() {
     st.held_for.insert([4u8; 32], vec![0x83, 0x40, 0x40, 0x40]);
     st.default_alias = Some("Dana".into());
     st.placements.insert([5u8; 32], vec![0xa0]);
+    st.transfers.insert(
+        [6u8; 32],
+        rhtn_client::store::Transfer {
+            former: [7u8; 32],
+            block: None,
+        },
+    );
     let seven = st.encode();
     let back = ClientStore::decode(&seven).expect("the current shape opens");
     assert_eq!(
         back, st,
-        "and round-trips, contacts, direct hints, held blobs, the default alias and the placements included"
+        "and round-trips, contacts, direct hints, held blobs, the default alias, the placements and the transfers included"
     );
 
     // the same store as the earlier shapes wrote it: the first six
@@ -478,7 +485,17 @@ fn a_store_written_before_locators_were_kept_still_opens() {
     // kept (2026-10-15); the first nine, before the direct hints and the
     // blobs held for peers (2026-10-24)
     let items = rhtn_codec::cbor::array_item_ranges(&seven, 0).unwrap();
-    assert_eq!(items.len(), 13);
+    assert_eq!(items.len(), 14);
+    // the thirteen-shape, before the transfers (2026-11-28): opens with
+    // none, its placements kept
+    let mut thirteen_shape = Vec::new();
+    rhtn_codec::encode::emit_array_head(&mut thirteen_shape, 13);
+    for r in &items[..13] {
+        thirteen_shape.extend_from_slice(&seven[r.clone()]);
+    }
+    let opened = ClientStore::decode(&thirteen_shape).expect("the thirteen-shape opens");
+    assert_eq!(opened.placements, st.placements, "with its placements");
+    assert!(opened.transfers.is_empty(), "and no transfers");
     // the twelve-shape, before the placements (2026-11-20): opens with
     // none, its name kept
     let mut twelve_shape = Vec::new();

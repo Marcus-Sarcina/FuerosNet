@@ -118,6 +118,8 @@ pub fn kind_name(kind: u64) -> &'static str {
         KIND_BACKUP_REQUEST => "backup_request",
         KIND_BACKUP_RETURN => "backup_return",
         KIND_PEERING_RECORD => "peering_record",
+        KIND_TRANSFER_REQUEST => "transfer_request",
+        KIND_TRANSFER_GRANT => "transfer_grant",
         _ => "unknown",
     }
 }
@@ -227,6 +229,7 @@ pub fn dispatched(d: &crate::ceremony::Dispatched) -> String {
         Fetched(Err(why)) => format!("Fetched(refused: {why})"),
         Conversation(c) => format!("Conversation({c})"),
         Peer(what) => format!("Peer({what})"),
+        Transfer(what) => format!("Transfer({what})"),
         Unverified { kind, bytes, .. } => {
             format!("Unverified(kind {kind}, {} bytes)", bytes.len())
         }

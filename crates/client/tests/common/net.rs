@@ -148,6 +148,7 @@ pub fn describe(d: &Dispatched) -> String {
         Dispatched::Response(r) => format!("Response({r:?})"),
         Dispatched::Conversation(c) => format!("Conversation({c})"),
         Dispatched::Peer(what) => format!("Peer({what})"),
+        Dispatched::Transfer(what) => format!("Transfer({what})"),
         Dispatched::Unverified { alias, bytes, .. } => {
             format!("Unverified({alias}: {})", String::from_utf8_lossy(bytes))
         }

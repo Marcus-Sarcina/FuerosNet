@@ -114,7 +114,7 @@ set -eu
 
 # **which runner this is**: a client compares it with the one it carries
 # and tells its operator when a newer one is available
-RUNNER_VERSION=5
+RUNNER_VERSION=6
 RUNNER_SELF="${RHTN_RUNNER_SELF:-/usr/local/bin/rhtn-package-runner}"
 AUTHORIZED="${RHTN_AUTHORIZED_KEYS:-/root/.ssh/authorized_keys}"
 NAMESPACE=rhtn-runner@1

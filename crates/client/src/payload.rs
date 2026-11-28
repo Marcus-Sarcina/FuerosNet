@@ -116,6 +116,13 @@ pub const KIND_BACKUP_RETURN: u64 = 29;
 /// (`wire-format.md` §7.10.3): what a peer that lost everything takes the
 /// sender as a peer by, verified under its own material and the sender's.
 pub const KIND_PEERING_RECORD: u64 = 30;
+/// A `TransferRequest` (`wire-format.md` §7.10.4): a subordinate to a
+/// patron it has had, asking for the statement that moves it under the
+/// new patron it names (design §6.1.1).
+pub const KIND_TRANSFER_REQUEST: u64 = 31;
+/// A `TransferGrant` (§7.10.4): that patron's `Transfer` block back,
+/// signed without its person (design Appendix A.3).
+pub const KIND_TRANSFER_GRANT: u64 = 32;
 // kind 25 (`ProximityUpdate`) was RETIRED 2026-10-24: ranging is not used
 // (design §7.6.3). The number is not reused and a decoder meeting it rejects.
 

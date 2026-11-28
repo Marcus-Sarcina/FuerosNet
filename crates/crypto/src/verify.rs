@@ -351,19 +351,34 @@ pub fn adoption_evidence<L: Lookup + ?Sized>(ids: &L, body: &[u8]) -> Result<(),
             .ok_or("former patron")?;
         let node = bs(map_get(bm, 1).ok_or("node")?);
         let patron = bs(map_get(bm, 2).ok_or("patron")?);
-        let mut stmt = Vec::new();
-        emit_array_head(&mut stmt, 3);
-        emit_bstr(&mut stmt, &node);
-        emit_bstr(&mut stmt, &former);
-        emit_bstr(&mut stmt, &patron);
         let r2 = value_slice_at(body, r9.start, 2).ok_or("transfer block")?;
-        let fid = ids
-            .identity(&former)
-            .ok_or_else(|| Failure::MissingKey(former.clone()))?;
-        verify_sign_block(fid, &body[r2], aad::TRANSFER, &stmt)
-            .map_err(|e| Failure::Invalid(format!("transfer statement: {e}")))?;
+        transfer_statement(ids, &node, &former, &patron, &body[r2])?;
     }
     Ok(())
+}
+
+/// **A former patron's transfer statement** (`wire-format.md` §4.1
+/// `Transfer` field 2): its signature over `[node, former, new_patron]`
+/// under `rhtn/1:transfer`, by `former`.  What an adoption's field 9 is
+/// checked by, and what the subject that asked for one checks it by
+/// before holding it (§7.10.4).
+pub fn transfer_statement<L: Lookup + ?Sized>(
+    ids: &L,
+    node: &[u8],
+    former: &[u8],
+    new_patron: &[u8],
+    block: &[u8],
+) -> Result<(), Failure> {
+    let mut stmt = Vec::new();
+    emit_array_head(&mut stmt, 3);
+    emit_bstr(&mut stmt, node);
+    emit_bstr(&mut stmt, former);
+    emit_bstr(&mut stmt, new_patron);
+    let fid = ids
+        .identity(former)
+        .ok_or_else(|| Failure::MissingKey(former.to_vec()))?;
+    verify_sign_block(fid, block, aad::TRANSFER, &stmt)
+        .map_err(|e| Failure::Invalid(format!("transfer statement: {e}")))
 }
 
 /// A transport delegation (`wire-format.md` §8.2), verified hybrid under
