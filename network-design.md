@@ -994,7 +994,8 @@ none makes it malformed** [author, 2026-09-05]:
 - **a proof of presence between the two parties** — the patron met the node —
   named by that record's `txid`; or
 - **the former patron's countersignature**, where the node is moving from a
-  patron it already had. That signature does the job a meeting otherwise does:
+  patron it already had to a new patron inside its horizon (§6.2). That
+  signature does the job a meeting otherwise does:
   a party who has already vouched for this node vouches again, to a named
   successor; or
 - **a rotation's own evidence**, where the adoption is a rotation (§9.1). A
@@ -1040,6 +1041,34 @@ object: a transfer is **an ordinary adoption carrying the former patron's
 countersignature** (field 9, `wire-format.md` §4.1), exactly as a rotation is an
 ordinary adoption carrying the old key's proof. The former patron's signature
 stands where a meeting otherwise would.
+
+**A transfer is strictly in-horizon** [author, 2026-11-28]: the node, its
+former patron and its new patron are each inside the others' horizons (§15.1).
+The new patron is one such as the node's grandpatron, a sibling of its patron,
+or a sibling or nephew of its own; a move further than that is a meeting, or
+another step.
+**That is what lets a statement stand where a meeting would** [author,
+2026-11-28]: every node in a horizon trusts every other and carries its location
+and key material, so an adoption agreed asynchronously, each party answering
+when next on, carries the assurance of the adoption it succeeds. Each of the
+three checks the rule against its own view before it agrees. A verifier
+elsewhere checks the statement and not the distance, since no operation the
+protocol defines depends on a node's own store of the topology [author,
+2026-11-28].
+
+**A transfer is three people's act, and not an automatic operation** like
+refreshing a node delegation or countersigning a grandsubordinate's adoption
+(Appendix A.3) [author, 2026-11-28]:
+
+1. the old or the new patron's person proposes it;
+2. the other patron's person agrees to it;
+3. the node's person is presented with the adoption under the new patron, to
+   sign or not.
+
+The adoption is recorded as such, carrying the former patron's statement. It
+needs no verifiers, because there is no in-person meeting, and no witnesses,
+because there is no waiting period or verifier process to witness [author,
+2026-11-28].
 
 **Dropping is still not a network operation**, which is what §3.1.1 settles and
 what the countersignature does not change: the protocol has no concept of a
@@ -1152,17 +1181,17 @@ leaves open a relationship its patron closed (`wire-format.md` §10).
 Moving to a grandpatron or a patron's sibling is an **ordinary adoption whose
 counterparty happens to be nearby.** Still no separate type: it is a transfer
 in §6.2's sense, an adoption carrying the former patron's countersignature
-(§6.1.1), which is the evidence the move offers in place of a meeting. When the
-new patron lies inside the old patron's replication horizon it already holds
-the node's history through sibling replication (§3.4), so **no archive
-presentation is needed and trust history is preserved**. A new patron may still
+(§6.1.1), which is the evidence the move offers in place of a meeting. The new
+patron lies inside the old patron's horizon, as a transfer's always does (§6.2),
+so it already holds the node's history through sibling replication (§3.4):
+**no archive presentation is needed and trust history is preserved**. A new patron may still
 run a fresh ceremony if they want one; that is their choice, not a requirement
 the move imposes, and the reference client does not prompt for it.
 
 **The countersignature is what makes this case cheap, and it is not free.** The
-former patron has to be reachable and willing. Its client signs without its
-person (Appendix A.3) when it next attaches (`wire-format.md` §7.10.4), so
-being offline delays a move rather than preventing it. Where it is neither, the move is
+former patron has to be reachable and willing. Each ask waits at the serving
+node of the person it is for, who answers when next on (`wire-format.md`
+§7.10.4), so being offline delays a move rather than preventing it. Where it is neither, the move is
 an ordinary adoption on a proof of presence like any other; nothing about being
 nearby exempts a node whose old patron will not sign.
 
@@ -7976,7 +8005,7 @@ several at once, not one per acquisition.
    patron's countersignature, peering requires a meeting outright (§6.3), and
    a rotation requires one every time (§9.0.1). What an attacker
    can still do is acquire one attested identity and move it by transfer,
-   which is what A34 prices. Note it is a *cost*, not an unforgeable
+   one in-horizon step at a time (§6.2), which is what A34 prices. Note it is a *cost*, not an unforgeable
    primitive — bilateral collusion defeats it, and the flow metric is what
    bounds the resulting damage (§7).
 2. **Static routable addressing** makes *infrastructure* expensive and visible.
@@ -9029,7 +9058,7 @@ A23 is superseded in place by A34.
 | **A19** | Infra costs **~$20/month retail, ~$5–7 marginal to an attacker** | §16.6's operator pricing and §17.3's static-addressing leg | Also §20.1 | A dated bill of materials and cloud-price survey for the assumed infra configuration, plus attacker consolidation/discount assumptions. |
 | **A21** | **Patrons will administer resources.** Hold a connection to a wider system, host an instance, bind roles, carry availability | §11.0.1's federation pattern, and through it every resource application larger than one neighbourhood | The resource-layer sibling of A11: A11 says users tolerate ceremony friction, this says operators tolerate administration. If false, applications stay local or route around the network, and if they route around it, §1.2's product argument goes with them | Operator research or deployment evidence measuring willingness and ability to host/federate resources, bind roles, and maintain availability. |
 | **A22** | Protocol-defined high-importance transactions occur **far less often than once per 100 seconds per user** | The capacity argument under the control-plane topology (§1) | If ordinary use is transaction-heavier than assumed, apex load ceases to be dominated by churn and A3 fails with it | A representative transaction-rate model or deployment telemetry for protocol-defined high-importance transactions per user. |
-| **A34** | **A former patron's countersignature is adequate evidence in place of a meeting between the two new parties** | §6.1.1's second route, and with it every lateral and vertical shift (§6.2.3) — the alternative being that each such move costs a fresh ceremony | If a countersignature is materially weaker than a meeting, transfers become the cheap route into a horizon that §6.1.1 closed for unattested adoptions, and an attacker who controls one patron walks its subordinates into subnets that never met them. **Replaces A23, whose premise — that proof of presence is optional — §6.1.1 removed on 2026-09-05**; the question moved rather than closed, from *what is an unattested edge worth* to *what is a vouched-for one worth* | A threat/evidence analysis or experiment comparing former-patron countersignatures with fresh meetings for resistance to malicious transfer/adoption. |
+| **A34** | **A former patron's countersignature is adequate evidence in place of a meeting between the two new parties** | §6.1.1's second route, and with it every lateral and vertical shift (§6.2.3) — the alternative being that each such move costs a fresh ceremony | If a countersignature is materially weaker than a meeting, transfers become the cheap route into a horizon that §6.1.1 closed for unattested adoptions, and an attacker who controls one patron moves its subordinates under parties that never met them, where those parties' persons agree, one in-horizon step at a time (§6.2). **Replaces A23, whose premise — that proof of presence is optional — §6.1.1 removed on 2026-09-05**; the question moved rather than closed, from *what is an unattested edge worth* to *what is a vouched-for one worth* | A threat/evidence analysis or experiment comparing former-patron countersignatures with fresh meetings for resistance to malicious transfer/adoption. |
 | **A24** | A user accumulates **a few hundred archive records per decade** | The claim that post-quantum archive size is operationally insignificant (§5) | An order of magnitude more makes the archive a storage and bandwidth problem, not a rounding error | A workload/lifecycle model or field data for archive-record accumulation per user per decade. |
 | **A25** | An envelope past **~400 KB** is prohibitive rather than merely large | Keeping embedded evidence classical instead of hybrid (§5.1) | If that size is tolerable, the simpler uniform rule (everything hybrid) becomes available | Implementation benchmarks showing the operational/UX/memory/bandwidth cost curve around 400 KB envelopes on target devices and transports. |
 | **A26** | A fuzzed profile discriminating **~99% of humans** is the right privacy/utility point | The biometric query representation (§7.5) | Too specific and it approaches court-grade evidence; too vague and verification stops working | A privacy/utility evaluation showing why the chosen fuzzed-profile operating point (~99% discrimination) is appropriate for both matching and privacy. |
@@ -9223,7 +9252,7 @@ order and refusal behaviour, with the role row consulted as a lookup.
 - **`§14.2.4`'s remaining caveats**: the split seal's composition wants an
   analysis of its own, and §5.2's crate maturity applies.
   **Payload-type demultiplexing is settled** [2026-09-30]: `wire-format.md`
-  §7.10.1 registers the kind tag and its thirty-two values, the ceremony's own
+  §7.10.1 registers the kind tag and its thirty-six values, the ceremony's own
   conversation (§7.1) among them and the arranging of an adoption after the
   record with it.
 - **The canonical biometric profile** (§7.5) is settled but for its fuzzing

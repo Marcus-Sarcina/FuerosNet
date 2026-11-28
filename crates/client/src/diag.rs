@@ -120,6 +120,10 @@ pub fn kind_name(kind: u64) -> &'static str {
         KIND_PEERING_RECORD => "peering_record",
         KIND_TRANSFER_REQUEST => "transfer_request",
         KIND_TRANSFER_GRANT => "transfer_grant",
+        KIND_TRANSFER_OFFER => "transfer_offer",
+        KIND_TRANSFER_ACCEPT => "transfer_accept",
+        KIND_TRANSFER_BODY => "transfer_body",
+        KIND_TRANSFER_RECORD => "transfer_record",
         _ => "unknown",
     }
 }

@@ -116,13 +116,25 @@ pub const KIND_BACKUP_RETURN: u64 = 29;
 /// (`wire-format.md` §7.10.3): what a peer that lost everything takes the
 /// sender as a peer by, verified under its own material and the sender's.
 pub const KIND_PEERING_RECORD: u64 = 30;
-/// A `TransferRequest` (`wire-format.md` §7.10.4): a subordinate to a
-/// patron it has had, asking for the statement that moves it under the
-/// new patron it names (design §6.1.1).
+/// A `TransferRequest` (`wire-format.md` §7.10.4): a new patron to a
+/// node's patron, asking for the node, for that patron's person to agree
+/// to or not (design §6.2.3).
 pub const KIND_TRANSFER_REQUEST: u64 = 31;
-/// A `TransferGrant` (§7.10.4): that patron's `Transfer` block back,
-/// signed without its person (design Appendix A.3).
+/// A `TransferGrant` (§7.10.4): the former patron's `Transfer` block for a
+/// move, to the new patron, answering a request or proposing the move.
 pub const KIND_TRANSFER_GRANT: u64 = 32;
+/// A `TransferOffer` (§7.10.4): the new patron to the node, the adoption
+/// offered on the statement, for the node's person to sign or not.
+pub const KIND_TRANSFER_OFFER: u64 = 33;
+/// A `TransferAccept` (§7.10.4): the node back, signed for — a series it
+/// can enter and its back-pointers.
+pub const KIND_TRANSFER_ACCEPT: u64 = 34;
+/// A `TransferBody` (§7.10.4): the new patron's adoption body and its two
+/// envelope entries over it, to the node.
+pub const KIND_TRANSFER_BODY: u64 = 35;
+/// A `TransferRecord` (§7.10.4): the finalised adoption, from the node to
+/// its new patron.
+pub const KIND_TRANSFER_RECORD: u64 = 36;
 // kind 25 (`ProximityUpdate`) was RETIRED 2026-10-24: ranging is not used
 // (design §7.6.3). The number is not reused and a decoder meeting it rejects.
 

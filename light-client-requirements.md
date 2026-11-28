@@ -1401,10 +1401,21 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   of a replication commitment here**: §4.4's field is optional and what it
   promises is bytes held for a peer (design §3.4), which is an operator's
   offer and not this meeting's.
-- **A rotation adoption and a transfer are assembled by their own subjects**
-  (design §9.0, §6.2), who hold the material that makes them. A body carrying
-  somebody else's `Recovery` block or transfer statement is not one you were shown
-  to sign.
+- **A rotation adoption is assembled by its own subject** (design §9.0), who
+  holds the material that makes it. A body carrying somebody else's `Recovery`
+  block is not one you were shown to sign.
+- **A transfer is your person's to agree to, whichever of the three you are**
+  (design §6.2; `wire-format.md` §7.10.4) [author, 2026-11-28]. As a patron,
+  let them propose one, releasing a subordinate to a new patron or asking a
+  node's patron to release it to you, and show them one proposed to them, with
+  the node and both patrons named. As the node, show the adoption offered:
+  who it moves you from and to, and that both patrons agreed. Never answer one
+  for them, and offer nothing a check of your own view has already failed.
+- **Once your person agrees, the rest is your client's.** As the node, sign the
+  body that comes back where field 9 is the statement your person accepted,
+  byte for byte, and that patron is inside your horizon and your former
+  patron's; the patron's position is the one your horizon holds for it, since
+  no meeting handed you its locator.
 - **Ask which subnet before you invite, and say which subnet before you
   accept** [author, 2026-10-15]. A patron holding positions in several subnets
   adopts into one of them (design §3.1.1), so an invitation to be adopted asks

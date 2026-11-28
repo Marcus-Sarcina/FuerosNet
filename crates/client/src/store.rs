@@ -346,29 +346,96 @@ pub struct ClientStore {
     /// position, not the chain. A backup or a ceremony device brings the
     /// archive itself, which speaks first.
     pub placements: BTreeMap<Keyhash, Vec<u8>>,
-    /// **The moves this client asked a patron of its to vouch for**, by
-    /// the new patron each names (`wire-format.md` §7.10.4): the former
-    /// patron asked, and its `Transfer` block (§4.1) once it answered.
-    /// Kept, since the answer comes when that patron's client next
+    /// **The transfers this client is party to and not done with**
+    /// (`wire-format.md` §7.10.4; design §6.2.3), by [`Transfer::id`]: one
+    /// a person here is to agree to or not, or one waiting on the next
+    /// party. Kept, since each answer comes when that party's client next
     /// attaches, which may be after this one has restarted.
     pub transfers: BTreeMap<Keyhash, Transfer>,
 }
 
-/// One move under a new patron, as its subject holds it.
+/// **One move of `node` from `former` to `new_patron`**, as one of the
+/// three holds it, and where it stands.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Transfer {
-    /// The former patron asked to vouch for it.
+    /// The node moving.
+    pub node: Keyhash,
+    /// The patron it moves from, whose statement the adoption carries.
     pub former: Keyhash,
-    /// Its `Transfer` block (`wire-format.md` §4.1), once it came.
+    /// The patron it moves to.
+    pub new_patron: Keyhash,
+    /// The former patron's `Transfer` block (`wire-format.md` §4.1), once
+    /// it is held.
     pub block: Option<Vec<u8>>,
+    /// Where the move stands from here.
+    pub stage: Stage,
+}
+
+/// **Where a transfer stands**, from the side of the party holding it
+/// (design §6.2.3) [author, 2026-11-28]: a patron's person proposes, the
+/// other patron's person agrees, and the node's person signs the adoption
+/// offered or does not.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Stage {
+    /// As the former patron: the new patron asked for the node, and the
+    /// person here is to agree or not.
+    ReleaseAsked,
+    /// As the new patron: the person here asked the former patron, whose
+    /// statement is awaited.
+    Requested,
+    /// As the new patron: the former patron's person proposed the move,
+    /// and the person here is to agree or not.
+    TakeOffered,
+    /// As the new patron: both patrons agreed, and the node is offered the
+    /// adoption.
+    Offered,
+    /// As the node: the adoption is offered, and the person here is to
+    /// sign it or not.
+    MoveOffered,
+    /// As the node: the person signed for it, and the body is awaited.
+    Accepted,
+}
+
+impl Stage {
+    const ALL: [Stage; 6] = [
+        Stage::ReleaseAsked,
+        Stage::Requested,
+        Stage::TakeOffered,
+        Stage::Offered,
+        Stage::MoveOffered,
+        Stage::Accepted,
+    ];
+
+    fn code(self) -> u64 {
+        Self::ALL.iter().position(|s| *s == self).unwrap_or(0) as u64
+    }
 }
 
 impl Transfer {
+    /// **What names a move**: its node and its new patron, digested. A
+    /// node has one move under a given patron in hand at a time.
+    #[must_use]
+    pub fn id_of(node: &Keyhash, new_patron: &Keyhash) -> Keyhash {
+        let mut b = Vec::with_capacity(64);
+        b.extend_from_slice(node);
+        b.extend_from_slice(new_patron);
+        rhtn_codec::cose::sha256(&b)
+    }
+
+    /// This move's [`Transfer::id_of`].
+    #[must_use]
+    pub fn id(&self) -> Keyhash {
+        Self::id_of(&self.node, &self.new_patron)
+    }
+
     fn encode(&self) -> Vec<u8> {
         use rhtn_codec::encode::*;
         let mut out = Vec::new();
-        emit_array_head(&mut out, 2);
+        emit_array_head(&mut out, 5);
+        emit_uint(&mut out, self.stage.code());
+        emit_bstr(&mut out, &self.node);
         emit_bstr(&mut out, &self.former);
+        emit_bstr(&mut out, &self.new_patron);
         match &self.block {
             Some(b) => emit_bstr(&mut out, b),
             None => emit_null(&mut out),
@@ -380,16 +447,26 @@ impl Transfer {
         use rhtn_codec::cbor::Item;
         let item = rhtn_codec::cbor::parse_all(b).ok()?;
         let Item::Array(f) = &item else { return None };
-        let [Item::Bytes(former), block] = f.as_slice() else {
+        let [
+            Item::Uint(stage),
+            Item::Bytes(node),
+            Item::Bytes(former),
+            Item::Bytes(new_patron),
+            block,
+        ] = f.as_slice()
+        else {
             return None;
         };
         Some(Transfer {
+            node: b[node.clone()].try_into().ok()?,
             former: b[former.clone()].try_into().ok()?,
+            new_patron: b[new_patron.clone()].try_into().ok()?,
             block: match block {
                 Item::Bytes(r) => Some(b[r.clone()].to_vec()),
                 Item::Null => None,
                 _ => return None,
             },
+            stage: *Stage::ALL.get(usize::try_from(*stage).ok()?)?,
         })
     }
 }

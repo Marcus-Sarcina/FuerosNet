@@ -3793,8 +3793,12 @@ before attribution.
 | 28 | `BackupRequest` (§7.10.3) | Peer to peer: asks for the blob the recipient holds of the sender |
 | 29 | `BackupReturn` (§7.10.3) | Peer to peer: the recipient's own blob, as the sender holds it |
 | 30 | `PeeringRecord` (§7.10.3) | Peer to peer, on contact: the peering record naming the two, which a recipient that holds none takes the sender as a peer by |
-| 31 | `TransferRequest` (§7.10.4) | A node to a patron it has had: the statement that moves it under the new patron it names (design §6.1.1) |
-| 32 | `TransferGrant` (§7.10.4) | That patron back: its `Transfer` block (§4.1) for the move asked |
+| 31 | `TransferRequest` (§7.10.4) | A new patron to a node's patron: the node it asks to be released to it |
+| 32 | `TransferGrant` (§7.10.4) | The former patron to the new: its `Transfer` block (§4.1), agreeing or proposing |
+| 33 | `TransferOffer` (§7.10.4) | The new patron to the node: the adoption offered on that block |
+| 34 | `TransferAccept` (§7.10.4) | The node back, signed for: what the new patron needs to build the body |
+| 35 | `TransferBody` (§7.10.4) | The new patron to the node: the adoption body and its two envelope entries |
+| 36 | `TransferRecord` (§7.10.4) | The node to its new patron: the finalised adoption |
 
 An unknown kind is application payload to a recipient that does not know it,
 and a kind whose body does not decode is dropped by the recipient that
@@ -4082,40 +4086,79 @@ submission is one request frame, and a serving node's mailbox holds mail
 held to **waits** for the next contact that holds one, and is never put to
 a relay. Kinds 26, 28 and 30 are small and go either way.
 
-#### 7.10.4 What a transfer asks of the former patron
+#### 7.10.4 What a transfer asks of three people
 
-**The former patron's countersignature is signed on its light client
-without its person** (design Appendix A.3, §6.1.1). The node moving asks for
-it (kind 31); the ask waits at the patron's serving node with the rest of
-what is queued for that client, and the client answers when it next
-attaches (kind 32), so a former patron that is offline delays a move and
-does not prevent one. What it signs is §4.1's `TransferStatement`, over the
-three keyhashes and nothing else, so the answer commits the patron to this
-node moving under this new patron and to nothing about the adoption that
-carries it.
+**A transfer is three people's act** (design §6.2) [author, 2026-11-28]: one
+patron's person proposes, the other patron's agrees, and the node's signs the
+adoption offered or does not. Every ask waits at the serving node of the party
+it is for with the rest of what is queued there, and is answered when that
+person is next on. What follows an agreement runs without anyone being asked
+again.
 
-**A patron answers a node it adopted and has not disavowed.** A departure
-does not stop it, since adopting at the destination and departing the
-origin come in either order (design §6.2); a disavowal is the patron's own
-word that it ended the relationship, which a statement vouching for the
-node would contradict. To anybody else it answers nothing, and a node
-hearing nothing knows only that, as §7.10.3's requester does.
+- **The former patron proposes** by sending its statement to the new patron
+  (kind 32), signed by its person's act; the new patron's person agrees or
+  not. **The new patron proposes** by asking the node's patron (kind 31); that
+  patron's person agrees or not, and agreeing sends the statement (kind 32),
+  which the new patron, having asked, acts on without asking its person again.
+- **The new patron offers the node the adoption** (kind 33). The node's person
+  signs for it or not; signing sends the two things the new patron cannot work
+  out for itself, a series the node has never occupied (§2.3) and its
+  back-pointers (§3.1) (kind 34). The new patron's client builds the adoption
+  in a slot of its own, field 9 the statement both patrons agreed to, signs it
+  and sends the body with its entries (kind 35). The node's client signs it
+  where field 9 is the statement its person accepted, byte for byte, and the
+  rest passes as any adoption body does (`light-client-requirements.md` §7),
+  keeps the envelope and returns it (kind 36).
+- **A refusal is silence.** A person who declines drops the ask and nobody is
+  told; a party hearing nothing knows only that, as §7.10.3's requester does.
+
+**Every party checks the move by its own view before it acts or agrees**: the
+node, the former patron and the new patron each inside the others' horizons
+(design §6.2); the statement verifying over the node, the former patron and the
+new patron (§4.1); the former patron having adopted the node and not disavowed
+it, which the former patron knows from its archive, the node from its own, and
+the new patron from its horizon. A disavowal is the patron's own word that it
+ended the relationship, which a statement vouching for the node would
+contradict; a departure does not stop it, since adopting at the destination and
+departing the origin come in either order (design §6.2). Whatever fails a check
+is dropped, and nothing is held for a person to answer. **Nobody else checks the
+distance**: a verifier checks field 9's signature (§4.1) and no party's
+topology.
 
 ```
-TransferRequest = {    ; kind 31
-  1: keyhash           ; the NEW patron, the only destination the statement
-                       ;   will name (§4.1). The node is the sender; the
-                       ;   patron asked, the recipient
+TransferRequest = {    ; kind 31, the new patron to the node's patron
+  1: keyhash           ; the node asked for. The new patron is the sender;
+                       ;   the patron asked, the recipient
 }
 
-TransferGrant = {      ; kind 32
-  1: keyhash,          ; the new patron, as asked
-  2: Transfer          ; §4.1's block, its field 1 the sender. The
-                       ;   recipient holds it where it asked that sender for
-                       ;   a move under field 1 and the statement verifies
-                       ;   over itself, the sender and field 1, and drops it
-                       ;   otherwise
+TransferGrant = {      ; kind 32, the former patron to the new patron
+  1: keyhash,          ; the node released
+  2: Transfer          ; §4.1's block, its field 1 the sender; its
+                       ;   statement names the recipient as new patron
 }
+
+TransferOffer = {      ; kind 33, the new patron to the node
+  1: Transfer          ; the block both patrons agreed to, carried unchanged
+                       ;   into the body's field 9
+}
+
+TransferAccept = {     ; kind 34, the node back, its person having signed
+  1: uint,             ; a series the sender has never occupied (§2.3),
+                       ;   which the adoption's locator opens at counter 0
+  2: [* txid]          ; the sender's back-pointers, the node's list of the
+                       ;   body's key 0 (§3.1)
+}
+
+TransferBody = {       ; kind 35, the new patron to the node
+  1: bstr,             ; the adoption body (§4.1), node the recipient and
+                       ;   patron the sender
+  2: [ 2 COSE_Signature ]  ; the sender's two envelope entries over it
+                       ;   (§3.5), classical then post-quantum
+}
+
+TransferRecord = Envelope  ; kind 36: the finalised adoption (§3), which the
+                       ;   recipient keeps where it is the adoption of the
+                       ;   sender it offered, carrying field 9
 ```
 
 ### 7.11 Profile

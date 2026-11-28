@@ -466,13 +466,14 @@ fn a_store_written_before_locators_were_kept_still_opens() {
     st.held_for.insert([4u8; 32], vec![0x83, 0x40, 0x40, 0x40]);
     st.default_alias = Some("Dana".into());
     st.placements.insert([5u8; 32], vec![0xa0]);
-    st.transfers.insert(
-        [6u8; 32],
-        rhtn_client::store::Transfer {
-            former: [7u8; 32],
-            block: None,
-        },
-    );
+    let t = rhtn_client::store::Transfer {
+        node: [6u8; 32],
+        former: [7u8; 32],
+        new_patron: [8u8; 32],
+        block: Some(vec![0x80]),
+        stage: rhtn_client::store::Stage::MoveOffered,
+    };
+    st.transfers.insert(t.id(), t);
     let seven = st.encode();
     let back = ClientStore::decode(&seven).expect("the current shape opens");
     assert_eq!(

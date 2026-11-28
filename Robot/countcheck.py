@@ -27,12 +27,21 @@ def main():
     s = DOC.read_text()
     table = {k: int(v) for k, v in re.findall(r'^\| ([A-Z]+) \| (\d+) \|$', s, re.M)}
     live, withdrawn = {}, {}
+    flags = []
+    # **a number names one row**: two rows under one ID made every
+    # citation of it ambiguous, and both counts were right while TX-031
+    # was two families (2026-11-28)
+    seen = {}
+    for prefix, n in re.findall(r'^\| ([A-Z]+)-(\d+) \|', s, re.M):
+        seen[(prefix, n)] = seen.get((prefix, n), 0) + 1
+    for (prefix, n), k in sorted(seen.items()):
+        if k > 1:
+            flags.append(f'{prefix}-{n} names {k} rows')
     for prefix, _n, second in re.findall(r'^\| ([A-Z]+)-(\d+) \|([^|]*)\|', s, re.M):
         if prefix == 'O':
             continue
         into = withdrawn if second.strip() == '—' else live
         into[prefix] = into.get(prefix, 0) + 1
-    flags = []
     for prefix in sorted(set(table) | set(live)):
         said, counted = table.get(prefix, 0), live.get(prefix, 0)
         if said != counted:

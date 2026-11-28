@@ -15779,7 +15779,7 @@
   "id": "CER-62",
   "area": "ceremony",
   "gap": "ceremony",
-  "title": "Refuse a recovery or transfer body on the path that reviews an ordinary adoption",
+  "title": "Refuse a recovery body, and a transfer body this key's person did not accept, on the path that reviews an ordinary adoption",
   "milestone": "after-5",
   "kind": "negative",
   "spec": [
@@ -15789,12 +15789,12 @@
   "rule": [
    {
     "where": "light-client-requirements.md §7",
-    "text": "A rotation adoption and a transfer are assembled by their own subjects"
+    "text": "A rotation adoption is assembled by its own subject"
    }
   ],
   "given": "A subject that has gathered recognition and can assemble a recovery block.",
-  "when": "A patron proposes an adoption carrying a recovery block, or a transfer statement, to the party being adopted as an ordinary body to review.",
-  "then": "It is refused with the reason; the recovery adoption's own path, where the subject assembled the block itself, is unaffected.",
+  "when": "A patron proposes an adoption carrying a recovery block, or a transfer statement for a move the party being adopted never accepted under that patron, as an ordinary body to review.",
+  "then": "It is refused with the reason; the recovery adoption's own path, where the subject assembled the block itself, and a transfer the node's person accepted (TX-032), are unaffected.",
   "oracle": "behaviour",
   "interpretation": "The subject of a recovery holds what makes it, so a block it did not assemble is one it has no grounds to sign [author, 2026-10-14].",
   "families": [

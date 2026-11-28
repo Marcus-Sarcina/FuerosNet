@@ -968,9 +968,9 @@ pub enum Dispatched {
     /// came to, in words a screen can show.  What it owes in answer is in
     /// the outbox.
     Peer(String),
-    /// A message of a transfer (`wire-format.md` §7.10.4; kinds 31 and
-    /// 32): a patron's statement asked of this client and answered, or
-    /// the one this client asked for, held — what it came to, in words.
+    /// A message of a transfer (`wire-format.md` §7.10.4; kinds 31 to
+    /// 36): an ask held for this person, or the step an agreement already
+    /// given takes — what it came to, in words.
     Transfer(String),
     /// **Application payload from a sender this client cannot attribute**
     /// [author, 2026-11-19]: no introduction held or carried for the
@@ -1054,6 +1054,31 @@ fn dataset_agreements(
             Some((node, addresses))
         })
         .collect()
+}
+
+/// A `Transfer` block as `wire-format.md` §4.1 field 9 carries it:
+/// `{1: former, 2: COSE_Sign}`.
+fn transfer_map(former: &Keyhash, block: &[u8]) -> Vec<u8> {
+    use rhtn_codec::encode::{emit_bstr, emit_map_head, emit_uint};
+    let mut out = Vec::new();
+    emit_map_head(&mut out, 2);
+    emit_uint(&mut out, 1);
+    emit_bstr(&mut out, former);
+    emit_uint(&mut out, 2);
+    out.extend_from_slice(block);
+    out
+}
+
+/// A `TransferGrant` (`wire-format.md` §7.10.4): `{1: node, 2: Transfer}`.
+fn transfer_grant(node: &Keyhash, former: &Keyhash, block: &[u8]) -> Vec<u8> {
+    use rhtn_codec::encode::{emit_bstr, emit_map_head, emit_uint};
+    let mut out = Vec::new();
+    emit_map_head(&mut out, 2);
+    emit_uint(&mut out, 1);
+    emit_bstr(&mut out, node);
+    emit_uint(&mut out, 2);
+    out.extend_from_slice(&transfer_map(former, block));
+    out
 }
 
 fn hex8(k: &Keyhash) -> String {
@@ -3965,59 +3990,115 @@ impl Client {
             return Err(refused("a patron is somebody else".into()));
         }
 
-        // 2. **the evidence is a meeting of these two that I hold.** A
-        // recovery or a transfer is the subject's own to assemble
-        // (design §9.0, §6.2), so a body carrying one did not come from
+        // 2. **the evidence is a meeting of these two that I hold, or a
+        // move this person accepted.** A recovery is the subject's own to
+        // assemble (design §9.0), so a body carrying one did not come from
         // this path and is not signed on it
         if rhtn_codec::cbor::value_slice(body, 6).is_some() {
             return Err(refused(
                 "a recovery adoption is assembled by its subject, not proposed to it".into(),
             ));
         }
-        if rhtn_codec::cbor::value_slice(body, 9).is_some() {
-            return Err(refused(
-                "a transfer carries the former patron's statement; this path adopts on a meeting"
-                    .into(),
-            ));
-        }
-        let pop: Txid = bytes_at(8)
-            .ok_or_else(|| refused("no presence evidence (field 8)".into()))?
-            .try_into()
-            .map_err(|_| Abort::Malformed("field 8 is not a txid".into()))?;
-        let held = self
-            .store
-            .records
-            .get(&pop)
-            .ok_or_else(|| refused(format!("no record {} is held here", hex8(&pop))))?;
-        let meeting = Record::parse(held).map_err(Abort::Record)?;
-        if meeting.tx_type != TYPE_PRESENCE {
-            return Err(refused("the evidence is not a presence record".into()));
-        }
-        // **as a set, not a sequence**: field 3 has no canonical order
-        // and carries the proposer's (`wire-format.md` §4.5), so which of
-        // the two is first says nothing about who they are
-        let mut met = meeting.participants();
-        met.sort();
-        if met != participants(me, patron).to_vec() {
-            return Err(refused("the evidence is a meeting of other parties".into()));
-        }
+        let transfer = rhtn_codec::cbor::value_slice(body, 9);
+        let not_before = match transfer.clone() {
+            // a transfer (design §6.2.3, `wire-format.md` §7.10.4): field
+            // 9 is the statement this person accepted for a move under
+            // this patron, byte for byte, and the move is inside the horizon
+            Some(r9) => {
+                let (former, block) = self.accepted_move(&patron).ok_or_else(|| {
+                    refused(format!(
+                        "no move under {} was accepted, so a transfer to it is not this key's",
+                        hex8(&patron)
+                    ))
+                })?;
+                if body[r9] != transfer_map(&former, &block)[..] {
+                    return Err(refused(
+                        "the statement the body carries is not the one held".into(),
+                    ));
+                }
+                if !self.within_horizon(&me, &patron) || !self.within_horizon(&former, &patron) {
+                    return Err(refused(format!(
+                        "{} is outside the horizon, and a transfer moves only inside it",
+                        hex8(&patron)
+                    )));
+                }
+                0
+            }
+            None => {
+                let pop: Txid = bytes_at(8)
+                    .ok_or_else(|| refused("no presence evidence (field 8)".into()))?
+                    .try_into()
+                    .map_err(|_| Abort::Malformed("field 8 is not a txid".into()))?;
+                let held = self
+                    .store
+                    .records
+                    .get(&pop)
+                    .ok_or_else(|| refused(format!("no record {} is held here", hex8(&pop))))?;
+                let meeting = Record::parse(held).map_err(Abort::Record)?;
+                if meeting.tx_type != TYPE_PRESENCE {
+                    return Err(refused("the evidence is not a presence record".into()));
+                }
+                // **as a set, not a sequence**: field 3 has no canonical
+                // order and carries the proposer's (`wire-format.md`
+                // §4.5), so which of the two is first says nothing about
+                // who they are
+                let mut met = meeting.participants();
+                met.sort();
+                if met != participants(me, patron).to_vec() {
+                    return Err(refused("the evidence is a meeting of other parties".into()));
+                }
+                meeting.effective
+            }
+        };
 
         // 3. the position is the patron's to issue: one nibble below
         // their own, in their own anchor
         let r3 = rhtn_codec::cbor::value_slice(body, 3)
             .ok_or_else(|| Abort::Malformed("field 3".into()))?;
         let loc = Locator::decode(&body[r3]).map_err(Abort::Malformed)?;
-        let theirs = self
-            .store
-            .contacts
-            .get(&patron)
-            .and_then(|c| c.locator.as_deref())
-            .ok_or_else(|| {
-                refused("no position of the patron's own is held, so nothing says this address is theirs to issue".into())
-            })?;
-        let theirs = rhtn_archive::locator::SignedLocator::parse(theirs)
-            .map_err(Abort::Malformed)?
-            .locator;
+        let theirs = if transfer.is_some() {
+            // **the patron's place as this key's horizon holds it**: no
+            // meeting handed its locator, and a transfer's new patron is
+            // inside the horizon, whose records carry it
+            let mut l = match self.horizon.locator_in(&patron, &loc.anchor) {
+                Some(l) => l.clone(),
+                // the subnet's root, which no record places: its position
+                // is the anchor itself (`wire-format.md` §2.1)
+                None if patron == loc.anchor => Locator::root_in(
+                    patron,
+                    Seqno {
+                        series: 1,
+                        counter: 0,
+                    },
+                    loc.subnet,
+                ),
+                None => {
+                    return Err(refused(format!(
+                        "no place of {} in this address's subnet is in this key's horizon",
+                        hex8(&patron)
+                    )));
+                }
+            };
+            // a record of a lone root's first adoption names no subnet,
+            // its own txid being the id (design §13.8), and a held
+            // position says which: the body's
+            if l.subnet.is_none() {
+                l.subnet = loc.subnet;
+            }
+            l
+        } else {
+            let theirs = self
+                .store
+                .contacts
+                .get(&patron)
+                .and_then(|c| c.locator.as_deref())
+                .ok_or_else(|| {
+                    refused("no position of the patron's own is held, so nothing says this address is theirs to issue".into())
+                })?;
+            rhtn_archive::locator::SignedLocator::parse(theirs)
+                .map_err(Abort::Malformed)?
+                .locator
+        };
         // **or one hop below the patron's own key** (`wire-format.md` §2.1,
         // design §13.8): a patron that holds a position in somebody else's
         // subnet may still root one under its own key — "which tree is the
@@ -4029,7 +4110,8 @@ impl Client {
         // key and GXV refused the body against the position it held for MRK
         // in GXV's own subnet (run 9613069-a2-nodeless-reverse-1,
         // 2026-10-24).
-        let under_own_key = loc.anchor == patron && loc.nibbles == 1 && loc.path.len() == 1;
+        let under_own_key =
+            transfer.is_none() && loc.anchor == patron && loc.nibbles == 1 && loc.path.len() == 1;
         if !under_own_key && (loc.anchor != theirs.anchor || loc.nibbles != theirs.nibbles + 1) {
             return Err(refused(format!(
                 "the address is not one hop below the patron's own position in {}",
@@ -4121,7 +4203,7 @@ impl Client {
             }
             None => return Err(Abort::Malformed("field 4".into())),
         };
-        if when < meeting.effective {
+        if when < not_before {
             return Err(refused(
                 "the adoption is timestamped before the meeting it rests on".into(),
             ));
@@ -5496,141 +5578,342 @@ impl Client {
         })
     }
 
-    /// **Ask `former` to vouch for this client's move under
-    /// `new_patron`** (`wire-format.md` §7.10.4; design §6.1.1, §6.2.3):
-    /// the request for its `Transfer` block, which waits at its serving
-    /// node with the rest of its traffic until its client next attaches,
-    /// and is answered there without its person (design Appendix A.3).
-    /// The ask is held under the new patron until the answer comes, and
-    /// asking again replaces it.
+    /// **Whether this key disavowed `node`**, by its horizon's view of the
+    /// relationship.
+    fn disavowed(&self, node: &Keyhash) -> bool {
+        let me = self.keyhash();
+        self.horizon.table.bindings().iter().any(|b| {
+            b.patron == me
+                && b.node == *node
+                && matches!(
+                    b.end,
+                    Some((_, _, rhtn_archive::topology::End::Disavowal(_)))
+                )
+        })
+    }
+
+    /// **Whether `node` sits under `patron` by this client's horizon**: an
+    /// open binding, which is what a new patron knows of a move it was not
+    /// a party to the adoption of.
+    fn bound_under(&self, node: &Keyhash, patron: &Keyhash) -> bool {
+        self.horizon
+            .table
+            .bindings()
+            .iter()
+            .any(|b| b.node == *node && b.patron == *patron && b.end.is_none())
+    }
+
+    /// **Whether `a` and `b` are inside each other's horizon, by this
+    /// client's view** (design §6.2, §15.1): within two adoption or
+    /// sibling edges, the walk the horizon is drawn by, and mutual for
+    /// that reason.  **A transfer is strictly in-horizon** [author,
+    /// 2026-11-28], so every pair of its three parties must pass, and each
+    /// party checks with what it holds; nobody else checks it.
+    fn within_horizon(&self, a: &Keyhash, b: &Keyhash) -> bool {
+        self.horizon.table.distance(a, b, 2).is_some()
+    }
+
+    /// Every pair of a move's three parties inside each other's horizon.
+    fn move_in_horizon(&self, node: &Keyhash, former: &Keyhash, new_patron: &Keyhash) -> bool {
+        self.within_horizon(node, former)
+            && self.within_horizon(node, new_patron)
+            && self.within_horizon(former, new_patron)
+    }
+
+    fn hold_transfer(&mut self, t: crate::store::Transfer) {
+        self.changed.insert(rhtn_model::Noun::Lines);
+        self.store.transfers.insert(t.id(), t);
+    }
+
+    /// **A patron's person proposes a transfer** (design §6.2.3;
+    /// `wire-format.md` §7.10.4) [author, 2026-11-28]: either patron
+    /// proposes, the other agrees, and the node's person is then offered
+    /// the adoption under the new patron, to sign or not.
     ///
-    /// **Refused where this client was never under `former`**, whose
-    /// statement would be about a subordinate it never had, and where the
-    /// new patron is this key or `former` (§4.1's distinctness rules).
-    pub fn request_transfer(
-        &mut self,
-        former: Keyhash,
-        new_patron: Keyhash,
-    ) -> Result<Vec<Msg>, Abort> {
+    /// **Which patron this client is follows from what it holds.** Where
+    /// `node` is a subordinate of this key, this is the former patron
+    /// releasing it to `other`: the statement is signed here, by this
+    /// person's act, and goes to the new patron's person to agree to.
+    /// Otherwise this is the new patron asking `other`, the node's patron
+    /// by this client's horizon, to release it; that patron's person
+    /// agrees or not.
+    ///
+    /// **Refused where the move is not inside the horizon** of all three
+    /// by this client's view, where the parties are not distinct (§4.1),
+    /// where the node is not this key's to release and not bound under
+    /// `other`, and where this key disavowed it.
+    pub fn propose_transfer(&mut self, node: Keyhash, other: Keyhash) -> Result<Vec<Msg>, Abort> {
         use rhtn_codec::encode::{emit_bstr, emit_map_head, emit_uint};
         let me = self.keyhash();
-        if new_patron == me || new_patron == former {
+        if node == me || other == me || node == other {
             return Err(Abort::PatronRefused(
-                "a transfer's new patron is neither the node nor its former patron (wire-format.md §4.1)"
+                "a transfer's node, former patron and new patron are three parties (wire-format.md §4.1)"
                     .into(),
             ));
         }
-        if !self.adoption_between(&me, &former) {
+        let releasing = self.adoption_between(&node, &me);
+        let (former, new_patron) = if releasing { (me, other) } else { (other, me) };
+        if releasing && self.disavowed(&node) {
+            return Err(Abort::PatronRefused(format!(
+                "this key disavowed {}, and vouches for no move of it",
+                hex8(&node)
+            )));
+        }
+        if !releasing && !self.bound_under(&node, &former) {
             return Err(Abort::NoRelationship(former));
         }
-        let mut req = Vec::new();
-        emit_map_head(&mut req, 1);
-        emit_uint(&mut req, 1);
-        emit_bstr(&mut req, &new_patron);
-        let msgs = self
-            .send_payload(former, payload::KIND_TRANSFER_REQUEST, &req)
-            .map_err(|e| Abort::Payload(e.to_string()))?;
-        self.store.transfers.insert(
-            new_patron,
-            crate::store::Transfer {
+        if !self.move_in_horizon(&node, &former, &new_patron) {
+            return Err(Abort::PatronRefused(format!(
+                "moving {} from {} to {} is not inside the horizon, and a transfer moves only inside it (design §6.2)",
+                hex8(&node),
+                hex8(&former),
+                hex8(&new_patron)
+            )));
+        }
+        let msgs = if releasing {
+            let block = rhtn_archive::tx::transfer_block(self.signer()?, &node, &new_patron);
+            let grant = transfer_grant(&node, &me, &block);
+            self.send_payload(new_patron, payload::KIND_TRANSFER_GRANT, &grant)
+                .map_err(|e| Abort::Payload(e.to_string()))?
+        } else {
+            let mut req = Vec::new();
+            emit_map_head(&mut req, 1);
+            emit_uint(&mut req, 1);
+            emit_bstr(&mut req, &node);
+            let msgs = self
+                .send_payload(former, payload::KIND_TRANSFER_REQUEST, &req)
+                .map_err(|e| Abort::Payload(e.to_string()))?;
+            self.hold_transfer(crate::store::Transfer {
+                node,
                 former,
+                new_patron,
                 block: None,
-            },
-        );
-        tracing::info!(target: "transfer", former = %id8(&former), new_patron = %id8(&new_patron), "transfer.asked");
+                stage: crate::store::Stage::Requested,
+            });
+            msgs
+        };
+        tracing::info!(target: "transfer", node = %id8(&node), former = %id8(&former), new_patron = %id8(&new_patron), releasing, "transfer.proposed");
         Ok(msgs)
     }
 
-    /// **The statement this client holds for a move under `new_patron`**:
-    /// the former patron and its `Transfer` block, once it answered.
-    pub fn transfer_for(&self, new_patron: &Keyhash) -> Option<(Keyhash, Vec<u8>)> {
-        let t = self.store.transfers.get(new_patron)?;
-        Some((t.former, t.block.clone()?))
+    /// **The transfers waiting on this client's person**: a new patron
+    /// asking this key to release a node, a former patron offering one to
+    /// this key, and an adoption offered to this key under a new patron.
+    #[must_use]
+    pub fn transfers_awaiting(&self) -> Vec<crate::store::Transfer> {
+        use crate::store::Stage;
+        self.store
+            .transfers
+            .values()
+            .filter(|t| {
+                matches!(
+                    t.stage,
+                    Stage::ReleaseAsked | Stage::TakeOffered | Stage::MoveOffered
+                )
+            })
+            .cloned()
+            .collect()
     }
 
-    /// **As a former patron: sign the statement a subordinate asked for**
-    /// (kind 31), with nobody asked (design Appendix A.3: countersigning
-    /// an adoption is automatic, on the patron's light client).
-    ///
-    /// **Answered for a party this client adopted and has not
-    /// disavowed.** A departure does not stop it, since a move is adopt
-    /// at the destination and depart the origin in either order (design
-    /// §6.2); a disavowal is this patron's own word that the relationship
-    /// ended against the node, which vouching for its move would
-    /// contradict.  **Nothing is answered otherwise**: a requester hearing
-    /// nothing knows only that, as a backup request does (§7.10.3).
-    fn answer_transfer_request(&mut self, from: Keyhash, inner: &[u8]) -> String {
-        use rhtn_codec::cbor::{Item, map_get, parse_all};
-        use rhtn_codec::encode::{emit_bstr, emit_map_head, emit_uint};
+    /// **The person's answer to a transfer waiting on them**, by
+    /// [`crate::store::Transfer::id`]. A refusal drops it and tells
+    /// nobody, as a patron that will not vouch answers nothing
+    /// (`wire-format.md` §7.10.4); an agreement takes the move one party
+    /// on.
+    pub fn answer_transfer(&mut self, id: &Keyhash, agree: bool) -> Result<Vec<Msg>, Abort> {
+        use crate::store::Stage;
+        let t = self
+            .store
+            .transfers
+            .get(id)
+            .cloned()
+            .ok_or_else(|| Abort::PatronRefused("no such transfer is waiting".into()))?;
+        if !matches!(
+            t.stage,
+            Stage::ReleaseAsked | Stage::TakeOffered | Stage::MoveOffered
+        ) {
+            return Err(Abort::PatronRefused(
+                "that transfer is not waiting on this person".into(),
+            ));
+        }
+        self.changed.insert(rhtn_model::Noun::Lines);
+        if !agree {
+            self.store.transfers.remove(id);
+            tracing::info!(target: "transfer", node = %id8(&t.node), "transfer.declined");
+            return Ok(Vec::new());
+        }
+        // what was true when it arrived is checked again, a horizon
+        // having moved since
+        if !self.move_in_horizon(&t.node, &t.former, &t.new_patron) {
+            self.store.transfers.remove(id);
+            return Err(Abort::PatronRefused(
+                "the move is no longer inside the horizon".into(),
+            ));
+        }
+        let msgs = match t.stage {
+            // the former patron agrees: its statement, to the new patron
+            Stage::ReleaseAsked => {
+                if self.disavowed(&t.node) || !self.adoption_between(&t.node, &t.former) {
+                    self.store.transfers.remove(id);
+                    return Err(Abort::PatronRefused(format!(
+                        "{} is no longer this key's to release",
+                        hex8(&t.node)
+                    )));
+                }
+                let block =
+                    rhtn_archive::tx::transfer_block(self.signer()?, &t.node, &t.new_patron);
+                let grant = transfer_grant(&t.node, &t.former, &block);
+                self.store.transfers.remove(id);
+                self.send_payload(t.new_patron, payload::KIND_TRANSFER_GRANT, &grant)
+            }
+            // the new patron agrees: the adoption, offered to the node
+            Stage::TakeOffered => {
+                let block = t.block.clone().ok_or_else(|| {
+                    Abort::PatronRefused("the former patron's statement is not held".into())
+                })?;
+                let msgs = self.offer_to_node(&t.node, &t.former, &block);
+                self.hold_transfer(crate::store::Transfer {
+                    stage: Stage::Offered,
+                    ..t.clone()
+                });
+                msgs
+            }
+            // the node's person signs: what the new patron needs to
+            // build the body, which is checked here before it is signed
+            Stage::MoveOffered => {
+                let ask = self.acceptance()?;
+                let msgs = self.send_payload(t.new_patron, payload::KIND_TRANSFER_ACCEPT, &ask);
+                self.hold_transfer(crate::store::Transfer {
+                    stage: Stage::Accepted,
+                    ..t.clone()
+                });
+                msgs
+            }
+            _ => unreachable!("matched above"),
+        }
+        .map_err(|e| Abort::Payload(e.to_string()))?;
+        tracing::info!(target: "transfer", node = %id8(&t.node), stage = ?t.stage, "transfer.agreed");
+        Ok(msgs)
+    }
+
+    /// The offer of an adoption to `node` on `former`'s statement (kind 33).
+    fn offer_to_node(
+        &mut self,
+        node: &Keyhash,
+        former: &Keyhash,
+        block: &[u8],
+    ) -> Result<Vec<Msg>, PayloadError> {
+        use rhtn_codec::encode::{emit_map_head, emit_uint};
+        let mut offer = Vec::new();
+        emit_map_head(&mut offer, 1);
+        emit_uint(&mut offer, 1);
+        offer.extend_from_slice(&transfer_map(former, block));
+        self.send_payload(*node, payload::KIND_TRANSFER_OFFER, &offer)
+    }
+
+    /// The node's acceptance (kind 34): a series this key has never
+    /// occupied and its back-pointers, the two things the new patron
+    /// cannot work out for itself.
+    fn acceptance(&self) -> Result<Vec<u8>, Abort> {
+        use rhtn_codec::encode::{emit_array_head, emit_bstr, emit_map_head, emit_uint};
+        let candidates: Vec<u32> = (0..16).map(|_| u32::from_le_bytes(self.random())).collect();
+        let series = crate::rotation::fresh_series(&self.archive, candidates).ok_or_else(|| {
+            Abort::PatronRefused("no series this key has never occupied came up".into())
+        })?;
+        let back = self.archive.next_back_pointers();
+        let mut ask = Vec::new();
+        emit_map_head(&mut ask, 2);
+        emit_uint(&mut ask, 1);
+        emit_uint(&mut ask, u64::from(series));
+        emit_uint(&mut ask, 2);
+        emit_array_head(&mut ask, back.len());
+        for t in &back {
+            emit_bstr(&mut ask, t);
+        }
+        Ok(ask)
+    }
+
+    /// The move this key accepted under `new_patron`: the former patron
+    /// and the statement the body's field 9 must carry.
+    fn accepted_move(&self, new_patron: &Keyhash) -> Option<(Keyhash, Vec<u8>)> {
         let me = self.keyhash();
-        let new_patron: Option<Keyhash> = match &parse_all(inner) {
+        let t = self
+            .store
+            .transfers
+            .get(&crate::store::Transfer::id_of(&me, new_patron))?;
+        (t.stage == crate::store::Stage::Accepted && t.node == me)
+            .then(|| Some((t.former, t.block.clone()?)))
+            .flatten()
+    }
+
+    /// **As the former patron: a new patron asks for a node of mine**
+    /// (kind 31). Held for this person to agree to or not where the node
+    /// is this key's subordinate, not disavowed, and the move is inside
+    /// the horizon by this client's view; **nothing is answered
+    /// otherwise**, and a requester hearing nothing knows only that, as a
+    /// backup request does (§7.10.3).
+    fn take_transfer_request(&mut self, from: Keyhash, inner: &[u8]) -> String {
+        use rhtn_codec::cbor::{Item, map_get, parse_all};
+        let me = self.keyhash();
+        let node: Option<Keyhash> = match &parse_all(inner) {
             Ok(Item::Map(m)) if m.len() == 1 => match map_get(m, 1) {
                 Some(Item::Bytes(r)) => inner[r.clone()].try_into().ok(),
                 _ => None,
             },
             _ => None,
         };
-        let Some(new_patron) = new_patron else {
+        let Some(node) = node else {
             return format!("{}'s transfer request does not decode", hex8(&from));
         };
-        if new_patron == me || new_patron == from {
+        if node == me || node == from {
             return format!(
-                "{} asked to move under itself or this key, which no statement names",
+                "{} asked for itself or this key, which no transfer moves",
                 hex8(&from)
             );
         }
-        if !self.adoption_between(&from, &me) {
+        if !self.adoption_between(&node, &me) {
             tracing::info!(target: "transfer", from = %id8(&from), "transfer.refused.not_ours");
             return format!(
-                "{} asked for a transfer and this key never adopted it",
-                hex8(&from)
+                "{} asked for {}, whom this key never adopted",
+                hex8(&from),
+                hex8(&node)
             );
         }
-        let disavowed = self.horizon.table.bindings().iter().any(|b| {
-            b.patron == me
-                && b.node == from
-                && matches!(
-                    b.end,
-                    Some((_, _, rhtn_archive::topology::End::Disavowal(_)))
-                )
-        });
-        if disavowed {
+        if self.disavowed(&node) {
             tracing::info!(target: "transfer", from = %id8(&from), "transfer.refused.disavowed");
             return format!(
-                "{} asked for a transfer and this key disavowed it",
-                hex8(&from)
+                "{} asked for {}, whom this key disavowed",
+                hex8(&from),
+                hex8(&node)
             );
         }
-        let block = match self.signer() {
-            Ok(s) => rhtn_archive::tx::transfer_block(s, &from, &new_patron),
-            Err(e) => return format!("no statement signed for {}: {e:?}", hex8(&from)),
-        };
-        let mut grant = Vec::new();
-        emit_map_head(&mut grant, 2);
-        emit_uint(&mut grant, 1);
-        emit_bstr(&mut grant, &new_patron);
-        emit_uint(&mut grant, 2);
-        emit_map_head(&mut grant, 2);
-        emit_uint(&mut grant, 1);
-        emit_bstr(&mut grant, &me);
-        emit_uint(&mut grant, 2);
-        grant.extend_from_slice(&block);
-        match self.send_payload(from, payload::KIND_TRANSFER_GRANT, &grant) {
-            Ok(msgs) => self.outbox.extend(msgs),
-            Err(e) => return format!("the statement for {} was not sent: {e}", hex8(&from)),
+        if !self.move_in_horizon(&node, &me, &from) {
+            tracing::info!(target: "transfer", from = %id8(&from), node = %id8(&node), "transfer.refused.outside");
+            return format!(
+                "{} asked for {}, and the move is outside the horizon",
+                hex8(&from),
+                hex8(&node)
+            );
         }
-        tracing::info!(target: "transfer", node = %id8(&from), new_patron = %id8(&new_patron), "transfer.signed");
-        format!(
-            "vouched for {} moving under {}",
-            hex8(&from),
-            hex8(&new_patron)
-        )
+        self.hold_transfer(crate::store::Transfer {
+            node,
+            former: me,
+            new_patron: from,
+            block: None,
+            stage: crate::store::Stage::ReleaseAsked,
+        });
+        tracing::info!(target: "transfer", node = %id8(&node), new_patron = %id8(&from), "transfer.release.asked");
+        format!("{} asks for {}", hex8(&from), hex8(&node))
     }
 
-    /// **The statement this client asked for** (kind 32): held where it
-    /// is from the former patron asked, for the move asked, and verifies
-    /// over this key, that patron and the new one (`wire-format.md` §4.1).
+    /// **As the new patron: a former patron's statement** (kind 32). Where
+    /// this key's person asked for it, the adoption is offered to the node
+    /// at once; where the former patron's person proposed it, it waits for
+    /// this person to agree. Held where the statement verifies over the
+    /// node, the sender and this key, the node is bound under the sender
+    /// by this horizon and the move is inside it; dropped otherwise.
     fn take_transfer_grant(&mut self, from: Keyhash, inner: &[u8]) -> String {
+        use crate::store::Stage;
         use rhtn_codec::cbor::{Item, map_get, parse_all, value_slice, value_slice_at};
         let me = self.keyhash();
         let read = || -> Option<(Keyhash, Keyhash, Vec<u8>)> {
@@ -5638,7 +5921,7 @@ impl Client {
             let Item::Map(m) = &item else {
                 return None;
             };
-            let new_patron: Keyhash = match map_get(m, 1)? {
+            let node: Keyhash = match map_get(m, 1)? {
                 Item::Bytes(r) => inner[r.clone()].try_into().ok()?,
                 _ => return None,
             };
@@ -5651,33 +5934,328 @@ impl Client {
             };
             let at = value_slice(inner, 2)?.start;
             let block = inner[value_slice_at(inner, at, 2)?].to_vec();
-            Some((new_patron, former, block))
+            Some((node, former, block))
         };
-        let Some((new_patron, former, block)) = read() else {
+        let Some((node, former, block)) = read() else {
             return format!("{}'s transfer statement does not decode", hex8(&from));
         };
-        if former != from || self.store.transfers.get(&new_patron).map(|t| t.former) != Some(from) {
+        if former != from || node == me || node == from {
             return format!(
-                "{} sent a transfer statement this key did not ask it for",
+                "{} sent a transfer statement that is not its own release of another party",
                 hex8(&from)
             );
         }
-        if let Err(e) = verify::transfer_statement(&self.known, &me, &from, &new_patron, &block) {
+        if let Err(e) = verify::transfer_statement(&self.known, &node, &from, &me, &block) {
             return format!("{}'s transfer statement was refused: {e:?}", hex8(&from));
         }
-        self.store.transfers.insert(
-            new_patron,
-            crate::store::Transfer {
-                former,
-                block: Some(block),
+        if !self.bound_under(&node, &from) || !self.move_in_horizon(&node, &from, &me) {
+            tracing::info!(target: "transfer", node = %id8(&node), former = %id8(&from), "transfer.refused.outside");
+            return format!(
+                "{} released {}, and the move is not one inside this key's horizon",
+                hex8(&from),
+                hex8(&node)
+            );
+        }
+        let id = crate::store::Transfer::id_of(&node, &me);
+        let asked = self
+            .store
+            .transfers
+            .get(&id)
+            .is_some_and(|t| t.stage == Stage::Requested && t.former == from);
+        if asked
+            && let Err(e) = self
+                .offer_to_node(&node, &from, &block)
+                .map(|msgs| self.outbox.extend(msgs))
+        {
+            return format!("the adoption was not offered to {}: {e}", hex8(&node));
+        }
+        self.hold_transfer(crate::store::Transfer {
+            node,
+            former,
+            new_patron: me,
+            block: Some(block),
+            stage: if asked {
+                Stage::Offered
+            } else {
+                Stage::TakeOffered
             },
-        );
-        tracing::info!(target: "transfer", former = %id8(&from), new_patron = %id8(&new_patron), "transfer.held");
+        });
+        tracing::info!(target: "transfer", node = %id8(&node), former = %id8(&from), asked, "transfer.release.held");
+        if asked {
+            format!(
+                "{} released {}, who is offered the adoption",
+                hex8(&from),
+                hex8(&node)
+            )
+        } else {
+            format!("{} offers {}", hex8(&from), hex8(&node))
+        }
+    }
+
+    /// **As the node: an adoption offered under the sender** (kind 33),
+    /// held for this person to sign or not where the statement verifies
+    /// over this key, its former patron and the sender, this key was
+    /// adopted by that former patron, and the move is inside the horizon
+    /// by this client's view.
+    fn take_transfer_offer(&mut self, from: Keyhash, inner: &[u8]) -> String {
+        use rhtn_codec::cbor::{Item, map_get, parse_all, value_slice, value_slice_at};
+        let me = self.keyhash();
+        let read = || -> Option<(Keyhash, Vec<u8>)> {
+            let item = parse_all(inner).ok()?;
+            let Item::Map(m) = &item else {
+                return None;
+            };
+            let Item::Map(t) = map_get(m, 1)? else {
+                return None;
+            };
+            let former: Keyhash = match map_get(t, 1)? {
+                Item::Bytes(r) => inner[r.clone()].try_into().ok()?,
+                _ => return None,
+            };
+            let at = value_slice(inner, 1)?.start;
+            let block = inner[value_slice_at(inner, at, 2)?].to_vec();
+            Some((former, block))
+        };
+        let Some((former, block)) = read() else {
+            return format!("{}'s adoption offer does not decode", hex8(&from));
+        };
+        if former == me || former == from {
+            return format!(
+                "{} offered a move from itself or from this key",
+                hex8(&from)
+            );
+        }
+        if let Err(e) = verify::transfer_statement(&self.known, &me, &former, &from, &block) {
+            return format!("{}'s adoption offer was refused: {e:?}", hex8(&from));
+        }
+        if !self.adoption_between(&me, &former) {
+            return format!(
+                "{} offered a move from {}, who never adopted this key",
+                hex8(&from),
+                hex8(&former)
+            );
+        }
+        if !self.move_in_horizon(&me, &former, &from) {
+            tracing::info!(target: "transfer", new_patron = %id8(&from), former = %id8(&former), "transfer.refused.outside");
+            return format!(
+                "{} offered a move from {}, and the move is not inside this key's horizon",
+                hex8(&from),
+                hex8(&former)
+            );
+        }
+        self.hold_transfer(crate::store::Transfer {
+            node: me,
+            former,
+            new_patron: from,
+            block: Some(block),
+            stage: crate::store::Stage::MoveOffered,
+        });
+        tracing::info!(target: "transfer", new_patron = %id8(&from), former = %id8(&former), "transfer.move.offered");
         format!(
-            "{} vouched for this key moving under {}",
+            "{} offers an adoption on {}'s release",
             hex8(&from),
-            hex8(&new_patron)
+            hex8(&former)
         )
+    }
+
+    /// **As the new patron: the node signed the offer** (kind 34). The body
+    /// is built here, in a slot of this key's own, with field 9 the
+    /// statement both patrons agreed to, signed without asking anyone
+    /// again — this person agreed when the move was offered — and sent
+    /// with its entries.
+    fn take_transfer_accept(&mut self, from: Keyhash, inner: &[u8]) -> String {
+        use rhtn_codec::cbor::{Item, as_uint, map_get, parse_all};
+        use rhtn_codec::encode::{emit_array_head, emit_bstr, emit_map_head, emit_uint};
+        let me = self.keyhash();
+        let read = || -> Option<(u32, Vec<Txid>)> {
+            let item = parse_all(inner).ok()?;
+            let Item::Map(m) = &item else {
+                return None;
+            };
+            let series = u32::try_from(as_uint(map_get(m, 1)?)?).ok()?;
+            let Item::Array(bs) = map_get(m, 2)? else {
+                return None;
+            };
+            let back = bs
+                .iter()
+                .map(|it| match it {
+                    Item::Bytes(r) => <Txid>::try_from(&inner[r.clone()]).ok(),
+                    _ => None,
+                })
+                .collect::<Option<Vec<Txid>>>()?;
+            Some((series, back))
+        };
+        let Some((series, back)) = read() else {
+            return format!("{}'s acceptance does not decode", hex8(&from));
+        };
+        let held = self
+            .store
+            .transfers
+            .get(&crate::store::Transfer::id_of(&from, &me))
+            .filter(|t| t.stage == crate::store::Stage::Offered)
+            .and_then(|t| Some((t.former, t.block.clone()?)));
+        let Some((former, block)) = held else {
+            return format!(
+                "{} accepted an adoption this key did not offer it",
+                hex8(&from)
+            );
+        };
+        if !self.move_in_horizon(&from, &former, &me) {
+            return format!(
+                "{} accepted, and the move is no longer inside the horizon",
+                hex8(&from)
+            );
+        }
+        // into the subnet the node is moving within: the one its place
+        // under the former patron names, where this key holds a position
+        let subnet = self
+            .horizon
+            .locators_of(&from)
+            .iter()
+            .filter_map(|l| l.subnet)
+            .find(|s| self.position_in(s).is_some())
+            .or_else(|| self.subnet());
+        let body = match self.propose_adoption_in(
+            subnet,
+            from,
+            &back,
+            Adopting {
+                evidence: Evidence::Transfer { former, block },
+                series,
+                presented_head: None,
+                key_material: None,
+                carrying: None,
+            },
+        ) {
+            Ok(b) => b,
+            Err(e) => return format!("no adoption of {} was built: {e:?}", hex8(&from)),
+        };
+        let entries = match self.sign_body(&body) {
+            Ok(e) => e,
+            Err(e) => return format!("the adoption of {} was not signed: {e:?}", hex8(&from)),
+        };
+        let mut reply = Vec::new();
+        emit_map_head(&mut reply, 2);
+        emit_uint(&mut reply, 1);
+        emit_bstr(&mut reply, &body);
+        emit_uint(&mut reply, 2);
+        emit_array_head(&mut reply, 2);
+        reply.extend_from_slice(&entries);
+        match self.send_payload(from, payload::KIND_TRANSFER_BODY, &reply) {
+            Ok(msgs) => self.outbox.extend(msgs),
+            Err(e) => return format!("the adoption of {} was not sent: {e}", hex8(&from)),
+        }
+        tracing::info!(target: "transfer", node = %id8(&from), former = %id8(&former), "transfer.adoption.signed");
+        format!("adopting {} on {}'s release", hex8(&from), hex8(&former))
+    }
+
+    /// **As the node: sign the body the new patron built, and finish it**
+    /// (kind 35): reviewed as every adoption body is
+    /// ([`Client::review_and_sign_adoption`], which takes field 9 only for
+    /// the move this person signed the offer of), the envelope assembled
+    /// from both signers' entries, kept, and sent back (kind 36).
+    fn take_transfer_body(&mut self, from: Keyhash, inner: &[u8]) -> String {
+        use rhtn_codec::cbor::{Item, map_get, parse_all, value_slice};
+        let me = self.keyhash();
+        let read = || -> Option<(Vec<u8>, Vec<u8>)> {
+            let item = parse_all(inner).ok()?;
+            let Item::Map(m) = &item else {
+                return None;
+            };
+            let Item::Bytes(r) = map_get(m, 1)? else {
+                return None;
+            };
+            let body = inner[r.clone()].to_vec();
+            let Item::Array(a) = map_get(m, 2)? else {
+                return None;
+            };
+            if a.len() != 2 {
+                return None;
+            }
+            // the two entries without the array's own head, as an envelope
+            // carries them (`wire-format.md` §3.5)
+            let r2 = value_slice(inner, 2)?;
+            Some((body, inner[r2.start + 1..r2.end].to_vec()))
+        };
+        let Some((body, theirs)) = read() else {
+            return format!("{}'s adoption body does not decode", hex8(&from));
+        };
+        let Some((former, _)) = self.accepted_move(&from) else {
+            return format!(
+                "{} sent an adoption body and this person accepted no move under it",
+                hex8(&from)
+            );
+        };
+        let mine = match self.review_and_sign_adoption(&body) {
+            Ok(e) => e,
+            Err(e) => return format!("{}'s adoption body was refused: {e:?}", hex8(&from)),
+        };
+        let env = rhtn_archive::tx::envelope_from_entries(
+            TYPE_ADOPTION,
+            &body,
+            &[(me, mine), (from, theirs)],
+        );
+        match Record::parse(&env) {
+            Ok(rec) if rec.field_hash(2) == Some(from) => {}
+            _ => return format!("{}'s adoption body names another patron", hex8(&from)),
+        }
+        if let Err(e) = self.take_adoption(&env) {
+            return format!("the adoption under {} was not kept: {e:?}", hex8(&from));
+        }
+        self.store
+            .transfers
+            .remove(&crate::store::Transfer::id_of(&me, &from));
+        match self.send_payload(from, payload::KIND_TRANSFER_RECORD, &env) {
+            Ok(msgs) => self.outbox.extend(msgs),
+            Err(e) => {
+                tracing::warn!(target: "transfer", patron = %id8(&from), ?e, "transfer.record.unsent")
+            }
+        }
+        tracing::info!(target: "transfer", patron = %id8(&from), former = %id8(&former), "transfer.adopted");
+        format!(
+            "adopted under {} on {}'s release",
+            hex8(&from),
+            hex8(&former)
+        )
+    }
+
+    /// **As the new patron: keep the record of an adoption this key
+    /// signed** (kind 36): an adoption of the sender under this key on a
+    /// transfer this key offered, whose signatures
+    /// [`Client::take_adoption`] checks.
+    fn take_transfer_record(&mut self, from: Keyhash, inner: &[u8]) -> String {
+        let me = self.keyhash();
+        let rec = match Record::parse(inner) {
+            Ok(r) => r,
+            Err(e) => return format!("{}'s transfer record does not read: {e}", hex8(&from)),
+        };
+        let carries_statement =
+            rhtn_codec::cbor::value_slice(&rec.bytes[rec.body.clone()], 9).is_some();
+        let id = crate::store::Transfer::id_of(&from, &me);
+        let offered = self
+            .store
+            .transfers
+            .get(&id)
+            .is_some_and(|t| t.stage == crate::store::Stage::Offered);
+        if rec.tx_type != TYPE_ADOPTION
+            || rec.field_hash(1) != Some(from)
+            || rec.field_hash(2) != Some(me)
+            || !carries_statement
+            || !offered
+        {
+            return format!(
+                "{} sent a record that is not the transfer adoption this key offered it",
+                hex8(&from)
+            );
+        }
+        match self.take_adoption(inner) {
+            Ok(_) => {
+                self.store.transfers.remove(&id);
+                tracing::info!(target: "transfer", node = %id8(&from), "transfer.recorded");
+                format!("{} is adopted here", hex8(&from))
+            }
+            Err(e) => format!("{}'s adoption here was not kept: {e:?}", hex8(&from)),
+        }
     }
 
     /// Open a backup and **scan it before any of it lands**
@@ -8091,13 +8669,27 @@ impl Client {
                 self.store.direct_hints.insert(from, inner.clone());
                 Dispatched::Candidates(inner)
             }
-            // **a former patron's countersignature, answered without its
-            // person** (design Appendix A.3), and the answer to one asked
+            // **a transfer, a patron's person proposing, the other's
+            // agreeing and the node's signing** [author, 2026-11-28]: each
+            // ask is held for the person it waits on, and what follows an
+            // agreement runs here
             payload::KIND_TRANSFER_REQUEST => {
-                Dispatched::Transfer(self.answer_transfer_request(from, &inner))
+                Dispatched::Transfer(self.take_transfer_request(from, &inner))
             }
             payload::KIND_TRANSFER_GRANT => {
                 Dispatched::Transfer(self.take_transfer_grant(from, &inner))
+            }
+            payload::KIND_TRANSFER_OFFER => {
+                Dispatched::Transfer(self.take_transfer_offer(from, &inner))
+            }
+            payload::KIND_TRANSFER_ACCEPT => {
+                Dispatched::Transfer(self.take_transfer_accept(from, &inner))
+            }
+            payload::KIND_TRANSFER_BODY => {
+                Dispatched::Transfer(self.take_transfer_body(from, &inner))
+            }
+            payload::KIND_TRANSFER_RECORD => {
+                Dispatched::Transfer(self.take_transfer_record(from, &inner))
             }
             // the record that makes a peer, from anybody it names
             payload::KIND_PEERING_RECORD => match self.take_peering_record(&from, &inner) {

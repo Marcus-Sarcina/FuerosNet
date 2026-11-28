@@ -4358,6 +4358,69 @@ impl Participant {
         })
     }
 
+    /// **Propose a transfer, as this person** (`wire-format.md` §7.10.4;
+    /// design §6.2.3) [author, 2026-11-28]: releasing `node`, a
+    /// subordinate of this key, to the new patron `other`; or asking
+    /// `other`, the node's patron, to release it to this key. The other
+    /// patron's person agrees or not, and the node's person then signs the
+    /// adoption offered or does not.
+    pub fn propose_transfer(&self, node: Id, other: Id) -> Result<(), Refused> {
+        self.call("propose_transfer", || {
+            let n = keyhash(&node).ok_or_else(|| Refused::new("a node is 32 bytes"))?;
+            let o = keyhash(&other).ok_or_else(|| Refused::new("a patron is 32 bytes"))?;
+            let msgs = self.handle.with_blocking(move |c| {
+                c.propose_transfer(n, o)
+                    .map_err(|a| Refused::new(rhtn_client::diag::abort(&a)))
+            })?;
+            // what is held is written before it goes, so a restart does
+            // not lose which answer is awaited
+            self.save()?;
+            self.net.carry_noting(msgs)?;
+            Ok(())
+        })
+    }
+
+    /// **The transfers waiting on this person**: a new patron asking for a
+    /// subordinate, a former patron offering one, or an adoption offered
+    /// to this key under a new patron.
+    #[must_use]
+    pub fn transfers_awaiting(&self) -> Vec<TransferAsk> {
+        self.call_plain("transfers_awaiting", || {
+            self.handle.with_blocking(|c| {
+                c.transfers_awaiting()
+                    .into_iter()
+                    .map(|t| TransferAsk {
+                        id: t.id().to_vec(),
+                        node: t.node.to_vec(),
+                        former: t.former.to_vec(),
+                        new_patron: t.new_patron.to_vec(),
+                        asks: match t.stage {
+                            rhtn_client::store::Stage::ReleaseAsked => TransferAsks::Release,
+                            rhtn_client::store::Stage::TakeOffered => TransferAsks::Take,
+                            _ => TransferAsks::Move,
+                        },
+                    })
+                    .collect()
+            })
+        })
+    }
+
+    /// **This person's answer to a transfer waiting on them**: agreed, the
+    /// move goes on to the next party; refused, it is dropped and nobody
+    /// is told.
+    pub fn answer_transfer(&self, id: Id, agree: bool) -> Result<(), Refused> {
+        self.call("answer_transfer", || {
+            let k = keyhash(&id).ok_or_else(|| Refused::new("a transfer is named by 32 bytes"))?;
+            let msgs = self.handle.with_blocking(move |c| {
+                c.answer_transfer(&k, agree)
+                    .map_err(|a| Refused::new(rhtn_client::diag::abort(&a)))
+            })?;
+            self.save()?;
+            self.net.carry_noting(msgs)?;
+            Ok(())
+        })
+    }
+
     /// **Leave a patron** (`light-client-requirements.md` §4.2): minted,
     /// signed, appended and posted in one act, because there is nothing to
     /// propose and nobody to ask.
@@ -4852,6 +4915,32 @@ pub struct DatasetTaken {
     pub other: u64,
     /// Records that did not verify or did not chain.
     pub refused: u64,
+}
+
+/// **A transfer waiting on this person** (`wire-format.md` §7.10.4).
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct TransferAsk {
+    /// What names it, for [`Participant::answer_transfer`].
+    pub id: Id,
+    /// The node moving.
+    pub node: Id,
+    /// The patron it moves from.
+    pub former: Id,
+    /// The patron it moves to.
+    pub new_patron: Id,
+    /// What this person is asked.
+    pub asks: TransferAsks,
+}
+
+/// **What a transfer asks of the person it waits on** (design §6.2.3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum TransferAsks {
+    /// As the former patron: to release `node` to `new_patron`.
+    Release,
+    /// As the new patron: to take `node` from `former`.
+    Take,
+    /// As the node: to sign the adoption under `new_patron`.
+    Move,
 }
 
 /// **One invitation to send**: where to send it, and what to send.
