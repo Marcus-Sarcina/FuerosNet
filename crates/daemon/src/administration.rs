@@ -102,9 +102,11 @@ use tokio::net::{TcpListener, TcpStream};
 /// A convention and not a default: the configuration names the address,
 /// because `Config` takes no policy by omission. What this is for is that a
 /// provisioning page, a firewall rule and this crate's documentation agree
-/// on one number. It sits beside the node's own 7447/UDP so an operator
-/// opening one thinks of the other, it is TCP where that is UDP, and
-/// nothing else in this project claims it [author, 2026-10-08].
+/// on one number. It sits beside 7447/UDP, the port a local or bench node
+/// serves QUIC on, so an operator opening one thinks of the other, it is
+/// TCP where that is UDP, and nothing else in this project claims it
+/// [author, 2026-10-08]. A launched instance serves QUIC on the protocol's
+/// default, 7431/UDP (`wire-format.md` §4.4).
 pub const DEFAULT_PORT: u16 = 7449;
 
 /// **The token acts are proved under at this start**: the replacement the
@@ -143,22 +145,6 @@ pub fn token_in_force(configured: [u8; 32], file: Option<&std::path::Path>) -> [
         }
     }
 }
-
-/// **0600 on a secret this instance keeps**: the token in force is what
-/// authorises an act, and a file anybody on the machine may read is not a
-/// secret.  Said rather than failed where the mode cannot be set, since
-/// the token is already written and refusing afterwards would leave the
-/// operator locked out.
-#[cfg(unix)]
-fn restrict(path: &std::path::Path) {
-    use std::os::unix::fs::PermissionsExt;
-    if let Err(e) = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)) {
-        crate::say!("rhtnd: {}: could not set 0600: {e}", path.display());
-    }
-}
-
-#[cfg(not(unix))]
-fn restrict(_: &std::path::Path) {}
 
 /// Bytes out of lower-case hex, or nothing where it is not hex of whole
 /// bytes: what a nonce and a proof arrive as.
@@ -201,6 +187,11 @@ pub const CALLER_TIMEOUT: Duration = Duration::from_secs(10);
 /// still held to [`CALLER_TIMEOUT`] inside it, because a caller that
 /// sends nothing is a stalled caller whatever it was going to ask for.
 pub const PACKAGE_TIMEOUT: Duration = Duration::from_secs(300);
+
+/// **How many callers are read at once**: enough that a stalled one or a
+/// few leave the operator a way in, and few enough that a stranger cannot
+/// make the surface hold an unbounded number of sockets.
+pub const READERS: usize = 8;
 
 /// The surface an operator reaches their instance over: what it needs to
 /// answer a fetch, to take a run, and to hand the node a record.
@@ -344,9 +335,13 @@ impl Surface {
 
     /// Serve until the caller drops this future.
     ///
-    /// **One caller at a time.** Each exchange is short and an operator is
-    /// one person, so there is nothing to gain from concurrency and a bound
-    /// on it is one fewer thing for a stranger to spend.
+    /// **Read side by side, answered one at a time.** A caller that is
+    /// slow to ask holds only its own reader, so one stalled connection
+    /// does not keep the operator out for the read's whole budget; a
+    /// bounded number are read at once ([`READERS`]), and one more is
+    /// closed unread rather than queued.  What they ask is still answered
+    /// one after another, since an operator is one person and two acts on
+    /// one host need no interleaving.
     pub async fn serve(self) {
         let listener = match TcpListener::bind(self.listen).await {
             Ok(l) => l,
@@ -370,11 +365,14 @@ impl Surface {
              transport key, PUT the signed run to /node/run, and the operator-signed records \
              to /node/endpoint-record and /node/anchor-entry"
         );
+        let me = Arc::new(self);
+        let readers = Arc::new(tokio::sync::Semaphore::new(READERS));
+        let turn = Arc::new(tokio::sync::Mutex::new(()));
         loop {
             let accepted = tokio::select! {
                 a = listener.accept() => a,
-                () = self.reopened.notified() => {
-                    let (code, said) = self.reload();
+                () = me.reopened.notified() => {
+                    let (code, said) = me.reload();
                     if code != 200 {
                         crate::say!("rhtnd: a sealed package reopened and the node did not take it: {said}");
                     }
@@ -384,19 +382,33 @@ impl Surface {
             let Ok((stream, from)) = accepted else {
                 continue;
             };
-            // a caller that stalls holds nothing: the exchange is bounded
-            // and the next one is waiting.  **The outer bound is the
-            // longer one** ([`PACKAGE_TIMEOUT`]), because an install
-            // waits on the host's engine; the read inside it keeps the
-            // short one, which is what a stalled caller meets.
-            let _ = tokio::time::timeout(PACKAGE_TIMEOUT, self.exchange(stream, from)).await;
+            let Ok(reading) = readers.clone().try_acquire_owned() else {
+                // every reader is taken: this one is closed unread
+                continue;
+            };
+            let (me, turn) = (me.clone(), turn.clone());
+            // a caller that stalls holds its own reader and nothing else.
+            // **The outer bound is the longer one** ([`PACKAGE_TIMEOUT`]),
+            // because an install waits on the host's engine; the read
+            // inside it keeps the short one, which is what a stalled
+            // caller meets.
+            tokio::spawn(async move {
+                let _held = reading;
+                let _ =
+                    tokio::time::timeout(PACKAGE_TIMEOUT, me.exchange(stream, from, &turn)).await;
+            });
         }
         // the listener runs until it is dropped, which the service's own end
         // does to it
     }
 
-    /// One connection: read a request, answer it, close.
-    async fn exchange(&self, mut stream: TcpStream, from: SocketAddr) {
+    /// One connection: read a request, answer it in its turn, close.
+    async fn exchange(
+        &self,
+        mut stream: TcpStream,
+        from: SocketAddr,
+        turn: &tokio::sync::Mutex<()>,
+    ) {
         let mut buf = Vec::new();
         let began = std::time::Instant::now();
         let req = loop {
@@ -450,7 +462,10 @@ impl Surface {
                 }
             }
         };
-        let (code, body) = self.answer_to(&req, Some(from));
+        let (code, body) = {
+            let _turn = turn.lock().await;
+            self.answer_to(&req, Some(from))
+        };
         tracing::info!(
             target: "daemon",
             step = "surface_request",
@@ -749,15 +764,11 @@ impl Surface {
         // **the file first, then the memory**: a token in force that the
         // next start would not find is the one state worth refusing to
         // hold
-        if let Some(dir) = path.parent()
-            && let Err(e) = std::fs::create_dir_all(dir)
+        if let Err(e) =
+            rhtn_node::durable::write_private(&path, format!("{}\n", hex(&fresh)).as_bytes())
         {
-            return (500, format!("{}: {e}\n", dir.display()));
-        }
-        if let Err(e) = std::fs::write(&path, format!("{}\n", hex(&fresh))) {
             return (500, format!("{}: {e}\n", path.display()));
         }
-        restrict(&path);
         *self.token.lock().unwrap() = fresh;
         // every proof made under the old token is worth nothing now, and
         // the nonces it spent are of no further interest

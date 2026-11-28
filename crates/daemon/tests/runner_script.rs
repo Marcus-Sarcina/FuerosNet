@@ -186,12 +186,16 @@ fn an_icon_is_read_out_of_an_image_that_is_made_and_never_started() {
             "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '{log}'\n\
              if [ \"$1\" = cp ]; then\n\
              \x20 want=\"$(cat '{held}' 2> /dev/null || true)\"\n\
-             \x20 case \"$2\" in *\":$want\") cp '{file}' \"$3\"; exit 0 ;; esac\n\
+             \x20 case \"$2\" in *\":$want\")\n\
+             \x20   if [ \"$3\" = - ]; then tar -cf - -C '{dir}' file; else cp '{file}' \"$3\"; fi\n\
+             \x20   exit 0 ;;\n\
+             \x20 esac\n\
              \x20 exit 1\n\
              fi\n",
             log = log.display(),
             held = held.display(),
             file = h.dir.join("file").display(),
+            dir = h.dir.display(),
         ),
     )
     .unwrap();
@@ -244,6 +248,9 @@ fn an_icon_is_read_out_of_an_image_that_is_made_and_never_started() {
             .1
             .starts_with("icon image/png 65536\n")
     );
+    // **one far over the cap is cut before it lands**, and is no icon
+    std::fs::write(h.dir.join("file"), vec![0u8; 4 << 20]).unwrap();
+    assert_eq!(h.ask(&format!("icon {image}")).1, "icon none\n");
 
     // and it takes an image reference and nothing else
     assert_eq!(h.ask("icon").0, 2);

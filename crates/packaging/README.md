@@ -83,8 +83,10 @@ listen = "0.0.0.0:7449"
 token  = "<64 hex digits>"
 ```
 
-**7449/TCP is the convention**, beside the node's own 7447/UDP so an operator
-opening one thinks of the other, and TCP where that is UDP. It is a convention
+**7449/TCP is the convention**, beside 7447/UDP, the port a local or bench
+node serves QUIC on, so an operator opening one thinks of the other, and TCP
+where that is UDP. A launched instance serves QUIC on the protocol's default,
+7431/UDP (`wire-format.md` §4.4). It is a convention
 and not a default: the configuration names the address, because `Config` takes
 no policy by omission. Open it in the provider's firewall alongside the QUIC
 port.

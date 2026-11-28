@@ -81,3 +81,6 @@ rhtn-resources = { path = "../resources" }
 # the merge tool, for the field-test test that reads two daemons' files
 # into one timeline
 rhtn-cli = { path = "../cli" }
+# **the phone's kernel against this daemon** (`tests/seam.rs`): the facade
+# the shells bind to, its flavour left to the leaf as the client's is
+rhtn-ffi = { path = "../ffi", default-features = false }

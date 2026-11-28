@@ -737,6 +737,9 @@ pub fn ceremony_cfg() -> Config {
     // What the window does is asserted where a clock can be moved —
     // `client/tests/ceremony.rs`, CER-52
     c.witness_window_s = 0;
+    // and the continuity check's, which a releasable build holds over four
+    // minutes: the rules themselves are `rhtn-client`'s continuity tests'
+    c.continuity.duration_ms = 0;
     c.capture = CaptureParams {
         min_frames: 3,
         max_frames: 3,

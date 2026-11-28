@@ -167,16 +167,27 @@ pub fn sshsig(seed: &[u8; 32], namespace: &str, message: &[u8]) -> String {
 }
 
 /// An Ed25519 ssh key in the two shapes ssh wants.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct HostControlKey {
     /// The `authorized_keys` line: `ssh-ed25519 <base64> rhtn-host-control`.
     pub public_line: String,
     /// The private key, in OpenSSH's own format, unencrypted — the shape
     /// `ssh -i` takes.  **It is a secret**: whoever holds it has a shell
-    /// on the machines this identity launched.
-    pub private_key: String,
+    /// on the machines this identity launched.  Zeroed when dropped.
+    pub private_key: Zeroizing<String>,
     /// The public half's 32 bytes, for anything that wants them raw.
     pub public_bytes: [u8; 32],
+}
+
+/// The public half and nothing of the private one: a key printed in a log
+/// or a panic is the one place it would otherwise leak.
+impl std::fmt::Debug for HostControlKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HostControlKey")
+            .field("public_line", &self.public_line)
+            .field("private_key", &"<withheld>")
+            .finish()
+    }
 }
 
 impl HostControlKey {
@@ -227,17 +238,23 @@ pub fn public_line_bare(public: &[u8; 32]) -> String {
 /// empty options, one key, the public blob, and the private section with
 /// its two equal check words, the key, the comment and the padding that
 /// rounds it to eight bytes.
-pub fn private_key(seed: &[u8; 32], public: &[u8; 32]) -> String {
+pub fn private_key(seed: &[u8; 32], public: &[u8; 32]) -> Zeroizing<String> {
     private_key_named(seed, public, COMMENT)
 }
 
 /// The same under a comment of its own.
-pub fn private_key_named(seed: &[u8; 32], public: &[u8; 32], comment: &str) -> String {
+///
+/// **Every buffer the seed passes through is zeroed when it goes**, and
+/// each is sized before it is written so that no growth leaves an
+/// unzeroed copy behind in a freed allocation.
+pub fn private_key_named(seed: &[u8; 32], public: &[u8; 32], comment: &str) -> Zeroizing<String> {
     let mut pub_blob = Vec::new();
     string(&mut pub_blob, b"ssh-ed25519");
     string(&mut pub_blob, public);
 
-    let mut private = Vec::new();
+    // the check words, the name, the public half, the key pair, the
+    // comment and up to seven bytes of padding
+    let mut private = Zeroizing::new(Vec::with_capacity(8 + 15 + 36 + 68 + 4 + comment.len() + 8));
     // **the check words are equal**, which is how ssh tells a wrong
     // passphrase from a right one; with no cipher they are still written
     let check: u32 = u32::from_be_bytes([seed[0], seed[1], seed[2], seed[3]]);
@@ -245,7 +262,7 @@ pub fn private_key_named(seed: &[u8; 32], public: &[u8; 32], comment: &str) -> S
     private.extend_from_slice(&check.to_be_bytes());
     string(&mut private, b"ssh-ed25519");
     string(&mut private, public);
-    let mut secret = Vec::with_capacity(64);
+    let mut secret = Zeroizing::new(Vec::with_capacity(64));
     secret.extend_from_slice(seed);
     secret.extend_from_slice(public);
     string(&mut private, &secret);
@@ -258,7 +275,9 @@ pub fn private_key_named(seed: &[u8; 32], public: &[u8; 32], comment: &str) -> S
         pad += 1;
     }
 
-    let mut all = Vec::new();
+    let mut all = Zeroizing::new(Vec::with_capacity(
+        15 + 8 + 8 + 4 + 4 + 4 + pub_blob.len() + 4 + private.len(),
+    ));
     all.extend_from_slice(b"openssh-key-v1\0");
     string(&mut all, b"none");
     string(&mut all, b"none");
@@ -267,13 +286,18 @@ pub fn private_key_named(seed: &[u8; 32], public: &[u8; 32], comment: &str) -> S
     string(&mut all, &pub_blob);
     string(&mut all, &private);
 
-    let body = base64(&all);
-    let mut out = String::from("-----BEGIN OPENSSH PRIVATE KEY-----\n");
+    let body = Zeroizing::new(base64(&all));
+    const BEGIN: &str = "-----BEGIN OPENSSH PRIVATE KEY-----\n";
+    const END: &str = "-----END OPENSSH PRIVATE KEY-----\n";
+    let mut out = Zeroizing::new(String::with_capacity(
+        BEGIN.len() + body.len() + body.len().div_ceil(70) + END.len(),
+    ));
+    out.push_str(BEGIN);
     for line in body.as_bytes().chunks(70) {
         out.push_str(std::str::from_utf8(line).expect("base64 is ascii"));
         out.push('\n');
     }
-    out.push_str("-----END OPENSSH PRIVATE KEY-----\n");
+    out.push_str(END);
     out
 }
 

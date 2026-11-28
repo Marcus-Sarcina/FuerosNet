@@ -2128,10 +2128,10 @@ one that is true.
   outside its store is offered again next time, by which point it may be
   inside.
 - **Install a way in to every machine you launch, derived from the
-  signing secret** [author, 2026-10-31]. An operator needs a shell on a
-  machine they rent — installing a package is theirs to do
-  (`infra-client-requirements.md` §9), and so is taking the machine apart
-  — and a key the provider holds or a device keeps is a key that dies with
+  signing secret** [author, 2026-10-31]. An operator needs a way in to a
+  machine they rent — taking the machine apart is theirs to do, and a
+  package is installed through their client rather than a shell
+  (`infra-client-requirements.md` §9.4) — and a key the provider holds or a device keeps is a key that dies with
   that device. So the client derives an Ed25519 **ssh** key from the
   identity's own signing seed under one fixed label, hands the public line
   to the machine in the script it runs once, and keeps nothing: **the

@@ -1,14 +1,15 @@
 # The mobile shells
 
 The light client application is a phone application. The ceremony's
-proximity channels are UWB, NFC and an optical exchange, and its capture is
+proximity channels are NFC and an optical exchange, and its capture is
 a guided camera session (`light-client-requirements.md` §1.3); none of them
 exists in a Rust process, so the participant-facing application is Kotlin
 on Android and Swift on iOS over `rhtn-ffi`.
 
 **These are not Cargo workspace members and cannot be.** They build with
-Gradle and Xcode, and `crates/check.sh` does not run them. Their tests run in
-their own toolchains, on their own runners.
+Gradle and Xcode, in their own toolchains. `crates/check.sh` runs the
+Android shell's unit tests on the JVM where an SDK and a JDK are present
+(its step 4c) and builds no APK.
 
 **They live here anyway, in the same tree as the library.** Eight of the
 nine manual product entries in the acceptance catalogue are this
@@ -23,15 +24,11 @@ the participant's application as it stands — the ceremony end to end, the
 conversations, the contacts, the catalog and the operator's screens — and
 the Swift one is not started. Two directories, one of them a plan.
 
-**Licensing: Apache-2.0 per artifact, AGPL per build that carries
-libsignal** [author, 2026-09-26]. Every file written here is Apache-2.0, as
-the workspace beneath is. A shell that links libsignal — the audited
-implementation of the payload session's cryptography, AGPL-3.0 — is conveyed
-as a whole under AGPL-3.0, because linking it requires that; a build without
-it is Apache-2.0 throughout. **No file changes licence either way**, and a
-release says which of the two it is. Contributions here are granted under
-Apache-2.0, as in the root repository, which is what lets the dependency be
-swapped later without anyone's permission.
+**Licensing: Apache-2.0, per artifact and per build.** Every file written
+here is Apache-2.0, as the workspace beneath is, and so is every build of the
+shell: the payload's cryptography is the kernel's own (the split seal), and
+no AGPL code is linked. Contributions here are granted under Apache-2.0, as
+in the root repository.
 
 **The engine a resource's page is framed in is Mozilla's GeckoView, under
 MPL-2.0** [author, 2026-11-25; MPL-2.0 in a client, 2026-09-16]. It is

@@ -57,6 +57,9 @@ pub fn ceremony(
         // What the window does is asserted where a clock can be moved
         // (`rhtn-client`'s CER-52); a bench build carries thirty seconds
         set.get(n).must("window 0");
+        // and the continuity check's, which a releasable build holds over
+        // four minutes; its rules are `rhtn-client`'s continuity tests'
+        set.get(n).must("continuity 0");
     }
     set.get(one)
         .must(&format!("begin {b} {} initiator", hex(&kh(wa))));

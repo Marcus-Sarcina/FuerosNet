@@ -3804,7 +3804,7 @@ the local exchanges (§14.3). **Kinds 20 to 24 are its opening** [author,
 2026-10-19; 25 retired 2026-10-24]: what a participant and its own nominees
 say to one another from the intent, and the one exchange the prune needs
 between the participants themselves — sent before the four-minute window opens, which is why they are
-their own kinds rather than early uses of the nine.
+their own kinds rather than early uses of the ten.
 
 **Kinds 15 to 19 also arrange a two-signature transaction after the record**
 [author, 2026-10-16]. An adoption (§4.1) and a peering (§4.4) each carry two

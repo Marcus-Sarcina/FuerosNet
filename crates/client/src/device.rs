@@ -197,7 +197,8 @@ pub struct Continuity {
     /// to use while the bench is run often: the capture runs, the loop
     /// still probes and says what it saw, and **nothing is abandoned**.
     /// The reference client's own figure is the four minutes design §7.1
-    /// prices a meeting in.
+    /// prices a meeting in, which is what a build other than the field
+    /// test's holds.
     ///
     /// **Why off rather than re-scaled onto the capture's own span**
     /// [bench, 2026-10-18]: the ratio is design §7.5's figure for four
@@ -219,12 +220,17 @@ pub struct Continuity {
 }
 
 impl Default for Continuity {
-    /// **The check is off** [author, 2026-10-18]; the ratio and the gap
-    /// are design §7.5's reference figures for when it is on, and the
-    /// probe interval is this client's own.
+    /// **The check is off in the field-test build** [author, 2026-10-18]
+    /// and on at design §7.1's four minutes in every other; the ratio and
+    /// the gap are design §7.5's reference figures, and the probe
+    /// interval is this client's own.
     fn default() -> Self {
         Continuity {
-            duration_ms: 0,
+            duration_ms: if cfg!(feature = "fieldtest") {
+                0
+            } else {
+                240_000
+            },
             max_gap_ms: 20_000,
             presence_pct: 90,
             probe_ms: 500,

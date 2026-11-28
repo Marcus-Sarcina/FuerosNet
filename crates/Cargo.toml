@@ -5,7 +5,7 @@ resolver = "3"
 members = ["acceptance", "adaptors", "archive", "cli", "client", "codec", "conformance", "crypto", "daemon", "desktop", "engine", "ffi", "launch",
     "model", "node", "participant", "policy", "resources", "sim", "testapp", "transport"]
 
-# Apache-2.0 on every crate, inherited rather than repeated fifteen times,
+# Apache-2.0 on every crate, inherited rather than repeated in each one,
 # so the grant has one place to be correct.  The full text and the copyright
 # notice are in `LICENSE` at the repository root.
 [workspace.package]

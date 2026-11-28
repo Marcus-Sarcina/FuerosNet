@@ -62,7 +62,7 @@ operations. Encoding for all of it is in
 
 **Not specified.** Nothing currently blocks a subsystem (§22.1). End-to-end payload encryption is the split seal
 (§14.2.4), composed from standard hybrid encapsulation rather than a new
-primitive. **Ten parameters
+primitive. **Nine parameters
 remain unset** (§21.1), sorted by how provisional they actually are in §21.1.1, and
 none of them currently hardens on first deployment. **The test vectors are
 canonical** (§23.4): regenerated under the specification pins whenever the
@@ -3509,8 +3509,7 @@ Two consequences requiring mitigation:
     inquirer observed it and said nothing* — the inquirer is an arbitrary third
     party sharing state with neither patron (§1.1). **What can be made durable is
     the observation, not the behaviour**: an inquirer-signed notice naming the two
-    conflicting assertions would be evidence standing on its own. Unspecified; §22
-    records it.
+    conflicting assertions would be evidence standing on its own. Unspecified.
 
     **The disclosure this creates runs in the design's favour.** It reads at first
     as a privacy cost — a stranger's inquiry generating notifications that name
@@ -3851,7 +3850,7 @@ disclaimed by design and is not a property this chain is protecting.
 **Deliberate multi-device forking is not an attack on this.** The "gain" of carrying
 pre-fork standing into two subnets is the archive doing its job, and a reviewing
 patron already ignores transactions with counterparties it cannot reach. **The
-multi-device problem is *accidental* forking** (§22.2).
+multi-device problem is *accidental* forking** (§23.3).
 
 **A series reissue is also an archive checkpoint, and this is what makes pruning
 possible at all.** Because every record commits to its predecessor, verification walks
@@ -6493,7 +6492,7 @@ socket, where ordinary HTTP is sufficient because nothing is in between.
 | Case | Endpoint | Who sees plaintext |
 |---|---|---|
 | **Leaf → leaf** | The recipient | The recipient, on any device holding its identity. **A direct message always passes the recipient's serving node** [author, 2026-11-19], which holds its ciphertext and one of the two secrets that open it (§14.2.4). Other payload takes the direct path where it can, where nobody relays, and on the fallback both serving infra nodes carry ciphertext (§12.6.3) |
-| **Leaf → patron** | The patron | The patron, legitimately. It is the addressed party, not a relay. Attach, heartbeat, queue operations, currency requests |
+| **Leaf → serving node** | The serving node | The serving node, legitimately. It is the addressed party, not a relay. Attach, heartbeat, queue operations, currency requests; a message to the patron as a person is leaf to leaf (§14.2.4.1) |
 | **Leaf → resource**, hosted on the node | The resource (§11) | The resource **and its hosting node**, which parses and re-serialises the request to insert the credential (§11.0.1, `wire-format.md` §11.2). An endpoint, not a relay, and the same visibility §11.2 gives it over role and membership |
 | **Leaf → resource**, brokered | The resource | **The resource alone**, and this is the default (§11.7): the node authenticates and hands off, the client connects to the service itself, and no application traffic crosses the node |
 | **Leaf → resource**, proxied | The resource | The resource and the proxying node. §11.7 keeps this off the default path precisely because it makes the node a content chokepoint |
@@ -8038,21 +8037,22 @@ several at once, not one per acquisition.
 
   **End-to-end encryption does not confine it to metadata.** Payload is encrypted
   **to the addressed endpoint**, and a provider hosts endpoints, so §14.2's own
-  table gives the plaintext away: a patron reads leaf-to-patron traffic *as the
-  addressed party, not a relay*; a hosting node reads a hosted resource's requests,
+  table gives the plaintext away: a serving node reads what its clients address to
+  it *as the addressed party, not a relay*; a hosting node reads a hosted resource's requests,
   which it parses and re-serialises to insert the credential; a proxying node reads
   proxied ones. What encryption does protect here is **leaf-to-leaf traffic in
   transit and brokered resources**, where the node authenticates and hands off
   (§11.7). Everything terminating at the provider is readable there.
 
-  **Nor is the exposure limited to reading.** An infra node signs **unattended**,
-  because Appendix A requires it to: countersignatures, `SubtreeAck` decisions, currency
-  attestations, disavowals, peering records and topology propagation all proceed
-  without an operator present, so the signing capability is on the machine. One order
-  therefore reaches the **genuine protocol authority** of every hosted instance at
-  once, with no separate social compromise per operator. The item below names
-  resource-access forgery; that is one consequence among these rather than the
-  boundary.
+  **Nor is the exposure limited to reading.** An infra node signs **unattended**
+  what its delegated credential issues (§23.3): `SubtreeAck` decisions and currency
+  attestations, and the topology it propagates proceeds without an operator present,
+  so that signing capability is on the machine. One order therefore reaches **what
+  every hosted instance issues** at once, with no separate social compromise per
+  operator. What advances an operator's archive, a countersignature, a disavowal or
+  a peering record, is signed on the operator's own device and is not on the machine
+  (§23.3). The item below names resource-access forgery; that is one consequence
+  among these rather than the boundary.
 
   **And the observation boundary is the provider, not the node.** Where a participant
   holds separate identities in two subnets whose serving nodes are hosted together,
@@ -8099,10 +8099,10 @@ several at once, not one per acquisition.
   what compelling a provider is *for*: scalable, deniable, invisible to the people it
   collects from, and the direct path denies it that for content, leaving impersonation
   instead: **per-target and prospective, never bulk and never retrospective**.
-  What it is *not* is self-burning [author, 2026-09-03]. Nothing cryptographically
-  distinguishes the operator's phone from their hosted instance under one shared
-  key (§23.3); concurrent activity under that key is the ordinary multi-device
-  condition, not an anomaly; and the horizon a direct exchange draws from
+  What it is *not* is self-burning [author, 2026-09-03]. Nothing
+  distinguishes an actor serving under the instance's credential from the instance
+  itself, which holds it by design (§23.3); activity under it is the instance's
+  ordinary condition, not an anomaly; and the horizon a direct exchange draws from
   includes parties who have never met the operator (P17), so an impersonation
   need not encounter anyone equipped to notice. **Detection is contingent on the
   counterparty's actual acquaintance with the operator, which the architecture
@@ -8335,7 +8335,8 @@ several at once, not one per acquisition.
   **The reach is not zero, and the earlier reason — that a fake region "harms
   nobody who is not engaging with it" — was wrong.** Witness eligibility is
   not a function of standing, so a node placed by a single boundary adoption,
-  valid without a proof of presence (§6.1.1), sits in a neighbourhood whose own
+  carrying its former patron's countersignature in place of a proof of presence
+  (§6.1.1), sits in a neighbourhood whose own
   parties nominate from it [author, 2026-10-19: each party draws its witnesses
   from its own contacts, §7.1.1]. The harm then lands on the *counterparty* of
   whoever engaged it — a party that never engaged with it at all: the C1 and C2
@@ -8569,7 +8570,7 @@ plaintext, and a message is one or the other.
 **Required:** payload MUST be encrypted end-to-end to its addressed endpoint,
 independently of hop transport, so nodes acting as *relays* carry ciphertext they
 cannot read. The endpoint is not always another person see **§14.2**, which
-separates the leaf-to-leaf, leaf-to-patron and leaf-to-resource cases and the
+separates the leaf-to-leaf, leaf-to-serving-node and leaf-to-resource cases and the
 patron's two roles. This is enforced at the source by simply not sharing the key,
 and therefore a genuine MUST (Appendix A). It also disposes of most of §19.5's queue
 question, a queue holding ciphertext is a much smaller problem than one holding
@@ -8690,7 +8691,7 @@ and a citation to a missing number resolves there.
 | P27 | **`AbuseReport.detail` puts arbitrary particulars into a signed, portable object** (§11.6) | **Low, reduced** | Not a disclosure to the recipient, who is the resource owner and already holds the context (see the withdrawn C16). **The residual was portability by a third-party reporter**, and there is no such party: the signer is the owner's own resource, so the object does not leave the owner's control unless the owner releases it. **That choice remains unreachable by any rule** (§1.1), which is why this is reduced rather than closed — a signature still makes forwarded particulars credible in a way an unsigned account would not. **`detail` may carry an application's own record of which of its users complained**, which is where any real personal particular now sits. Bounded at 1 KB (`wire-format.md` §6.3), which limits volume rather than kind |
 | P28 | **Source photographs may carry EXIF and contextual background** (§7.5) | Low | See C17. Encryption under the subject's keystream (§7.5.2) means a compliant client holds nothing readable; stripping still applies because a legitimate decryption during verification puts plaintext in the holder's hands |
 | **P29** | **A ceremony counterparty holds the victim's raw capture indefinitely** (§7.5) — **substantially answered by §7.5.2** for compliant clients, where the capture is ciphertext the subject holds the key to | Medium–High | Retention is a client commitment with no detection mechanism (P13). An adversary attending one meeting acquires a biometric sample joined to a record naming time, coarse place and social position. The ceremony is a collection event as much as an evidence event, and the victim consents to the second |
-| P30 | **A brokered external session may outlive a user's membership** (§11.2) | Medium | **Addressed at the client**: `light-client-requirements.md` §6 requires telling the user, at first use of a brokered resource, that ending their membership will not end that vendor's session. The network can stop new establishment; it cannot reach into a session running on someone else's terms |
+| P30 | **A brokered external session may outlive a user's membership** (§11.2) | Medium | **Addressed where an owner reads it** [author, 2026-11-05]: the limit bears on an owner's belief that revoking a membership was complete, so it is said to the owner (`infra-client-requirements.md` §10.5) and not to the member, who has lost nothing and has nothing to act on (`light-client-requirements.md` §8). The network can stop new establishment; it cannot reach into a session running on someone else's terms |
 | P31 | **A hostile infra extension is inside the trust boundary** (`infra-client-requirements.md` §9.2) | Medium | Narrowed from a claim about joining separated datasets, which the design does not permit — no binding exposes network primitives to a package. The residual is that **installed code runs inside the boundary the threat model draws around operator conduct**, and whether an isolation mechanism holds against a hostile module is an engineering question this document does not settle |
 | P32 | **Client-side caches have no stated lifetimes** — resolved locators, catalog answers, session and capability history, currency queries (§12.6.1, §11.5) | Medium | Each is a record of who a user looked for and when, held on a device that can be seized. **A cache with no expiry is a retention decision made by omission**, and the endpoint-aggregation problem (C9) is what it feeds. Client obligation added; the values are unset |
 | P33 | **Multi-device replication semantics are unspecified** (§23.3) | Undetermined | **Answered at §23.3** [author, 2026-09-16]: seeds sit only where their holder put them — the ceremony device, and a desktop restored from the phrase [author, 2026-11-18] — and every other device carries a delegated transport credential; deletion state follows the seed, §7.5.2 making a capture decryptable only when its subject releases a key derived from one; archives, captures and caches go where the storage is, under §13.7.1's envelope. Retention and deletion commitments can be assessed now, being a property of one device rather than of an unspecified set. Severity is left as filed rather than restated |
@@ -9193,8 +9194,8 @@ indefinitely.
 not be reassembled from six registers.** What is wanted in a *later* release is §23;
 nothing in that chapter blocks anything in this one.
 
-**The identity, presence, routing and messaging layers are specified. The resource
-layer is partly specified.** Every transaction, record, signature rule and encoding is
+**The identity, presence, routing, messaging and resource layers are
+specified.** Every transaction, record, signature rule and encoding is
 specified. What remains is parameter values, policy tuning, product behaviour, and one
 implementation attempt.
 
@@ -9214,13 +9215,13 @@ order and refusal behaviour, with the role row consulted as a lookup.
 
 ### 22.2 Decide during implementation
 
-- **Ten unset parameters** (§21.1), sorted in §21.1.1 by how provisional they
+- **Nine unset parameters** (§21.1), sorted in §21.1.1 by how provisional they
   actually are. **None is currently in the class that hardens on first deployment**,
   which is a change worth noting rather than a permanent property.
 - **`§14.2.4`'s remaining caveats**: the split seal's composition wants an
   analysis of its own, and §5.2's crate maturity applies.
   **Payload-type demultiplexing is settled** [2026-09-30]: `wire-format.md`
-  §7.10.1 registers the kind tag and its twenty values, the ceremony's own
+  §7.10.1 registers the kind tag and its thirty values, the ceremony's own
   conversation (§7.1) among them and the arranging of an adoption after the
   record with it.
 - **The canonical biometric profile** (§7.5) is settled but for its fuzzing
@@ -9277,7 +9278,7 @@ line here says *this is not being built yet*.
 
 ### 23.1 Deferred by decision
 
-- **Autonomous participation** and the attention question depending on it (§22). Not to
+- **Autonomous participation** and the attention question depending on it (§23.2). Not to
   be implemented in this or any intervening version.
 - **Transaction types beyond the current six** (seven numbers allocated; type 6
   is a tombstone). ~~And multiple identities per client~~ — **built 2026-11-07**
@@ -9633,9 +9634,13 @@ one node.
 
 ### A.3 What a client does without asking
 
-**Infra operation is automatic.** Routing, queuing, countersigning
-adoptions, acknowledging subtree membership (§11.2.1), replication and issuing
-resource credentials all proceed without user intervention. **Witnessing and
+**Infra operation is automatic.** Routing, queuing, acknowledging subtree
+membership (§11.2.1), replication and issuing resource credentials all proceed
+without user intervention. **So does countersigning an adoption, on the patron's
+light client** [author, 2026-11-27]: the node caches an adoption awaiting its
+patron's signature with the other traffic it holds for that client, and the
+client signs it automatically when it is next available, so no adoption goes
+unrecognised because a light client is offline. **Witnessing and
 answering a verifier query are automatic too, despite resembling human acts**: the
 witness's client observes a ceremony, tests the evidence and signs without pausing
 for its operator's approval, and a verifier's client compares a profile

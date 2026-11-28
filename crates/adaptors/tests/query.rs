@@ -44,6 +44,9 @@ fn host(name: &'static str, cfg: Config, serving: &Arc<dyn Serving>, inboxes: &I
 fn buffered(ms: u64) -> Config {
     let mut c = Config::default();
     c.verifier.grant_buffer_ms = ms;
+    // the continuity check off: a releasable build holds the counterparty
+    // across four minutes, and these meetings run against a real clock
+    c.continuity.duration_ms = 0;
     c
 }
 

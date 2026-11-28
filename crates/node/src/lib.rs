@@ -30,6 +30,8 @@ pub mod currency;
 /// The node's diagnostic events, compiled out of a releasable build.
 pub mod diag;
 
+/// A secret on the disk, written owner-only and whole or not at all.
+pub mod durable;
 /// The directive plane between the instances this node hosts
 /// (`resource-design/federation-model.md` §2, §5, §6), stubbed at the
 /// node: envelopes, their semantics, and the reserved paths they cross.

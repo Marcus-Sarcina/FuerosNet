@@ -418,7 +418,7 @@ fn act(ask: &Ask, path: &str, body: &[u8], budget: Duration) -> Result<String, S
 ///
 /// It is read out of the operator's identity file for this act and is in
 /// no file of its own.
-fn runner_key(ask: &Ask) -> Result<String, String> {
+fn runner_key(ask: &Ask) -> Result<zeroize::Zeroizing<String>, String> {
     let path = ask
         .identity
         .as_ref()

@@ -410,6 +410,21 @@ pub struct LiveNode {
     pub verifier: Arc<Mutex<Option<LocalVerifier>>>,
 }
 
+/// **A node stopped gives back what it held**: its session layer's own
+/// handlers reach it through the slot its adjacency shares, so without this
+/// the node kept itself alive, and with it the socket it served on, for as
+/// long as the process ran.  Emptying the slot breaks that cycle, and
+/// closing the two endpoints ends the tasks serving them.
+impl Drop for LiveNode {
+    fn drop(&mut self) {
+        if let Ok(mut held) = self.adjacency.node.lock() {
+            held.take();
+        }
+        self.endpoint.close(0u32.into(), b"stopped");
+        self.client_ep.close(0u32.into(), b"stopped");
+    }
+}
+
 impl LiveNode {
     /// Start a node on loopback.  The hooks are installed on `cfg` before
     /// the transport node is built, so the first session already carries.

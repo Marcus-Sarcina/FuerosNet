@@ -24,6 +24,10 @@ gate:
     CARGO_HOME: $CI_PROJECT_DIR/.cargo
     KOTLIN_VERSION: "2.4.20"
     JNA_VERSION: "5.17.0"
+    # GitHub's published digest for the zip; Maven Central publishes only
+    # a SHA-1 for the jar, which the copy hashed here matched [2026-11-27]
+    KOTLIN_SHA256: "59e9ca74c7904ef2c122b12114937673ccce68de820a663f0ed66ccf8799e0b7"
+    JNA_SHA256: "b3a9408e7c51e08ef0e3bfcc08f443f6ec0f6191ba8cd7c18d53d2b22e5bdbc0"
     # The checkout cleaner spares the two build directories, which live in
     # the runner's per-project build volume between jobs; this is the whole
     # caching arrangement, faster than packing a multi-gigabyte target/
@@ -56,12 +60,17 @@ gate:
     OPENGREP_RULES_COMMIT: "f1d2b562b414783763fd02a6ed2736eaed622efa"
     OPENGREP_RULES_SHA256: "9a5f1cd5c625418cc1c776120123e2d4371df9bb66e099426b17c3488e13619d"
   before_script:
-    - apt-get update -qq && apt-get install -y -qq python3 openjdk-17-jdk-headless unzip curl > /dev/null
+    # the last three are the desktop window's, which check.sh lints where
+    # they are present
+    - apt-get update -qq && apt-get install -y -qq python3 openjdk-17-jdk-headless unzip curl pkg-config libwebkit2gtk-4.1-dev libgtk-3-dev > /dev/null
     - rustup component add rustfmt clippy
     - cargo install cargo-deny cargo-sweep cargo-nextest --locked
     - mkdir -p "$HOME/opt/downloads" && cd "$HOME/opt"
-    - curl -sSL -o kotlin.zip "https://github.com/JetBrains/kotlin/releases/download/v$KOTLIN_VERSION/kotlin-compiler-$KOTLIN_VERSION.zip" && unzip -q kotlin.zip
-    - curl -sSL -o "downloads/jna-$JNA_VERSION.jar" "https://repo1.maven.org/maven2/net/java/dev/jna/jna/$JNA_VERSION/jna-$JNA_VERSION.jar"
+    - curl -sSfL -o kotlin.zip "https://github.com/JetBrains/kotlin/releases/download/v$KOTLIN_VERSION/kotlin-compiler-$KOTLIN_VERSION.zip"
+    - echo "$KOTLIN_SHA256  kotlin.zip" | sha256sum -c -
+    - unzip -q kotlin.zip
+    - curl -sSfL -o "downloads/jna-$JNA_VERSION.jar" "https://repo1.maven.org/maven2/net/java/dev/jna/jna/$JNA_VERSION/jna-$JNA_VERSION.jar"
+    - echo "$JNA_SHA256  downloads/jna-$JNA_VERSION.jar" | sha256sum -c -
     - mkdir -p "osv-scanner/v$OSV_SCANNER_VERSION" "opengrep/v$OPENGREP_VERSION" "opengrep/rules-$(printf %.7s "$OPENGREP_RULES_COMMIT")"
     - curl -sSfL -o "osv-scanner/v$OSV_SCANNER_VERSION/osv-scanner_linux_amd64" "https://github.com/google/osv-scanner/releases/download/v$OSV_SCANNER_VERSION/osv-scanner_linux_amd64"
     - echo "$OSV_SCANNER_SHA256  osv-scanner/v$OSV_SCANNER_VERSION/osv-scanner_linux_amd64" | sha256sum -c -

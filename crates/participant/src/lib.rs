@@ -574,6 +574,15 @@ impl Instrument {
                     .map_err(|e| e.reason().to_string())?;
                 Ok(vec![format!("window {seconds}")])
             }
+            // and the continuity check's window, in milliseconds, which a
+            // releasable build holds over four minutes: zero is the check
+            // off, as the field-test build has it
+            ["continuity", ms] => {
+                let ms: u64 = ms.parse().map_err(|_| "continuity <ms>".to_string())?;
+                c.set_continuity_window_ms(ms)
+                    .map_err(|e| e.reason().to_string())?;
+                Ok(vec![format!("continuity {ms}")])
+            }
             ["witness-ask"] => Ok(vec![format!(
                 "witness-ask {}",
                 carry::pack_ask(&c.witness_ask().map_err(|e| e.reason().to_string())?)

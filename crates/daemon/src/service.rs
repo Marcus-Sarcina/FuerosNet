@@ -588,7 +588,8 @@ impl Service {
         // The derived state is written out beside the store, so a wake
         // folds in what arrived since rather than replaying the history
         // [author, 2026-09-13]; a snapshot that cannot account for what the
-        // store holds is discarded and the whole fold runs
+        // store holds is discarded and repaired from the neighbours' replay
+        // (design §15.1.1), never folded again from the records in force
         // **the downline table is read before the fold and settled by it**
         // (design §15.2.2): what memos told this node of positions beyond
         // its horizon is in no store, so it is kept beside the derived
@@ -1277,21 +1278,35 @@ impl Service {
     }
 
     fn write_back(&self) -> Result<(), std::io::Error> {
-        let mut view = self.node.view.lock().unwrap();
-        view.profiles.save(&self.keys)?;
-        view.archive.save(&self.archive)?;
-        // what is kept of a relationship nobody in the horizon is party to
-        // any longer goes before the write (`infra-client-requirements.md`
-        // §4.3)
-        view.settle_kept();
-        view.store.save(&self.topology)?;
-        std::fs::write(self.topology.join(DOWNLINE), view.downline.encode())?;
-        std::fs::write(self.topology.join(LOCAL_MAP), view.local_map.encode())?;
+        // **taken under the lock, written after it**: everything goes
+        // into copies at one instant, so the derived state and the store
+        // it is a fold of agree, and nothing that needs the view waits on
+        // the disk
+        let (profiles, archive, store, downline, local_map, derived) = {
+            let mut view = self.node.view.lock().unwrap();
+            // what is kept of a relationship nobody in the horizon is
+            // party to any longer goes before the write
+            // (`infra-client-requirements.md` §4.3)
+            view.settle_kept();
+            (
+                view.profiles.clone(),
+                view.archive.clone(),
+                view.store.persisted(),
+                view.downline.encode(),
+                view.local_map.encode(),
+                view.materialise().encode(),
+            )
+        };
+        profiles.save(&self.keys)?;
+        archive.save(&self.archive)?;
+        store.save(&self.topology)?;
+        std::fs::write(self.topology.join(DOWNLINE), downline)?;
+        std::fs::write(self.topology.join(LOCAL_MAP), local_map)?;
         // the derived state last, so it is never newer than the store it
         // claims to be a fold of: a snapshot ahead of its store would be
         // discarded on the next start, which costs a replay, while a
         // snapshot behind is exactly the case the watermark handles
-        std::fs::write(self.topology.join(DERIVED), view.materialise().encode())
+        std::fs::write(self.topology.join(DERIVED), derived)
     }
 
     /// Serve until signalled, then stop.

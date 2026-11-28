@@ -112,6 +112,11 @@ impl NodeKeyService {
                 };
                 let mut held = Vec::new();
                 for f in files.flatten() {
+                    // a key is a file named by its number, and nothing
+                    // else in the directory is one
+                    if f.file_name().to_string_lossy().parse::<u64>().is_err() {
+                        continue;
+                    }
                     if let Some(h) = std::fs::read(f.path()).ok().and_then(|b| read_held(&b)) {
                         held.push(h);
                     }
@@ -138,10 +143,9 @@ impl NodeKeyService {
         let Some(p) = self.path(recipient, h.fields.n) else {
             return Ok(());
         };
-        if let Some(parent) = p.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        std::fs::write(&p, write_held(h))
+        // whole or not at all: rotation rewrites the retired key in
+        // place, and that is the key the queued messages still need
+        crate::durable::write_private(&p, &write_held(h))
     }
 
     fn unlink(&self, recipient: &Keyhash, n: u64) {

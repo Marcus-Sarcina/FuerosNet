@@ -13,7 +13,7 @@ use std::collections::BTreeMap;
 pub type Triple = (Keyhash, Txid, u64);
 
 /// The store, kept on disk where it was opened at a directory.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ProfileStore {
     held: BTreeMap<Triple, Vec<u8>>,
     dir: Option<std::path::PathBuf>,

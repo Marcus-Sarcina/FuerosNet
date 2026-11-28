@@ -37,9 +37,9 @@ pub mod package_seal;
 /// The split seal (design §14.2.4): the identity's encryption key, the
 /// message key, the AEAD and the sender's tag.
 pub mod seal;
-pub mod signer;
 /// What a caller must provide to sign: the trait the profile's signing
 /// contexts are written against.
+pub mod signer;
 /// **The ssh key that controls a node this identity launched**: derived
 /// from the signing seed, so the phrase that restores the identity
 /// restores the shell on its machines (`light-client-requirements.md`

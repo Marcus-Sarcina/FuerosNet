@@ -1,21 +1,21 @@
 ﻿# FuerosNet
 
-FuerosNet is a reconfigurable-heirarchic trust and networking protocol built to leverage personal relationships and in-person interactions.
+FuerosNet is a reconfigurable-hierarchic trust and networking protocol built to leverage personal relationships and in-person interactions.
 
-While FuerosNet adopts some patterns familiar from cryptocurrency and/or privacy network projects, it’s core social structure is self-organizing hierarchies of users who are known to one another through in-person interactions.
+While FuerosNet adopts some patterns familiar from cryptocurrency and/or privacy network projects, its core social structure is self-organizing hierarchies of users who are known to one another through in-person interactions.
 
 
 ## Key Features
 
-- The Proof-of-Presence ceremony generates a cryptographically attested record of a substantial in-person meeting between users. PoP replaces proof-of-work and similar mechanisms used to secure distributed systems by imposing it’s cost on the non-parallelizable resource of human presence and attention rather than on an economic resource such as electricity or financial assets.
+- The Proof-of-Presence ceremony generates a cryptographically attested record of a substantial in-person meeting between users. PoP replaces proof-of-work and similar mechanisms used to secure distributed systems by imposing its cost on the non-parallelizable resource of human presence and attention rather than on an economic resource such as electricity or financial assets.
 
 - Trust and visibility in FuerosNet are user-centric, so the system does not require a global ledger or namespace. Users of FuerosNet are free to distrust or completely disregard distant portions of the network, providing a natural resistance to Sybil and similar attacks.
 
 - Because FuerosNet does not require a token or other global ledger, it does not lend itself to financial attacks or pump-and-dump schemes. Instead of promising to make you rich, FuerosNet exists to facilitate communication and collaboration with people you know and trust.
 
-- Message routing and access control flow along a self-organizing user heirarchy with social benefits described in [Section 3.3](/network-design.md#3.3-the-infrastructure-tier).
+- Message routing and access control flow along a self-organizing user hierarchy with social benefits described in [Section 3.3](/network-design.md#3.3-the-infrastructure-tier).
 
-- Subnets within FuerosNet are able to smoothly merge or partition with the infrastructure and resources following their individual owners. Information and visibility resist concentration and therefor surveillance by untrusted parties.
+- Subnets within FuerosNet are able to smoothly merge or partition with the infrastructure and resources following their individual owners. Information and visibility resist concentration and therefore surveillance by untrusted parties.
 
 - Infrastructure is user-owned with the increased status of a Patron node as the incentive to contribute. This means FuerosNet requires no central operator.
 
@@ -28,11 +28,11 @@ While FuerosNet adopts some patterns familiar from cryptocurrency and/or privacy
 
 The system consists of three main components:
 
-1) This repository contains the network protocol itself, establishing it’s high level design, trust model, transaction types, and wire format and implements the core libraries required to operate the protocol without any platform-specific implementation or user interface.
+1) This repository contains the network protocol itself, establishing its high level design, trust model, transaction types, and wire format, and the core libraries that implement it, in `crates/`.
 
-2) The Infrastructure-Node repo will be a reference implementation of the FuerosNet infra node along with a set of base resources and the resource interface for expansion with third-party applications.
+2) The reference infrastructure node is here too (`crates/daemon`, run as `rhtnd`), with the resource interface for expansion with third-party applications. The base applications live in a repository of their own.
 
-3) Several Light-Client-Node repositories will contain reference implementations of the user-facing app for various desktop and mobile targets. (In FN jargon, this is called the “light client” in recognition that many users will not contribute infrastructure and will only operate as this type of node). Launching and administering infrastructure nodes will also primarily be done through an interface in the light client.
+3) The reference implementation of the user-facing app is here as well, for Android (`crates/mobile/android`) and the Linux desktop (`crates/desktop`). (In FN jargon, this is called the “light client” in recognition that many users will not contribute infrastructure and will only operate as this type of node). Launching and administering infrastructure nodes is done through an interface in the light client.
 
 
 ### Building from source
@@ -115,11 +115,11 @@ You are also welcome to email marcus@sarcina.co with your comments, questions, u
 
 **The core libraries are Apache-2.0**, and are meant to be built on without a copyleft obligation propagating out of them. Nothing under a copyleft licence is linked into them.
 
-**Every artifact this project authors in the reference clients is also Apache-2.0** — the application code, the platform shells, the resources, all of it. The exception is one dependency: [libsignal](https://github.com/signalapp/libsignal), which is AGPL-3.0 and is the audited implementation of the payload session's cryptography.
+**Every artifact this project authors in the reference clients is also Apache-2.0** — the application code, the platform shells, the resources, all of it — and so is every client build.
 
-**A client build that includes libsignal is conveyed as a whole under AGPL-3.0**, because that is what linking AGPL code requires. This does not relicense any file: each source artifact remains under the licence its header states, and **a build that does not include libsignal is Apache-2.0 throughout**. Releases carry which of the two they are, and the AGPL obligation attaches to those builds that contain it and to no others.
+**Two pieces of third-party code reach a client under their own terms.** On Android, the engine a resource's page is framed in is Mozilla's [GeckoView](https://hg.mozilla.org/releases/mozilla-release), under MPL-2.0, shipped as Mozilla released it with no file of it changed. On the Linux desktop, the window and its web view are the system's own WebKitGTK and GTK 3, under the LGPL, linked dynamically and never bundled. Neither one's terms reach anything written here.
 
-**Contributions are Apache-2.0 everywhere**, in the client repositories exactly as in this one, on the terms below. That is what keeps the arrangement above reversible: if an audited implementation under a permissive licence becomes available, the dependency is swapped and subsequent builds are Apache-2.0 again, with nobody's permission needed.
+**Contributions are Apache-2.0 everywhere**, on the terms below.
 
 ### Contributing
 

@@ -42,5 +42,7 @@ rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", 
 rustls-native-certs = "0.8"
 # MIT OR Apache-2.0; `diag merge` reads the field-test files' JSON lines
 serde_json = { workspace = true }
+# a runner key held only as long as the act that carries it
+zeroize = { workspace = true }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "io-util"] }
 quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls-aws-lc-rs", "log"] }

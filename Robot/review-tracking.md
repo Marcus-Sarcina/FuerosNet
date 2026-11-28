@@ -22936,3 +22936,114 @@ against `2865fd0d` (five Rust, two Android) before anything was changed.
 | P5 | `review_20261125_hosted_session_must_be_fresh_after_restart` | The hosted session identifier was a hash of member, resource and a count, so it repeated after a restart and anyone could compute it | **Fixed**: sixteen random bytes. The probe passes |
 | P6 | `another_registered_resource_is_not_this_pages_resource` | The phone's frame proxy carries a request for any resource being served, whichever frame asked: with two framed at once, one page reaches the other's resource as the member | **Fixed 2026-11-26**: the proxy refuses, before any resource is looked for, a request the engine marks `Sec-Fetch-Site` other than `same-origin` or `none`, one whose `Origin` is not the host asked, and one with no mark (`Carrier.crossed`); `a_request_that_crossed_from_another_origin_is_not_carried` (CAT-034). **Measured on MRK, Gecko 161**: the screen's own load, 32 parts, 10 segments and the page's report were carried under the rule with nothing refused; a fetch to another address under `localhost` and one to the page's own origin from a sandboxed document each arrived marked `cross-site` and were refused (`carrier.crossed`, `framed` false and true). The probe as filed no longer compiles, the origin now taking an identity; its assertion is the regression test's. The desktop has no such route: each window's scheme handler answers its own origin only |
 | P7 | `opening_the_same_resource_as_another_identity_does_not_replace_the_first_frame` | A resource's origin is its keyhash alone, so a second identity opening it replaces the first's serving, and the two share the page's storage | **Fixed 2026-11-26** on his ruling of that day ("Yes, separate storage per identity"): the origin is one label, a SHA-256 of identity and resource cut to 31 bytes, on phone and desktop (`Frames.host`, `frame::origin`), so each is its own site as well as its own origin; the phone's screen fixes its identity when it opens; `one_resource_opened_as_two_identities_is_answered_as_each` (CAT-035). **Found beside it on the desktop**: a window was opened as the identity that held the subnet and then asked as whichever identity was in focus, and one resource had one store and one window whoever opened it; a window now asks as the identity that opened it, with a store per identity (`frame::storage`). Script consent stays per resource, as light-client section 8 has it. What bench pages stored under the old origins is orphaned, there being no migration before release |
+
+## Project review of 2026-11-27 (filed as `reviews/project-review-2026-11-27.md`)
+
+Written against `5d358a29`; verified at `70981b64`, every finding read against
+the code or text it cites (the four P0s by me, the rest by two read-only
+agents whose stronger claims I re-read). F-numbers are this pass's own and are
+never reused.
+
+### Security and correctness (code)
+
+| F | Finding | Verdict | Evidence, and what the review got wrong |
+|---|---|---|---|
+| F01 | A hosted package administers its node over the shared loopback | **Holds** | `package-runner.sh:247` `--network=host`; `administration.rs:639` loopback returns Ok. Contradicts infra §8.2's own reason for replacing the token (a package reading provider metadata). Host networking is his 2026-11-26 standing (future-features §8), so the fix is on the surface side. **Decision owed** |
+| F02 | Phone sends the runner private key and the replacement token in cleartext | **Holds** | `Provision.kt:284` `http://`; `ActActivity.kt:323` `"key" to key`; `rotate` takes `token` in the body. Infra §8.2 leaves the channel unspecified. **Decision owed** (raised with F01) |
+| F03 | Continuity check off in every build | **Holds as a divergence** | `device.rs:227` unconditional `duration_ms: 0`; `deferred-decisions.md` records "off on the field-test build"; `ceremony.rs:99` gates the window on `fieldtest`. No release exists, so pre-release, not an emergency |
+| F04 | Runner hardening | **Mostly holds** | No `--memory`/`--cpus`/`--pids-limit`/`--user`; inode quota 0 (`:219`); `project_id` unlocked (`:178`); icon copied before its cap (`:288-299`); `node-send` tars blocks with packages running. Review omitted `--read-only --cap-drop=all no-new-privileges` already on the line; `node-receive`'s tar comes only from the operator's own machine over the runner key, so lower than stated. Limit values are parameters: **decision owed** |
+| F05 | Spent nonces forgotten after 1024 acts or a restart | **Holds, stronger than stated** | `administration.rs:697` FIFO at `NONCES_REMEMBERED`; nonces client-chosen, no time. Infra §8.2's "a captured proof is worth nothing after it" is not met. Moot for captured proofs once F02's channel is encrypted, still owed |
+| F06 | `Surface::serve` serial | **Holds** | `administration.rs:373-393`; one slow caller holds the surface |
+| F07 | Node-key writes not atomic, mode left to umask | **Holds, stronger** | `node_keys.rs:144`; rotation rewrites the *retired* key in place (`:221`), the one queued mail needs; truncated file silently skipped on reload |
+| F08 | Token written then chmodded, not atomic | **Holds** | `administration.rs:757-760`; truncated file silently falls back to the configured token (`:137-142`); same pattern `cli/src/keys.rs:148` |
+| F09 | SSH private key in unzeroized buffers | **Holds, plus** | `crypto/src/ssh.rs:235-270`; and `HostControlKey` derives `Debug` over `pub private_key` (`:170-177`) |
+| F10 | Android admin tokens in plaintext preferences | **Holds** | `OperatorActivity.kt:76`, `OperatorStore.kt:225`; `allowBackup="false"` mitigates |
+| F11 | Desktop provider tokens in plaintext files | **Partly** | 0600 files as the desktop README states; `custody.rs:4` limits the keyring to two secrets and the CLI reads the same file. **Decision owed** |
+| F12 | Desktop temp SSH key at a PID path without `create_new` | **Partly** | Directory is 0700 (`platform.rs:108`); the real defect is two tunnels in one process sharing the path |
+| F13 | No low-order check in `seal.rs` `tag_key` | **Holds, P2** | `seal.rs:119-124`; specs silent; a peer's own low-order auth key makes its tags forgeable. Adding a refusal is a wire statement: **decision owed** |
+| F14 | `crypto/src/lib.rs` doc attached to the wrong module; Android `land` no fsync; orphan KDocs | **Holds** | `lib.rs:40-47`; `AndroidShell.kt:297-310`, `:218`; also `Provision.kt:224` |
+| F15 | rustix 1.1.4 (RUSTSEC-2026-0486) | **Holds** | `Cargo.lock:4297`; `osv-scanner.toml:39-40` says 1.1.6 fixes it |
+| F16 | `rhtn-desktop --features gui` never compiled by the gate or CI | **Holds** | `desktop/Cargo.toml:82,88`; no `gui` in `check.sh` or `.gitlab-ci.yml`; `main.rs`, `custody.rs`, `window.rs` unchecked |
+| F17 | CI downloads kotlin and jna unhashed | **Holds, plus** | `.gitlab-ci.yml:63-64`, no `-f` on the curls either; `rust:1-bookworm` unpinned |
+| F18 | Desktop links 8 workspace crates against ffi's "nothing else" sentence | **Holds** | `ffi/src/lib.rs:8-11`; **decision owed**: stale sentence or broken boundary |
+| F19 | `Provision.kt` rewrites NetworkPoint CBOR by regex | **Holds** | `:230-247` |
+| F20 | Desktop CSP grants `unsafe-eval` | **Wrong as a widening** | `frame.rs:163` is a ceiling beside the page's own policy; the phone forwards the page's CSP with no ceiling, so the desktop is the stricter |
+| F21 | Lock held across disk writes in `write_back`; ffi `next_event` | **Holds / wrong** | `service.rs:1279-1294` real; `net.rs:1404` guards a single-consumer receiver, no contention |
+| F22 | Models 148 spec commits behind | **Holds as a coverage gap** | 149 commits since `f886f6e8`; results current for what they model; `models/README.md:141-147` justifies the payload's absence by PQXDH, which is gone |
+| F23 | Wasmtime carried in every rhtnd | **Holds as fact** | `daemon/Cargo.toml:38`; whether to drop it is his |
+| F24 | 30 days of node keys | **Misread** | Design §14.2.4.3 already states "a month of keys"; the day bounds sharing, deletion is by message; undelivered mail holds keys longer still. Nothing to fix; the decoupling question in the review's P3 is his |
+
+### Documents
+
+| F | Finding | Verdict | Where |
+|---|---|---|---|
+| F30 | Infra fold-and-replay bullet against records-in-force | **Holds, wider** | infra §4.3 `:268-276` vs `:243-245` and design §15.1.1; also TOP-009 |
+| F31 | §18.1 every instance signs unattended | **Holds** | design `:8048-8054`, `:8102-8104` against §23.3 `:9375-9381`; possibly A.3 `:9637` and infra `:15` "countersign". **His check owed** on the last two |
+| F32 | §18.1 reads leaf-to-patron in the clear vs. mail sealed | **Wrong** | different traffic |
+| F33 | §14.2 table's leaf-to-patron row | **Holds** | `:6496` against §14.2.4.1 `:6583` |
+| F34 | Stranger not answered vs. cold calls | **Wrong** | same rule; "stranger" used in two senses, a wording tidy at most |
+| F35 | P30 cites a first-use warning he reversed | **Holds** | design `:8693` vs light `:1491-1498`; UX-010 carries it: a row removal or rewrite needs **his approval** |
+| F36 | O-011 template version 1 | **Holds** | functional `:1130` vs design `:2270`, engine `TEMPLATE_VERSION = 2` |
+| F37 | §18.4 "boundary adoption without proof of presence" | **Partly** | true of the former patron's countersignature route only; name it |
+| F38 | Shell needed vs. no shell | **Holds** | infra `:1135-1137` vs `:1159-1162`; light `:2131-2133` vs `:1968-1972` |
+| F39 | Port 7431 vs 7447 | **Partly** | 7447 is the local/bench/sim port; stale where called the node's: Containerfile `:104-106`, packaging README `:86`, `administration.rs:105`. **Decision owed**: what the image exposes |
+| F40 | Counts and pointers | **Holds** | "Ten parameters" ×2 (nine live); queue cap listed three times; "twenty values" (30 live); "the nine" (ten kinds, also NET-032); §22 for §23.2, plus `:3854` and `:3512` §22 pointers; "partly specified" `:9196`; functional `:41` "16 crates" |
+| F41 | functional_tests cites code paths against a project rule | **Wrong** | no such rule; it inventories `crates/` by design |
+| F42 | Stale onboarding | **Holds** | README `:31-35` and licensing `:116-122` (his text), typos; `crates/README.md` six members missing, `:23`; `crates/mobile/README.md:10,26-34`; `deny.toml:3-7`; `Cargo.toml:8`; `check.sh:356`; Containerfile `:43`. CLAUDE.md `:5` is his file; AGENTS.md is Reviewer2's and not touched |
+
+### Suitability (review §3)
+
+Strategic and his: the operator burden against the audience, the ceremony's
+length, the horizon outside the max-flow metric (by design: in-horizon nodes
+are trusted), node-key retention, card-holder flooding of a mailbox, `live`
+media leaving the frame (by design, the frame threat model), CGNAT relay load,
+iOS. Nothing is filed as owed on these until he takes one up.
+
+### What was done (2026-11-27, his "(a), go ahead with steps 2 through 5")
+
+- **F01/F02/F05**: decided (a), every operator client over ssh to a Unix
+  socket on the host; not yet built, the build waits on his go.
+- **F03**: `Continuity::default()` is four minutes outside `fieldtest`, zero in
+  it; `the_check_is_off_only_in_the_field_test_build`.
+- **F04, the parts with no value to choose**: `project_id` under `flock`; the
+  icon read as a tar stream cut at 81920 bytes and refused unless one plain
+  file; `node-send` stops the `rhtn-pkg-*` containers before the tar and
+  starts them again where the send fails. Limits and the inode quota wait on
+  his values.
+- **F06**: the surface reads up to `READERS` (8) callers side by side and
+  answers them one at a time; a ninth is closed unread.
+- **F07/F08**: `rhtn_node::durable::write_private` (0600 from creation, flush,
+  rename, flush the directory) for node keys, the rotated admin token and the
+  CLI's key files; node-key load reads only files named by a number.
+- **F09**: every buffer in `private_key_named` is `Zeroizing` and pre-sized;
+  `HostControlKey.private_key` is `Zeroizing<String>`; `Debug` withholds it.
+- **F14**: doc comments reattached (`crypto/src/lib.rs`, `AndroidShell.kt`);
+  Android's whole-file writes flush before the rename.
+- **F15**: rustix 1.1.6; RUSTSEC-2026-0486 dropped from `osv-scanner.toml`.
+- **F16**: `check.sh` lints the desktop window in both flavours, examples
+  included, where WebKitGTK 4.1 and GTK 3 are installed; CI installs them.
+- **F17**: kotlin zip and jna jar pinned by SHA-256 (the zip against GitHub's
+  digest, the jar's local copy against Central's SHA-1), curls with `-f`.
+- **F19**: `network_point_ip` and `network_point_at` exported from `rhtn-ffi`;
+  `Provision.kt` calls them; `PointTest.kt` moved to `ffi/tests/points.rs`.
+- **F21**: `write_back` copies under the lock and writes after it
+  (`TopologyStore::persisted`, tested file for file in `persist.rs`).
+- **F30, F31 (the unattended-signing paragraph), F33, F35 (design half), F36,
+  F37, F38, F40**: corrected in the root documents, swept by search.
+  F30 found the code already repairs (`restore_materialised`); only its doc
+  comments and the daemon's said otherwise.
+- **F42**: README spelling and overview; `crates/README.md` six members and the
+  client's relations; `crates/mobile/README.md` UWB and step 4c; `deny.toml`,
+  `Cargo.toml`, `check.sh`, Containerfile comments.
+- **Put to him, one at a time**: UX-010; A.3 and infra's "countersign" and the
+  "one shared key" sentence in §18.1; the image's port; the README and mobile
+  README licensing paragraphs; CLAUDE.md line 5; F04's values; F11; F13; F18;
+  F22; F23.
+- **Found while fixing F30**: the acceptance catalogue quoted infra §4.3's old
+  bullets verbatim (DMN-11, DMN-12, DMN-16, TOP-25), so the gate flagged
+  them; quotes moved to the new sentences and DMN-12's `then` to what its test
+  already asserts (a discarded view leaves nothing). **Not yet looked at**: the
+  light client's horizon still replays the records it holds on a stale fold
+  (`client/tests/horizon.rs`, TOP-25, `Woke::Replayed`), against
+  `light-client-requirements.md` §4's "repair, not a replay"; to be read
+  before anything is said of it.

@@ -2,8 +2,9 @@
 
 You are helping A. Marcus Zuech develop the Reconfigurable-Hierarchic Trust
 Network — a peer-to-peer trust protocol metered against physical presence. He is
-the author and sole decision-maker. Nothing is implemented; this is a design under
-review.
+the author and sole decision-maker. A reference implementation is under way in
+`crates/`; the design is still under review, and the documents are authoritative
+over the code.
 
 Read `network-design.md` §1 first — it states what the network is for — and its
 **Appendix A**, which carries the conventions the document assumes.

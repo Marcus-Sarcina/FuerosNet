@@ -2894,6 +2894,19 @@ impl Participant {
         })
     }
 
+    /// **The continuity check's window, set the same way** (design §7.5):
+    /// the instrument's to set and not a person's, for the reason the
+    /// witness window above is. A releasable build holds the counterparty
+    /// across four minutes; zero is the check off, which a field-test build
+    /// has by default and a process test whose clock it does not own wants.
+    pub fn set_continuity_window_ms(&self, ms: u64) -> Result<(), Refused> {
+        self.call("set_continuity_window_ms", || {
+            self.handle
+                .with_blocking(move |c| c.cfg.continuity.duration_ms = ms);
+            Ok(())
+        })
+    }
+
     /// The ceremony this client is in, once both intents have crossed.
     #[must_use]
     pub fn ceremony(&self) -> Option<Id> {
@@ -3422,7 +3435,7 @@ impl Participant {
         self.call("host_runner_private_key", || {
             self.handle.with_blocking(|c| {
                 c.signer()
-                    .map(|id| id.host_runner_key().private_key)
+                    .map(|id| id.host_runner_key().private_key.to_string())
                     .map_err(|_| Refused::new("this device holds no seed, so it derives no key"))
             })
         })
@@ -3459,7 +3472,7 @@ impl Participant {
         self.call("host_control_private_key", || {
             self.handle.with_blocking(|c| {
                 c.signer()
-                    .map(|id| id.host_control_key().private_key)
+                    .map(|id| id.host_control_key().private_key.to_string())
                     .map_err(|_| Refused::new("this device holds no seed, so it derives no key"))
             })
         })
@@ -5086,6 +5099,29 @@ pub fn network_point(
     let mut out = Vec::new();
     point.encode(&mut out);
     Ok(out)
+}
+
+/// **The IPv4 address an encoded `NetworkPoint` names** (`wire-format.md`
+/// §4.4), dotted, or nothing where the bytes are not a point: read here
+/// by the codec's own decoder, so no shell keeps a second parser of it.
+#[uniffi::export]
+pub fn network_point_ip(point: Vec<u8>) -> Option<String> {
+    let p = rhtn_transport::session::NetworkPoint::decode_bytes(&point).ok()?;
+    Some(std::net::Ipv4Addr::from(p.ip).to_string())
+}
+
+/// **The same point at another IPv4 address**, for re-signing a moved
+/// node's records: the address replaced, and the ASN, the zone and the
+/// port it was signed with kept as they were.
+#[uniffi::export]
+pub fn network_point_at(point: Vec<u8>, host: String) -> Result<Vec<u8>, Refused> {
+    let mut p = rhtn_transport::session::NetworkPoint::decode_bytes(&point)
+        .map_err(|_| Refused::new("those bytes are not a network point"))?;
+    let v4: std::net::Ipv4Addr = host
+        .parse()
+        .map_err(|_| Refused::new(format!("`{host}` is not an IPv4 address")))?;
+    p.ip = v4.octets();
+    Ok(p.encode_bytes())
 }
 
 impl Participant {

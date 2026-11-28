@@ -346,6 +346,12 @@ async fn the_guided_capture_takes_three_to_five_frames_over_ten_to_fifteen_secon
         // be moved (`rhtn-client`'s CER-52)
         rhtn_client::ceremony::Config {
             witness_window_s: 0,
+            // nor the continuity check's four minutes, which would hold
+            // the capture across them in place of its own span
+            continuity: rhtn_client::device::Continuity {
+                duration_ms: 0,
+                ..Default::default()
+            },
             ..Default::default()
         },
     )

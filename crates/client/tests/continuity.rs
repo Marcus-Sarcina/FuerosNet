@@ -112,6 +112,27 @@ fn params() -> CaptureParams {
     }
 }
 
+/// The check off, as the field-test build has it.
+fn off() -> Continuity {
+    Continuity {
+        duration_ms: 0,
+        ..Continuity::default()
+    }
+}
+
+/// **Off in the field-test build and four minutes in every other**: the
+/// bench's relaxation is a build difference, and a releasable client holds
+/// design §7.1's meeting.
+#[test]
+fn the_check_is_off_only_in_the_field_test_build() {
+    let want = if cfg!(feature = "fieldtest") {
+        0
+    } else {
+        240_000
+    };
+    assert_eq!(Continuity::default().duration_ms, want);
+}
+
 /// A window long enough for the rules to be measured over: zero turns the
 /// check off, which is the bench's setting and not what these assert.
 fn enforcing() -> Continuity {
@@ -233,7 +254,7 @@ fn a_set_floor_holds_the_same_face_over_a_longer_window() {
 /// What a burst would look like is all of them in one corner.
 #[test]
 fn the_prompts_spread_through_the_window_over_many_draws() {
-    let c = Continuity::default();
+    let c = off();
     let p = params();
     let (mut total, mut runs, mut last_fifth) = (0f64, 0u32, 0u32);
     for b in 1u8..=200u8 {
@@ -278,8 +299,7 @@ fn the_prompts_spread_through_the_window_over_many_draws() {
 // acceptance: CER-66
 #[test]
 fn a_window_of_zero_abandons_nothing() {
-    let off = Continuity::default();
-    assert_eq!(off.duration_ms, 0, "the floor is inactive by default");
+    let off = off();
     // away for most of it, a second face, and nobody at all: each would
     // have ended the meeting under an enforced window
     let mostly_away = {

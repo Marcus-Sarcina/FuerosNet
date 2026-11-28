@@ -12,8 +12,10 @@ browsing and resource requests happen in a participant client and are governed b
 only.
 
 **Your node runs unattended.** Design Appendix A.3 (*What a client does without asking*) is
-the rule: serve, queue, countersign, acknowledge, replicate and issue credentials
-from standing policy, and interrupt your operator only for a live two-person act or
+the rule: serve, queue, acknowledge, replicate and issue credentials from standing
+policy, hold an adoption awaiting your operator's countersignature with the rest of
+what is queued for their client until it next attaches, so that it signs it then
+(design Appendix A.3), and interrupt your operator only for a live two-person act or
 for configuring their own node.
 
 **The infra node is the front door.** It serves sessions, holds queues, issues
@@ -266,14 +268,16 @@ guarantee, which is a floor rather than a ceiling.
   kept and not replayed, and a party that attaches after a flood has passed
   is not handed it again from here.
 - **Keep the derived view too, and keep it beside the store** (design §15.1.1).
-  Your table, your routing slots and your own position are a fold over the
-  records you hold, and folding them again is work paid on every start. Store
-  the fold's result with a watermark that says which records produced it.
-- **Discard a derived view that cannot account for your store, and replay.** It
-  is a cache of a pure function, so the only safe response to a mismatch is the
-  whole fold — never a partial repair, and never a view kept because it is
-  probably close. Write it after the store it claims to be a fold of, so it is
-  never the newer of the two.
+  Your table, your routing slots and your own position are derived state, and
+  the derived copy is the state: what was folded into it is not kept to be
+  folded again. Store it with a watermark that says which records it accounts
+  for.
+- **Discard a derived view that cannot account for your store, and repair.**
+  Never a view kept because it is probably close: one that fails the
+  watermark is discarded whole and begun again, and your neighbours' replay
+  of the same frames (`wire-format.md` §10.1.3) fills it, never your records
+  in force, which are proof and not the fold's input (above). Write it after
+  the store it claims to account for, so it is never the newer of the two.
 
 ### 4.4 How you learn an infra child's endpoints
 
@@ -1132,10 +1136,9 @@ operator's, lent for one request.
 **Your operator reaches this machine as themselves** [2026-10-31]. A
 launched instance takes one `authorized_keys` line: the ssh key its
 operator's client derives from their own signing seed
-(`light-client-requirements.md` §10). That shell is what installing a
-package here needs, since the hosting file and the package itself are
-yours to put in place and no protocol act does it; and because the key is
-derived, **an operator who lost the device that launched this machine
+(`light-client-requirements.md` §10). That shell is their way in to the
+machine itself, beside the surface a package is installed through (§9.4);
+and because the key is derived, **an operator who lost the device that launched this machine
 controls it again from their phrase**. The surface of §8.2 is not that
 shell and does not become one: it carries what an operator's client
 signs, not what an operator types.

@@ -36,10 +36,6 @@ id = "RUSTSEC-2024-0429"
 reason = "informational (unsound): glib 0.18.5's VariantStrIter iterator impls (alias GHSA-wrw7-89jp-8q8g), reached through rhtn-desktop -> wry -> gdkx11; fixed in glib 0.20, and the GTK3 bindings wry and tao build on are at 0.18"
 
 [[IgnoredVulns]]
-id = "RUSTSEC-2026-0486"
-reason = "informational (unsound): rustix 1.1.4's xattr functions given a zero-length buffer (alias GHSA-jh2m-fhpj-3vr7), reached through tempfile, xattr, memfd and wasmtime; FIXABLE by rustix 1.1.6, a semver-compatible update of the lockfile"
-
-[[IgnoredVulns]]
 id = "RUSTSEC-2026-0371"
 reason = "informational (unmaintained): zbus_names 3.0.0, reached through rhtn-desktop -> keyring -> zbus (the Secret Service backend on Linux); no known vulnerability"
 

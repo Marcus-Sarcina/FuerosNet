@@ -5145,7 +5145,7 @@
    },
    {
     "where": "infra-client-requirements.md §4.3",
-    "text": "Store the fold's result with a watermark that says which records produced it."
+    "text": "Store it with a watermark that says which records it accounts\n  for."
    }
   ],
   "given": "A node has run, accepted a set of topology records, and written its store and its derived view.",
@@ -5172,12 +5172,12 @@
    },
    {
     "where": "infra-client-requirements.md §4.3",
-    "text": "Discard a derived view that cannot account for your store, and replay."
+    "text": "Discard a derived view that cannot account for your store, and repair."
    }
   ],
   "given": "A node with a written store and a written derived view.",
   "when": "The derived view is damaged, or a record is added to the store that sorts at or below the view's watermark, and the node is started.",
-  "then": "The view is discarded, the whole store is replayed, and the resulting table and slots equal what a node with no derived view at all would hold.",
+  "then": "The view is discarded and begun again, nothing is folded back from the store, and the resulting table and slots equal what a node with no derived view at all would hold.",
   "oracle": "behaviour",
   "interpretation": null
  },
@@ -5275,7 +5275,7 @@
   "rule": [
    {
     "where": "infra-client-requirements.md §4.3",
-    "text": "Discard a derived view that cannot account for your store, and replay."
+    "text": "Discard a derived view that cannot account for your store, and repair."
    },
    {
     "where": "design §15.1.1",
@@ -13658,7 +13658,7 @@
    },
    {
     "where": "infra-client-requirements.md §4.3",
-    "text": "Store\n  the fold's result with a watermark that says which records produced it."
+    "text": "Store it with a watermark that says which records it accounts\n  for."
    }
   ],
   "given": "A party holding a materialised copy of the shape a set of records produced.",

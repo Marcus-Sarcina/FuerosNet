@@ -216,15 +216,6 @@ class AndroidShell(
     }
 
     /**
-     * **Forget what [seal] wrote**, which a rotation's prior seeds need:
-     * they are the one thing held across a rotation that must not linger
-     * once it is done (design §23.3 keeps a seed off every wire; keeping a
-     * superseded one on disk afterwards would be the same mistake at
-     * rest).
-     *
-     * Whether nothing is there now, which is true where there never was.
-     */
-    /**
      * **The thread files' layer** ([Threads]): raw appends and ranged
      * reads under the scope directory, no custody wrapping — what is
      * written here was sealed by the kernel before it arrived.
@@ -236,7 +227,9 @@ class AndroidShell(
             f.parentFile?.mkdirs()
             val tmp = File.createTempFile("${f.name}.", ".tmp", f.parentFile ?: dir)
             try {
-                tmp.writeBytes(bytes)
+                // flushed before the rename, or a crash can leave the new
+                // name pointing at bytes that never reached the disk
+                java.io.FileOutputStream(tmp).use { it.write(bytes); it.fd.sync() }
                 tmp.renameTo(f)
             } finally {
                 tmp.delete()
@@ -258,6 +251,15 @@ class AndroidShell(
         }.getOrNull()
     }
 
+    /**
+     * **Forget what [seal] wrote**, which a rotation's prior seeds need:
+     * they are the one thing held across a rotation that must not linger
+     * once it is done (design §23.3 keeps a seed off every wire; keeping a
+     * superseded one on disk afterwards would be the same mistake at
+     * rest).
+     *
+     * Whether nothing is there now, which is true where there never was.
+     */
     fun forget(name: String): Boolean {
         val f = File(dir, name)
         return !f.isFile || f.delete()
@@ -298,7 +300,9 @@ class AndroidShell(
         return try {
             val tmp = File.createTempFile("$name.", ".tmp", dir)
             try {
-                tmp.writeBytes(bytes)
+                // flushed before the rename, or a crash can leave the new
+                // name pointing at bytes that never reached the disk
+                java.io.FileOutputStream(tmp).use { it.write(bytes); it.fd.sync() }
                 tmp.renameTo(File(dir, name))
             } finally {
                 // a rename that went leaves nothing here; one that did

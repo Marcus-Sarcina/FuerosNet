@@ -56,6 +56,13 @@ fn a_saved_store_is_the_seen_set_after_a_restart() {
     let dir = std::env::temp_dir().join(format!("rhtn-store-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     n.store.save(&dir).unwrap();
+    // and what a copy taken to save from writes is the same, file for file
+    // (the service writes from one once the view's lock is released)
+    let from_copy = std::env::temp_dir().join(format!("rhtn-store-copy-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&from_copy);
+    n.store.persisted().save(&from_copy).unwrap();
+    assert_eq!(contents_under(&dir), contents_under(&from_copy));
+    let _ = std::fs::remove_dir_all(&from_copy);
     let loaded = TopologyStore::load(&dir).unwrap();
     assert!(loaded.holds_txid(&a_x.txid));
     assert_eq!(loaded.endpoint(&kh("carol")).unwrap().bytes, er);
@@ -436,4 +443,25 @@ fn a_retired_endpoint_record_does_not_return_from_disk() {
         "nor is it replayed"
     );
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Every file beneath `dir`, by its path from there, with its bytes.
+fn contents_under(dir: &std::path::Path) -> Vec<(std::path::PathBuf, Vec<u8>)> {
+    let mut out = Vec::new();
+    let mut todo = vec![dir.to_path_buf()];
+    while let Some(d) = todo.pop() {
+        for e in std::fs::read_dir(&d).unwrap().flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                todo.push(p);
+            } else {
+                out.push((
+                    p.strip_prefix(dir).unwrap().to_path_buf(),
+                    std::fs::read(&p).unwrap(),
+                ));
+            }
+        }
+    }
+    out.sort();
+    out
 }

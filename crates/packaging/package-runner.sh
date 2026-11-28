@@ -124,6 +124,9 @@ NODE=rhtnd
 ENGINE="${RHTN_ENGINE:-podman}"
 LOG=/var/log/rhtn-package-runner.log
 BLOCKS="${RHTN_BLOCKS:-/var/lib/rhtn-blocks}"
+# the most of an icon's stream read: the cap (65536 bytes), its tar
+# headers and the padding a tar is rounded to
+ICON_STREAM=81920
 MOUNT_AT=/rhtn-block
 
 # **a host that will not take the log is not a failure**: the redirection
@@ -178,13 +181,18 @@ image_of() {
 project_id() {
   ids="$BLOCKS/.projects"
   touch "$ids"
-  id="$(awk -v n="$1" '$1==n{print $2}' "$ids")"
-  if [ -z "$id" ]; then
-    last="$(awk 'BEGIN{m=10000}{if($2>m)m=$2}END{print m}' "$ids")"
-    id=$((last+1))
-    printf '%s %s\n' "$1" "$id" >> "$ids"
-  fi
-  printf '%s' "$id"
+  # **one taker at a time**: two starts at once would read the same last
+  # number and give two packages one project, and so one quota
+  (
+    if command -v flock > /dev/null 2>&1; then flock 9; fi
+    id="$(awk -v n="$1" '$1==n{print $2}' "$ids")"
+    if [ -z "$id" ]; then
+      last="$(awk 'BEGIN{m=10000}{if($2>m)m=$2}END{print m}' "$ids")"
+      id=$((last+1))
+      printf '%s %s\n' "$1" "$id" >> "$ids"
+    fi
+    printf '%s' "$id"
+  ) 9>> "$ids.lock"
 }
 
 # **provision one bounded block, or say why not** (above): prints the
@@ -284,9 +292,16 @@ case "$verb" in
     found=""
     for kind in png jpeg webp; do
       case "$kind" in jpeg) ext=jpg ;; *) ext="$kind" ;; esac
-      rm -rf "$work/icon"
-      if "$ENGINE" cp "$held:/rhtn/icon.$ext" "$work/icon" > /dev/null 2>&1 \
-          && [ -f "$work/icon" ] && [ ! -L "$work/icon" ]; then
+      rm -rf "$work/icon" "$work/icon.tar"
+      # **bounded before it lands**: the file comes out as a tar stream
+      # cut at the cap and its headers, so an image naming a file of any
+      # size fills nothing here; one cut short does not read, and one
+      # that is not a plain file is not an icon
+      "$ENGINE" cp "$held:/rhtn/icon.$ext" - 2> /dev/null | head -c "$ICON_STREAM" > "$work/icon.tar"
+      if [ -s "$work/icon.tar" ] \
+          && [ "$(tar -tvf "$work/icon.tar" 2> /dev/null | wc -l)" -eq 1 ] \
+          && [ "$(tar -tvf "$work/icon.tar" 2> /dev/null | cut -c1)" = "-" ] \
+          && tar -xOf "$work/icon.tar" > "$work/icon" 2> /dev/null; then
         found="image/$kind"
         break
       fi
@@ -414,6 +429,10 @@ case "$verb" in
     RHTN_MV_ENGINE="$ENGINE" RHTN_MV_NODE="$NODE" RHTN_MV_TO="$to" RHTN_MV_WORK="$work" \
       RHTN_MV_ROOT="$root" RHTN_MV_BLOCKS="$blocks" RHTN_MV_LOG="$LOG" RHTN_MV_SSH="${RHTN_SSH:-ssh}" setsid sh -c '
       "$RHTN_MV_ENGINE" stop "$RHTN_MV_NODE" > /dev/null 2>&1 || true
+      # **the packages too, before their blocks are read**: a block
+      # copied while its package writes is a database torn mid-write
+      pkgs="$("$RHTN_MV_ENGINE" ps --format "{{.Names}}" 2> /dev/null | grep "^rhtn-pkg-" || true)"
+      for p in $pkgs; do "$RHTN_MV_ENGINE" stop "$p" > /dev/null 2>&1 || true; done
       # shellcheck disable=SC2086
       if tar -C "$RHTN_MV_ROOT" -cf - var/lib/rhtn $RHTN_MV_BLOCKS | "$RHTN_MV_SSH" -i "$RHTN_MV_WORK/key" \
           -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20 \
@@ -423,6 +442,7 @@ case "$verb" in
         what="sent to $RHTN_MV_TO"
       else
         "$RHTN_MV_ENGINE" start "$RHTN_MV_NODE" > /dev/null 2>&1 || true
+        for p in $pkgs; do "$RHTN_MV_ENGINE" start "$p" > /dev/null 2>&1 || true; done
         what="not sent to $RHTN_MV_TO: $(tail -n 1 "$RHTN_MV_WORK/said" 2> /dev/null); the node here is started again"
       fi
       { printf "%s rhtn-package-runner: node-send %s\n" "$(date -Is)" "$what" >> "$RHTN_MV_LOG"; } 2> /dev/null || true

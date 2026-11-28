@@ -179,6 +179,10 @@ impl Phone {
         // proposer waits out: seconds here, where a phone takes minutes
         p.set_witness_window_s(5)
             .expect("the window is the shell's to set");
+        // and the continuity check off, as the bench has it: a releasable
+        // build holds the counterparty across four minutes
+        p.set_continuity_window_ms(0)
+            .expect("the window is the shell's to set");
         let serving = subnet.serving_node_of(name);
         let addr = subnet.addr_of(serving);
         let attached = p

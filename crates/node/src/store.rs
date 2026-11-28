@@ -862,6 +862,28 @@ fn unhex(s: &str) -> Option<Vec<u8>> {
 }
 
 impl TopologyStore {
+    /// **What [`TopologyStore::save`] writes, and nothing else**: a copy
+    /// to save from once the lock on the view that holds this store is
+    /// released, without the bodies held only while the process runs and
+    /// without what is pending.
+    #[must_use]
+    pub fn persisted(&self) -> TopologyStore {
+        TopologyStore {
+            seen: self.seen.clone(),
+            own: self.own.clone(),
+            transactions: BTreeMap::new(),
+            kept: self.kept.clone(),
+            endpoints: self.endpoints.clone(),
+            conflicts: self.conflicts.clone(),
+            pending: Vec::new(),
+            proved_series: self.proved_series.clone(),
+            presence: BTreeMap::new(),
+            delegations: self.delegations.clone(),
+            acks: self.acks.clone(),
+            pending_ceiling: None,
+        }
+    }
+
     /// Write the store to a directory: one file per object, and the series
     /// proved and pairs retired beside them.  A node keeps its topology
     /// store across a restart because it is the seen-set: forgetting it

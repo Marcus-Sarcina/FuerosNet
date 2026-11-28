@@ -36,32 +36,10 @@ pub fn mint(path: &Path, seeds: [[u8; 32]; 2]) -> Result<Identity, String> {
     Ok(SigningIdentity::from_seeds(&seeds[0], &seeds[1]).public)
 }
 
+/// Owner-only from the moment the file exists, and whole or not at all
+/// (`rhtn_node::durable`).
 fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    // created 0600, never wider even for an instant; the chmod below then
-    // narrows a file that already existed wider
-    #[cfg(unix)]
-    {
-        use std::io::Write;
-        use std::os::unix::fs::OpenOptionsExt;
-        let mut f = std::fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .mode(0o600)
-            .open(path)
-            .map_err(|e| format!("{}: {e}", path.display()))?;
-        f.write_all(bytes)
-            .map_err(|e| format!("{}: {e}", path.display()))?;
-    }
-    #[cfg(not(unix))]
-    std::fs::write(path, bytes).map_err(|e| format!("{}: {e}", path.display()))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
-            .map_err(|e| format!("{}: {e}", path.display()))?;
-    }
-    Ok(())
+    rhtn_node::durable::write_private(path, bytes).map_err(|e| format!("{}: {e}", path.display()))
 }
 
 /// Read an identity file and describe its public half.  The private half
@@ -145,23 +123,8 @@ pub fn host_control(path: &Path, private: Option<&Path>, runner: bool) -> Result
         format!("{}\n", key.public_line)
     };
     if let Some(to) = private {
-        std::fs::write(to, key.private_key.as_bytes())
-            .map_err(|e| format!("{}: {e}", to.display()))?;
-        restrict(to)?;
+        write_private(to, key.private_key.as_bytes())?;
         out.push_str(&format!("private   {}\n", to.display()));
     }
     Ok(out)
-}
-
-/// 0600 on a private key, which ssh refuses to read without.
-#[cfg(unix)]
-fn restrict(p: &Path) -> Result<(), String> {
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(p, std::fs::Permissions::from_mode(0o600))
-        .map_err(|e| format!("{}: {e}", p.display()))
-}
-
-#[cfg(not(unix))]
-fn restrict(_: &Path) -> Result<(), String> {
-    Ok(())
 }

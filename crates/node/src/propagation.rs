@@ -1732,9 +1732,9 @@ impl NodeView {
     /// its watermark are exactly the ones it does not claim to have folded
     /// in.  Anything else — a record that arrived late and sorts below the
     /// watermark, a store that lost records, a snapshot from another
-    /// node — fails that count and the whole fold runs.  **The failure is
-    /// slow, never wrong**, which is the property that lets this be a
-    /// cache at all.
+    /// node — fails that count, and the view is discarded and repaired by
+    /// reconciliation (design §15.1.1).  **The failure is slow, never
+    /// wrong.**
     pub fn restore_materialised<L: Lookup + ?Sized>(
         &mut self,
         snap: Option<&Snapshot>,

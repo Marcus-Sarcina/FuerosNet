@@ -1,11 +1,10 @@
 # cargo-deny for the RHTN workspace (Robot/implementation-plan.md section 3;
 # the gate's step 3b).  The licence policy [author]: Apache-2.0, MIT or
-# looser is free; copyleft is not taken into the library.  AGPL, which the
-# payload library's natural source carries, is admitted only in a segregated
-# client application and never here, and its absence from the list below is
-# what refuses it.  MPL-2.0 is uniffi's, accepted for the mobile boundary on
-# 2026-09-16; it is added here when uniffi arrives, with this comment moved
-# beside it.  The list is what the tree carried on 2026-09-22, every one
+# looser is free; copyleft is not taken into the library.  AGPL is admitted
+# only in a segregated client application and never here, and its absence
+# from the list below is what refuses it.  MPL-2.0 is accepted in a client
+# where it is used unmodified (2026-09-16), and is listed below for that.
+# The list began as what the tree carried on 2026-09-22, every one
 # permissive; a new licence fails until it is read and listed.
 
 [graph]

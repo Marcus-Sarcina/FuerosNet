@@ -40,10 +40,10 @@ ARG FLAVOUR=releasable
 # No cache mounts: they need BuildKit, and this has to build under podman and
 # under a plain docker alike.  A slower build is a smaller contract.
 # **Two invocations for the field-test flavour, and why** [2026-11-03]:
-# `rhtn-cli` depends on `rhtn-client` without `default-features = false`,
-# so selecting both binaries in one command unifies `rhtn-client`'s
-# `releasable` in beside the `fieldtest` asked for, and the two-flavours
-# guard in its `lib.rs` stops the build.  The gate never met this because
+# `rhtn-cli` is releasable by default, and its `releasable` sets
+# `rhtn-client`'s and `rhtn-daemon`'s, so selecting both binaries in one
+# command unifies `releasable` in beside the `fieldtest` asked for, and the
+# two-flavours guard stops the build.  The gate never met this because
 # `check.sh`'s flavour lint selects the daemon and not the CLI.  **The
 # flavour is the daemon's**: the CLI in this image is an operator's
 # instrument and wants no diagnostic hooks, so it is built as it ships.
@@ -102,8 +102,10 @@ USER rhtn
 WORKDIR /var/lib/rhtn
 
 # QUIC, and the STUN Binding requests the same address answers
-# (`infra-client-requirements.md` §7, design §14.1.1)
-EXPOSE 7447/udp
+# (`infra-client-requirements.md` §7, design §14.1.1), on the protocol's
+# default port (`wire-format.md` §4.4), which a launched instance serves on;
+# a local or bench node serves on 7447 and names it in its configuration
+EXPOSE 7431/udp
 # the operator's surface: the one channel their client reaches this
 # instance over (`rhtn_daemon::administration`)
 EXPOSE 7449/tcp

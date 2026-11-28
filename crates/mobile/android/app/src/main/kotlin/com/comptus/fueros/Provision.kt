@@ -221,31 +221,22 @@ object Provision {
         exchange(at, "GET", target, null).getOrThrow()
     }
 
-    /** `application/x-www-form-urlencoded`, as the surface reads it. */
     /**
-     * **The IPv4 address a `NetworkPoint` names**, read out of its
-     * encoding (`wire-format.md` §7.6: key 1 first, four bytes — `01 44`
-     * and the octets after the map's head), or null where it names none.
+     * **The IPv4 address a `NetworkPoint` names**, read by the kernel's
+     * own decoder, or null where the hex is not a point.
      */
     fun pointIp(hex: String): String? =
-        Regex("^a[1-7]0144([0-9a-f]{8})").find(hex.lowercase())?.groupValues?.get(1)
-            ?.chunked(2)?.joinToString(".") { it.toInt(16).toString() }
+        runCatching { uniffi.rhtn_ffi.networkPointIp(unhex(hex)) }.getOrNull()
 
     /**
-     * **The same point at another IPv4 address**: the four octets after
-     * key 1 replaced, the ASN, zone and port kept as they were signed.
-     * Null where the point names no address to replace.
+     * **The same point at another IPv4 address**: the address replaced by
+     * the kernel, the ASN, zone and port kept as they were signed. Null
+     * where the point or the address does not read.
      */
-    fun pointAt(hex: String, ip: String): ByteArray? {
-        val octets = ip.split('.').mapNotNull { it.toIntOrNull() }
-        if (octets.size != 4 || octets.any { it !in 0..255 }) return null
-        val h = hex.lowercase()
-        // key 1 sorts first in canonical CBOR, straight after the map's head
-        if (!Regex("^a[1-7]0144[0-9a-f]{8}").containsMatchIn(h)) return null
-        val swapped = h.replaceRange(2, 14, "0144" + octets.joinToString("") { "%02x".format(it) })
-        return unhex(swapped)
-    }
+    fun pointAt(hex: String, ip: String): ByteArray? =
+        runCatching { uniffi.rhtn_ffi.networkPointAt(unhex(hex), ip) }.getOrNull()
 
+    /** `application/x-www-form-urlencoded`, as the surface reads it. */
     fun form(fields: List<Pair<String, String>>): ByteArray =
         fields.joinToString("&") { (k, v) -> "$k=${escape(v)}" }.toByteArray()
 

@@ -219,6 +219,18 @@ flavourlint "fieldtest" --no-default-features \
   -p rhtn-client -p rhtn-daemon -p rhtn-participant -p rhtn-ffi \
   --features rhtn-client/fieldtest,rhtn-adaptors/fieldtest,rhtn-daemon/fieldtest,rhtn-participant/fieldtest,rhtn-ffi/fieldtest
 flavourlint "ffi harness, cli" -p rhtn-ffi --features harness,cli
+# **The desktop's window** (`desktop/Cargo.toml`, `gui`): the binary and
+# the two examples that open windows are behind it, so nothing above had
+# ever compiled them [review, 2026-11-27].  Where the system's web view
+# and its development files are absent the step is skipped and says so,
+# as the Android shell's is; the CI image installs them.
+if pkg-config --exists webkit2gtk-4.1 gtk+-3.0 2> /dev/null; then
+  flavourlint "desktop window" -p rhtn-desktop --features gui --examples
+  flavourlint "desktop window, fieldtest" -p rhtn-desktop --no-default-features \
+    --features gui,fieldtest --examples
+else
+  echo "  desktop window: skipped, no WebKitGTK 4.1 and GTK 3 development files (libwebkit2gtk-4.1-dev libgtk-3-dev)"
+fi
 
 echo "=== 3c. Licences and advisories ==="
 # cargo-deny against deny.toml: the allow-list is what the dependency tree
@@ -353,7 +365,7 @@ if cargo nextest --version > /dev/null 2>&1; then
     echo "  cargo nextest: FAILED"; fail=1
   fi
   # nextest does not run doctests.  The workspace has none, in any of its
-  # sixteen crates, and this is the line that establishes that rather than
+  # crates, and this is the line that establishes that rather than
   # assuming it: it costs four seconds and it fails if one ever appears
   # and breaks.
   if (cd "$HERE" && nice -n 19 cargo test -j 8 --workspace --doc --quiet 2>&1 | tail -3); then
